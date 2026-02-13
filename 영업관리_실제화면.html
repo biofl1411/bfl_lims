@@ -1815,6 +1815,26 @@ async function searchFss(region) {
     } catch(e){ console.log('FSS error:', searchNames[i], e.message); }
   }
 
+  // 지역 드릴다운인 경우: 검색 지역 주소로 필터링
+  if(bizState.sido !== '검색' && allRows.length > 0) {
+    var SIDO_FULL = {'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종',
+      '경기':'경기도','강원':'강원도','충북':'충청북도','충남':'충청남도','전북':'전라북도','전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주'};
+    var sidoKey = SIDO_FULL[bizState.sido] || bizState.sido;
+    var sgKey = bizState.sigungu || '';
+    allRows = allRows.filter(function(r) {
+      var addr = (r.LOCP_ADDR || '').replace(/\s+/g, ' ');
+      // 시도 매칭
+      if(addr.indexOf(sidoKey) < 0 && addr.indexOf(bizState.sido) < 0) return false;
+      // 시군구 매칭 (있으면)
+      if(sgKey && addr.indexOf(sgKey) < 0) {
+        // "파주시" → "파주" 로도 매칭 시도
+        var sgShort = sgKey.replace(/시$|군$|구$/,'');
+        if(addr.indexOf(sgShort) < 0) return false;
+      }
+      return true;
+    });
+  }
+
   document.getElementById('bizFssCount').textContent = allRows.length;
   if(allRows.length === 0) {
     document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#8892a4;font-size:12px">인허가 결과 없음<br><span style="font-size:11px">CORS 차단으로 조회 불가 시, 브라우저에서 직접 확인:<br><a href="https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/I1220/json/1/5/BSSH_NM=' + encodeURIComponent(bizState.sigungu||bizState.sido||'') + '" target="_blank" style="color:#1565c0">🔗 식약처 API 직접 열기</a></span></td></tr>';
