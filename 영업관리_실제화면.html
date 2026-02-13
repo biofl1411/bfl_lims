@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - 영업 관리</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;display:flex;background:#f8f9fb;font-size:13px;overflow:hidden}
+
+/* Sidebar */
+.sb{width:240px;background:#1a2332;display:flex;flex-direction:column;flex-shrink:0;z-index:10}
+.sb-hd{padding:16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between}
+.sb-logo{color:#4fc3f7;font-weight:800;font-size:16px}
+.sb-menu{flex:1;padding:8px;overflow-y:auto}
+.sb-cat{padding:8px 12px;font-size:10px;color:#4a6785;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.sb-item{padding:9px 12px;color:#8ea4c0;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:9px;font-size:13px;margin-bottom:1px;transition:all .15s}
+.sb-item:hover{background:rgba(255,255,255,.05)}
+.sb-item.active{color:#4fc3f7;background:rgba(79,195,247,.1);font-weight:600}
+.sb-item .badge{margin-left:auto;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700}
+.badge-ok{background:rgba(46,125,50,.2);color:#66bb6a}
+.badge-new{background:rgba(21,101,192,.2);color:#64b5f6}
+.badge-later{background:rgba(230,81,0,.2);color:#ffb74d}
+.sb-ft{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px}
+.sb-avatar{width:32px;height:32px;border-radius:50%;background:rgba(79,195,247,.2);display:flex;align-items:center;justify-content:center;font-size:14px}
+.sb-name{color:#c8d6e5;font-size:12px;font-weight:600}
+.sb-role{color:#6b7d93;font-size:10px}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-bell{position:relative;cursor:pointer;font-size:18px}
+.topbar-bell .dot{position:absolute;top:-2px;right:-4px;width:8px;height:8px;background:#e53935;border-radius:50%}
+
+.content{flex:1;padding:24px;overflow-y:auto}
+
+/* Buttons */
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-success{background:#2e7d32;color:#fff}.btn-success:hover{background:#1b5e20}
+.btn-danger{background:#e53935;color:#fff}.btn-danger:hover{background:#c62828}
+.btn-sm{padding:6px 12px;font-size:11px}
+.btn-check{background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb}.btn-check:hover{background:#bbdefb}
+
+/* Cards */
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px}
+.card-bd{padding:20px}
+
+/* Tables */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{background:#f8f9fb;padding:10px 14px;font-size:11px;font-weight:700;color:#5f6b7a;text-align:left;border-bottom:2px solid #e2e6ed;white-space:nowrap}
+.tbl td{padding:10px 14px;border-bottom:1px solid #eef0f4;font-size:12px;color:#333}
+.tbl tr:hover{background:#fafbfc}
+.tbl .center{text-align:center}
+
+/* Traffic dots */
+.tl{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
+.tl-blue{background:#2196f3}.tl-green{background:#4caf50}.tl-yellow{background:#ffeb3b}.tl-orange{background:#ff9800}.tl-red{background:#f44336}
+
+/* Tags */
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.tag-vip{background:#fce4ec;color:#c62828}.tag-a{background:#e3f2fd;color:#1565c0}.tag-b{background:#e8f5e9;color:#2e7d32}.tag-c{background:#f3e5f5;color:#7b1fa2}
+.tag-active{background:#e8f5e9;color:#2e7d32}.tag-dormant{background:#fff3e0;color:#e65100}.tag-terminated{background:#f5f5f5;color:#9e9e9e}
+.tag-pending{background:#fff3e0;color:#e65100}.tag-approved{background:#e8f5e9;color:#2e7d32}.tag-rejected{background:#fce4ec;color:#c62828}
+
+/* Form */
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.fg label{font-size:11px;color:#5f6b7a;font-weight:600}
+.fg label .req{color:#e53935}
+.fg input,.fg select,.fg textarea{padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;outline:none;font-family:inherit;transition:border .15s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#4fc3f7;box-shadow:0 0 0 3px rgba(79,195,247,.1)}
+.fg textarea{resize:vertical;min-height:60px}
+.fg select{cursor:pointer;background:#fff}
+.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fg-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+.sub-card{background:#f8f9fb;border:1px solid #eef0f4;border-radius:10px;padding:14px;margin-bottom:10px;position:relative}
+.sub-card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.sub-card-title{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.sub-card-num{background:#e3f2fd;color:#1565c0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.btn-remove{background:none;border:none;color:#e53935;font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px}
+.btn-remove:hover{background:#fce4ec}
+.btn-add{display:flex;align-items:center;gap:6px;padding:10px;border:2px dashed #c8d6e5;border-radius:10px;background:transparent;color:#5f6b7a;font-size:12px;font-weight:600;cursor:pointer;width:100%;justify-content:center}
+.btn-add:hover{border-color:#1a73e8;color:#1a73e8;background:#f0f7ff}
+.combo{display:flex;gap:6px}.combo select,.combo input{flex:1}
+.hint{font-size:10px;color:#8892a4;margin-top:2px}
+.check-result{margin-top:4px;font-size:11px;padding:6px 10px;border-radius:6px;display:none}
+.check-ok{background:#e8f5e9;color:#2e7d32}.check-dup{background:#fff3e0;color:#e65100}
+
+/* Section title */
+.sec-title{font-size:14px;font-weight:700;color:#1a2332;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:8px}
+.sec-num{background:#1a73e8;color:#fff;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+
+/* Timeline */
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:#e2e6ed}
+.tl-item{position:relative;margin-bottom:16px;padding:14px;background:#fff;border:1px solid #e2e6ed;border-radius:10px}
+.tl-item::before{content:'';position:absolute;left:-20px;top:18px;width:10px;height:10px;border-radius:50%;background:#1a73e8;border:2px solid #fff;box-shadow:0 0 0 2px #1a73e8}
+.tl-item.sys::before{background:#ff9800}
+.tl-date{font-size:10px;color:#8892a4;margin-bottom:4px}
+.tl-content{font-size:12px;color:#333}
+.tl-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.tl-tag{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.tl-tag-call{background:#e3f2fd;color:#1565c0}.tl-tag-sms{background:#f3e5f5;color:#7b1fa2}
+.tl-tag-connected{background:#e8f5e9;color:#2e7d32}.tl-tag-missed{background:#fce4ec;color:#c62828}
+.tl-tag-refused{background:#fff3e0;color:#e65100}
+
+/* Route viz */
+.route{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:12px;background:#f8f9fb;border-radius:10px;margin:8px 0}
+.route-stop{padding:6px 12px;background:#fff;border:1px solid #e2e6ed;border-radius:8px;font-size:11px;font-weight:600;text-align:center}
+.route-stop.home{background:#1a2332;color:#fff;border-color:#1a2332}
+.route-arrow{color:#1a73e8;font-weight:700;font-size:14px}
+
+/* Overlay */
+.overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:100;justify-content:center;align-items:center}
+.overlay.show{display:flex}
+.popup{background:#fff;border-radius:14px;padding:24px;max-width:500px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,.15)}
+.popup h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.popup-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+
+/* Login popup */
+.login-popup{max-width:440px}
+.login-popup .alert{background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:14px;margin:12px 0;font-size:12px;color:#e65100}
+.login-miss{font-size:28px;font-weight:800;color:#e53935;text-align:center;margin:8px 0}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:14px;text-align:center}
+.stat-val{font-size:22px;font-weight:800;color:#1a2332}
+.stat-label{font-size:10px;color:#8892a4;margin-top:2px}
+
+/* Approval flow */
+.approval-flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.af-step{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;text-align:center;min-width:80px}
+.af-arr{font-size:16px;color:#8892a4}
+
+/* Toast */
+.toast{display:none;position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1a2332;color:#fff;padding:14px 28px;border-radius:10px;font-size:14px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:200}
+.toast.show{display:block;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* View toggle */
+.view-mode{display:flex;gap:4px;margin-bottom:12px}
+.vm-btn{padding:6px 14px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:#5f6b7a}
+.vm-btn.active{background:#1a73e8;color:#fff;border-color:#1a73e8}
+
+/* File upload area */
+.file-area{border:2px dashed #e2e6ed;border-radius:10px;padding:16px;text-align:center;color:#8892a4;font-size:12px;cursor:pointer}
+.file-area:hover{border-color:#1a73e8;color:#1a73e8;background:#f0f7ff}
+
+/* Address row */
+.addr-row{display:flex;gap:8px}.addr-row input{flex:1}
+
+.radio-group{display:flex;gap:12px;padding:6px 0}
+.radio-item{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px}
+.radio-item input{accent-color:#1a73e8;width:16px;height:16px}
+
+/* Responsive */
+@media(max-width:768px){.sb{display:none}.stats{grid-template-columns:1fr 1fr}.fg-row,.fg-row3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- Login Popup -->
+<div class="overlay show" id="loginPopup">
+<div class="popup login-popup">
+  <h3>🔔 수금 활동 기록 안내</h3>
+  <div class="alert">
+    <strong>⚠️ 미수금 업체가 있습니다!</strong><br>
+    아래 업체에 대한 수금 활동을 기록해 주세요.
+  </div>
+  <table class="tbl" style="margin:8px 0">
+    <thead><tr><th>업체명</th><th>신호등</th><th>미수금액</th><th>연체일</th></tr></thead>
+    <tbody>
+      <tr><td>풀무원식품(주)</td><td class="center"><span class="tl tl-orange"></span></td><td>4,500,000원</td><td>68일</td></tr>
+      <tr><td>(주)오뚜기</td><td class="center"><span class="tl tl-yellow"></span></td><td>1,200,000원</td><td>45일</td></tr>
+    </tbody>
+  </table>
+  <div style="text-align:center;margin:8px 0">
+    <span style="font-size:11px;color:#e65100;">수금 활동 기록 안내를</span>
+    <div class="login-miss">2회 누락</div>
+    <span style="font-size:11px;color:#e65100;">하였습니다.</span>
+  </div>
+  <div class="popup-actions" style="justify-content:center">
+    <button class="btn btn-primary" onclick="closePopup('loginPopup');showPage('collection')">📞 수금 활동 작성하기</button>
+    <button class="btn btn-secondary" onclick="closePopup('loginPopup')">나중에 하기</button>
+  </div>
+</div>
+</div>
+
+<!-- Company Dup Popup -->
+<div class="overlay" id="companyDup">
+<div class="popup">
+  <h3>🔍 동일 고객사가 이미 등록되어 있습니다</h3>
+  <div style="background:#f8f9fb;border:1px solid #e2e6ed;border-radius:10px;padding:14px;margin:8px 0">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span class="tl tl-orange"></span>
+      <strong style="font-size:14px">풀무원식품(주)</strong>
+      <span class="tag tag-a">A등급</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:#5f6b7a">
+      <div>사업자번호: 234-56-78901</div>
+      <div>대표자: 원풀무</div>
+      <div>담당 영업: <strong>박주임</strong></div>
+      <div>최근거래: 2026-01-28</div>
+    </div>
+  </div>
+  <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:10px;font-size:12px;color:#e65100">
+    ⚠️ 이미 <strong>박주임</strong>이 담당 중입니다. 담당자를 추가하면 박주임에게 알림이 발송됩니다.
+  </div>
+  <div class="popup-actions">
+    <button class="btn btn-secondary" onclick="closePopup('companyDup')">취소</button>
+    <button class="btn btn-primary" onclick="closePopup('companyDup');toast('📩 박주임에게 알림 발송 완료. 담당자를 추가합니다.')">기존 업체에 담당자 추가</button>
+  </div>
+</div>
+</div>
+
+<!-- Contact Dup Popup -->
+<div class="overlay" id="contactDup">
+<div class="popup">
+  <h3>🔍 동일 담당자가 발견되었습니다</h3>
+  <p style="font-size:12px;color:#5f6b7a;margin-bottom:10px">이름과 전화번호로 조회한 결과입니다.</p>
+  <div style="background:#f8f9fb;border:1px solid #e2e6ed;border-radius:10px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>기존 등록 정보</strong>
+      <span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">담당: 박주임</span>
+    </div>
+    <div style="font-size:12px;color:#333;line-height:1.8">
+      이름: <strong>이규성</strong><br>
+      전화: <strong style="letter-spacing:1px">010-****-5678</strong><br>
+      이메일: <strong style="letter-spacing:1px">lee***@pulmu.com</strong><br>
+      소속: 풀무원식품(주)
+    </div>
+  </div>
+  <p style="font-size:12px;color:#5f6b7a;margin:10px 0">이 사람과 <strong>동일 인물</strong>입니까?</p>
+  <div class="popup-actions">
+    <button class="btn btn-secondary" onclick="closePopup('contactDup')">취소</button>
+    <button class="btn btn-success" onclick="closePopup('contactDup');toast('✅ 신규 담당자로 등록합니다.')">아니오, 신규 등록</button>
+    <button class="btn btn-primary" onclick="closePopup('contactDup');toast('📩 기존 담당 박주임에게 알림 발송 완료')">예, 동일 인물</button>
+  </div>
+</div>
+</div>
+
+<!-- Sidebar -->
+<div class="sb">
+  <div class="sb-hd"><div class="sb-logo" style="cursor:pointer" onclick="location.href='index.html'">🧪 BioFoodLab</div></div>
+  <div class="sb-menu">
+    <div class="sb-item" onclick="location.href='index.html'" style="color:#4fc3f7;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:10px"><span>🏠</span> 홈 (대시보드)</div>
+    <div class="sb-cat">영업 관리</div>
+    <div class="sb-item active" onclick="showPage('customerList')" id="nav-customerList"><span>🏢</span> 고객사 관리 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-item" onclick="showPage('daily')" id="nav-daily"><span>📝</span> 업무일지 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-item" onclick="showPage('vehicle')" id="nav-vehicle"><span>🚗</span> 차량일지 <span class="badge badge-new">신규</span></div>
+    <div class="sb-item" onclick="showPage('collection')" id="nav-collection"><span>📞</span> 미수금 활동 내역 <span class="badge badge-new">신규</span></div>
+    <div class="sb-item" onclick="showPage('estimate')" id="nav-estimate"><span>📋</span> 견적서 관리 <span class="badge badge-later">추후</span></div>
+    <div class="sb-item" onclick="showPage('trade')" id="nav-trade"><span>📄</span> 거래명세표 관리 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-item" onclick="showPage('urgent')" id="nav-urgent"><span>🚨</span> 긴급 협조 요청 <span class="badge badge-later">추후</span></div>
+    <div class="sb-item" onclick="showPage('arManage')" id="nav-arManage"><span>💰</span> 미수금 관리 <span class="badge badge-later">추후</span></div>
+    <div class="sb-item" onclick="showPage('invoice')" id="nav-invoice"><span>🧾</span> 계산서 발행 승인 <span class="badge badge-ok">확정</span></div>
+  </div>
+  <div class="sb-ft">
+    <div class="sb-avatar">👤</div>
+    <div><div class="sb-name">이주임</div><div class="sb-role">영업부</div></div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">영업 관리</span>
+    <span class="topbar-sep">/</span>
+    <span class="topbar-sub" id="topSub">고객사 관리</span>
+    <div class="topbar-right">
+      <div class="topbar-bell" onclick="toast('🔔 알림 3건: 입금 약속일 도래 1건, 신호등 변경 1건, 미작성 경고 1건')">🔔<span class="dot"></span></div>
+    </div>
+  </div>
+  <div class="content" id="contentArea">
+
+    <!-- ===== 고객사 관리 - 목록 ===== -->
+    <div class="page" id="page-customerList">
+      <div class="stats">
+        <div class="stat"><div class="stat-val">47</div><div class="stat-label">전체 거래처</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32">38</div><div class="stat-label">활동 중</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e65100">6</div><div class="stat-label">미수금 업체</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e53935">2</div><div class="stat-label">위험 (주황+빨강)</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <h3>고객사 목록</h3>
+          <div class="right">
+            <input type="text" placeholder="🔍 회사명, 사업자번호 검색..." style="padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;width:220px">
+            <button class="btn btn-primary" onclick="showPage('customerReg')">+ 신규 등록</button>
+          </div>
+        </div>
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>신호등</th><th>등급</th><th>회사명</th><th>대표자</th><th>사업자번호</th><th>담당자</th><th>영업담당</th><th>계약상태</th><th>최근거래</th></tr></thead>
+            <tbody>
+              <tr><td class="center"><span class="tl tl-blue"></span></td><td><span class="tag tag-vip">VIP</span></td><td><strong>CJ제일제당(주)</strong></td><td>김CJ</td><td>123-45-67890</td><td>김부장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-10</td></tr>
+              <tr><td class="center"><span class="tl tl-green"></span></td><td><span class="tag tag-a">A</span></td><td><strong>(주)농심</strong></td><td>신농심</td><td>345-67-89012</td><td>이과장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-08</td></tr>
+              <tr><td class="center"><span class="tl tl-yellow"></span></td><td><span class="tag tag-b">B</span></td><td><strong>(주)오뚜기</strong></td><td>함오뚜기</td><td>456-78-90123</td><td>박대리</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2025-12-20</td></tr>
+              <tr style="background:#fff8e1"><td class="center"><span class="tl tl-orange"></span></td><td><span class="tag tag-a">A</span></td><td><strong>풀무원식품(주)</strong></td><td>원풀무</td><td>234-56-78901</td><td>이규성</td><td>박주임</td><td><span class="tag tag-active">활동</span></td><td>2025-12-05</td></tr>
+              <tr style="background:#fce4ec"><td class="center"><span class="tl tl-red"></span></td><td><span class="tag tag-c">C</span></td><td><strong>(주)삼양식품</strong></td><td>전삼양</td><td>567-89-01234</td><td>최팀장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2025-10-15</td></tr>
+              <tr><td class="center"><span class="tl tl-blue"></span></td><td><span class="tag tag-b">B</span></td><td><strong>동원F&B(주)</strong></td><td>김동원</td><td>678-90-12345</td><td>정과장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-12</td></tr>
+              <tr><td class="center"><span class="tl tl-green"></span></td><td><span class="tag tag-a">A</span></td><td><strong>대상(주)</strong></td><td>임대상</td><td>789-01-23456</td><td>한대리</td><td>이주임</td><td><span class="tag tag-dormant">휴면</span></td><td>2025-08-20</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 고객사 등록 ===== -->
+    <div class="page" id="page-customerReg" style="display:none">
+      <div style="margin-bottom:16px"><button class="btn btn-secondary btn-sm" onclick="showPage('customerList')">← 목록으로</button></div>
+      <div class="card"><div class="card-bd" style="max-width:860px">
+        <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
+        <div class="fg-row">
+          <div class="fg"><label>법인 여부 <span class="req">*</span></label><div class="radio-group"><label class="radio-item"><input type="radio" name="corp" checked> 법인</label><label class="radio-item"><input type="radio" name="corp"> 개인</label></div></div>
+          <div class="fg"><label>거래처 등급</label><select><option>등급 선택</option><option>VIP</option><option>A</option><option>B</option><option>C</option></select></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>회사명 <span class="req">*</span></label><div class="combo"><input id="regCompany" placeholder="예: (주)바이오푸드랩"><button class="btn btn-check btn-sm" onclick="demoCompanyDup()">중복 확인</button></div><div class="check-result" id="compChk"></div></div>
+          <div class="fg"><label>대표자명 <span class="req">*</span></label><input placeholder="대표자 이름"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>사업자번호 <span class="req">*</span></label><div class="combo"><input placeholder="000-00-00000" maxlength="12" oninput="fmtBiz(this)"><button class="btn btn-check btn-sm" onclick="toast('✅ 중복 없음')">중복 확인</button></div></div>
+          <div class="fg"><label>법인번호 <span class="req">*</span></label><input placeholder="000000-0000000" maxlength="14"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>업태 <span class="req">*</span></label><input placeholder="예: 제조업"></div>
+          <div class="fg"><label>종목 <span class="req">*</span></label><input placeholder="예: 식품"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>계약 상태</label><select><option selected>활동</option><option>휴면</option><option>해지</option></select></div>
+          <div class="fg"><label>신호등</label><div style="display:flex;align-items:center;gap:6px;padding:8px 0"><span class="tl tl-blue"></span><span style="font-size:11px;color:#5f6b7a">파랑 (신규 등록 시 기본값)</span></div></div>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">2</span> 주소</div>
+        <div class="fg"><label>주소 <span class="req">*</span></label><div class="addr-row"><input placeholder="우편번호" style="max-width:120px" readonly><button class="btn btn-secondary btn-sm" onclick="toast('🔍 카카오 우편번호 API 연동 예정')">우편번호 찾기</button></div></div>
+        <div class="fg"><input placeholder="기본주소 (자동입력)" readonly></div>
+        <div class="fg"><input placeholder="상세주소 입력"></div>
+
+        <div class="sec-title"><span class="sec-num">3</span> 인허가 정보 <span style="margin-left:auto;font-size:11px;color:#8892a4;font-weight:400">여러 개 등록 가능</span></div>
+        <div id="licenseArea">
+          <div class="sub-card">
+            <div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">1</span> 인허가</div></div>
+            <div class="fg-row">
+              <div class="fg"><label>분야 <span class="req">*</span></label><select><option>선택</option><option>식품</option><option>축산</option></select></div>
+              <div class="fg"><label>영업의 형태 <span class="req">*</span></label><div class="combo"><select><option>선택</option><option>식품제조가공업</option><option>즉석판매제조가공업</option><option>식품소분업</option><option>유통전문판매업</option><option>축산물가공업</option><option>식육포장처리업</option><option value="etc">✏️ 직접 입력</option></select></div></div>
+            </div>
+            <div class="fg-row">
+              <div class="fg"><label>대표자 <span class="req">*</span></label><input placeholder="인허가 대표자"></div>
+              <div class="fg"><label>인허가번호 <span class="req">*</span></label><input placeholder="인허가번호"></div>
+            </div>
+            <div class="fg-row">
+              <div class="fg"><label>영업소명칭 <span class="req">*</span></label><input placeholder="영업소 명칭"></div>
+              <div class="fg"><label>소재지 <span class="req">*</span></label><input placeholder="소재지"></div>
+            </div>
+            <div class="fg"><label>인허가 문서 첨부</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div class="file-area" style="flex:1;padding:10px" onclick="toast('📁 파일 선택 (PDF, JPG, PNG)')">📁 클릭하여 파일 선택 또는 드래그</div>
+                <button class="btn btn-secondary btn-sm" disabled style="opacity:.5">🤖 OCR 인식<br><span style="font-size:9px">(추후 구현)</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" onclick="toast('+ 인허가 정보 추가됨')">+ 인허가 정보 추가</button>
+
+        <div class="sec-title"><span class="sec-num">4</span> 고객사 담당자 <span style="margin-left:auto;font-size:11px;color:#8892a4;font-weight:400">여러 명 등록 가능</span></div>
+        <div id="contactArea">
+          <div class="sub-card">
+            <div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">1</span> 담당자</div></div>
+            <div class="fg-row3">
+              <div class="fg"><label>이름 <span class="req">*</span></label><input id="regCName" placeholder="담당자 이름"></div>
+              <div class="fg"><label>전화번호 <span class="req">*</span></label><input placeholder="010-0000-0000" oninput="fmtPhone(this)"></div>
+              <div class="fg"><label>이메일</label><input type="email" placeholder="email@example.com"></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+              <button class="btn btn-check btn-sm" onclick="demoContactDup()">🔍 중복 확인</button>
+              <div class="check-result" id="cntChk"></div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:#8892a4">
+                자사 담당: <select style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px"><option>선택</option><option>박주임</option><option selected>이주임</option><option>김사원</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" onclick="toast('+ 담당자 추가됨')">+ 담당자 추가</button>
+
+        <div class="sec-title"><span class="sec-num">5</span> 세금계산서 담당자 <button class="btn btn-check btn-sm" style="margin-left:auto" onclick="toast('📋 1번 담당자 정보 복사 완료')">📋 1번 담당자 복사</button></div>
+        <div class="fg-row3">
+          <div class="fg"><label>이름 <span class="req">*</span></label><input placeholder="담당자 이름"></div>
+          <div class="fg"><label>전화번호 <span class="req">*</span></label><input placeholder="010-0000-0000"></div>
+          <div class="fg"><label>이메일 <span class="req">*</span></label><input type="email" placeholder="세금계산서 수신 이메일"></div>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">6</span> 메모 / 비고</div>
+        <div class="fg"><textarea placeholder="특이사항, 계약 조건, 참고사항 등..."></textarea></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+          <button class="btn btn-secondary" onclick="showPage('customerList')">취소</button>
+          <button class="btn btn-primary" onclick="toast('✅ 고객사가 등록되었습니다!');setTimeout(()=>showPage('customerList'),1500)">✅ 고객사 등록</button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ===== 업무일지 - 목록 ===== -->
+    <div class="page" id="page-daily" style="display:none">
+      <!-- 요약 통계 -->
+      <div class="stats">
+        <div class="stat"><div class="stat-val" style="color:#1565c0">12</div><div class="stat-label">이번 주 작성</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32">8</div><div class="stat-label">방문 건수</div></div>
+        <div class="stat"><div class="stat-val" style="color:#1a2332">9,680,000</div><div class="stat-label">이번 주 매출합계</div></div>
+        <div class="stat"><div class="stat-val" style="color:#7b1fa2">2</div><div class="stat-label">신규영업 활동</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-hd">
+          <h3>📝 업무일지</h3>
+          <div class="right">
+            <span style="font-size:11px;color:#8892a4;margin-right:8px">영업부만 작성 · 부서원 조회 가능</span>
+            <button class="btn btn-primary" onclick="showPage('dailyWrite')">+ 업무일지 작성</button>
+          </div>
+        </div>
+        <!-- 필터 영역 -->
+        <div style="padding:14px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fafbfc">
+          <div class="fg" style="margin:0;flex-shrink:0">
+            <input type="date" value="2026-02-10" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          </div>
+          <span style="color:#c8d6e5">~</span>
+          <div class="fg" style="margin:0;flex-shrink:0">
+            <input type="date" value="2026-02-13" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          </div>
+          <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#fff;cursor:pointer">
+            <option>전체 작성자</option>
+            <option selected>이주임</option>
+            <option>김영업</option>
+            <option>박철수</option>
+          </select>
+          <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#fff;cursor:pointer">
+            <option>전체 시료수거</option>
+            <option>방문</option>
+            <option>택배·퀵</option>
+            <option>내방</option>
+          </select>
+          <input placeholder="업체명 검색..." style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:160px">
+          <button class="btn btn-secondary btn-sm" onclick="toast('🔍 검색 완료')">검색</button>
+        </div>
+        <!-- 테이블 -->
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th style="width:40px;text-align:center">📎</th><th>날짜</th><th>작성자</th><th>업체명</th><th>시료수거</th><th style="text-align:right">매출(VAT포함)</th><th>특이사항</th><th>신규영업</th><th>익일계획</th><th style="width:60px"></th></tr></thead>
+            <tbody>
+              <tr onclick="showPage('dailyDetail')" style="cursor:pointer">
+                <td class="center">📄</td>
+                <td><b>2026-02-13</b></td><td>이주임</td><td><b>CJ제일제당(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">2,200,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">신제품 출시 관련 추가 검사 요청</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">농심 택배 접수 예정</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px" title="상세보기">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td><b>2026-02-13</b></td><td>이주임</td><td><b>(주)농심</b></td>
+                <td><span class="tag" style="background:#e8f5e9;color:#2e7d32">택배·퀵</span></td>
+                <td style="text-align:right;font-weight:600">880,000</td>
+                <td>-</td><td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">-</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-12</td><td>이주임</td><td><b>동원F&B(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">1,500,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">경쟁사 견적 비교 요청 — A사 가격 비교 자료 요청</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">CJ 방문 예정</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-12</td><td>이주임</td><td><b>(신규) 하림그룹</b></td>
+                <td><span class="tag" style="background:#f3e5f5;color:#7b1fa2">내방</span></td>
+                <td style="text-align:right;color:#8892a4">-</td>
+                <td>-</td>
+                <td style="color:#7b1fa2;font-weight:600">식품안전팀 미팅</td>
+                <td style="font-size:11px;color:#5f6b7a">견적서 발송</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-11</td><td>이주임</td><td><b>CJ제일제당(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">3,100,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">반기 계약 갱신 논의</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">동원F&B 방문</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-11</td><td>김영업</td><td><b>풀무원식품(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">1,800,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">미수금 건 수금 활동 병행</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">서울유통 수금 전화</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-10</td><td>이주임</td><td><b>오뚜기(주)</b></td>
+                <td><span class="tag" style="background:#e8f5e9;color:#2e7d32">택배·퀵</span></td>
+                <td style="text-align:right;font-weight:600">650,000</td>
+                <td>-</td><td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">CJ 계약 갱신 논의</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 페이지네이션 -->
+        <div style="padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eef0f4">
+          <span style="font-size:11px;color:#8892a4">총 7건 (1/1 페이지)</span>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-secondary btn-sm" disabled>← 이전</button>
+            <button class="btn btn-sm" style="background:#1a73e8;color:#fff;border:none;border-radius:6px;min-width:28px">1</button>
+            <button class="btn btn-secondary btn-sm" disabled>다음 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 업무일지 - 작성 폼 ===== -->
+    <div class="page" id="page-dailyWrite" style="display:none">
+      <div style="margin-bottom:16px"><button class="btn btn-secondary btn-sm" onclick="showPage('daily')">← 목록으로</button></div>
+      <div class="card"><div class="card-bd" style="max-width:860px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3 style="font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px">📝 업무일지 작성</h3>
+          <span style="font-size:11px;color:#8892a4">작성자: 이주임 (영업부) · 2026-02-13</span>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
+        <div class="fg-row">
+          <div class="fg"><label>날짜 <span class="req">*</span></label><input type="date" value="2026-02-13"></div>
+          <div class="fg"><label>업체명 <span class="req">*</span></label>
+            <div class="combo">
+              <select id="dailyCompany" onchange="dailyCompanyChange(this)">
+                <option>업체 선택...</option>
+                <option>CJ제일제당(주)</option>
+                <option>(주)농심</option>
+                <option>동원F&B(주)</option>
+                <option>풀무원식품(주)</option>
+                <option>오뚜기(주)</option>
+                <option value="_new">✏️ 신규 업체 직접 입력</option>
+              </select>
+            </div>
+            <input id="dailyCompanyNew" placeholder="신규 업체명 입력" style="display:none;margin-top:6px;padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;width:100%">
+          </div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>시료수거 방법 <span class="req">*</span></label>
+            <select id="dailySample" onchange="dailySampleChange(this)">
+              <option value="">선택...</option>
+              <option value="visit">방문</option>
+              <option value="delivery">택배·퀵</option>
+              <option value="walkin">내방</option>
+            </select>
+          </div>
+          <div class="fg"><label>매출 (VAT 포함)</label><input type="text" placeholder="숫자만 입력 (예: 2200000)" oninput="fmtMoney(this)"></div>
+        </div>
+
+        <!-- 방문 시 차량일지 연동 안내 -->
+        <div id="dailyVehicleNotice" style="display:none;background:#e3f2fd;border:1px solid #bbdefb;border-radius:10px;padding:14px;margin:8px 0 16px;font-size:12px;color:#1565c0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="font-size:16px">🚗</span>
+            <b>차량일지 자동 연동</b>
+            <span style="font-size:10px;background:#bbdefb;padding:2px 8px;border-radius:4px;margin-left:auto">카카오모빌리티 길찾기 API</span>
+          </div>
+
+          <div class="fg-row" style="margin-bottom:8px">
+            <div class="fg" style="margin:0"><label style="color:#1565c0">출발지 <span class="req">*</span></label>
+              <select id="vStartType" onchange="calcRoutePreview()" style="border-color:#90caf9">
+                <option value="office">🏢 회사 (기본)</option>
+                <option value="home">🏠 현지출근 (자택)</option>
+              </select>
+            </div>
+            <div class="fg" style="margin:0"><label style="color:#1565c0">방문지 (업체 주소 자동)</label>
+              <input id="vDestPreview" value="서울 중구 을지로 (CJ제일제당)" style="background:#e3f2fd;border-color:#90caf9" readonly>
+            </div>
+          </div>
+          <div class="fg-row" style="margin-bottom:8px">
+            <div class="fg" style="margin:0"><label style="color:#1565c0">도착지 <span class="req">*</span></label>
+              <select id="vEndType" onchange="calcRoutePreview()" style="border-color:#90caf9">
+                <option value="office">🏢 회사 (기본)</option>
+                <option value="home">🏠 자택 (퇴근)</option>
+              </select>
+            </div>
+            <div class="fg" style="margin:0"><label style="color:#1565c0">예상 주행거리</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input id="vDistPreview" type="number" value="42" style="border-color:#90caf9;width:100px;text-align:right;font-weight:700;font-size:15px">
+                <span style="font-weight:600">km</span>
+                <span style="font-size:10px;color:#1565c0;background:#bbdefb;padding:2px 6px;border-radius:4px" id="vDistLabel">API 자동계산</span>
+              </div>
+              <div class="hint" style="color:#1565c0;margin-top:4px">💡 자동 계산 후 수동 조정 가능 (퇴근 거리, 우회 등)</div>
+            </div>
+          </div>
+
+          <!-- 경유지 추가 -->
+          <div id="vWaypointArea"></div>
+          <button type="button" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px dashed #90caf9;border-radius:6px;background:transparent;color:#1565c0;font-size:11px;font-weight:600;cursor:pointer;margin-top:6px" onclick="addWaypoint()">+ 경유지 추가</button>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">2</span> 업무 상세</div>
+        <div class="fg"><label>특이사항</label><textarea placeholder="방문 또는 접수 관련 특이사항을 작성하세요.&#10;예: 신제품 출시 관련 추가 검사 요청, 단가 협의 필요 등"></textarea></div>
+        <div class="fg"><label>경쟁사 동향</label><textarea placeholder="경쟁사 관련 정보가 있다면 작성하세요.&#10;예: A검사기관에서 5% 저렴한 단가 제시, B기관 신규 서비스 시작 등" style="min-height:50px"></textarea></div>
+        <div class="fg"><label>건의사항</label><textarea placeholder="회사에 건의할 사항이 있다면 작성하세요.&#10;예: 신규 검사 항목 도입 필요, 장비 추가 요청 등" style="min-height:50px"></textarea></div>
+
+        <div class="sec-title"><span class="sec-num">3</span> 영업 활동</div>
+        <div class="fg"><label>신규영업 활동</label><textarea placeholder="신규 영업 관련 활동이 있다면 작성하세요.&#10;예: 하림그룹 식품안전팀 미팅 — 제안서 전달, 견적서 발송 예정" style="min-height:50px"></textarea></div>
+        <div class="fg"><label>익일 계획 <span class="req">*</span></label><textarea placeholder="다음 영업일에 할 계획을 작성하세요.&#10;예: 농심 택배 접수 예정, CJ 계약 갱신 최종 확인"></textarea></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid #eef0f4">
+          <button class="btn btn-secondary" onclick="showPage('daily')">취소</button>
+          <button class="btn btn-secondary" onclick="toast('💾 임시저장 되었습니다')">임시저장</button>
+          <button class="btn btn-primary" onclick="dailySave()">✅ 저장</button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ===== 업무일지 - 상세 보기 ===== -->
+    <div class="page" id="page-dailyDetail" style="display:none">
+      <div style="margin-bottom:16px;display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="showPage('daily')">← 목록으로</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="toast('✏️ 수정 모드로 전환')">✏️ 수정</button>
+          <button class="btn btn-danger btn-sm" onclick="if(confirm('삭제하시겠습니까?'))toast('🗑️ 삭제되었습니다')">🗑️ 삭제</button>
+        </div>
+      </div>
+
+      <div class="card"><div class="card-bd">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #eef0f4">
+          <div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:4px">📝 업무일지 상세</h3>
+            <span style="font-size:12px;color:#8892a4">2026-02-13 (목) · 이주임 (영업부)</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:#8892a4;margin-bottom:4px">작성일시</div>
+            <div style="font-size:12px;color:#5f6b7a">2026-02-13 17:32</div>
+          </div>
+        </div>
+
+        <!-- 기본 정보 카드 -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">업체명</div>
+            <div style="font-size:14px;font-weight:700;color:#1a2332">CJ제일제당(주)</div>
+          </div>
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">시료수거</div>
+            <div><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗 차량일지 연동</span></div>
+          </div>
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">매출 (VAT 포함)</div>
+            <div style="font-size:14px;font-weight:700;color:#2e7d32">₩ 2,200,000</div>
+          </div>
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">방문 지역</div>
+            <div style="font-size:13px;font-weight:600;color:#1a2332">서울(중구)</div>
+          </div>
+        </div>
+
+        <!-- 상세 내용 -->
+        <div class="sec-title" style="margin-top:8px"><span class="sec-num">1</span> 특이사항</div>
+        <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#333">
+          신제품 출시 관련 추가 검사 요청. 2월 말까지 미생물 5종 + 영양성분 분석이 필요하며, 시료는 오늘 수거 완료. 담당자(식품안전팀 김과장)와 납기 2주 확인.
+        </div>
+
+        <div class="sec-title"><span class="sec-num">2</span> 경쟁사 동향</div>
+        <div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#e65100">
+          <b>⚠️ A검사기관</b> — 미생물 검사 단가를 약 8% 인하한 것으로 파악됨. CJ측에서 가격 비교 자료를 요청함. 대응 필요.
+        </div>
+
+        <div class="sec-title"><span class="sec-num">3</span> 건의사항</div>
+        <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#333">
+          경쟁사 단가 인하에 대응하기 위해 대량 계약 할인 정책 검토가 필요합니다. 반기 계약 갱신 시 활용 가능한 패키지 단가표를 재무부와 협의 요청드립니다.
+        </div>
+
+        <div class="sec-title"><span class="sec-num">4</span> 신규영업 활동</div>
+        <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;color:#8892a4;font-style:italic">
+          해당 없음
+        </div>
+
+        <div class="sec-title"><span class="sec-num">5</span> 익일 계획</div>
+        <div style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#1565c0">
+          <b>📅 2026-02-14 (금)</b><br>
+          • 농심 택배 접수 예정 (시료 도착 확인 후 접수)<br>
+          • CJ 패키지 단가표 초안 작성 → 재무부 검토 요청
+        </div>
+
+        <!-- 연결 정보 -->
+        <div style="border-top:1px solid #eef0f4;padding-top:16px;margin-top:16px">
+          <div style="font-size:12px;font-weight:700;color:#1a2332;margin-bottom:10px">🔗 연결된 정보</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="showPage('vehicle')">
+              🚗 <b>차량일지</b> — 서울(중구) 왕복 42km
+              <span style="color:#1565c0;font-size:10px">보기 →</span>
+            </div>
+            <div style="background:#f8f9fb;border:1px solid #e2e6ed;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="showPage('customerList')">
+              🏢 <b>CJ제일제당(주)</b> — 고객사 정보
+              <span style="color:#5f6b7a;font-size:10px">보기 →</span>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ===== 차량일지 ===== -->
+    <div class="page" id="page-vehicle" style="display:none">
+      <!-- 설정 카드 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd">
+          <h3>⚙️ 차량일지 설정</h3>
+          <div class="right"><button class="btn btn-sm btn-secondary" onclick="toast('✅ 설정이 저장되었습니다')">설정 저장</button></div>
+        </div>
+        <div class="card-bd">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+            <div class="fg" style="margin:0">
+              <label>🏢 회사 주소 (기본 출발지/도착지)</label>
+              <input value="경기도 화성시 동탄대로 123 바이오푸드랩" style="background:#f8f9fb;font-size:12px" readonly>
+              <div class="hint">관리자 > 시스템 설정에서 변경</div>
+            </div>
+            <div class="fg" style="margin:0">
+              <label>🏠 자택 주소 (현지출근/퇴근용)</label>
+              <input id="vHomeAddr" placeholder="자택 주소를 입력하세요" style="font-size:12px" value="서울 강남구 역삼동 123">
+              <div class="hint">개인 설정 · 거리 계산에 사용</div>
+            </div>
+            <div class="fg" style="margin:0">
+              <label>🚗 차량 번호</label>
+              <input value="12가 3456" style="font-size:12px">
+              <div class="hint">기본 차량 · 업무일지 연동 시 자동 입력</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;padding:8px 12px;background:#fff3e0;border-radius:8px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px">
+            <span>📍</span> 주행거리는 <b>카카오모빌리티 길찾기 API</b>로 자동 계산됩니다 (무료 일 10,000건). 자동 계산 후 수동 조정도 가능합니다.
+          </div>
+        </div>
+      </div>
+
+      <!-- 목록 -->
+      <div class="card">
+        <div class="card-hd">
+          <h3>🚗 차량일지</h3>
+          <div class="right">
+            <span style="font-size:11px;color:#1565c0;background:#e3f2fd;padding:4px 10px;border-radius:6px">🔗 업무일지 방문 기록에서 자동 생성</span>
+          </div>
+        </div>
+        <!-- 필터 -->
+        <div style="padding:12px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fafbfc">
+          <input type="date" value="2026-02-10" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          <span style="color:#c8d6e5">~</span>
+          <input type="date" value="2026-02-13" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#fff">
+            <option>전체 운전자</option><option selected>이주임</option><option>김영업</option>
+          </select>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px">
+            <span style="color:#5f6b7a">합계:</span>
+            <span style="font-weight:700;color:#1a2332">1,002 km</span>
+            <span style="color:#8892a4">|</span>
+            <span style="color:#e65100;font-weight:600">주유비 165,000</span>
+            <span style="color:#8892a4">|</span>
+            <span style="color:#1565c0;font-weight:600">통행료 49,600</span>
+          </div>
+        </div>
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>날짜</th><th>운전자</th><th>차량</th>
+                <th>출발지</th><th>경로</th><th>도착지</th>
+                <th style="text-align:right">주행(km)</th>
+                <th style="text-align:center">조정</th>
+                <th style="text-align:right">주유비</th><th style="text-align:right">통행료</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- 2/13 회사→중구→회사 -->
+              <tr>
+                <td><b>2026-02-13</b></td><td>이주임</td><td>12가 3456</td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td>
+                  <div class="route">
+                    <div class="route-stop">서울(중구)</div>
+                  </div>
+                </td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td style="text-align:right;font-weight:700">42</td>
+                <td style="text-align:center"><span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 6px;border-radius:4px">API</span></td>
+                <td style="text-align:right">-</td>
+                <td style="text-align:right">4,800</td>
+                <td class="center"><span style="cursor:pointer;font-size:12px" onclick="toast('✏️ 수정 모드')">✏️</span></td>
+              </tr>
+              <!-- 2/12 회사→강남→양천→회사 -->
+              <tr>
+                <td><b>2026-02-12</b></td><td>이주임</td><td>12가 3456</td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td>
+                  <div class="route">
+                    <div class="route-stop">서울(강남구)</div>
+                    <span class="route-arrow">→</span>
+                    <div class="route-stop">서울(양천구)</div>
+                  </div>
+                </td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td style="text-align:right;font-weight:700">68</td>
+                <td style="text-align:center"><span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 6px;border-radius:4px">API</span></td>
+                <td style="text-align:right">45,000</td>
+                <td style="text-align:right">6,400</td>
+                <td class="center"><span style="cursor:pointer;font-size:12px" onclick="toast('✏️ 수정 모드')">✏️</span></td>
+              </tr>
+              <!-- 2/11 현지출근→중구→인천→부산→자택 (수동 조정 예시) -->
+              <tr style="background:#fffde7">
+                <td><b>2026-02-11</b></td><td>이주임</td><td>12가 3456</td>
+                <td><span class="tag" style="background:#f3e5f5;color:#7b1fa2">🏠 현지출근</span></td>
+                <td>
+                  <div class="route">
+                    <div class="route-stop">서울(중구)</div>
+                    <span class="route-arrow">→</span>
+                    <div class="route-stop">인천(연수구)</div>
+                    <span class="route-arrow">→</span>
+                    <div class="route-stop">부산(해운대구)</div>
+                  </div>
+                </td>
+                <td><span class="tag" style="background:#f3e5f5;color:#7b1fa2">🏠 자택</span></td>
+                <td style="text-align:right;font-weight:700;color:#e65100">
+                  <span style="text-decoration:line-through;color:#8892a4;font-weight:400;font-size:10px">878</span>
+                  892
+                </td>
+                <td style="text-align:center"><span style="font-size:10px;color:#e65100;background:#fff3e0;padding:1px 6px;border-radius:4px">수동</span></td>
+                <td style="text-align:right">120,000</td>
+                <td style="text-align:right">38,400</td>
+                <td class="center"><span style="cursor:pointer;font-size:12px" onclick="toast('✏️ 수정 모드')">✏️</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 범례 -->
+        <div style="padding:10px 20px;border-top:1px solid #eef0f4;display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:#8892a4">
+          <span><span class="tag" style="background:#e3f2fd;color:#1565c0;font-size:9px">🏢 회사</span> 회사 출발/도착</span>
+          <span><span class="tag" style="background:#f3e5f5;color:#7b1fa2;font-size:9px">🏠 현지출근</span> 자택 출발/도착</span>
+          <span><span style="background:#e8f5e9;padding:1px 6px;border-radius:4px;font-size:9px;color:#2e7d32">API</span> 카카오 길찾기 자동계산</span>
+          <span><span style="background:#fff3e0;padding:1px 6px;border-radius:4px;font-size:9px;color:#e65100">수동</span> 운전자가 직접 조정</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 미수금 활동 내역 ===== -->
+    <div class="page" id="page-collection" style="display:none">
+      <div class="card">
+        <div class="card-hd">
+          <h3>📞 미수금 활동 내역</h3>
+          <div class="right">
+            <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px">
+              <option>풀무원식품(주) — 🟠 주황</option>
+              <option>(주)오뚜기 — 🟡 노랑</option>
+              <option>(주)삼양식품 — 🔴 빨강</option>
+            </select>
+            <button class="btn btn-primary">+ 수금 활동 기록</button>
+          </div>
+        </div>
+        <div class="card-bd">
+          <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#e65100">미수금액</div>
+              <div style="font-size:20px;font-weight:800;color:#e65100">4,500,000원</div>
+            </div>
+            <div style="background:#fce4ec;border:1px solid #ef9a9a;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#c62828">연체일</div>
+              <div style="font-size:20px;font-weight:800;color:#c62828">68일</div>
+            </div>
+            <div style="background:#e3f2fd;border:1px solid #90caf9;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#1565c0">수금 시도</div>
+              <div style="font-size:20px;font-weight:800;color:#1565c0">5회</div>
+            </div>
+            <div style="background:#f3e5f5;border:1px solid #ce93d8;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#7b1fa2">입금 약속일</div>
+              <div style="font-size:20px;font-weight:800;color:#7b1fa2">02/20</div>
+            </div>
+          </div>
+
+          <div class="timeline">
+            <div class="tl-item sys">
+              <div class="tl-date">2026-02-13 09:00 · 시스템</div>
+              <div class="tl-content">🚦 <strong>신호등 변경:</strong> 노랑 → <span style="color:#e65100;font-weight:700">주황</span> (연체 68일, 미연결 2회)</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-02-12 14:30 · 이주임</div>
+              <div class="tl-content">이규성 과장에게 전화 연결 성공. "이번 달 20일까지 입금하겠다"고 약속.</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-connected">✅ 연결</span>
+                <span class="tl-tag" style="background:#e8f5e9;color:#2e7d32">📅 약속: 02/20</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-02-10 11:15 · 이주임</div>
+              <div class="tl-content">전화 연결 안됨. 문자 발송 — "미수금 확인 부탁드립니다."</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-missed">❌ 미연결</span>
+                <span class="tl-tag tl-tag-sms">💬 문자 발송</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-02-05 16:00 · 이주임</div>
+              <div class="tl-content">이규성 과장 전화 수신 거절.</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-refused">🚫 수신거절</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-01-28 10:00 · 이주임</div>
+              <div class="tl-content">카카오톡 메시지 발송. 읽음 확인됨. 회신 없음.</div>
+              <div class="tl-tags">
+                <span class="tl-tag" style="background:#fff9c4;color:#f57f17">💬 카카오톡</span>
+                <span class="tl-tag tl-tag-missed">회신 없음</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-01-20 09:30 · 이주임</div>
+              <div class="tl-content">전화 연결. 김부장 "다음 달 초 처리하겠다" 응답. (미이행)</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-connected">✅ 연결</span>
+                <span class="tl-tag" style="background:#fce4ec;color:#c62828">❌ 약속 미이행</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 견적서 관리 ===== -->
+    <div class="page" id="page-estimate" style="display:none">
+      <div class="card"><div class="card-bd" style="text-align:center;padding:60px">
+        <div style="font-size:48px;margin-bottom:12px">⏸️</div>
+        <div style="font-size:16px;font-weight:700;color:#e65100;margin-bottom:8px">추후 검토 항목</div>
+        <div style="font-size:13px;color:#5f6b7a">홈페이지 기존 기능 활용 예정<br>단가는 검사항목 DB 자동 연동 방식으로 구현 예정</div>
+      </div></div>
+    </div>
+
+    <!-- ===== 거래명세표 관리 ===== -->
+    <div class="page" id="page-trade" style="display:none">
+      <div class="card">
+        <div class="card-hd"><h3>📄 거래명세표 관리</h3><div class="right"><button class="btn btn-secondary btn-sm">📅 월별 일괄 발행</button><button class="btn btn-primary btn-sm">+ 거래명세표 작성</button></div></div>
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>발행일</th><th>거래명세표 번호</th><th>업체명</th><th>항목 수</th><th>금액(합계)</th><th>상태</th><th>비고</th></tr></thead>
+            <tbody>
+              <tr><td>2026-02-10</td><td>TM-2026-0213</td><td>CJ제일제당(주)</td><td>4건</td><td style="text-align:right">2,200,000</td><td><span class="tag tag-approved">발송완료</span></td><td><button class="btn btn-secondary btn-sm">PDF</button> <button class="btn btn-secondary btn-sm">📧</button></td></tr>
+              <tr><td>2026-02-08</td><td>TM-2026-0198</td><td>(주)농심</td><td>2건</td><td style="text-align:right">880,000</td><td><span class="tag tag-approved">발송완료</span></td><td><button class="btn btn-secondary btn-sm">PDF</button></td></tr>
+              <tr><td>2026-02-05</td><td>TM-2026-0185</td><td>동원F&B(주)</td><td>3건</td><td style="text-align:right">1,500,000</td><td><span class="tag tag-pending">대기</span></td><td><button class="btn btn-secondary btn-sm">PDF</button> <button class="btn btn-primary btn-sm">📧 발송</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:12px 16px;font-size:12px;color:#e65100">
+        ⚠️ 세부 구현은 <strong>접수관리</strong> 완성 후 구체화 예정 — 접수 완료 시 자동 생성
+      </div>
+    </div>
+
+    <!-- ===== 긴급 협조 요청 ===== -->
+    <div class="page" id="page-urgent" style="display:none">
+      <div class="card"><div class="card-bd" style="text-align:center;padding:60px">
+        <div style="font-size:48px;margin-bottom:12px">⏸️</div>
+        <div style="font-size:16px;font-weight:700;color:#e65100;margin-bottom:8px">추후 검토 항목</div>
+        <div style="font-size:13px;color:#5f6b7a">검사 목적별 표기 항목이 다르므로 반영 필요<br>기능 방향: 요청 등록, 현황 조회(대기/처리중/완료), 담당자 배정, 완료 알림</div>
+      </div></div>
+    </div>
+
+    <!-- ===== 미수금 관리 ===== -->
+    <div class="page" id="page-arManage" style="display:none">
+      <div class="card"><div class="card-bd" style="text-align:center;padding:60px">
+        <div style="font-size:48px;margin-bottom:12px">⏸️</div>
+        <div style="font-size:16px;font-weight:700;color:#e65100;margin-bottom:8px">추후 검토 항목</div>
+        <div style="font-size:13px;color:#5f6b7a">재무관리 설계 후 구체화 예정</div>
+      </div></div>
+    </div>
+
+    <!-- ===== 계산서 발행 승인 ===== -->
+    <div class="page" id="page-invoice" style="display:none">
+      <div class="stats">
+        <div class="stat"><div class="stat-val">12</div><div class="stat-label">이번 달 요청</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e65100">3</div><div class="stat-label">대기</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32">8</div><div class="stat-label">승인</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e53935">1</div><div class="stat-label">반려</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><h3>🧾 계산서 발행 승인요청</h3><div class="right"><button class="btn btn-primary">+ 승인 요청</button></div></div>
+        <div class="card-bd">
+          <div style="background:#f8f9fb;border:1px solid #eef0f4;border-radius:10px;padding:14px;margin-bottom:16px">
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px">승인 흐름</div>
+            <div class="approval-flow">
+              <div class="af-step" style="background:#e3f2fd;color:#1565c0">영업사원<br><small>요청</small></div>
+              <span class="af-arr">→</span>
+              <div class="af-step" style="background:#fff3e0;color:#e65100">재무부<br><small>검토</small></div>
+              <span class="af-arr">→</span>
+              <div class="af-step" style="background:#e8f5e9;color:#2e7d32">승인</div>
+              <span class="af-arr">→</span>
+              <div class="af-step" style="background:#f3e5f5;color:#7b1fa2">세금계산서<br><small>자동 발행</small></div>
+            </div>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>요청일</th><th>업체명</th><th>금액</th><th>발행사유</th><th>상태</th><th>처리자</th><th>처리일</th></tr></thead>
+            <tbody>
+              <tr><td>2026-02-13</td><td>CJ제일제당(주)</td><td style="text-align:right">2,200,000</td><td>월 정기 검사 비용</td><td><span class="tag tag-pending">대기</span></td><td>-</td><td>-</td></tr>
+              <tr><td>2026-02-12</td><td>동원F&B(주)</td><td style="text-align:right">1,500,000</td><td>긴급 검사 비용</td><td><span class="tag tag-pending">대기</span></td><td>-</td><td>-</td></tr>
+              <tr><td>2026-02-10</td><td>(주)농심</td><td style="text-align:right">880,000</td><td>영양성분 분석 비용</td><td><span class="tag tag-approved">승인</span></td><td>재무부 김과장</td><td>2026-02-11</td></tr>
+              <tr><td>2026-02-08</td><td>(주)오뚜기</td><td style="text-align:right">650,000</td><td>유통기한 연장 검사</td><td><span class="tag tag-approved">승인</span></td><td>재무부 김과장</td><td>2026-02-09</td></tr>
+              <tr style="background:#fce4ec"><td>2026-02-05</td><td>풀무원식품(주)</td><td style="text-align:right">4,500,000</td><td>미수금 정산 요청</td><td><span class="tag tag-rejected">반려</span></td><td>재무부 김과장</td><td>2026-02-06</td></tr>
+              <tr><td colspan="7" style="background:#fce4ec;font-size:11px;color:#c62828;padding:6px 14px">↳ 반려 사유: 미수금 업체 — 수금 활동 기록 후 재요청 바랍니다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toastEl"></div>
+
+<script>
+const pageNames = {
+  customerList:'고객사 관리', customerReg:'고객사 관리 > 신규 등록',
+  daily:'업무일지', dailyWrite:'업무일지 > 작성', dailyDetail:'업무일지 > 상세',
+  vehicle:'차량일지', collection:'미수금 활동 내역',
+  estimate:'견적서 관리', trade:'거래명세표 관리', urgent:'긴급 협조 요청',
+  arManage:'미수금 관리', invoice:'계산서 발행 승인요청'
+};
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  document.getElementById('page-' + id).style.display = 'block';
+  document.getElementById('topSub').textContent = pageNames[id] || '';
+  document.querySelectorAll('.sb-item').forEach(el => el.classList.remove('active'));
+  const navId = (id === 'customerReg') ? 'customerList' : (id === 'dailyWrite' || id === 'dailyDetail') ? 'daily' : id;
+  const nav = document.getElementById('nav-' + navId);
+  if (nav) nav.classList.add('active');
+  document.getElementById('contentArea').scrollTop = 0;
+}
+function closePopup(id) { document.getElementById(id).classList.remove('show'); }
+function toast(msg) {
+  const t = document.getElementById('toastEl');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+function fmtBiz(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>10)v=v.slice(0,10);
+  if(v.length>5)v=v.slice(0,3)+'-'+v.slice(3,5)+'-'+v.slice(5);
+  else if(v.length>3)v=v.slice(0,3)+'-'+v.slice(3);
+  el.value=v;
+}
+function fmtPhone(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>11)v=v.slice(0,11);
+  if(v.length>7)v=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7);
+  else if(v.length>3)v=v.slice(0,3)+'-'+v.slice(3);
+  el.value=v;
+}
+function demoCompanyDup() {
+  const name = document.getElementById('regCompany').value.trim();
+  if(!name){alert('회사명을 입력하세요.');return;}
+  if(name.includes('풀무원')){document.getElementById('companyDup').classList.add('show');}
+  else{const el=document.getElementById('compChk');el.style.display='block';el.className='check-result check-ok';el.textContent='✅ 중복 없음 — 등록 가능';}
+}
+function demoContactDup() {
+  const name = document.getElementById('regCName').value.trim();
+  if(!name){alert('이름을 입력하세요.');return;}
+  if(name==='이규성'){document.getElementById('contactDup').classList.add('show');}
+  else{const el=document.getElementById('cntChk');el.style.display='inline-block';el.className='check-result check-ok';el.textContent='✅ 중복 없음';}
+}
+// ── 업무일지 함수 ──
+function dailyCompanyChange(sel) {
+  const newInput = document.getElementById('dailyCompanyNew');
+  if (sel.value === '_new') {
+    newInput.style.display = 'block';
+    newInput.focus();
+  } else {
+    newInput.style.display = 'none';
+  }
+}
+function dailySampleChange(sel) {
+  const notice = document.getElementById('dailyVehicleNotice');
+  if (sel.value === 'visit') {
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
+}
+function fmtMoney(el) {
+  let v = el.value.replace(/[^0-9]/g, '');
+  if (v) {
+    el.value = Number(v).toLocaleString('ko-KR');
+  }
+}
+function dailySave() {
+  const company = document.getElementById('dailyCompany').value;
+  const sample = document.getElementById('dailySample').value;
+  if (!company || company === '업체 선택...') { toast('⚠️ 업체를 선택하세요.'); return; }
+  if (!sample) { toast('⚠️ 시료수거 방법을 선택하세요.'); return; }
+  toast('✅ 업무일지가 저장되었습니다!');
+  if (sample === 'visit') {
+    setTimeout(() => toast('🚗 차량일지에 자동 반영되었습니다.'), 1500);
+  }
+  setTimeout(() => showPage('daily'), 2500);
+}
+
+// ── 차량일지 경로 계산 ──
+var wpCount = 0;
+function calcRoutePreview() {
+  const startType = document.getElementById('vStartType').value;
+  const endType = document.getElementById('vEndType').value;
+  const distEl = document.getElementById('vDistPreview');
+  const labelEl = document.getElementById('vDistLabel');
+  // 데모: 출발/도착 조합에 따라 다른 예상 거리
+  const demoDistMap = {
+    'office-office': 42,
+    'home-office': 38,
+    'office-home': 45,
+    'home-home': 52
+  };
+  const key = startType + '-' + endType;
+  const dist = demoDistMap[key] || 42;
+  distEl.value = dist;
+  labelEl.textContent = 'API 자동계산';
+  labelEl.style.background = '#bbdefb';
+  labelEl.style.color = '#1565c0';
+  toast('📍 경로 재계산: ' + (startType==='office'?'회사':'자택') + ' → 방문지 → ' + (endType==='office'?'회사':'자택') + ' = ' + dist + 'km');
+}
+// km 수동 조정 감지
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'vDistPreview') {
+    const labelEl = document.getElementById('vDistLabel');
+    labelEl.textContent = '수동 조정';
+    labelEl.style.background = '#fff3e0';
+    labelEl.style.color = '#e65100';
+  }
+});
+function addWaypoint() {
+  wpCount++;
+  const area = document.getElementById('vWaypointArea');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px';
+  div.innerHTML = '<span style="font-size:11px;color:#1565c0;flex-shrink:0">경유지 ' + wpCount + '</span>' +
+    '<select style="flex:1;padding:7px 10px;border:1px solid #90caf9;border-radius:6px;font-size:12px;background:#fff">' +
+    '<option>업체 선택...</option><option>CJ제일제당(주) — 서울 중구</option><option>(주)농심 — 서울 동작구</option><option>동원F&B(주) — 서울 서초구</option><option>풀무원식품(주) — 서울 강남구</option>' +
+    '</select>' +
+    '<button onclick="this.parentElement.remove();calcRoutePreview()" style="background:none;border:1px solid #ef9a9a;color:#e53935;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px">✕</button>';
+  area.appendChild(div);
+  toast('+ 경유지 ' + wpCount + ' 추가됨 (여러 업체 방문 시)');
+}
+</script>
+</body>
+</html>
