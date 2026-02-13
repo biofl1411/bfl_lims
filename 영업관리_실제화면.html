@@ -170,6 +170,25 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .sg-btn:hover{background:#e3f2fd;border-color:#90caf9;color:#1565c0}
 .dong-btn{padding:8px 12px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;color:#5f6b7a;cursor:pointer;transition:all .15s}
 .dong-btn:hover{background:#e8f5e9;border-color:#81c784;color:#2e7d32}
+/* API 수집 설정 */
+.api-item{padding:14px 16px;border:1px solid #eef0f4;border-radius:10px;margin-bottom:10px;transition:all .15s;background:#fafbfc}
+.api-item:hover{border-color:#c8d6e5;background:#fff}
+.api-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.api-check{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#1a2332}
+.api-check input[type="checkbox"]{width:18px;height:18px;accent-color:#1a73e8;cursor:pointer}
+.api-check strong{color:#1a73e8;font-family:monospace;font-size:12px;background:#e8f0fe;padding:2px 6px;border-radius:4px}
+.api-count{font-size:11px;color:#8892a4;font-weight:600;background:#f0f2f5;padding:3px 8px;border-radius:4px}
+.api-fields{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.api-tag{font-size:10px;padding:2px 7px;background:#e8f5e9;color:#2e7d32;border-radius:3px;font-family:monospace;cursor:default;border:1px solid #c8e6c9}
+.api-tag:hover{background:#c8e6c9}
+.api-item:has(input:not(:checked)){opacity:.5;background:#f5f5f5}
+.api-item:has(input:not(:checked)) .api-tag{background:#f0f0f0;color:#aaa;border-color:#e0e0e0}
+.collect-row{display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid #f0f2f5;font-size:12px}
+.collect-row:last-child{border-bottom:none}
+.collect-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.collect-dot.ok{background:#4caf50}
+.collect-dot.err{background:#f44336}
+.collect-dot.run{background:#ff9800;animation:pulse 1s infinite}
 .sido-label{background:rgba(255,255,255,.88)!important;border:none!important;box-shadow:0 1px 4px rgba(0,0,0,.18)!important;font-size:12px!important;font-weight:700!important;color:#1a2332!important;padding:3px 8px!important;border-radius:4px!important}
 .sido-label::before{display:none!important}
 .sg-label{background:rgba(255,255,255,.82)!important;border:none!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important;font-size:10px!important;font-weight:600!important;color:#37474f!important;padding:2px 6px!important;border-radius:3px!important}
@@ -251,6 +270,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
     <div class="sb-item" onclick="showPage('urgent')" id="nav-urgent"><span>🚨</span> 긴급 협조 요청 <span class="badge badge-later">추후</span></div>
     <div class="sb-item" onclick="showPage('arManage')" id="nav-arManage"><span>💰</span> 미수금 관리 <span class="badge badge-later">추후</span></div>
     <div class="sb-item" onclick="showPage('invoice')" id="nav-invoice"><span>🧾</span> 계산서 발행 승인 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-cat" style="margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px">관리자</div>
+    <div class="sb-item" onclick="showPage('apiSettings')" id="nav-apiSettings"><span>⚙️</span> API 수집 설정 <span class="badge badge-new">신규</span></div>
   </div>
   <div class="sb-ft">
     <div class="sb-avatar">👤</div>
@@ -329,6 +350,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <div class="card" style="flex:1;min-width:480px">
             <div class="card-hd"><h3>🗺️ 시/도 선택</h3><div class="right" style="font-size:11px;color:#8892a4">지도를 클릭하여 선택</div></div>
             <div class="card-bd" style="padding:0">
+              <div id="fssLoadStatus" style="display:none;padding:8px 16px;background:#fff3e0;border-bottom:1px solid #ffe0b2;font-size:12px;color:#e65100">
+                <span id="fssLoadText">⏳ 식약처 데이터 로딩 중...</span>
+                <div style="margin-top:4px;height:4px;background:#ffe0b2;border-radius:2px;overflow:hidden"><div id="fssLoadBar" style="height:100%;background:#fb8c00;width:0%;transition:width .3s"></div></div>
+              </div>
               <div id="koreaMap" style="width:100%;height:480px;border-radius:0 0 12px 12px"></div>
             </div>
           </div>
@@ -410,50 +435,23 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
       </div>
 
-      <!-- STEP 3: 검색 결과 -->
+      <!-- STEP 3: 식약처 결과 목록 -->
       <div id="bizStep3" style="display:none">
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          <!-- 지도 -->
-          <div class="card" style="flex:1;min-width:350px">
-            <div class="card-hd"><h3>🗺️ 검색 위치</h3></div>
-            <div class="card-bd" style="padding:0">
-              <div id="bizResultMap" style="width:100%;height:350px;background:#e8edf2"></div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-hd">
+            <h3 id="fssResultTitle">🏭 식약처 인허가 업체 목록</h3>
+            <div class="right">
+              <span id="bizFssCount" style="font-size:22px;font-weight:700;color:#2e7d32;margin-right:12px">0</span>
+              <span style="font-size:12px;color:#8892a4;margin-right:16px">건</span>
+              <button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">🗺️ 새로 검색</button>
             </div>
           </div>
-          <!-- 결과 요약 -->
-          <div style="width:280px;flex-shrink:0">
-            <div class="card" style="margin-bottom:12px">
-              <div class="card-bd" style="text-align:center;padding:16px">
-                <div style="font-size:11px;color:#8892a4;margin-bottom:4px">카카오맵 검색</div>
-                <div id="bizKakaoCount" style="font-size:28px;font-weight:700;color:#1a73e8">-</div>
-              </div>
-            </div>
-            <div class="card" style="margin-bottom:12px">
-              <div class="card-bd" style="text-align:center;padding:16px">
-                <div style="font-size:11px;color:#8892a4;margin-bottom:4px">식약처 인허가</div>
-                <div id="bizFssCount" style="font-size:28px;font-weight:700;color:#2e7d32">-</div>
-              </div>
-            </div>
-            <button class="btn btn-secondary" onclick="bizGoStep(0)" style="width:100%;padding:10px">🗺️ 새로 검색</button>
-          </div>
-        </div>
-        <!-- 탭: 카카오 / 식약처 -->
-        <div style="display:flex;gap:0;margin:16px 0">
-          <button class="btn" id="resTab1" onclick="switchResTab(1)" style="flex:1;padding:10px;border-radius:8px 0 0 8px;font-weight:600;font-size:13px;background:#1a73e8;color:#fff;border:1px solid #1a73e8">🗺️ 카카오맵 결과</button>
-          <button class="btn" id="resTab2" onclick="switchResTab(2)" style="flex:1;padding:10px;border-radius:0 8px 8px 0;font-weight:600;font-size:13px;background:#fff;color:#5f6b7a;border:1px solid #e2e6ed">🏭 식약처 인허가</button>
-        </div>
-        <!-- 카카오 결과 -->
-        <div id="resPanel1">
-          <div class="card"><div class="card-bd" style="padding:0"><div id="bizResultList"></div></div></div>
-        </div>
-        <!-- 식약처 결과 -->
-        <div id="resPanel2" style="display:none">
-          <div class="card"><div class="card-bd" style="padding:0;overflow-x:auto">
+          <div class="card-bd" style="padding:0;overflow-x:auto">
             <table class="tbl">
-              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>관할관청</th><th>거리</th><th></th></tr></thead>
+              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>관할관청</th><th></th></tr></thead>
               <tbody id="fssTableBody"></tbody>
             </table>
-          </div></div>
+          </div>
         </div>
       </div>
 
@@ -1179,6 +1177,270 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       </div>
     </div>
 
+    <!-- ===== API 수집 설정 ===== -->
+    <div class="page" id="page-apiSettings" style="display:none">
+
+      <!-- 상단 요약 -->
+      <div class="stats">
+        <div class="stat"><div class="stat-val" id="apiTotalCount">16</div><div class="stat-label">전체 API</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32" id="apiActiveCount">0</div><div class="stat-label">수집 활성</div></div>
+        <div class="stat"><div class="stat-val" style="color:#1a73e8" id="apiLastCollect">-</div><div class="stat-label">최근 수집</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e65100" id="apiNextCollect">03:00</div><div class="stat-label">다음 수집(KST)</div></div>
+      </div>
+
+      <!-- 수집 시간 설정 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd"><h3>🕐 수집 스케줄 설정</h3></div>
+        <div class="card-bd">
+          <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;font-weight:600;white-space:nowrap">수집 시각 (KST):</label>
+              <input type="time" id="collectTime" value="03:00" style="padding:8px 12px;border:1px solid #dde2ea;border-radius:6px;font-size:14px;font-weight:600;width:120px">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;font-weight:600;white-space:nowrap">수집 방식:</label>
+              <select id="collectMode" style="padding:8px 12px;border:1px solid #dde2ea;border-radius:6px;font-size:13px">
+                <option value="incremental">증분 수집 (변경분만)</option>
+                <option value="full">전체 수집 (매일 전체)</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;font-weight:600;white-space:nowrap">API 서버:</label>
+              <input type="text" id="apiServerUrl" value="http://localhost:5050" placeholder="http://서버IP:5050" style="padding:8px 12px;border:1px solid #dde2ea;border-radius:6px;font-size:12px;font-family:monospace;width:200px">
+            </div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="saveApiSettings()" style="padding:8px 20px">💾 설정 저장</button>
+            <button class="btn btn-secondary" onclick="testApiConnection()" style="padding:8px 20px">🔌 연결 테스트</button>
+            <button class="btn btn-secondary" onclick="checkAllApis(true)" style="padding:8px 16px">☑️ 전체 선택</button>
+            <button class="btn btn-secondary" onclick="checkAllApis(false)" style="padding:8px 16px">⬜ 전체 해제</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- API 카테고리 1: 업소 인허가 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpBiz')">
+          <h3>🏭 업소 인허가 대장 <span style="font-size:12px;font-weight:400;color:#8892a4">(9개 API)</span></h3>
+          <div class="right"><span id="grpBizArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpBiz">
+
+          <div class="api-item" id="api-I1220">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1220</strong> — 식품제조가공업</label>
+              <span class="api-count">~30,279건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag" title="인허가번호">LCNS_NO</span>
+              <span class="api-tag" title="업소명">BSSH_NM</span>
+              <span class="api-tag" title="대표자명">PRSDNT_NM</span>
+              <span class="api-tag" title="업종">INDUTY_NM</span>
+              <span class="api-tag" title="허가일자">PRMS_DT</span>
+              <span class="api-tag" title="전화번호">TELNO</span>
+              <span class="api-tag" title="주소">LOCP_ADDR</span>
+              <span class="api-tag" title="기관명">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2829">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2829</strong> — 즉석판매제조가공업</label>
+              <span class="api-count">~97,696건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I-0020">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I-0020</strong> — 건강기능식품 전문/벤처제조업</label>
+              <span class="api-count">~551건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">TELNO</span><span class="api-tag">LOCP_ADDR</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1300">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1300</strong> — 축산물 가공업</label>
+              <span class="api-count">~4,233건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span><span class="api-tag">TELNO</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1320">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1320</strong> — 축산물 식육포장처리업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">CLSBIZ_DVS_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span><span class="api-tag">TELNO</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2835">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2835</strong> — 식육즉석판매가공업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2831">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2831</strong> — 식품소분업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-C001">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C001</strong> — 수입식품등영업신고</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span><span class="api-tag">TELNO</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1260">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1260</strong> — 식품등수입판매업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">TELNO</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- API 카테고리 2: 품목 제조 보고 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpPrd')">
+          <h3>📦 품목 제조 보고 <span style="font-size:12px;font-weight:400;color:#8892a4">(2개 API)</span></h3>
+          <div class="right"><span id="grpPrdArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpPrd">
+
+          <div class="api-item" id="api-I1250">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1250</strong> — 식품(첨가물)품목제조보고</label>
+              <span class="api-count" style="color:#e65100">~1,043,828건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">PRODUCTION</span><span class="api-tag">HIENG_LNTRT_DVS_NM</span><span class="api-tag">CHILD_CRTFC_YN</span><span class="api-tag">POG_DAYCNT</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LAST_UPDT_DTM</span><span class="api-tag">USAGE</span><span class="api-tag">PRPOS</span><span class="api-tag">DISPOS</span><span class="api-tag">FRMLC_MTRQLT</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1310">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1310</strong> — 축산물 품목제조정보</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">PRODUCTION</span><span class="api-tag">POG_DAYCNT</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LAST_UPDT_DTM</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- API 카테고리 3: 원재료 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpMat')">
+          <h3>🧪 원재료 정보 <span style="font-size:12px;font-weight:400;color:#8892a4">(3개 API)</span></h3>
+          <div class="right"><span id="grpMatArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpMat">
+
+          <div class="api-item" id="api-C002">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C002</strong> — 식품(첨가물)품목제조보고(원재료)</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">RAWMTRL_NM</span><span class="api-tag">RAWMTRL_ORDNO</span><span class="api-tag">CHNG_DT</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-C003">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C003</strong> — 건강기능식품 품목제조신고(원재료)</label>
+              <span class="api-count">~44,272건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">POG_DAYCNT</span><span class="api-tag">DISPOS</span><span class="api-tag">NTK_MTHD</span><span class="api-tag">PRIMARY_FNCLTY</span><span class="api-tag">IFTKN_ATNT_MATR_CN</span><span class="api-tag">CSTDY_MTHD</span><span class="api-tag">SHAP</span><span class="api-tag">STDR_STND</span><span class="api-tag">RAWMTRL_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-C006">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C006</strong> — 축산물품목제조보고(원재료)</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">RAWMTRL_NM</span><span class="api-tag">LCNS_NO</span><span class="api-tag">CHNG_DT</span><span class="api-tag">RAWMTRL_ORDNO</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- API 카테고리 4: 변경 이력 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpChg')">
+          <h3>📝 인허가 변경 이력 <span style="font-size:12px;font-weight:400;color:#8892a4">(2개 API)</span></h3>
+          <div class="right"><span id="grpChgArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpChg">
+
+          <div class="api-item" id="api-I2859">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2859</strong> — 식품업소 인허가 변경 정보</label>
+              <span class="api-count">변경분</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">BSSH_NM</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LCNS_NO</span><span class="api-tag">TELNO</span><span class="api-tag">SITE_ADDR</span><span class="api-tag">CHNG_DT</span><span class="api-tag">CHNG_BF_CN</span><span class="api-tag">CHNG_AF_CN</span><span class="api-tag">CHNG_PRVNS</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2860">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2860</strong> — 건강기능식품업소 인허가 변경 정보</label>
+              <span class="api-count">변경분</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">BSSH_NM</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LCNS_NO</span><span class="api-tag">TELNO</span><span class="api-tag">SITE_ADDR</span><span class="api-tag">CHNG_DT</span><span class="api-tag">CHNG_BF_CN</span><span class="api-tag">CHNG_AF_CN</span><span class="api-tag">CHNG_PRVNS</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 수집 현황 -->
+      <div class="card">
+        <div class="card-hd"><h3>📊 수집 현황</h3><div class="right"><button class="btn btn-secondary btn-sm" onclick="loadCollectStatus()">🔄 새로고침</button></div></div>
+        <div class="card-bd">
+          <div id="collectStatusArea" style="font-size:12px;color:#8892a4;text-align:center;padding:20px">
+            API 서버 연결 후 수집 현황을 확인할 수 있습니다.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
   </div>
 </div>
 
@@ -1191,7 +1453,8 @@ const pageNames = {
   daily:'업무일지', dailyWrite:'업무일지 > 작성', dailyDetail:'업무일지 > 상세',
   vehicle:'차량일지', collection:'미수금 활동 내역',
   estimate:'견적서 관리', trade:'거래명세표 관리', urgent:'긴급 협조 요청',
-  arManage:'미수금 관리', invoice:'계산서 발행 승인요청'
+  arManage:'미수금 관리', invoice:'계산서 발행 승인요청',
+  apiSettings:'API 수집 설정'
 };
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
@@ -1204,6 +1467,8 @@ function showPage(id) {
   document.getElementById('contentArea').scrollTop = 0;
   // 업체조회 페이지 → Leaflet 지도 초기화
   if(id === 'bizSearch') setTimeout(initSidoMap, 150);
+  // API 설정 페이지 → 카운트 업데이트
+  if(id === 'apiSettings') setTimeout(updateApiCount, 100);
 }
 function closePopup(id) { document.getElementById(id).classList.remove('show'); }
 function toast(msg) {
@@ -1358,13 +1623,66 @@ var SIDO_NAME_MAP = {
 var SIDO_COLORS = ['#1a73e8','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','#f4511e','#6d4c41',
   '#3949ab','#c0ca33','#00acc1','#d81b60','#5e35b1','#039be5','#7cb342','#ff6f00','#546e7a'];
 
+// ── 식약처 전체 데이터 (정적 JSON) ──
+var fssAllData = null;
+var fssLoading = false;
+var SIDO_ADDR = {'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종',
+  '경기':'경기도','강원':'강원도','충북':'충청북도','충남':'충청남도','전북':'전라북도','전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주'};
+
+function loadFssData() {
+  if(fssAllData || fssLoading) return;
+  fssLoading = true;
+  fetch('data/fss_all.json').then(function(r){
+    if(!r.ok) throw new Error('파일 없음');
+    return r.json();
+  }).then(function(data){
+    fssAllData = data;
+    fssLoading = false;
+    console.log('식약처 데이터 로드:', fssAllData.length + '건');
+    toast('📊 식약처 ' + fssAllData.length.toLocaleString() + '건 로드 완료');
+    updateSidoLabels();
+  }).catch(function(e){
+    fssLoading = false;
+    console.error('fss_all.json 로드 실패:', e);
+    toast('⚠️ 식약처 데이터 파일이 없습니다. download_fss.py를 실행하세요.');
+  });
+}
+
+function fssFilterSido(sido) {
+  if(!fssAllData) return [];
+  var key = SIDO_ADDR[sido] || sido;
+  return fssAllData.filter(function(r){ return r.addr && r.addr.indexOf(key) >= 0; });
+}
+function fssFilterSg(sido, sg) {
+  var list = fssFilterSido(sido);
+  var sgClean = sg.replace(/시$|군$|구$/,'');
+  return list.filter(function(r){ return r.addr.indexOf(sg) >= 0 || r.addr.indexOf(sgClean) >= 0; });
+}
+function fssFilterDong(sido, sg, dong) {
+  var list = fssFilterSg(sido, sg);
+  return list.filter(function(r){ return r.addr.indexOf(dong) >= 0; });
+}
+
+function updateSidoLabels() {
+  if(!fssAllData || !sidoGeoLayer) return;
+  sidoGeoLayer.eachLayer(function(layer){
+    var fullName = layer.feature.properties.name || '';
+    var shortName = SIDO_NAME_MAP[fullName] || fullName;
+    var cnt = fssFilterSido(shortName).length;
+    layer.unbindTooltip();
+    layer.bindTooltip(shortName + '<br><b style="color:#e53935">' + cnt.toLocaleString() + '</b>', {permanent:true, direction:'center', className:'sido-label'});
+  });
+}
+
 function initSidoMap() {
-  if(sidoMap) { sidoMap.invalidateSize(); return; }
+  if(sidoMap) { sidoMap.invalidateSize(); if(fssAllData) updateSidoLabels(); return; }
   var el = document.getElementById('koreaMap');
   if(!el || el.offsetHeight === 0) return;
   sidoMap = L.map('koreaMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 7);
   // 타일 레이어
   applyMapTile();
+  // 식약처 전체 데이터 로드
+  loadFssData();
   // 시도 경계 GeoJSON 로드
   fetch(SIDO_GEO_URL).then(function(r){return r.json()}).then(function(geo){
     sidoGeoLayer = L.geoJSON(geo, {
@@ -1454,11 +1772,12 @@ function initSgMap(sido) {
     },
     onEachFeature: function(feature, layer){
       var name = feature.properties.name || '';
-      layer.bindTooltip(name, {permanent:true, direction:'center', className:'sg-label'});
+      var cnt = fssAllData ? fssFilterSg(sido, name).length : 0;
+      var label = name + (cnt ? '<br><b style="color:#e53935;font-size:9px">' + cnt.toLocaleString() + '</b>' : '');
+      layer.bindTooltip(label, {permanent:true, direction:'center', className:'sg-label'});
       layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.75, weight:3}); });
       layer.on('mouseout', function(e){ sgGeoLayer.resetStyle(e.target); });
       layer.on('click', function(){
-        // GeoJSON 이름 → regionData 이름 매핑
         var matched = matchSigungu(sido, name);
         if(matched) selectSigungu(matched);
       });
@@ -1568,7 +1887,9 @@ function initDongMap(sido, sg) {
         },
         onEachFeature: function(feature, layer){
           var name = feature.properties.name || '';
-          layer.bindTooltip(name, {permanent:true, direction:'center', className:'sg-label'});
+          var cnt = fssAllData ? fssFilterDong(sido, sg, name).length : 0;
+          var label = name + (cnt ? '<br><b style="color:#e53935;font-size:9px">' + cnt.toLocaleString() + '</b>' : '');
+          layer.bindTooltip(label, {permanent:true, direction:'center', className:'sg-label'});
           layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.7, weight:2.5}); });
           layer.on('mouseout', function(e){ dongGeoLayer.resetStyle(e.target); });
           layer.on('click', function(){
@@ -1636,7 +1957,42 @@ async function loadDongList(sido, sigungu) {
 function selectDong(dong) {
   bizState.dong = dong;
   updateBreadcrumb();
-  doRegionSearch();
+  // 식약처 데이터 필터링
+  var rows = fssAllData ? fssFilterDong(bizState.sido, bizState.sigungu, dong) : [];
+  showFssResults(rows);
+}
+
+function showFssResults(rows) {
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'block';
+  document.getElementById('bizFssCount').textContent = rows.length;
+  if(rows.length === 0) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">해당 지역에 등록된 식품제조가공업체가 없습니다.</td></tr>';
+    return;
+  }
+  var html = '';
+  rows.forEach(function(r, i){
+    var nm = r.nm || '-';
+    var ceo = r.ceo || '-';
+    var biz = r.biz || '-';
+    var lic = r.lic || '-';
+    var addr = r.addr || '-';
+    var org = r.org || '';
+    var tel = r.tel || '';
+    html += '<tr>';
+    html += '<td style="font-size:12px"><b>' + nm + '</b>' + (tel ? '<br><span style="font-size:10px;color:#8892a4">📞 ' + tel + '</span>' : '') + '</td>';
+    html += '<td style="font-size:12px">' + ceo + '</td>';
+    html += '<td><span style="font-size:11px">' + biz + '</span></td>';
+    html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
+    html += '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
+    html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
+    html += '<td><button style="font-size:10px;padding:3px 10px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
+    html += '</tr>';
+  });
+  document.getElementById('fssTableBody').innerHTML = html;
+  toast('🏭 식약처 ' + rows.length + '건 조회');
 }
 
 function bizGoStep(n) {
@@ -1681,12 +2037,12 @@ async function doRegionSearch() {
   document.getElementById('bizStep1').style.display = 'none';
   document.getElementById('bizStep2').style.display = 'none';
   document.getElementById('bizStep3').style.display = 'block';
-  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 카카오맵 검색 중...</div>';
+  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 해당 지역 전체 업체 검색 중...</div>';
   document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 식약처 조회 중...</td></tr>';
   document.getElementById('bizKakaoCount').textContent = '...';
   document.getElementById('bizFssCount').textContent = '...';
-  // 1. 카카오맵 검색 (결과 업체명 저장)
-  await searchKakao(region + ' 식품');
+  // 1. 카카오맵 영역 기반 검색 (다중 키워드 + 페이지네이션)
+  await searchKakaoArea(region);
   // 2. 카카오 결과의 업체명으로 식약처 검색
   await searchFss(region);
   initResultMap(region);
@@ -1914,6 +2270,209 @@ function bizReg(name, addr) {
 (function(){
   var h = location.hash.replace('#','');
   if (h && pageNames[h]) { showPage(h); }
+})();
+
+// ── API 수집 설정 ──
+var apiSettingsData = {
+  collectTime: '03:00',
+  collectMode: 'incremental',
+  serverUrl: 'http://localhost:5050',
+  activeApis: ['I1220','I2829','I-0020','I1300','I1320','I2835','I2831','C001','I1260',
+               'I1250','I1310','C002','C003','C006','I2859','I2860']
+};
+
+// 저장된 설정 로드
+(function loadSavedSettings(){
+  try {
+    var saved = JSON.parse(sessionStorage.getItem('apiSettings'));
+    if(saved) {
+      apiSettingsData = saved;
+      // UI 반영
+      setTimeout(function(){
+        var timeEl = document.getElementById('collectTime');
+        if(timeEl) timeEl.value = saved.collectTime || '03:00';
+        var modeEl = document.getElementById('collectMode');
+        if(modeEl) modeEl.value = saved.collectMode || 'incremental';
+        var urlEl = document.getElementById('apiServerUrl');
+        if(urlEl) urlEl.value = saved.serverUrl || 'http://localhost:5050';
+        // 체크박스 반영
+        document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]').forEach(function(cb){
+          var apiId = cb.closest('.api-item').id.replace('api-','');
+          cb.checked = saved.activeApis.indexOf(apiId) >= 0;
+        });
+        updateApiCount();
+      }, 100);
+    }
+  } catch(e){}
+})();
+
+function updateApiCount() {
+  var checks = document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]');
+  var active = 0;
+  checks.forEach(function(cb){ if(cb.checked) active++; });
+  var el = document.getElementById('apiActiveCount');
+  if(el) el.textContent = active;
+  var nextEl = document.getElementById('apiNextCollect');
+  var timeEl = document.getElementById('collectTime');
+  if(nextEl && timeEl) nextEl.textContent = timeEl.value;
+}
+
+function toggleApiGroup(groupId) {
+  var el = document.getElementById(groupId);
+  var arrow = document.getElementById(groupId + 'Arrow');
+  if(!el) return;
+  if(el.style.display === 'none') {
+    el.style.display = 'block';
+    if(arrow) arrow.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if(arrow) arrow.textContent = '▶';
+  }
+}
+
+function checkAllApis(checked) {
+  document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]').forEach(function(cb){
+    cb.checked = checked;
+  });
+  updateApiCount();
+}
+
+function saveApiSettings() {
+  var checks = document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]');
+  var activeApis = [];
+  checks.forEach(function(cb){
+    if(cb.checked) {
+      var apiId = cb.closest('.api-item').id.replace('api-','');
+      activeApis.push(apiId);
+    }
+  });
+
+  apiSettingsData = {
+    collectTime: document.getElementById('collectTime').value,
+    collectMode: document.getElementById('collectMode').value,
+    serverUrl: document.getElementById('apiServerUrl').value.trim(),
+    activeApis: activeApis
+  };
+
+  // 세션 저장
+  sessionStorage.setItem('apiSettings', JSON.stringify(apiSettingsData));
+
+  // 서버에 설정 전송 시도
+  var url = apiSettingsData.serverUrl + '/api/settings';
+  fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(apiSettingsData)
+  }).then(function(res){ return res.json(); })
+    .then(function(data){
+      if(data.success) {
+        toast('✅ 설정이 서버에 저장되었습니다. 수집 시각: ' + apiSettingsData.collectTime + ' KST');
+      } else {
+        toast('⚠️ 로컬 저장 완료. 서버 저장은 실패: ' + (data.error || ''));
+      }
+    })
+    .catch(function(){
+      toast('💾 로컬 저장 완료. (서버 연결 시 자동 동기화됩니다)');
+    });
+
+  updateApiCount();
+}
+
+function testApiConnection() {
+  var url = document.getElementById('apiServerUrl').value.trim();
+  if(!url) { toast('⚠️ API 서버 주소를 입력하세요.'); return; }
+
+  document.getElementById('collectStatusArea').innerHTML =
+    '<div style="padding:20px;text-align:center;color:#1a73e8">🔄 연결 테스트 중...</div>';
+
+  fetch(url + '/api/status')
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      if(data.success) {
+        toast('✅ API 서버 연결 성공!');
+        renderCollectStatus(data);
+      } else {
+        toast('❌ 서버 응답 오류');
+        document.getElementById('collectStatusArea').innerHTML =
+          '<div style="color:#e53935;padding:20px;text-align:center">서버 응답 오류: ' + JSON.stringify(data) + '</div>';
+      }
+    })
+    .catch(function(e){
+      toast('❌ 서버 연결 실패: ' + e.message);
+      document.getElementById('collectStatusArea').innerHTML =
+        '<div style="color:#e53935;padding:20px;text-align:center">연결 실패: ' + e.message +
+        '<br><br><span style="font-size:11px;color:#8892a4">서버가 실행 중인지 확인하세요.<br>' +
+        'bioflsever에서: <code>sudo systemctl status fss-api</code></span></div>';
+    });
+}
+
+function loadCollectStatus() {
+  var url = document.getElementById('apiServerUrl').value.trim();
+  if(!url) { toast('⚠️ API 서버 주소를 먼저 입력하세요.'); return; }
+  testApiConnection();
+}
+
+function renderCollectStatus(data) {
+  var html = '';
+
+  // 테이블별 요약
+  var tableNames = {
+    'fss_businesses': '업소 인허가',
+    'fss_products': '품목 제조',
+    'fss_materials': '원재료',
+    'fss_changes': '변경 이력'
+  };
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px">';
+  if(data.tables) {
+    for(var tbl in data.tables) {
+      var t = data.tables[tbl];
+      var name = tableNames[tbl] || tbl;
+      var cnt = t.count ? t.count.toLocaleString() : '0';
+      var last = t.last_collected ? t.last_collected.substring(0,16) : '-';
+      html += '<div style="padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #eef0f4">';
+      html += '<div style="font-size:11px;color:#8892a4">' + name + '</div>';
+      html += '<div style="font-size:20px;font-weight:700;color:#1a2332">' + cnt + '</div>';
+      html += '<div style="font-size:10px;color:#b0b8c4">최근: ' + last + '</div>';
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
+  // 최근 수집 로그
+  if(data.recent_logs && data.recent_logs.length > 0) {
+    html += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#1a2332">최근 수집 이력</div>';
+    data.recent_logs.forEach(function(log){
+      var dt = (log.started_at || '').substring(0,16);
+      var dotClass = log.error_count > 0 ? 'err' : 'ok';
+      html += '<div class="collect-row">';
+      html += '<span class="collect-dot ' + dotClass + '"></span>';
+      html += '<span style="color:#8892a4;min-width:100px">' + dt + '</span>';
+      html += '<span style="font-weight:600;min-width:60px">' + log.api_source + '</span>';
+      html += '<span style="flex:1">' + (log.api_name || '') + '</span>';
+      html += '<span style="color:#1a73e8">' + (log.fetched_count||0).toLocaleString() + '건</span>';
+      html += '<span style="color:#2e7d32;margin-left:8px">+' + (log.inserted_count||0) + '</span>';
+      html += '<span style="color:#e65100;margin-left:4px">↻' + (log.updated_count||0) + '</span>';
+      if(log.error_count > 0) html += '<span style="color:#e53935;margin-left:4px">✗' + log.error_count + '</span>';
+      html += '<span style="color:#b0b8c4;margin-left:8px">' + (log.duration_sec||0) + '초</span>';
+      html += '</div>';
+    });
+
+    // 최근 수집일시 업데이트
+    var lastEl = document.getElementById('apiLastCollect');
+    if(lastEl && data.recent_logs[0]) {
+      lastEl.textContent = (data.recent_logs[0].started_at || '').substring(5,16);
+    }
+  } else {
+    html += '<div style="text-align:center;color:#8892a4;padding:16px">수집 이력이 없습니다. 최초 수집을 실행하세요.</div>';
+  }
+
+  document.getElementById('collectStatusArea').innerHTML = html;
+}
+
+// 페이지 진입 시 카운트 업데이트
+(function(){
+  setTimeout(updateApiCount, 200);
 })();
 </script>
 </body>
