@@ -399,12 +399,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
               </div>
             </div>
             <div class="card">
-              <div class="card-hd"><h3>🏭 업종 필터</h3></div>
-              <div class="card-bd" style="display:flex;flex-direction:column;gap:4px" id="bizTypeArea">
-                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" checked value="food"> 🍽️ 식품제조가공업</label>
-                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" checked value="instant"> 🥡 즉석판매제조가공업</label>
-                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" value="livestock"> 🥩 축산물가공업</label>
-                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" value="health"> 💊 건강기능식품</label>
+              <div class="card-hd"><h3>🏭 식약처 조회</h3></div>
+              <div class="card-bd" id="bizTypeArea" style="font-size:12px;color:#5f6b7a;line-height:1.8">
+                ✅ 식품제조가공업 (I1220)<br>
+                <span style="font-size:10px;color:#8892a4">업소명 검색: 빠른검색 이용<br>지역 검색: 최근 100건 내 필터링</span>
               </div>
             </div>
           </div>
@@ -481,7 +479,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div id="resPanel2" style="display:none">
           <div class="card"><div class="card-bd" style="padding:0;overflow-x:auto">
             <table class="tbl">
-              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>기관명</th><th>거리</th><th></th></tr></thead>
+              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>관할관청</th><th>거리</th><th></th></tr></thead>
               <tbody id="fssTableBody"></tbody>
             </table>
           </div></div>
@@ -1563,25 +1561,21 @@ async function searchFss(region) {
     document.getElementById('bizFssCount').textContent = '-';
     return;
   }
-  var codes = {food:'I2570', instant:'I2790', livestock:'I2660', health:'C003'};
-  var icons = {food:'🍽️', instant:'🥡', livestock:'🥩', health:'💊'};
-  var types = [];
-  document.querySelectorAll('#bizTypeArea input:checked').forEach(function(cb){ types.push(cb.value); });
+  // I1220: 식품제조가공업정보 (행정안전부) - 키 등록 확인됨
+  var codes = {food:'I1220'};
+  var icons = {food:'🍽️'};
+  var types = ['food']; // 현재 키로 사용 가능한 서비스
   var allRows = [];
   for(var t of types) {
     try {
       var baseUrl = 'https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/' + codes[t] + '/json/1/100';
       var apiUrl;
-      // 반드시 검색 조건 포함
+      // BSSH_NM(업소명)만 서버 필터 가능, 주소는 클라이언트 필터
       if(bizState.sido === '검색' && bizState.sigungu) {
         apiUrl = baseUrl + '/BSSH_NM=' + encodeURIComponent(bizState.sigungu);
-      } else if(bizState.sido) {
-        var addrQ = bizState.sido;
-        if(bizState.sigungu) addrQ += ' ' + bizState.sigungu;
-        if(bizState.dong) addrQ += ' ' + bizState.dong;
-        apiUrl = baseUrl + '/SITE_ADDR=' + encodeURIComponent(addrQ);
       } else {
-        continue; // 조건 없으면 조회하지 않음
+        // 지역 검색: 전체 조회 후 주소 필터링
+        apiUrl = baseUrl;
       }
       var res;
       try {
@@ -1594,6 +1588,16 @@ async function searchFss(region) {
       var data = JSON.parse(text);
       var key = Object.keys(data)[0];
       var rows = (data[key] && data[key].row) ? data[key].row : [];
+      // 지역 필터링 (클라이언트)
+      if(bizState.sido && bizState.sido !== '검색') {
+        rows = rows.filter(function(r){
+          var addr = r.LOCP_ADDR || '';
+          if(!addr.includes(bizState.sido)) return false;
+          if(bizState.sigungu && !addr.includes(bizState.sigungu)) return false;
+          if(bizState.dong && !addr.includes(bizState.dong)) return false;
+          return true;
+        });
+      }
       rows.forEach(function(r){ r._t = t; });
       allRows = allRows.concat(rows);
     } catch(e){ console.log('FSS error:', t, e.message); }
@@ -1609,15 +1613,16 @@ async function searchFss(region) {
     var ceo = r.PRSDNT_NM || '-';
     var biz = r.INDUTY_NM || '-';
     var lic = r.LCNS_NO || '-';
-    var addr = r.LOCP_ADDR || r.SITE_ADDR || r.ADDR || '-';
+    var addr = r.LOCP_ADDR || '-';
     var org = r.INSTT_NM || '';
     var tel = r.TELNO || '';
     html += '<tr>';
-    html += '<td><b>' + nm + '</b></td><td>' + ceo + '</td>';
-    html += '<td>' + (icons[r._t]||'') + ' ' + biz + '</td>';
+    html += '<td><b>' + nm + '</b>' + (tel ? '<br><span style="font-size:10px;color:#8892a4">📞 ' + tel + '</span>' : '') + '</td>';
+    html += '<td>' + ceo + '</td>';
+    html += '<td><span style="font-size:11px">' + biz + '</span></td>';
     html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
     html += '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
-    html += '<td><span style="color:#2e7d32;font-weight:600;font-size:11px">' + org + '</span></td>';
+    html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
     html += '<td><span id="fD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 6px;border-radius:4px;cursor:pointer" onclick="calcAddrDist(\'' + addr.replace(/'/g,"\\'") + '\',\'fD' + i + '\')">📐</span></td>';
     html += '<td><button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
     html += '</tr>';
