@@ -1574,37 +1574,39 @@ async function searchFss(region) {
       if(bizState.sido === '검색' && bizState.sigungu) {
         apiUrl = baseUrl + '/BSSH_NM=' + encodeURIComponent(bizState.sigungu);
       } else {
-        // 지역 검색: 전체 조회 후 주소 필터링
-        apiUrl = baseUrl;
+        // 지역 검색: 주소 필터 미지원 → 식약처 조회 생략
+        document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#8892a4;font-size:12px">식약처 인허가는 <b>업체명 검색</b>만 지원됩니다.<br>상단 빠른검색에 업체명을 입력하세요.</td></tr>';
+        document.getElementById('bizFssCount').textContent = '-';
+        return;
       }
       var res;
-      try {
-        res = await fetch(apiUrl);
-      } catch(corsErr) {
-        res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl));
+      var proxyList = [
+        'https://api.allorigins.win/raw?url=',
+        '' // 직접 호출 (CORS 허용된 경우)
+      ];
+      var text = '';
+      for(var p = 0; p < proxyList.length; p++) {
+        try {
+          var fetchUrl = proxyList[p] ? proxyList[p] + encodeURIComponent(apiUrl) : apiUrl;
+          res = await fetch(fetchUrl);
+          text = await res.text();
+          if(text && text.startsWith('{') && !text.includes('error code')) break;
+        } catch(e){ text = ''; continue; }
       }
-      var text = await res.text();
-      if(text.includes('<script') || text.includes('alert(')) continue;
+      if(!text || !text.startsWith('{')) {
+        console.log('FSS: 프록시 실패', t);
+        continue;
+      }
       var data = JSON.parse(text);
       var key = Object.keys(data)[0];
       var rows = (data[key] && data[key].row) ? data[key].row : [];
-      // 지역 필터링 (클라이언트)
-      if(bizState.sido && bizState.sido !== '검색') {
-        rows = rows.filter(function(r){
-          var addr = r.LOCP_ADDR || '';
-          if(!addr.includes(bizState.sido)) return false;
-          if(bizState.sigungu && !addr.includes(bizState.sigungu)) return false;
-          if(bizState.dong && !addr.includes(bizState.dong)) return false;
-          return true;
-        });
-      }
       rows.forEach(function(r){ r._t = t; });
       allRows = allRows.concat(rows);
     } catch(e){ console.log('FSS error:', t, e.message); }
   }
   document.getElementById('bizFssCount').textContent = allRows.length;
   if(allRows.length === 0) {
-    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">인허가 결과 없음</td></tr>';
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#8892a4;font-size:12px">인허가 결과 없음<br><span style="font-size:11px">CORS 차단으로 조회 불가 시, 브라우저에서 직접 확인:<br><a href="https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/I1220/json/1/5/BSSH_NM=' + encodeURIComponent(bizState.sigungu||bizState.sido||'') + '" target="_blank" style="color:#1565c0">🔗 식약처 API 직접 열기</a></span></td></tr>';
     return;
   }
   var html = '';
@@ -1628,6 +1630,7 @@ async function searchFss(region) {
     html += '</tr>';
   });
   document.getElementById('fssTableBody').innerHTML = html;
+  toast('🏭 식약처 ' + allRows.length + '건 조회');
 }
 
 function initResultMap(query) {
