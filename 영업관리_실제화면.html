@@ -165,7 +165,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
 /* Responsive */
 @media(max-width:768px){.sb{display:none}.stats{grid-template-columns:1fr 1fr}.fg-row,.fg-row3{grid-template-columns:1fr}}
+.sido-block{position:absolute;width:56px;height:50px;background:#e3f2fd;border:2px solid #90caf9;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#1565c0;cursor:pointer;transition:all .2s;user-select:none}
+.sido-block:hover{background:#1a73e8;color:#fff;border-color:#1a73e8;transform:scale(1.08);z-index:2;box-shadow:0 4px 12px rgba(26,115,232,.3)}
+.sido-block.sb-small{width:56px;height:32px;font-size:11px;border-radius:8px}
+.sido-block.active{background:#1a73e8;color:#fff;border-color:#0d47a1;box-shadow:0 4px 12px rgba(26,115,232,.4)}
+.sg-btn{padding:10px 16px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-weight:600;color:#1a2332;cursor:pointer;transition:all .15s;min-width:80px;text-align:center}
+.sg-btn:hover{background:#e3f2fd;border-color:#90caf9;color:#1565c0}
+.dong-btn{padding:8px 12px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;color:#5f6b7a;cursor:pointer;transition:all .15s}
+.dong-btn:hover{background:#e8f5e9;border-color:#81c784;color:#2e7d32}
 </style>
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=1d5b2febea0c84335256f6a15d9e7c05&libraries=services"></script>
 </head>
 <body>
 
@@ -317,73 +326,169 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       </div>
     </div>
 
-    <!-- ===== 업체조회 (카카오 API 연동) ===== -->
+    <!-- ===== 업체조회 (지도 드릴다운 + 카카오 + 식약처) ===== -->
     <div class="page" id="page-bizSearch" style="display:none">
-      <!-- 검색 카드 -->
+
+      <!-- 상단: 현재 선택 경로 (브레드크럼) -->
       <div class="card" style="margin-bottom:16px">
-        <div class="card-hd">
-          <h3>🔍 업체조회</h3>
-          <div class="right">
-            <span style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:3px 8px;border-radius:4px">카카오맵 API 연동</span>
+        <div class="card-bd" style="display:flex;align-items:center;gap:8px;padding:12px 20px;flex-wrap:wrap">
+          <span style="font-size:15px">🗺️</span>
+          <b style="font-size:14px;color:#1a2332">업체조회</b>
+          <span style="color:#c8d6e5">|</span>
+          <div id="bizBreadcrumb" style="display:flex;align-items:center;gap:4px;font-size:13px">
+            <span style="color:#1a73e8;font-weight:600;cursor:pointer" onclick="bizGoStep(0)">전국</span>
           </div>
-        </div>
-        <div class="card-bd">
-          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-            <div class="fg" style="margin:0;flex:1;min-width:250px">
-              <label>업체명 또는 주소 검색</label>
-              <input id="bizSearchInput" placeholder="예: CJ제일제당, 서울 강남구 식품회사..." style="font-size:14px;padding:11px 14px" onkeydown="if(event.key==='Enter')doBizSearch()">
-            </div>
-            <div class="fg" style="margin:0;flex-shrink:0">
-              <label>카테고리</label>
-              <select id="bizSearchCat" style="padding:11px 10px">
-                <option value="">전체</option>
-                <option value="FD6">음식점</option>
-                <option value="CE7">카페</option>
-                <option value="MT1">대형마트</option>
-                <option value="CS2">편의점</option>
-                <option value="BK9">은행</option>
-                <option value="HP8">병원</option>
-                <option value="PM9">약국</option>
-              </select>
-            </div>
-            <button class="btn btn-primary" onclick="doBizSearch()" style="padding:11px 24px;flex-shrink:0">🔍 검색</button>
-          </div>
-          <div style="margin-top:8px;font-size:11px;color:#8892a4">
-            💡 업체명, 주소, 전화번호로 검색 가능 · 검색 결과에서 바로 고객사 등록 가능 · 거리 계산은 회사(동탄) 기준
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <input id="bizQuickSearch" placeholder="업체명 빠른검색..." style="padding:6px 12px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:180px" onkeydown="if(event.key==='Enter')doBizQuickSearch()">
+            <button class="btn btn-primary btn-sm" onclick="doBizQuickSearch()" style="padding:6px 12px">🔍</button>
           </div>
         </div>
       </div>
 
-      <!-- 검색 결과 -->
-      <div id="bizSearchResults" style="display:none">
-        <div class="card" style="margin-bottom:16px">
+      <!-- STEP 0: 전국 시도 지도 -->
+      <div id="bizStep0">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <!-- 지도 영역 -->
+          <div class="card" style="flex:1;min-width:380px">
+            <div class="card-hd"><h3>📍 시/도 선택</h3><div class="right" style="font-size:11px;color:#8892a4">클릭하여 선택</div></div>
+            <div class="card-bd" style="padding:20px;display:flex;justify-content:center">
+              <div id="koreaMap" style="position:relative;width:320px;height:440px">
+                <!-- 시도 블록맵 (카토그램) -->
+                <div class="sido-block" style="left:90px;top:0" onclick="selectSido('강원')">강원</div>
+                <div class="sido-block" style="left:30px;top:0" onclick="selectSido('경기')">경기</div>
+                <div class="sido-block sb-small" style="left:0;top:55px" onclick="selectSido('인천')">인천</div>
+                <div class="sido-block sb-small" style="left:0;top:0" onclick="selectSido('서울')">서울</div>
+                <div class="sido-block" style="left:30px;top:80px" onclick="selectSido('충남')">충남</div>
+                <div class="sido-block sb-small" style="left:0;top:100px" onclick="selectSido('대전')">대전</div>
+                <div class="sido-block sb-small" style="left:0;top:135px" onclick="selectSido('세종')">세종</div>
+                <div class="sido-block" style="left:90px;top:80px" onclick="selectSido('충북')">충북</div>
+                <div class="sido-block" style="left:150px;top:80px" onclick="selectSido('경북')">경북</div>
+                <div class="sido-block sb-small" style="left:210px;top:100px" onclick="selectSido('울산')">울산</div>
+                <div class="sido-block sb-small" style="left:210px;top:135px" onclick="selectSido('대구')">대구</div>
+                <div class="sido-block" style="left:30px;top:175px" onclick="selectSido('전북')">전북</div>
+                <div class="sido-block sb-small" style="left:0;top:200px" onclick="selectSido('광주')">광주</div>
+                <div class="sido-block" style="left:150px;top:175px" onclick="selectSido('경남')">경남</div>
+                <div class="sido-block sb-small" style="left:210px;top:200px" onclick="selectSido('부산')">부산</div>
+                <div class="sido-block" style="left:30px;top:270px" onclick="selectSido('전남')">전남</div>
+                <div class="sido-block" style="left:90px;top:370px" onclick="selectSido('제주')">제주</div>
+              </div>
+            </div>
+          </div>
+          <!-- 우측: 안내 + API 설정 -->
+          <div style="width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:16px">
+            <div class="card">
+              <div class="card-hd"><h3>📋 조회 방법</h3></div>
+              <div class="card-bd" style="font-size:12px;color:#5f6b7a;line-height:2">
+                <b>1단계</b> 시/도 선택 (지도 클릭)<br>
+                <b>2단계</b> 시/군/구 선택<br>
+                <b>3단계</b> 읍/면/동 선택<br>
+                <b>결과</b> 카카오맵 + 식약처 동시 조회<br>
+                <div style="margin-top:8px;padding:8px;background:#e3f2fd;border-radius:6px;font-size:11px;color:#1565c0">
+                  💡 우측 상단 빠른검색으로 업체명 직접 검색도 가능합니다
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><h3>🔑 식약처 API 키</h3></div>
+              <div class="card-bd">
+                <input id="fssApiKey" placeholder="data.go.kr 인증키 (Encoding)" style="font-size:11px;font-family:monospace;padding:8px;margin-bottom:6px">
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-secondary btn-sm" onclick="testFssKey()" style="flex:1;font-size:11px">🧪 테스트</button>
+                  <a href="https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15092373" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;font-size:11px;text-decoration:none;text-align:center">📋 발급</a>
+                </div>
+                <div style="margin-top:6px;font-size:10px;color:#8892a4">미입력 시 카카오맵만 조회됩니다</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><h3>🏭 업종 필터</h3></div>
+              <div class="card-bd" style="display:flex;flex-direction:column;gap:4px" id="bizTypeArea">
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" checked value="food"> 🍽️ 식품제조가공업</label>
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" checked value="instant"> 🥡 즉석판매제조가공업</label>
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" value="livestock"> 🥩 축산물가공업</label>
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0"><input type="checkbox" value="health"> 💊 건강기능식품</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 1: 시군구 선택 -->
+      <div id="bizStep1" style="display:none">
+        <div class="card">
           <div class="card-hd">
-            <h3 id="bizResultTitle">검색 결과</h3>
-            <div class="right"><span id="bizResultCount" style="font-size:12px;color:#5f6b7a"></span></div>
+            <h3 id="step1Title">🏙️ 시/군/구 선택</h3>
+            <div class="right"><button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">← 시/도 다시 선택</button></div>
           </div>
-          <div class="card-bd" style="padding:0">
-            <div id="bizResultList"></div>
+          <div class="card-bd">
+            <div id="sigunguGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
           </div>
         </div>
       </div>
 
-      <!-- 기본 안내 (검색 전) -->
-      <div id="bizSearchGuide" class="card">
-        <div class="card-bd" style="text-align:center;padding:60px 20px">
-          <div style="font-size:48px;margin-bottom:16px">🔍</div>
-          <div style="font-size:16px;font-weight:700;color:#1a2332;margin-bottom:8px">업체를 검색해보세요</div>
-          <div style="font-size:13px;color:#8892a4;line-height:1.8">
-            카카오맵 데이터베이스에서 전국 사업장 정보를 조회합니다.<br>
-            검색 결과에서 <b>고객사 등록</b>을 바로 할 수 있습니다.<br>
-            회사 ↔ 업체 간 <b>거리·소요시간</b>도 자동으로 계산됩니다.
+      <!-- STEP 2: 읍면동 선택 -->
+      <div id="bizStep2" style="display:none">
+        <div class="card">
+          <div class="card-hd">
+            <h3 id="step2Title">🏘️ 읍/면/동 선택</h3>
+            <div class="right">
+              <button class="btn btn-secondary btn-sm" onclick="bizGoStep(1)" style="margin-right:6px">← 시/군/구</button>
+              <button class="btn btn-primary btn-sm" onclick="doRegionSearch()">🔍 현재 시/군/구 전체 검색</button>
+            </div>
           </div>
-          <div style="margin-top:24px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
-            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bizSearchInput').value='CJ제일제당';doBizSearch()">예시: CJ제일제당</button>
-            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bizSearchInput').value='농심';doBizSearch()">예시: 농심</button>
-            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bizSearchInput').value='서울 강남구 식품';doBizSearch()">예시: 강남구 식품</button>
+          <div class="card-bd">
+            <div id="dongGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+            <div id="dongLoading" style="text-align:center;padding:20px;color:#8892a4;display:none">⏳ 읍/면/동 정보를 불러오는 중...</div>
           </div>
         </div>
       </div>
+
+      <!-- STEP 3: 검색 결과 -->
+      <div id="bizStep3" style="display:none">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <!-- 지도 -->
+          <div class="card" style="flex:1;min-width:350px">
+            <div class="card-hd"><h3>🗺️ 검색 위치</h3></div>
+            <div class="card-bd" style="padding:0">
+              <div id="bizResultMap" style="width:100%;height:350px;background:#e8edf2"></div>
+            </div>
+          </div>
+          <!-- 결과 요약 -->
+          <div style="width:280px;flex-shrink:0">
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-bd" style="text-align:center;padding:16px">
+                <div style="font-size:11px;color:#8892a4;margin-bottom:4px">카카오맵 검색</div>
+                <div id="bizKakaoCount" style="font-size:28px;font-weight:700;color:#1a73e8">-</div>
+              </div>
+            </div>
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-bd" style="text-align:center;padding:16px">
+                <div style="font-size:11px;color:#8892a4;margin-bottom:4px">식약처 인허가</div>
+                <div id="bizFssCount" style="font-size:28px;font-weight:700;color:#2e7d32">-</div>
+              </div>
+            </div>
+            <button class="btn btn-secondary" onclick="bizGoStep(0)" style="width:100%;padding:10px">🗺️ 새로 검색</button>
+          </div>
+        </div>
+        <!-- 탭: 카카오 / 식약처 -->
+        <div style="display:flex;gap:0;margin:16px 0">
+          <button class="btn" id="resTab1" onclick="switchResTab(1)" style="flex:1;padding:10px;border-radius:8px 0 0 8px;font-weight:600;font-size:13px;background:#1a73e8;color:#fff;border:1px solid #1a73e8">🗺️ 카카오맵 결과</button>
+          <button class="btn" id="resTab2" onclick="switchResTab(2)" style="flex:1;padding:10px;border-radius:0 8px 8px 0;font-weight:600;font-size:13px;background:#fff;color:#5f6b7a;border:1px solid #e2e6ed">🏭 식약처 인허가</button>
+        </div>
+        <!-- 카카오 결과 -->
+        <div id="resPanel1">
+          <div class="card"><div class="card-bd" style="padding:0"><div id="bizResultList"></div></div></div>
+        </div>
+        <!-- 식약처 결과 -->
+        <div id="resPanel2" style="display:none">
+          <div class="card"><div class="card-bd" style="padding:0;overflow-x:auto">
+            <table class="tbl">
+              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>상태</th><th>거리</th><th></th></tr></thead>
+              <tbody id="fssTableBody"></tbody>
+            </table>
+          </div></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ===== 고객사 등록 ===== -->
@@ -1243,102 +1348,324 @@ function addWaypoint() {
   toast('+ 경유지 ' + wpCount + ' 추가됨 (여러 업체 방문 시)');
 }
 
-// ── 업체조회 (카카오 API) ──
+// ── 업체조회 (지도 드릴다운 + 카카오 + 식약처) ──
 const KAKAO_REST_KEY = '8e5dab09aacd882449bd3865699a9d69';
-const COMPANY_ORIGIN = {x:'127.0741', y:'37.2004'}; // 회사 좌표 (동탄 기준)
+const COMPANY_ORIGIN = {x:'127.0741', y:'37.2004'};
+var bizMap2 = null, bizMarkers2 = [];
+var bizState = {sido:'', sigungu:'', dong:''};
 
-async function doBizSearch() {
-  const query = document.getElementById('bizSearchInput').value.trim();
-  if (!query) { toast('⚠️ 검색어를 입력하세요.'); return; }
+var regionData = {
+  '서울':['강남구','강동구','강북구','강서구','관악구','광진구','구로구','금천구','노원구','도봉구','동대문구','동작구','마포구','서대문구','서초구','성동구','성북구','송파구','양천구','영등포구','용산구','은평구','종로구','중구','중랑구'],
+  '부산':['강서구','금정구','기장군','남구','동구','동래구','부산진구','북구','사상구','사하구','서구','수영구','연제구','영도구','중구','해운대구'],
+  '대구':['남구','달서구','달성군','동구','북구','서구','수성구','중구'],
+  '인천':['강화군','계양구','남동구','동구','미추홀구','부평구','서구','연수구','옹진군','중구'],
+  '광주':['광산구','남구','동구','북구','서구'],
+  '대전':['대덕구','동구','서구','유성구','중구'],
+  '울산':['남구','동구','북구','울주군','중구'],
+  '세종':['세종시'],
+  '경기':['가평군','고양시','과천시','광명시','광주시','구리시','군포시','김포시','남양주시','동두천시','부천시','성남시','수원시','시흥시','안산시','안성시','안양시','양주시','양평군','여주시','연천군','오산시','용인시','의왕시','의정부시','이천시','파주시','평택시','포천시','하남시','화성시'],
+  '강원':['강릉시','고성군','동해시','삼척시','속초시','양구군','양양군','영월군','원주시','인제군','정선군','철원군','춘천시','태백시','평창군','홍천군','화천군','횡성군'],
+  '충북':['괴산군','단양군','보은군','영동군','옥천군','음성군','제천시','증평군','진천군','청주시','충주시'],
+  '충남':['계룡시','공주시','금산군','논산시','당진시','보령시','부여군','서산시','서천군','아산시','예산군','천안시','청양군','태안군','홍성군'],
+  '전북':['고창군','군산시','김제시','남원시','무주군','부안군','순창군','완주군','익산시','임실군','장수군','전주시','정읍시','진안군'],
+  '전남':['강진군','고흥군','곡성군','광양시','구례군','나주시','담양군','목포시','무안군','보성군','순천시','신안군','여수시','영광군','영암군','완도군','장성군','장흥군','진도군','함평군','해남군','화순군'],
+  '경북':['경산시','경주시','고령군','구미시','군위군','김천시','문경시','봉화군','상주시','성주군','안동시','영덕군','영양군','영주시','영천시','예천군','울릉군','울진군','의성군','청도군','청송군','칠곡군','포항시'],
+  '경남':['거제시','거창군','고성군','김해시','남해군','밀양시','사천시','산청군','양산시','의령군','진주시','창녕군','창원시','통영시','하동군','함안군','함양군','합천군'],
+  '제주':['서귀포시','제주시']
+};
 
-  document.getElementById('bizSearchGuide').style.display = 'none';
-  document.getElementById('bizSearchResults').style.display = 'block';
-  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:40px;color:#8892a4"><span style="font-size:24px">⏳</span><br>검색 중...</div>';
-  document.getElementById('bizResultTitle').textContent = '🔍 "' + query + '" 검색 결과';
+function selectSido(sido) {
+  bizState = {sido:sido, sigungu:'', dong:''};
+  document.querySelectorAll('.sido-block').forEach(function(b){b.classList.remove('active')});
+  if(event && event.target) event.target.classList.add('active');
+  var list = regionData[sido] || [];
+  var html = '';
+  list.forEach(function(g){
+    html += '<div class="sg-btn" onclick="selectSigungu(\'' + g + '\')">' + g + '</div>';
+  });
+  document.getElementById('sigunguGrid').innerHTML = html;
+  document.getElementById('step1Title').textContent = '🏙️ ' + sido + ' > 시/군/구 선택';
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'block';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'none';
+  updateBreadcrumb();
+  toast('📍 ' + sido + ' 선택');
+}
 
+function selectSigungu(sg) {
+  bizState.sigungu = sg;
+  bizState.dong = '';
+  document.getElementById('step2Title').textContent = '🏘️ ' + bizState.sido + ' ' + sg + ' > 읍/면/동 선택';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'block';
+  document.getElementById('dongGrid').style.display = 'none';
+  document.getElementById('dongLoading').style.display = 'block';
+  updateBreadcrumb();
+  loadDongList(bizState.sido, sg);
+}
+
+async function loadDongList(sido, sigungu) {
   try {
-    const res = await fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(query) + '&size=10', {
-      headers: { 'Authorization': 'KakaoAK ' + KAKAO_REST_KEY }
+    var res = await fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(sido + ' ' + sigungu) + '&size=30', {
+      headers: {'Authorization': 'KakaoAK ' + KAKAO_REST_KEY}
     });
-    const data = await res.json();
-    const docs = data.documents || [];
+    var data = await res.json();
+    var dongs = new Set();
+    (data.documents||[]).forEach(function(d){
+      var a = d.address || d.road_address;
+      if(a){
+        var r3 = a.region_3depth_name || a.region_3depth_h_name || '';
+        if(r3) dongs.add(r3.split(' ')[0]);
+      }
+    });
+    var dongArr = Array.from(dongs).sort();
+    if(dongArr.length === 0){
+      document.getElementById('dongGrid').innerHTML = '<div style="text-align:center;width:100%;padding:16px;color:#8892a4;font-size:12px">읍/면/동 자동 로드 불가 — 시/군/구 전체 검색을 이용하세요.</div>';
+    } else {
+      var html = '';
+      dongArr.forEach(function(d){
+        html += '<div class="dong-btn" onclick="selectDong(\'' + d + '\')">' + d + '</div>';
+      });
+      document.getElementById('dongGrid').innerHTML = html;
+    }
+    document.getElementById('dongGrid').style.display = 'flex';
+    document.getElementById('dongLoading').style.display = 'none';
+  } catch(e) {
+    document.getElementById('dongGrid').innerHTML = '<div style="text-align:center;width:100%;padding:16px;color:#e53935">로드 실패</div>';
+    document.getElementById('dongGrid').style.display = 'flex';
+    document.getElementById('dongLoading').style.display = 'none';
+  }
+}
 
-    if (docs.length === 0) {
-      document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:40px;color:#8892a4">검색 결과가 없습니다. 다른 키워드로 시도해보세요.</div>';
-      document.getElementById('bizResultCount').textContent = '0건';
+function selectDong(dong) {
+  bizState.dong = dong;
+  updateBreadcrumb();
+  doRegionSearch();
+}
+
+function bizGoStep(n) {
+  document.getElementById('bizStep0').style.display = n===0 ? 'block' : 'none';
+  document.getElementById('bizStep1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('bizStep2').style.display = n===2 ? 'block' : 'none';
+  document.getElementById('bizStep3').style.display = 'none';
+  if(n===0) bizState = {sido:'', sigungu:'', dong:''};
+  if(n===1) { bizState.sigungu=''; bizState.dong=''; }
+  updateBreadcrumb();
+}
+
+function updateBreadcrumb() {
+  var html = '<span style="color:#1a73e8;font-weight:600;cursor:pointer" onclick="bizGoStep(0)">전국</span>';
+  if(bizState.sido) html += ' <span style="color:#c8d6e5">›</span> <span style="color:#1a73e8;cursor:pointer" onclick="bizGoStep(1)">' + bizState.sido + '</span>';
+  if(bizState.sigungu) html += ' <span style="color:#c8d6e5">›</span> <span style="color:#1a73e8;cursor:pointer" onclick="bizGoStep(2)">' + bizState.sigungu + '</span>';
+  if(bizState.dong) html += ' <span style="color:#c8d6e5">›</span> <b style="color:#1a2332">' + bizState.dong + '</b>';
+  document.getElementById('bizBreadcrumb').innerHTML = html;
+}
+
+function switchResTab(n) {
+  document.getElementById('resPanel1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('resPanel2').style.display = n===2 ? 'block' : 'none';
+  ['resTab1','resTab2'].forEach(function(id,i){
+    var el = document.getElementById(id);
+    var active = (i+1)===n;
+    el.style.background = active ? '#1a73e8' : '#fff';
+    el.style.color = active ? '#fff' : '#5f6b7a';
+    el.style.borderColor = active ? '#1a73e8' : '#e2e6ed';
+  });
+}
+
+async function doRegionSearch() {
+  var region = bizState.sido;
+  if(bizState.sigungu) region += ' ' + bizState.sigungu;
+  if(bizState.dong) region += ' ' + bizState.dong;
+  if(!region) { toast('지역을 선택하세요.'); return; }
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'block';
+  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 카카오맵 검색 중...</div>';
+  document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 식약처 조회 중...</td></tr>';
+  document.getElementById('bizKakaoCount').textContent = '...';
+  document.getElementById('bizFssCount').textContent = '...';
+  searchKakao(region + ' 식품');
+  searchFss(region);
+  initResultMap(region);
+}
+
+function doBizQuickSearch() {
+  var q = document.getElementById('bizQuickSearch').value.trim();
+  if(!q) { toast('업체명을 입력하세요.'); return; }
+  bizState = {sido:'검색', sigungu:q, dong:''};
+  updateBreadcrumb();
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'block';
+  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 검색 중...</div>';
+  document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 조회 중...</td></tr>';
+  document.getElementById('bizKakaoCount').textContent = '...';
+  document.getElementById('bizFssCount').textContent = '...';
+  searchKakao(q);
+  searchFss(q);
+  initResultMap(q);
+}
+
+async function searchKakao(query) {
+  try {
+    var res = await fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(query) + '&size=15', {
+      headers: {'Authorization': 'KakaoAK ' + KAKAO_REST_KEY}
+    });
+    var data = await res.json();
+    var docs = data.documents || [];
+    document.getElementById('bizKakaoCount').textContent = docs.length;
+    if(docs.length === 0) {
+      document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">카카오맵 결과 없음</div>';
       return;
     }
-
-    document.getElementById('bizResultCount').textContent = docs.length + '건 (총 ' + (data.meta?.total_count||0) + '건 중)';
-
-    let html = '';
+    bizMarkers2.forEach(function(m){ m.setMap(null); });
+    bizMarkers2 = [];
+    var bounds = bizMap2 ? new kakao.maps.LatLngBounds() : null;
+    var html = '';
     docs.forEach(function(d, i) {
-      const addr = d.road_address_name || d.address_name || '-';
-      const phone = d.phone || '-';
-      const category = d.category_name || '';
-      const placeUrl = d.place_url || '#';
-
-      html += '<div class="biz-result-item" id="bizItem' + i + '" style="padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:16px;align-items:flex-start;transition:background .15s" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'">';
-      html += '<div style="flex-shrink:0;width:36px;height:36px;background:#e3f2fd;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1565c0">' + (i+1) + '</div>';
+      var addr = d.road_address_name || d.address_name || '-';
+      var phone = d.phone || '-';
+      var cat = d.category_name || '';
+      if(bizMap2){
+        var pos = new kakao.maps.LatLng(parseFloat(d.y), parseFloat(d.x));
+        var marker = new kakao.maps.Marker({position:pos, map:bizMap2});
+        bizMarkers2.push(marker);
+        bounds.extend(pos);
+      }
+      html += '<div style="padding:12px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:12px" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'">';
+      html += '<div style="width:28px;height:28px;background:#e3f2fd;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#1565c0;flex-shrink:0">' + (i+1) + '</div>';
       html += '<div style="flex:1;min-width:0">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-      html += '<span style="font-size:14px;font-weight:700;color:#1a2332">' + d.place_name + '</span>';
-      if (category) html += '<span style="font-size:10px;color:#8892a4;background:#f1f3f5;padding:1px 6px;border-radius:3px">' + category.split(' > ').pop() + '</span>';
+      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><b style="font-size:13px;color:#1a2332">' + d.place_name + '</b>';
+      if(cat) html += '<span style="font-size:9px;background:#f1f3f5;padding:1px 5px;border-radius:3px;color:#8892a4">' + cat.split(' > ').pop() + '</span>';
       html += '</div>';
-      html += '<div style="font-size:12px;color:#5f6b7a;margin-bottom:3px">📍 ' + addr + '</div>';
-      html += '<div style="font-size:12px;color:#5f6b7a;margin-bottom:6px">📞 ' + phone + '</div>';
-      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
-      html += '<span id="bizDist' + i + '" style="font-size:11px;color:#1565c0;background:#e3f2fd;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="calcBizDist(\'' + d.x + '\',\'' + d.y + '\',' + i + ')">📐 거리 계산</span>';
-      html += '<a href="' + placeUrl + '" target="_blank" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:4px;text-decoration:none">🗺️ 카카오맵</a>';
-      html += '<button class="btn btn-sm" style="font-size:11px;padding:2px 10px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizToCustomer(\'' + d.place_name.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\',\'' + phone + '\')">+ 고객사 등록</button>';
-      html += '</div>';
-      html += '</div>';
-      html += '</div>';
+      html += '<div style="font-size:11px;color:#5f6b7a">📍 ' + addr + '  ·  📞 ' + phone + '</div>';
+      html += '<div style="display:flex;gap:5px;margin-top:5px">';
+      html += '<span id="kD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 7px;border-radius:4px;cursor:pointer" onclick="calcDist(\'' + d.x + '\',\'' + d.y + '\',\'kD' + i + '\')">📐 거리</span>';
+      if(d.place_url) html += '<a href="' + d.place_url + '" target="_blank" style="font-size:10px;color:#e65100;background:#fff3e0;padding:2px 7px;border-radius:4px;text-decoration:none">🗺️</a>';
+      html += '<button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + d.place_name.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button>';
+      html += '</div></div></div>';
     });
-
     document.getElementById('bizResultList').innerHTML = html;
-    toast('✅ ' + docs.length + '건 검색 완료');
-
-  } catch(err) {
-    document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:40px;color:#e53935">❌ API 호출 실패: ' + err.message + '</div>';
+    if(bizMap2 && bounds) bizMap2.setBounds(bounds);
+  } catch(e) {
+    document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#e53935">❌ ' + e.message + '</div>';
+    document.getElementById('bizKakaoCount').textContent = '0';
   }
 }
 
-async function calcBizDist(destX, destY, idx) {
-  const el = document.getElementById('bizDist' + idx);
-  el.innerHTML = '⏳ 계산 중...';
+async function searchFss(region) {
+  var apiKey = document.getElementById('fssApiKey').value.trim();
+  if(!apiKey) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#e65100">🔑 식약처 API 키를 입력하면 인허가 정보도 조회됩니다</td></tr>';
+    document.getElementById('bizFssCount').textContent = '-';
+    return;
+  }
+  var codes = {food:'I2570', instant:'I2790', livestock:'I2660', health:'C003'};
+  var icons = {food:'🍽️', instant:'🥡', livestock:'🥩', health:'💊'};
+  var types = [];
+  document.querySelectorAll('#bizTypeArea input:checked').forEach(function(cb){ types.push(cb.value); });
+  var allRows = [];
+  for(var t of types) {
+    try {
+      var res = await fetch('https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/' + codes[t] + '/json/1/20');
+      var data = await res.json();
+      var key = Object.keys(data)[0];
+      var rows = (data[key] && data[key].row) ? data[key].row : [];
+      rows = rows.filter(function(r){
+        var addr = r.SITE_ADDR || r.ADDR || '';
+        return addr.includes(bizState.sido);
+      });
+      if(bizState.sigungu && bizState.sigungu !== '검색') rows = rows.filter(function(r){ return (r.SITE_ADDR||r.ADDR||'').includes(bizState.sigungu); });
+      rows.forEach(function(r){ r._t = t; });
+      allRows = allRows.concat(rows);
+    } catch(e){}
+  }
+  document.getElementById('bizFssCount').textContent = allRows.length;
+  if(allRows.length === 0) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">인허가 결과 없음</td></tr>';
+    return;
+  }
+  var html = '';
+  allRows.forEach(function(r, i){
+    var nm = r.BSSH_NM || r.ENTRPS_NM || '-';
+    var ceo = r.REPRSNT_NM || r.CEO_NM || '-';
+    var biz = r.INDUTY_NM || r.PRMSNL_SE || '-';
+    var lic = r.LCNS_NO || r.PRMSNL_NO || '-';
+    var addr = r.SITE_ADDR || r.ADDR || '-';
+    var st = r.BSN_STATE_NM || r.PRGRSS_STATE_NM || '영업중';
+    html += '<tr>';
+    html += '<td><b>' + nm + '</b></td><td>' + ceo + '</td>';
+    html += '<td>' + (icons[r._t]||'') + ' ' + biz + '</td>';
+    html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
+    html += '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
+    html += '<td><span style="color:' + (st.includes('영업')?'#2e7d32':'#e65100') + ';font-weight:600;font-size:11px">' + st + '</span></td>';
+    html += '<td><span id="fD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 6px;border-radius:4px;cursor:pointer" onclick="calcAddrDist(\'' + addr.replace(/'/g,"\\'") + '\',\'fD' + i + '\')">📐</span></td>';
+    html += '<td><button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
+    html += '</tr>';
+  });
+  document.getElementById('fssTableBody').innerHTML = html;
+}
+
+function initResultMap(query) {
   try {
-    const res = await fetch('https://apis-navi.kakaomobility.com/v1/directions?origin=' + COMPANY_ORIGIN.x + ',' + COMPANY_ORIGIN.y + '&destination=' + destX + ',' + destY, {
-      headers: { 'Authorization': 'KakaoAK ' + KAKAO_REST_KEY }
+    var el = document.getElementById('bizResultMap');
+    if(!bizMap2) bizMap2 = new kakao.maps.Map(el, {center:new kakao.maps.LatLng(36.5,127.5), level:13});
+    fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(query.replace(' 식품','')) + '&size=1', {
+      headers:{'Authorization':'KakaoAK ' + KAKAO_REST_KEY}
+    }).then(function(r){return r.json()}).then(function(data){
+      if(data.documents && data.documents[0]){
+        bizMap2.setCenter(new kakao.maps.LatLng(parseFloat(data.documents[0].y), parseFloat(data.documents[0].x)));
+        bizMap2.setLevel(7);
+      }
     });
-    const data = await res.json();
-    const route = data.routes[0];
-    if (route.result_code === 0) {
-      const km = (route.summary.distance / 1000).toFixed(1);
-      const min = Math.round(route.summary.duration / 60);
-      const toll = route.summary.fare.toll;
-      el.innerHTML = '🚗 편도 ' + km + 'km · ' + min + '분' + (toll > 0 ? ' · 통행료 ' + toll.toLocaleString() + '원' : '');
-      el.style.background = '#e8f5e9';
-      el.style.color = '#2e7d32';
-    } else {
-      el.innerHTML = '⚠️ 경로 없음';
-      el.style.background = '#fff3e0';
-      el.style.color = '#e65100';
-    }
-  } catch(err) {
-    el.innerHTML = '❌ 오류';
-    el.style.background = '#ffebee';
-    el.style.color = '#e53935';
-  }
+  } catch(e){ document.getElementById('bizResultMap').innerHTML = '<div style="padding:40px;text-align:center;color:#8892a4">지도 표시 불가</div>'; }
 }
 
-function bizToCustomer(name, addr, phone) {
+async function calcDist(x, y, elId) {
+  var el = document.getElementById(elId); el.innerHTML = '⏳';
+  try {
+    var res = await fetch('https://apis-navi.kakaomobility.com/v1/directions?origin='+COMPANY_ORIGIN.x+','+COMPANY_ORIGIN.y+'&destination='+x+','+y, {
+      headers:{'Authorization':'KakaoAK '+KAKAO_REST_KEY}
+    });
+    var d = await res.json(), r = d.routes[0];
+    if(r.result_code===0){
+      el.innerHTML = '🚗 '+(r.summary.distance/1000).toFixed(0)+'km · '+Math.round(r.summary.duration/60)+'분';
+      el.style.background='#e8f5e9'; el.style.color='#2e7d32';
+    } else { el.innerHTML='경로없음'; }
+  } catch(e){ el.innerHTML='❌'; }
+}
+
+async function calcAddrDist(addr, elId) {
+  var el = document.getElementById(elId); el.innerHTML = '⏳';
+  try {
+    var g = await fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr),{headers:{'Authorization':'KakaoAK '+KAKAO_REST_KEY}});
+    var gd = await g.json();
+    if(gd.documents && gd.documents[0]) calcDist(gd.documents[0].x, gd.documents[0].y, elId);
+    else el.innerHTML='-';
+  } catch(e){ el.innerHTML='❌'; }
+}
+
+function bizReg(name, addr) {
   showPage('customerReg');
-  const compEl = document.getElementById('regCompany');
-  if (compEl) compEl.value = name;
-  toast('📋 "' + name + '" 정보를 고객사 등록 폼에 불러왔습니다.');
+  var c = document.getElementById('regCompany');
+  if(c) c.value = name;
+  toast('📋 "'+name+'" → 고객사 등록');
 }
 
+function testFssKey() {
+  var k = document.getElementById('fssApiKey').value.trim();
+  if(!k){ toast('인증키를 입력하세요.'); return; }
+  toast('🧪 테스트 중...');
+  fetch('https://openapi.foodsafetykorea.go.kr/api/'+k+'/I2570/json/1/1')
+    .then(function(r){return r.json()}).then(function(d){
+      if(d.I2570 && d.I2570.row) toast('✅ API 키 유효!');
+      else toast('⚠️ 키가 유효하지 않습니다.');
+    }).catch(function(e){ toast('❌ '+e.message); });
+}
 // ── hash 기반 페이지 라우팅 ──
 (function(){
   var h = location.hash.replace('#','');
