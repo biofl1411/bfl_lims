@@ -482,7 +482,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div id="resPanel2" style="display:none">
           <div class="card"><div class="card-bd" style="padding:0;overflow-x:auto">
             <table class="tbl">
-              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>상태</th><th>거리</th><th></th></tr></thead>
+              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>기관명</th><th>거리</th><th></th></tr></thead>
               <tbody id="fssTableBody"></tbody>
             </table>
           </div></div>
@@ -1564,14 +1564,19 @@ async function searchFss(region) {
     document.getElementById('bizFssCount').textContent = '-';
     return;
   }
-  var codes = {food:'I2570', instant:'I2790', livestock:'I2660', health:'C003'};
+  var codes = {food:'I1220', instant:'I2790', livestock:'I2660', health:'C003'};
   var icons = {food:'🍽️', instant:'🥡', livestock:'🥩', health:'💊'};
   var types = [];
   document.querySelectorAll('#bizTypeArea input:checked').forEach(function(cb){ types.push(cb.value); });
   var allRows = [];
   for(var t of types) {
     try {
+      // 식품안전나라 API: /api/키/서비스코드/json/시작/끝/BSSH_NM=값
       var apiUrl = 'https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/' + codes[t] + '/json/1/100';
+      // 키워드 검색일 경우 업소명 파라미터 추가
+      if(bizState.sido === '검색' && bizState.sigungu) {
+        apiUrl += '/BSSH_NM=' + encodeURIComponent(bizState.sigungu);
+      }
       var res;
       try {
         // 직접 호출 시도
@@ -1588,14 +1593,14 @@ async function searchFss(region) {
       var data = JSON.parse(text);
       var key = Object.keys(data)[0];
       var rows = (data[key] && data[key].row) ? data[key].row : [];
-      // 지역 필터
+      // 지역 필터 (LOCP_ADDR 기준)
       rows = rows.filter(function(r){
-        var addr = r.SITE_ADDR || r.ADDR || r.SITE_ADDR_RD || '';
-        if(bizState.sido === '검색') return addr.includes(bizState.sigungu) || (r.BSSH_NM||r.ENTRPS_NM||'').includes(bizState.sigungu);
+        var addr = r.LOCP_ADDR || r.SITE_ADDR || r.ADDR || '';
+        if(bizState.sido === '검색') return true; // 업소명 검색은 이미 API에서 필터됨
         return addr.includes(bizState.sido);
       });
-      if(bizState.sigungu && bizState.sigungu !== '검색') rows = rows.filter(function(r){ return (r.SITE_ADDR||r.ADDR||'').includes(bizState.sigungu); });
-      if(bizState.dong) rows = rows.filter(function(r){ return (r.SITE_ADDR||r.ADDR||'').includes(bizState.dong); });
+      if(bizState.sigungu && bizState.sigungu !== '검색') rows = rows.filter(function(r){ return (r.LOCP_ADDR||r.SITE_ADDR||r.ADDR||'').includes(bizState.sigungu); });
+      if(bizState.dong) rows = rows.filter(function(r){ return (r.LOCP_ADDR||r.SITE_ADDR||r.ADDR||'').includes(bizState.dong); });
       rows.forEach(function(r){ r._t = t; });
       allRows = allRows.concat(rows);
     } catch(e){ console.log('FSS error:', t, e.message); }
@@ -1607,18 +1612,19 @@ async function searchFss(region) {
   }
   var html = '';
   allRows.forEach(function(r, i){
-    var nm = r.BSSH_NM || r.ENTRPS_NM || '-';
-    var ceo = r.REPRSNT_NM || r.CEO_NM || '-';
-    var biz = r.INDUTY_NM || r.PRMSNL_SE || '-';
-    var lic = r.LCNS_NO || r.PRMSNL_NO || '-';
-    var addr = r.SITE_ADDR || r.ADDR || '-';
-    var st = r.BSN_STATE_NM || r.PRGRSS_STATE_NM || '영업중';
+    var nm = r.BSSH_NM || '-';
+    var ceo = r.PRSDNT_NM || '-';
+    var biz = r.INDUTY_NM || '-';
+    var lic = r.LCNS_NO || '-';
+    var addr = r.LOCP_ADDR || r.SITE_ADDR || r.ADDR || '-';
+    var org = r.INSTT_NM || '';
+    var tel = r.TELNO || '';
     html += '<tr>';
     html += '<td><b>' + nm + '</b></td><td>' + ceo + '</td>';
     html += '<td>' + (icons[r._t]||'') + ' ' + biz + '</td>';
     html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
     html += '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
-    html += '<td><span style="color:' + (st.includes('영업')?'#2e7d32':'#e65100') + ';font-weight:600;font-size:11px">' + st + '</span></td>';
+    html += '<td><span style="color:#2e7d32;font-weight:600;font-size:11px">' + org + '</span></td>';
     html += '<td><span id="fD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 6px;border-radius:4px;cursor:pointer" onclick="calcAddrDist(\'' + addr.replace(/'/g,"\\'") + '\',\'fD' + i + '\')">📐</span></td>';
     html += '<td><button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
     html += '</tr>';
@@ -1676,12 +1682,11 @@ function testFssKey() {
   var k = document.getElementById('fssApiKey').value.trim();
   if(!k){ toast('인증키를 입력하세요.'); return; }
   toast('🧪 테스트 중...');
-  var url = 'https://openapi.foodsafetykorea.go.kr/api/'+k+'/I2570/json/1/1';
+  var url = 'https://openapi.foodsafetykorea.go.kr/api/'+k+'/I1220/json/1/1';
   fetch(url).then(function(r){return r.text()}).then(function(t){
     if(t.includes('row')) toast('✅ API 키 유효! (직접 연결)');
     else throw new Error('CORS');
   }).catch(function(){
-    // CORS 프록시로 재시도
     fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url))
       .then(function(r){return r.text()}).then(function(t){
         if(t.includes('row')) toast('✅ API 키 유효! (프록시 연결)');
