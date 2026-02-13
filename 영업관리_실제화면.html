@@ -412,19 +412,27 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
       </div>
 
-      <!-- STEP 2: 읍면동 선택 -->
+      <!-- STEP 2: 읍면동 선택 (지도 + 버튼) -->
       <div id="bizStep2" style="display:none">
-        <div class="card">
-          <div class="card-hd">
-            <h3 id="step2Title">🏘️ 읍/면/동 선택</h3>
-            <div class="right">
-              <button class="btn btn-secondary btn-sm" onclick="bizGoStep(1)" style="margin-right:6px">← 시/군/구</button>
-              <button class="btn btn-primary btn-sm" onclick="doRegionSearch()">🔍 현재 시/군/구 전체 검색</button>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div class="card" style="flex:1;min-width:400px">
+            <div class="card-hd">
+              <h3 id="step2Title">🏘️ 읍/면/동 선택</h3>
+              <div class="right">
+                <button class="btn btn-secondary btn-sm" onclick="bizGoStep(1)" style="margin-right:6px">← 시/군/구</button>
+                <button class="btn btn-primary btn-sm" onclick="doRegionSearch()">🔍 시/군/구 전체 검색</button>
+              </div>
+            </div>
+            <div class="card-bd" style="padding:0">
+              <div id="dongMap" style="width:100%;height:420px"></div>
             </div>
           </div>
-          <div class="card-bd">
-            <div id="dongGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-            <div id="dongLoading" style="text-align:center;padding:20px;color:#8892a4;display:none">⏳ 읍/면/동 정보를 불러오는 중...</div>
+          <div class="card" style="width:240px;flex-shrink:0">
+            <div class="card-hd"><h3>📋 목록에서 선택</h3></div>
+            <div class="card-bd" style="max-height:420px;overflow-y:auto">
+              <div id="dongGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+              <div id="dongLoading" style="text-align:center;padding:20px;color:#8892a4;display:none">⏳ 읍/면/동 로딩 중...</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1364,9 +1372,10 @@ var regionData = {
 };
 
 // ── Leaflet 지도 (VWORLD/OSM + 시도/시군구 GeoJSON) ──
-var sidoMap = null, sidoGeoLayer = null, sgGeoData = null;
+var sidoMap = null, sidoGeoLayer = null, sgGeoData = null, dongGeoData = null;
 var SIDO_GEO_URL = 'data/sido.json';
 var SG_GEO_URL = 'data/sigungu.json';
+var DONG_GEO_URL = 'data/dong.json';
 var SIDO_NAME_MAP = {
   '서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천',
   '광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종',
@@ -1403,6 +1412,8 @@ function initSidoMap() {
   }).catch(function(e){ console.error('시도 GeoJSON 로드 실패:', e); });
   // 시군구 GeoJSON 프리로드
   fetch(SG_GEO_URL).then(function(r){return r.json()}).then(function(geo){ sgGeoData = geo; });
+  // 읍면동 GeoJSON 프리로드
+  fetch(DONG_GEO_URL).then(function(r){return r.json()}).then(function(geo){ dongGeoData = geo; });
 }
 
 function applyMapTile() {
@@ -1496,6 +1507,10 @@ function matchSigungu(sido, geoName) {
   return geoName;
 }
 
+var dongMap = null, dongGeoLayer = null;
+var DONG_COLORS = ['#4fc3f7','#81c784','#ffb74d','#e57373','#ba68c8','#4dd0e1','#a1887f','#90a4ae',
+  '#7986cb','#dce775','#f06292','#4db6ac','#aed581','#ffd54f','#9575cd','#64b5f6'];
+
 function selectSigungu(sg) {
   bizState.sigungu = sg;
   bizState.dong = '';
@@ -1505,7 +1520,111 @@ function selectSigungu(sg) {
   document.getElementById('dongGrid').style.display = 'none';
   document.getElementById('dongLoading').style.display = 'block';
   updateBreadcrumb();
-  loadDongList(bizState.sido, sg);
+  // 읍면동 지도 + 목록 로드
+  setTimeout(function(){ initDongMap(bizState.sido, sg); }, 100);
+}
+
+function findSgCode(sido, sgName) {
+  if(!sgGeoData) return '';
+  var sidoCode = SIDO_CODE_MAP[sido] || '';
+  // 매칭되는 모든 시군구 코드 수집
+  var matched = [];
+  for(var i = 0; i < sgGeoData.features.length; i++) {
+    var f = sgGeoData.features[i];
+    var code = f.properties.code;
+    if(code.substring(0,2) !== sidoCode) continue;
+    var name = f.properties.name;
+    // "수원시" → "수원시장안구", "수원시권선구" 등 모두 매칭
+    if(name === sgName || name.indexOf(sgName) >= 0 || sgName.indexOf(name) >= 0
+       || name.substring(0,2) === sgName.substring(0,2)) {
+      matched.push(code);
+    }
+  }
+  if(matched.length === 0) return sidoCode;
+  if(matched.length === 1) return matched[0];
+  // 복합도시: 공통 prefix 계산 (수원시 31011,31012,31013,31014 → "3101")
+  var prefix = matched[0];
+  for(var j = 1; j < matched.length; j++) {
+    while(matched[j].substring(0, prefix.length) !== prefix && prefix.length > 2) {
+      prefix = prefix.substring(0, prefix.length - 1);
+    }
+  }
+  return prefix;
+}
+
+function initDongMap(sido, sg) {
+  var el = document.getElementById('dongMap');
+  if(!el) return;
+  if(dongMap) { dongMap.remove(); dongMap = null; }
+  dongMap = L.map('dongMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 11);
+  // 타일
+  var vkey = document.getElementById('vworldApiKey') ? document.getElementById('vworldApiKey').value.trim() : '';
+  if(vkey) {
+    L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19}).addTo(dongMap);
+  } else {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(dongMap);
+  }
+
+  // 시군구 코드 찾기
+  var sgCode = findSgCode(sido, sg);
+  var dongButtons = [];
+
+  if(dongGeoData && sgCode.length >= 4) {
+    // 시군구에 하위구가 있는 경우 (예: 수원시→장안구,권선구...) sgCode 5자리 앞 4자리로 필터
+    // 일반 시군구는 5자리 전체로 필터
+    var prefix = sgCode;
+    var filtered = {
+      type: 'FeatureCollection',
+      features: dongGeoData.features.filter(function(f){ return f.properties.code.substring(0, prefix.length) === prefix; })
+    };
+    // 하위구 포함 매칭이 안 되면 앞 3~4자리로 재시도
+    if(filtered.features.length === 0 && sgCode.length >= 3) {
+      prefix = sgCode.substring(0, 4);
+      filtered.features = dongGeoData.features.filter(function(f){ return f.properties.code.substring(0, 4) === prefix; });
+    }
+    if(filtered.features.length === 0 && sgCode.length >= 2) {
+      prefix = sgCode.substring(0, 3);
+      filtered.features = dongGeoData.features.filter(function(f){ return f.properties.code.substring(0, 3) === prefix; });
+    }
+
+    if(filtered.features.length > 0) {
+      dongGeoLayer = L.geoJSON(filtered, {
+        style: function(feature){
+          var idx = filtered.features.indexOf(feature) % DONG_COLORS.length;
+          return {color:'#fff', weight:1.5, fillColor:DONG_COLORS[idx], fillOpacity:0.4};
+        },
+        onEachFeature: function(feature, layer){
+          var name = feature.properties.name || '';
+          layer.bindTooltip(name, {permanent:true, direction:'center', className:'sg-label'});
+          layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.7, weight:2.5}); });
+          layer.on('mouseout', function(e){ dongGeoLayer.resetStyle(e.target); });
+          layer.on('click', function(){
+            selectDong(name);
+          });
+        }
+      }).addTo(dongMap);
+      dongMap.fitBounds(dongGeoLayer.getBounds(), {padding:[15,15]});
+
+      // GeoJSON에서 동 목록 생성
+      filtered.features.forEach(function(f){ dongButtons.push(f.properties.name); });
+    }
+  }
+
+  // 동 버튼 목록 렌더링
+  if(dongButtons.length > 0) {
+    dongButtons.sort();
+    var html = '';
+    dongButtons.forEach(function(d){
+      html += '<div class="dong-btn" onclick="selectDong(\'' + d + '\')">' + d + '</div>';
+    });
+    document.getElementById('dongGrid').innerHTML = html;
+  } else {
+    // GeoJSON에 없으면 카카오 API 폴백
+    loadDongList(sido, sg);
+    return;
+  }
+  document.getElementById('dongGrid').style.display = 'flex';
+  document.getElementById('dongLoading').style.display = 'none';
 }
 
 async function loadDongList(sido, sigungu) {
@@ -1554,6 +1673,7 @@ function bizGoStep(n) {
   document.getElementById('bizStep3').style.display = 'none';
   if(n===0) { bizState = {sido:'', sigungu:'', dong:''}; setTimeout(function(){ if(sidoMap) sidoMap.invalidateSize(); }, 150); }
   if(n===1) { bizState.sigungu=''; bizState.dong=''; setTimeout(function(){ if(sgMap) sgMap.invalidateSize(); }, 150); }
+  if(n===2) { bizState.dong=''; setTimeout(function(){ if(dongMap) dongMap.invalidateSize(); }, 150); }
   updateBreadcrumb();
 }
 
