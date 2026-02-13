@@ -391,12 +391,12 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <div class="card">
               <div class="card-hd"><h3>🔑 식약처 API 키</h3></div>
               <div class="card-bd">
-                <input id="fssApiKey" placeholder="data.go.kr 인증키 (Encoding)" style="font-size:11px;font-family:monospace;padding:8px;margin-bottom:6px">
+                <input id="fssApiKey" placeholder="식품안전나라 인증키" style="font-size:11px;font-family:monospace;padding:8px;margin-bottom:6px" value="e5a1d9f07d6c4424a757">
                 <div style="display:flex;gap:6px">
                   <button class="btn btn-secondary btn-sm" onclick="testFssKey()" style="flex:1;font-size:11px">🧪 테스트</button>
-                  <a href="https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15092373" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;font-size:11px;text-decoration:none;text-align:center">📋 발급</a>
+                  <a href="https://www.foodsafetykorea.go.kr/api/mypage/myPageUser.do" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;font-size:11px;text-decoration:none;text-align:center">📋 키관리</a>
                 </div>
-                <div style="margin-top:6px;font-size:10px;color:#8892a4">미입력 시 카카오맵만 조회됩니다</div>
+                <div style="margin-top:6px;font-size:10px;color:#2e7d32">✅ 키 등록완료 (식품안전나라)</div>
               </div>
             </div>
             <div class="card">
@@ -1571,18 +1571,34 @@ async function searchFss(region) {
   var allRows = [];
   for(var t of types) {
     try {
-      var res = await fetch('https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/' + codes[t] + '/json/1/20');
-      var data = await res.json();
+      var apiUrl = 'https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/' + codes[t] + '/json/1/100';
+      var res;
+      try {
+        // 직접 호출 시도
+        res = await fetch(apiUrl);
+      } catch(corsErr) {
+        // CORS 차단 시 프록시 사용
+        res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl));
+      }
+      var text = await res.text();
+      // HTML 응답 (에러) 체크
+      if(text.includes('<script') || text.includes('alert(')) {
+        continue;
+      }
+      var data = JSON.parse(text);
       var key = Object.keys(data)[0];
       var rows = (data[key] && data[key].row) ? data[key].row : [];
+      // 지역 필터
       rows = rows.filter(function(r){
-        var addr = r.SITE_ADDR || r.ADDR || '';
+        var addr = r.SITE_ADDR || r.ADDR || r.SITE_ADDR_RD || '';
+        if(bizState.sido === '검색') return addr.includes(bizState.sigungu) || (r.BSSH_NM||r.ENTRPS_NM||'').includes(bizState.sigungu);
         return addr.includes(bizState.sido);
       });
       if(bizState.sigungu && bizState.sigungu !== '검색') rows = rows.filter(function(r){ return (r.SITE_ADDR||r.ADDR||'').includes(bizState.sigungu); });
+      if(bizState.dong) rows = rows.filter(function(r){ return (r.SITE_ADDR||r.ADDR||'').includes(bizState.dong); });
       rows.forEach(function(r){ r._t = t; });
       allRows = allRows.concat(rows);
-    } catch(e){}
+    } catch(e){ console.log('FSS error:', t, e.message); }
   }
   document.getElementById('bizFssCount').textContent = allRows.length;
   if(allRows.length === 0) {
@@ -1660,11 +1676,19 @@ function testFssKey() {
   var k = document.getElementById('fssApiKey').value.trim();
   if(!k){ toast('인증키를 입력하세요.'); return; }
   toast('🧪 테스트 중...');
-  fetch('https://openapi.foodsafetykorea.go.kr/api/'+k+'/I2570/json/1/1')
-    .then(function(r){return r.json()}).then(function(d){
-      if(d.I2570 && d.I2570.row) toast('✅ API 키 유효!');
-      else toast('⚠️ 키가 유효하지 않습니다.');
-    }).catch(function(e){ toast('❌ '+e.message); });
+  var url = 'https://openapi.foodsafetykorea.go.kr/api/'+k+'/I2570/json/1/1';
+  fetch(url).then(function(r){return r.text()}).then(function(t){
+    if(t.includes('row')) toast('✅ API 키 유효! (직접 연결)');
+    else throw new Error('CORS');
+  }).catch(function(){
+    // CORS 프록시로 재시도
+    fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url))
+      .then(function(r){return r.text()}).then(function(t){
+        if(t.includes('row')) toast('✅ API 키 유효! (프록시 연결)');
+        else if(t.includes('유효하지')) toast('⚠️ 키가 유효하지 않습니다.');
+        else toast('⚠️ 응답 확인 필요');
+      }).catch(function(e){ toast('❌ 연결 실패: '+e.message); });
+  });
 }
 // ── hash 기반 페이지 라우팅 ──
 (function(){
