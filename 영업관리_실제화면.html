@@ -165,16 +165,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
 /* Responsive */
 @media(max-width:768px){.sb{display:none}.stats{grid-template-columns:1fr 1fr}.fg-row,.fg-row3{grid-template-columns:1fr}}
-/* Leaflet 지도 오버라이드 */
-#koreaMap .leaflet-tooltip{font-family:inherit;font-size:13px;font-weight:700;padding:4px 10px;border-radius:6px;border:none;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-#koreaMap .sido-label{background:rgba(255,255,255,.92);color:#1a2332;font-size:12px;font-weight:700;border:none;box-shadow:0 1px 4px rgba(0,0,0,.12);padding:3px 8px}
-#koreaMap .sido-label::before{display:none}
-#koreaMap{cursor:pointer}
-.leaflet-container{font-family:inherit}
+#koreaMap,#sgMap{cursor:pointer}
 .sg-btn{padding:10px 16px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-weight:600;color:#1a2332;cursor:pointer;transition:all .15s;min-width:80px;text-align:center}
 .sg-btn:hover{background:#e3f2fd;border-color:#90caf9;color:#1565c0}
 .dong-btn{padding:8px 12px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;color:#5f6b7a;cursor:pointer;transition:all .15s}
 .dong-btn:hover{background:#e8f5e9;border-color:#81c784;color:#2e7d32}
+.sido-label{background:rgba(255,255,255,.88)!important;border:none!important;box-shadow:0 1px 4px rgba(0,0,0,.18)!important;font-size:12px!important;font-weight:700!important;color:#1a2332!important;padding:3px 8px!important;border-radius:4px!important}
+.sido-label::before{display:none!important}
+.sg-label{background:rgba(255,255,255,.82)!important;border:none!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important;font-size:10px!important;font-weight:600!important;color:#37474f!important;padding:2px 6px!important;border-radius:3px!important}
+.sg-label::before{display:none!important}
+.leaflet-container{font-family:inherit!important}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -379,7 +379,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 <label style="font-weight:600;color:#5f6b7a;margin-bottom:4px;display:block">식약처 (식품안전나라)</label>
                 <input id="fssApiKey" placeholder="식품안전나라 인증키" style="font-size:11px;font-family:monospace;padding:7px;margin-bottom:8px" value="e5a1d9f07d6c4424a757">
                 <label style="font-weight:600;color:#5f6b7a;margin-bottom:4px;display:block">VWORLD (국토지리정보)</label>
-                <input id="vworldApiKey" placeholder="VWORLD API 키 (선택)" style="font-size:11px;font-family:monospace;padding:7px;margin-bottom:4px" onchange="applyVworldKey()">
+                <input id="vworldApiKey" placeholder="VWORLD API 키 (선택)" style="font-size:11px;font-family:monospace;padding:7px;margin-bottom:4px" onchange="applyMapTile()">
                 <div style="font-size:10px;color:#8892a4;margin-bottom:6px">미입력 시 OpenStreetMap 사용</div>
                 <div style="display:flex;gap:6px">
                   <a href="https://www.foodsafetykorea.go.kr/api/mypage/myPageUser.do" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;font-size:10px;text-decoration:none;text-align:center">식약처 키관리</a>
@@ -391,15 +391,23 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
       </div>
 
-      <!-- STEP 1: 시군구 선택 -->
+      <!-- STEP 1: 시군구 선택 (지도 + 버튼) -->
       <div id="bizStep1" style="display:none">
-        <div class="card">
-          <div class="card-hd">
-            <h3 id="step1Title">🏙️ 시/군/구 선택</h3>
-            <div class="right"><button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">← 시/도 다시 선택</button></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div class="card" style="flex:1;min-width:400px">
+            <div class="card-hd">
+              <h3 id="step1Title">🏙️ 시/군/구 선택</h3>
+              <div class="right"><button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">← 시/도 다시 선택</button></div>
+            </div>
+            <div class="card-bd" style="padding:0">
+              <div id="sgMap" style="width:100%;height:420px"></div>
+            </div>
           </div>
-          <div class="card-bd">
-            <div id="sigunguGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          <div class="card" style="width:260px;flex-shrink:0">
+            <div class="card-hd"><h3>📋 목록에서 선택</h3></div>
+            <div class="card-bd" style="max-height:420px;overflow-y:auto">
+              <div id="sigunguGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1355,9 +1363,10 @@ var regionData = {
   '제주':['서귀포시','제주시']
 };
 
-// ── Leaflet 지도 (VWORLD + 시도 GeoJSON) ──
-var sidoMap = null, sidoGeoLayer = null, sidoHighlight = null;
-var GEOJSON_URL = 'https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2018/json/skorea-provinces-2018-geo.json';
+// ── Leaflet 지도 (VWORLD/OSM + 시도/시군구 GeoJSON) ──
+var sidoMap = null, sidoGeoLayer = null, sgGeoData = null;
+var SIDO_GEO_URL = 'data/sido.json';
+var SG_GEO_URL = 'data/sigungu.json';
 var SIDO_NAME_MAP = {
   '서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천',
   '광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종',
@@ -1372,56 +1381,49 @@ function initSidoMap() {
   var el = document.getElementById('koreaMap');
   if(!el || el.offsetHeight === 0) return;
   sidoMap = L.map('koreaMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 7);
-  // VWORLD 타일 (키 있으면) / OSM 폴백
+  // 타일 레이어
+  applyMapTile();
+  // 시도 경계 GeoJSON 로드
+  fetch(SIDO_GEO_URL).then(function(r){return r.json()}).then(function(geo){
+    sidoGeoLayer = L.geoJSON(geo, {
+      style: function(feature){
+        var idx = geo.features.indexOf(feature) % SIDO_COLORS.length;
+        return {color:'#fff', weight:2, fillColor:SIDO_COLORS[idx], fillOpacity:0.45};
+      },
+      onEachFeature: function(feature, layer){
+        var fullName = feature.properties.name || '';
+        var shortName = SIDO_NAME_MAP[fullName] || fullName;
+        layer.bindTooltip(shortName, {permanent:true, direction:'center', className:'sido-label'});
+        layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.75, weight:3}); });
+        layer.on('mouseout', function(e){ sidoGeoLayer.resetStyle(e.target); });
+        layer.on('click', function(){ selectSido(shortName); });
+      }
+    }).addTo(sidoMap);
+    sidoMap.fitBounds(sidoGeoLayer.getBounds(), {padding:[10,10]});
+  }).catch(function(e){ console.error('시도 GeoJSON 로드 실패:', e); });
+  // 시군구 GeoJSON 프리로드
+  fetch(SG_GEO_URL).then(function(r){return r.json()}).then(function(geo){ sgGeoData = geo; });
+}
+
+function applyMapTile() {
+  if(!sidoMap) return;
+  sidoMap.eachLayer(function(l){ if(l instanceof L.TileLayer) sidoMap.removeLayer(l); });
   var vkey = document.getElementById('vworldApiKey') ? document.getElementById('vworldApiKey').value.trim() : '';
   if(vkey) {
     L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19, minZoom:5}).addTo(sidoMap);
   } else {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, minZoom:5}).addTo(sidoMap);
   }
-  // 시도 경계 GeoJSON 로드
-  fetch(GEOJSON_URL).then(function(r){return r.json()}).then(function(geo){
-    sidoGeoLayer = L.geoJSON(geo, {
-      style: function(feature){
-        var idx = geo.features.indexOf(feature) % SIDO_COLORS.length;
-        return {color:'#fff', weight:2, fillColor:SIDO_COLORS[idx], fillOpacity:0.5};
-      },
-      onEachFeature: function(feature, layer){
-        var fullName = feature.properties.name || '';
-        var shortName = SIDO_NAME_MAP[fullName] || fullName;
-        layer.bindTooltip(shortName, {permanent:true, direction:'center', className:'sido-label'});
-        layer.on('mouseover', function(e){
-          e.target.setStyle({fillOpacity:0.8, weight:3});
-        });
-        layer.on('mouseout', function(e){
-          sidoGeoLayer.resetStyle(e.target);
-        });
-        layer.on('click', function(){
-          selectSido(shortName);
-        });
-      }
-    }).addTo(sidoMap);
-    sidoMap.fitBounds(sidoGeoLayer.getBounds(), {padding:[10,10]});
-  }).catch(function(e){ console.error('GeoJSON 로드 실패:', e); });
-  // 출처 표시
-  L.control.attribution({position:'bottomright'}).addAttribution(
-    vkey ? '© <a href="https://www.vworld.kr" target="_blank">VWORLD 국토지리정보</a>' : '© OpenStreetMap'
-  ).addTo(sidoMap);
-}
-
-// VWORLD 키 입력 후 지도 타일 교체
-function applyVworldKey() {
-  if(!sidoMap) return;
-  var vkey = document.getElementById('vworldApiKey').value.trim();
-  sidoMap.eachLayer(function(layer){ if(layer instanceof L.TileLayer) sidoMap.removeLayer(layer); });
-  if(vkey) {
-    L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19, minZoom:5}).addTo(sidoMap);
-    toast('🗺️ VWORLD 지도 적용됨');
-  } else {
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, minZoom:5}).addTo(sidoMap);
-  }
   if(sidoGeoLayer) sidoGeoLayer.bringToFront();
 }
+
+var sgMap = null, sgGeoLayer = null;
+var SG_COLORS = ['#42a5f5','#66bb6a','#ffa726','#ef5350','#ab47bc','#26c6da','#8d6e63','#78909c',
+  '#5c6bc0','#d4e157','#ec407a','#29b6f6','#9ccc65','#ffca28','#7e57c2','#26a69a'];
+var SIDO_CODE_MAP = {
+  '서울':'11','부산':'21','대구':'22','인천':'23','광주':'24','대전':'25','울산':'26','세종':'29',
+  '경기':'31','강원':'32','충북':'33','충남':'34','전북':'35','전남':'36','경북':'37','경남':'38','제주':'39'
+};
 
 function selectSido(sido) {
   bizState = {sido:sido, sigungu:'', dong:''};
@@ -1438,6 +1440,60 @@ function selectSido(sido) {
   document.getElementById('bizStep3').style.display = 'none';
   updateBreadcrumb();
   toast('📍 ' + sido + ' 선택');
+  // 시군구 지도 생성/업데이트
+  setTimeout(function(){ initSgMap(sido); }, 100);
+}
+
+function initSgMap(sido) {
+  var el = document.getElementById('sgMap');
+  if(!el) return;
+  if(sgMap) { sgMap.remove(); sgMap = null; }
+  sgMap = L.map('sgMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 9);
+  // 타일
+  var vkey = document.getElementById('vworldApiKey') ? document.getElementById('vworldApiKey').value.trim() : '';
+  if(vkey) {
+    L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19}).addTo(sgMap);
+  } else {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(sgMap);
+  }
+  // 시군구 경계
+  var sidoCode = SIDO_CODE_MAP[sido] || '';
+  if(!sgGeoData || !sidoCode) return;
+  var filtered = {
+    type: 'FeatureCollection',
+    features: sgGeoData.features.filter(function(f){ return f.properties.code.substring(0,2) === sidoCode; })
+  };
+  sgGeoLayer = L.geoJSON(filtered, {
+    style: function(feature){
+      var idx = filtered.features.indexOf(feature) % SG_COLORS.length;
+      return {color:'#fff', weight:2, fillColor:SG_COLORS[idx], fillOpacity:0.45};
+    },
+    onEachFeature: function(feature, layer){
+      var name = feature.properties.name || '';
+      layer.bindTooltip(name, {permanent:true, direction:'center', className:'sg-label'});
+      layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.75, weight:3}); });
+      layer.on('mouseout', function(e){ sgGeoLayer.resetStyle(e.target); });
+      layer.on('click', function(){
+        // GeoJSON 이름 → regionData 이름 매핑
+        var matched = matchSigungu(sido, name);
+        if(matched) selectSigungu(matched);
+      });
+    }
+  }).addTo(sgMap);
+  if(filtered.features.length > 0) sgMap.fitBounds(sgGeoLayer.getBounds(), {padding:[15,15]});
+}
+
+function matchSigungu(sido, geoName) {
+  var list = regionData[sido] || [];
+  // 정확히 일치
+  for(var i=0; i<list.length; i++) {
+    if(geoName === list[i] || geoName.indexOf(list[i]) >= 0 || list[i].indexOf(geoName) >= 0) return list[i];
+  }
+  // 앞 2글자 매칭 (수원시장안구 → 수원시 등)
+  for(var i=0; i<list.length; i++) {
+    if(geoName.substring(0,2) === list[i].substring(0,2)) return list[i];
+  }
+  return geoName;
 }
 
 function selectSigungu(sg) {
@@ -1496,8 +1552,8 @@ function bizGoStep(n) {
   document.getElementById('bizStep1').style.display = n===1 ? 'block' : 'none';
   document.getElementById('bizStep2').style.display = n===2 ? 'block' : 'none';
   document.getElementById('bizStep3').style.display = 'none';
-  if(n===0) { bizState = {sido:'', sigungu:'', dong:''}; setTimeout(function(){ if(sidoMap) sidoMap.invalidateSize(); }, 100); }
-  if(n===1) { bizState.sigungu=''; bizState.dong=''; }
+  if(n===0) { bizState = {sido:'', sigungu:'', dong:''}; setTimeout(function(){ if(sidoMap) sidoMap.invalidateSize(); }, 150); }
+  if(n===1) { bizState.sigungu=''; bizState.dong=''; setTimeout(function(){ if(sgMap) sgMap.invalidateSize(); }, 150); }
   updateBreadcrumb();
 }
 
