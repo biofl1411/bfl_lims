@@ -635,50 +635,82 @@ function dInitSeg(){
 
 function renderSegUI(){
   const a=document.getElementById('d-seg-area');
-  const now=new Date(),y2=String(now.getFullYear()).slice(-2),y4=String(now.getFullYear()),m=String(now.getMonth()+1).padStart(2,'0');
-  let h='';
+  if(!a)return;
+  const now=new Date(),y2=String(now.getFullYear()).slice(-2),y4=String(now.getFullYear()),m=String(now.getMonth()+1).padStart(2,'0'),dy=String(now.getDate()).padStart(2,'0');
+  const sep=document.getElementById('d-seg-sep')?document.getElementById('d-seg-sep').value:'-';
+
+  // === 비주얼 블록 미리보기 ===
+  let blocks='<div class="seg-builder">';
+  dSg.forEach((s,i)=>{
+    if(i>0)blocks+=`<span class="seg-sep">${sep}</span>`;
+    let displayVal='??';
+    if(s.t==='fixed')displayVal=s.v||'??';
+    else if(s.t==='year')displayVal=s.v==='4'?y4:y2;
+    else if(s.t==='month')displayVal=m;
+    else if(s.t==='day')displayVal=dy;
+    else if(s.t==='serial'){const dd=parseInt(s.v)||4;displayVal='1'.padStart(dd,'0')}
+    else if(s.t==='branch')displayVal=s.v||'HQ';
+    else if(s.t==='field'){const p=P[curIdx];const fc=(p&&p.fields||[]).map(id=>{const f=FIELDS.find(x=>x.id===id);return f?f.code:'?'});displayVal=fc[0]||'?'}
+    blocks+=`<div class="seg-block" onclick="document.getElementById('seg-edit-${i}').scrollIntoView({behavior:'smooth',block:'center'})">
+      <label>구분 ${i+1}</label>
+      <div style="font-family:'Outfit',monospace;font-size:16px;font-weight:800;color:var(--pri);margin-top:4px">${displayVal}</div>
+      <div style="font-size:9px;color:var(--sub);margin-top:3px">${s.l}</div>
+    </div>`;
+  });
+  blocks+='</div>';
+
+  // === 편집 폼 ===
+  let form='<div style="margin-top:14px">';
   dSg.forEach((s,i)=>{
     let valHtml='';
     if(s.t==='fixed'){
-      valHtml=`<input type="text" value="${s.v}" style="font-size:12px;text-align:center" placeholder="예: QC" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
+      valHtml=`<input type="text" value="${s.v}" style="font-size:12px;text-align:center" placeholder="예: QC" onchange="dSg[${i}].v=this.value;renderSegUI()">`;
     } else if(s.t==='year'){
       if(s.v!=='2'&&s.v!=='4')s.v='2';
-      valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;dUpdatePrev()">
+      valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;renderSegUI()">
         <option value="2" ${s.v==='2'?'selected':''}>2자리 (${y2})</option>
         <option value="4" ${s.v==='4'?'selected':''}>4자리 (${y4})</option></select>`;
     } else if(s.t==='month'){
       valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${m})</div>`;
+    } else if(s.t==='day'){
+      valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${dy})</div>`;
     } else if(s.t==='serial'){
       if(!['3','4','5'].includes(s.v))s.v='4';
-      valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;dUpdatePrev()">
+      valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;renderSegUI()">
         <option value="3" ${s.v==='3'?'selected':''}>3자리 (001)</option>
         <option value="4" ${s.v==='4'?'selected':''}>4자리 (0001)</option>
         <option value="5" ${s.v==='5'?'selected':''}>5자리 (00001)</option></select>`;
     } else if(s.t==='branch'){
-      valHtml=`<input type="text" value="${s.v||'HQ'}" style="font-size:12px;text-align:center" placeholder="예: HQ" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
-    } else if(s.t==='day'){
-      valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${String(now.getDate()).padStart(2,'0')})</div>`;
+      valHtml=`<input type="text" value="${s.v||'HQ'}" style="font-size:12px;text-align:center" placeholder="예: HQ" onchange="dSg[${i}].v=this.value;renderSegUI()">`;
     } else if(s.t==='field'){
       const p=P[curIdx];
       const fNames=(p&&p.fields||[]).map(id=>{const f=FIELDS.find(x=>x.id===id);return f?f.code:'?'}).join('/');
       valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${fNames||'미설정'})</div>`;
     }
     const valLabel=s.t==='fixed'||s.t==='branch'?'값':s.t==='month'||s.t==='day'||s.t==='field'?'미리보기':'설정';
-    h+=`<div class="fg-row" style="margin-bottom:6px">
-      <div class="fg" style="flex:0 0 80px"><label>구분 ${i+1}</label><input type="text" value="${s.l}" style="font-size:12px" onchange="dSg[${i}].l=this.value;dUpdatePrev()"></div>
-      <div class="fg"><label>유형</label><select style="font-size:12px" onchange="changeSegType(${i},this.value)">
-        <option value="fixed" ${s.t==='fixed'?'selected':''}>고정 문자</option>
-        <option value="field" ${s.t==='field'?'selected':''}>분야코드 (자동)</option>
-        <option value="year" ${s.t==='year'?'selected':''}>년도 (자동)</option>
-        <option value="month" ${s.t==='month'?'selected':''}>월 (자동)</option>
-        <option value="day" ${s.t==='day'?'selected':''}>일 (자동)</option>
-        <option value="serial" ${s.t==='serial'?'selected':''}>일련번호 (자동증가)</option>
-        <option value="branch" ${s.t==='branch'?'selected':''}>지부 코드</option>
-      </select></div>
-      <div class="fg" style="flex:0 0 120px"><label>${valLabel}</label>${valHtml}</div>
+
+    form+=`<div id="seg-edit-${i}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${i%2===0?'var(--bg)':'var(--card)'};border-radius:10px;margin-bottom:4px;border-left:3px solid var(--pri)">
+      <div style="flex:0 0 60px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--sub)">구분 ${i+1}</div>
+        <input type="text" value="${s.l}" style="font-size:11px;text-align:center;border:none;background:transparent;font-weight:600;width:60px;padding:2px" onchange="dSg[${i}].l=this.value;renderSegUI()">
+      </div>
+      <div style="flex:1">
+        <select style="font-size:12px;width:100%;padding:6px 8px;border:1.5px solid var(--bdr);border-radius:8px" onchange="changeSegType(${i},this.value)">
+          <option value="fixed" ${s.t==='fixed'?'selected':''}>고정 문자</option>
+          <option value="field" ${s.t==='field'?'selected':''}>분야코드 (자동)</option>
+          <option value="year" ${s.t==='year'?'selected':''}>년도 (자동)</option>
+          <option value="month" ${s.t==='month'?'selected':''}>월 (자동)</option>
+          <option value="day" ${s.t==='day'?'selected':''}>일 (자동)</option>
+          <option value="serial" ${s.t==='serial'?'selected':''}>일련번호 (자동증가)</option>
+          <option value="branch" ${s.t==='branch'?'selected':''}>지부 코드</option>
+        </select>
+      </div>
+      <div style="flex:0 0 110px"><div style="font-size:9px;font-weight:700;color:var(--sub);margin-bottom:2px">${valLabel}</div>${valHtml}</div>
     </div>`;
   });
-  a.innerHTML=h;
+  form+='</div>';
+
+  a.innerHTML=blocks+form;
   dUpdatePrev();
 }
 
