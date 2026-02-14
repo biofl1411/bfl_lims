@@ -1081,8 +1081,8 @@ function openFieldEdit(fid){
   document.getElementById('mf-submit').textContent='저장';
   document.getElementById('mf-name').value=f.name;
   document.getElementById('mf-code').value=f.code;
-  document.getElementById('mf-code').setAttribute('readonly',true);
-  document.getElementById('mf-code').style.opacity='.5';
+  document.getElementById('mf-code').removeAttribute('readonly');
+  document.getElementById('mf-code').style.opacity='1';
   document.getElementById('mf-desc').value=f.desc||'';
   document.getElementById('mf-color').value=f.color;
   updateFieldPreview();
@@ -1113,11 +1113,29 @@ function saveField(){
   if(editingFieldId){
     // 수정 모드
     const f=FIELDS.find(x=>x.id===editingFieldId);
-    if(f){
-      f.name=name;
-      f.color=color;
-      f.desc=desc;
+    if(!f)return;
+    const oldId=editingFieldId;
+    const newId=code;
+
+    // 코드가 변경된 경우 중복 체크 + 연결 데이터 업데이트
+    if(oldId!==newId){
+      if(FIELDS.find(x=>x.id===newId)){toast('이미 존재하는 코드입니다','info');return;}
+      P.forEach(p=>{
+        if(p.fields){
+          const idx=p.fields.indexOf(oldId);
+          if(idx>=0)p.fields[idx]=newId;
+        }
+        if(p.fieldCodes&&p.fieldCodes[oldId]){
+          p.fieldCodes[newId]=p.fieldCodes[oldId];
+          delete p.fieldCodes[oldId];
+        }
+      });
+      f.id=newId;
     }
+    f.name=name;
+    f.code=code;
+    f.color=color;
+    f.desc=desc;
     closeModal('mfield');
     renderFieldCardList();
     toast(`${name} 분야가 수정되었습니다 ✨`,'ok');
