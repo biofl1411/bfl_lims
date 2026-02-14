@@ -305,13 +305,15 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
               <div class="fg"><label>구분자</label><select id="d-seg-sep" onchange="dUpdatePrev()"><option value="-">하이픈 (-)</option><option value="/">슬래시 (/)</option><option value=".">마침표 (.)</option></select></div>
             </div>
             <div id="d-seg-area"></div>
-            <div class="fg" style="margin-top:8px"><label>초기화 주기</label><select><option>매년 초기화</option><option>매월 초기화</option><option>초기화 안 함</option></select></div>
+            <div class="fg" style="margin-top:8px"><label>초기화 주기</label><select id="d-reset" onchange="updateResetDesc()"><option value="year">매년 초기화</option><option value="month">매월 초기화</option><option value="none">초기화 안 함</option></select></div>
+            <div id="reset-desc" style="margin-top:6px;padding:10px 14px;background:var(--pri-l);border-radius:10px;font-size:12px;color:var(--pri)">📅 매년 1월 1일에 일련번호가 0001부터 다시 시작됩니다</div>
             <div class="preview-hero">
               <div class="ph-label">미리보기</div>
               <div class="ph-number" id="d-pn">QC-26-02-0001</div>
               <div class="ph-desc" id="d-pd">목적코드 − 년도 − 월 − 일련번호</div>
             </div>
             <div class="example-list" id="d-pl"></div>
+            <div style="margin-top:10px;padding:10px 14px;background:var(--green-l);border-radius:10px;font-size:12px;color:#0a8967">💡 <b>년도·월·일</b>은 서버 날짜 기준으로 자동 변경됩니다. <b>일련번호</b>는 접수할 때마다 자동으로 1씩 증가합니다.</div>
             <div style="display:flex;justify-content:flex-end;margin-top:12px">
               <button class="btn btn-primary btn-sm" onclick="toast('접수번호 형식이 저장되었습니다 ✨','ok')">접수번호 저장</button>
             </div>
@@ -554,46 +556,63 @@ function renderSegUI(){
   dSg.forEach((s,i)=>{
     let valHtml='';
     if(s.t==='fixed'){
-      valHtml=`<input type="text" value="${s.v}" style="font-size:12px;text-align:center" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
+      valHtml=`<input type="text" value="${s.v}" style="font-size:12px;text-align:center" placeholder="예: QC" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
     } else if(s.t==='year'){
+      if(s.v!=='2'&&s.v!=='4')s.v='2';
       valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;dUpdatePrev()">
         <option value="2" ${s.v==='2'?'selected':''}>2자리 (${y2})</option>
         <option value="4" ${s.v==='4'?'selected':''}>4자리 (${y4})</option></select>`;
     } else if(s.t==='month'){
       valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${m})</div>`;
     } else if(s.t==='serial'){
+      if(!['3','4','5'].includes(s.v))s.v='4';
       valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;dUpdatePrev()">
         <option value="3" ${s.v==='3'?'selected':''}>3자리 (001)</option>
         <option value="4" ${s.v==='4'?'selected':''}>4자리 (0001)</option>
         <option value="5" ${s.v==='5'?'selected':''}>5자리 (00001)</option></select>`;
     } else if(s.t==='branch'){
-      valHtml=`<input type="text" value="${s.v||'HQ'}" style="font-size:12px;text-align:center" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
+      valHtml=`<input type="text" value="${s.v||'HQ'}" style="font-size:12px;text-align:center" placeholder="예: HQ" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
+    } else if(s.t==='day'){
+      valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${String(now.getDate()).padStart(2,'0')})</div>`;
     }
+    const valLabel=s.t==='fixed'||s.t==='branch'?'값':s.t==='month'||s.t==='day'?'미리보기':'설정';
     h+=`<div class="fg-row" style="margin-bottom:6px">
       <div class="fg" style="flex:0 0 80px"><label>구분 ${i+1}</label><input type="text" value="${s.l}" style="font-size:12px" onchange="dSg[${i}].l=this.value;dUpdatePrev()"></div>
-      <div class="fg"><label>유형</label><select style="font-size:12px" onchange="dSg[${i}].t=this.value;renderSegUI();dUpdatePrev()">
+      <div class="fg"><label>유형</label><select style="font-size:12px" onchange="changeSegType(${i},this.value)">
         <option value="fixed" ${s.t==='fixed'?'selected':''}>고정 문자</option>
         <option value="year" ${s.t==='year'?'selected':''}>년도 (자동)</option>
         <option value="month" ${s.t==='month'?'selected':''}>월 (자동)</option>
+        <option value="day" ${s.t==='day'?'selected':''}>일 (자동)</option>
         <option value="serial" ${s.t==='serial'?'selected':''}>일련번호 (자동증가)</option>
         <option value="branch" ${s.t==='branch'?'selected':''}>지부 코드</option>
       </select></div>
-      <div class="fg" style="flex:0 0 110px"><label>${s.t==='fixed'||s.t==='branch'?'값':'설정'}</label>${valHtml}</div>
+      <div class="fg" style="flex:0 0 120px"><label>${valLabel}</label>${valHtml}</div>
     </div>`;
   });
   a.innerHTML=h;
   dUpdatePrev();
 }
 
+function changeSegType(idx,newType){
+  const defaults={fixed:{l:'고정문자',v:''},year:{l:'년도',v:'2'},month:{l:'월',v:''},day:{l:'일',v:''},serial:{l:'일련번호',v:'4'},branch:{l:'지부코드',v:'HQ'}};
+  dSg[idx].t=newType;
+  dSg[idx].v=defaults[newType].v;
+  if(!dSg[idx].l||['고정문자','년도','월','일','일련번호','지부코드','목적코드'].includes(dSg[idx].l)){
+    dSg[idx].l=defaults[newType].l;
+  }
+  renderSegUI();
+}
+
 function dUpdatePrev(){
   const sep=document.getElementById('d-seg-sep').value;
-  const now=new Date(),y=String(now.getFullYear()).slice(-2),m=String(now.getMonth()+1).padStart(2,'0');
+  const now=new Date(),y=String(now.getFullYear()).slice(-2),y4=String(now.getFullYear()),m=String(now.getMonth()+1).padStart(2,'0'),d=String(now.getDate()).padStart(2,'0');
   let parts=[],descs=[];
   dSg.forEach(s=>{
-    if(s.t==='fixed'){parts.push(s.v);descs.push(s.l)}
-    else if(s.t==='year'){parts.push(s.v==='4'?String(now.getFullYear()):y);descs.push(s.l)}
+    if(s.t==='fixed'){parts.push(s.v||'??');descs.push(s.l)}
+    else if(s.t==='year'){parts.push(s.v==='4'?y4:y);descs.push(s.l)}
     else if(s.t==='month'){parts.push(m);descs.push(s.l)}
-    else if(s.t==='serial'){const d=parseInt(s.v)||4;parts.push('0001'.padStart(d,'0'));descs.push(s.l)}
+    else if(s.t==='day'){parts.push(d);descs.push(s.l)}
+    else if(s.t==='serial'){const dd=parseInt(s.v)||4;parts.push('1'.padStart(dd,'0'));descs.push(s.l)}
     else if(s.t==='branch'){parts.push(s.v||'HQ');descs.push(s.l)}
   });
   document.getElementById('d-pn').textContent=parts.join(sep);
@@ -641,6 +660,14 @@ function tt(el){el.classList.toggle('open');el.nextElementSibling.classList.togg
 
 // ══ ADD STD ROW ══
 function asr(){const tr=document.createElement('tr');tr.innerHTML=`<td><select style="font-size:12px;padding:6px 10px;border:1.5px solid var(--bdr);border-radius:8px;width:100%"><option>자가품질위탁검사용</option><option>참고용(기준규격외)</option><option>참고용(유통기한설정)</option><option>참고용(영양성분)</option><option>참고용(외부의뢰)</option><option>정도관리</option><option>연구용역</option></select></td><td><input type="text" placeholder="기준" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--bdr);border-radius:8px"></td><td><input type="text" placeholder="규격" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--bdr);border-radius:8px"></td><td><select style="font-size:12px;padding:6px 10px;border:1.5px solid var(--bdr);border-radius:8px"><option>이하</option><option>미만</option><option>불검출</option></select></td><td><button class="ic-btn ic-btn-del" onclick="this.closest('tr').remove()">✕</button></td>`;document.getElementById('st').appendChild(tr)}
+
+function updateResetDesc(){
+  const v=document.getElementById('d-reset').value;
+  const el=document.getElementById('reset-desc');
+  if(v==='year'){el.innerHTML='📅 매년 1월 1일에 일련번호가 <b>0001</b>부터 다시 시작됩니다';el.style.background='var(--pri-l)';el.style.color='var(--pri)'}
+  else if(v==='month'){el.innerHTML='📅 매월 1일에 일련번호가 <b>0001</b>부터 다시 시작됩니다';el.style.background='var(--mint-l)';el.style.color='var(--mint)'}
+  else{el.innerHTML='📅 일련번호가 계속 증가합니다 (초기화 없음)';el.style.background='var(--amber-l)';el.style.color='#b8860b'}
+}
 
 // ══ INIT ══
 rp();
