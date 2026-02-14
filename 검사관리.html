@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - 검사 관리</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Noto Sans KR',sans-serif; background:#f1f3f5; color:#333; display:flex; min-height:100vh; }
+
+/* ── 좌측 사이드바 ── */
+.sidebar { width:240px; background:linear-gradient(180deg,#1a2a44 0%,#1e3352 100%); color:#fff; flex-shrink:0; display:flex; flex-direction:column; }
+.sidebar-header { padding:20px 16px; border-bottom:1px solid rgba(255,255,255,.1); }
+.sidebar-header h1 { font-size:15px; font-weight:700; color:#6cb4ee; }
+.sidebar-header p { font-size:11px; color:rgba(255,255,255,.5); margin-top:4px; }
+.sidebar nav { flex:1; padding:12px 0; overflow-y:auto; }
+.nav-group { margin-bottom:4px; }
+.nav-group-title { padding:10px 20px; font-size:12px; font-weight:600; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:.5px; }
+.nav-item { display:flex; align-items:center; padding:9px 20px 9px 28px; font-size:13px; color:rgba(255,255,255,.65); cursor:pointer; transition:all .2s; border-left:3px solid transparent; }
+.nav-item:hover { background:rgba(255,255,255,.05); color:#fff; }
+.nav-item.active { background:rgba(108,180,238,.12); color:#6cb4ee; border-left-color:#6cb4ee; font-weight:600; }
+.nav-item .icon { width:18px; margin-right:10px; font-size:14px; }
+.nav-back { display:flex; align-items:center; padding:12px 20px; font-size:12px; color:rgba(255,255,255,.5); cursor:pointer; border-top:1px solid rgba(255,255,255,.1); margin-top:auto; }
+.nav-back:hover { color:#fff; }
+
+/* ── 메인 영역 ── */
+.main { flex:1; display:flex; flex-direction:column; min-width:0; }
+.top-bar { background:#fff; padding:12px 28px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e1e4e8; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+.breadcrumb { font-size:13px; color:#666; }
+.breadcrumb span { color:#1a73e8; font-weight:600; }
+.top-bar-right { display:flex; align-items:center; gap:12px; font-size:12px; color:#888; }
+
+.content { flex:1; padding:24px 28px; overflow-y:auto; }
+
+/* ── 탭 ── */
+.tabs { display:flex; gap:4px; background:#fff; border-radius:10px; padding:6px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.tab { padding:10px 18px; font-size:13px; font-weight:500; color:#666; cursor:pointer; border-radius:7px; transition:all .2s; text-align:center; flex:1; }
+.tab:hover { background:#f0f4ff; color:#1a73e8; }
+.tab.active { background:#1a73e8; color:#fff; font-weight:600; box-shadow:0 2px 8px rgba(26,115,232,.25); }
+
+/* ── 패널 공통 ── */
+.panel { display:none; }
+.panel.active { display:block; }
+.card { background:#fff; border-radius:10px; padding:20px 24px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.card-title { font-size:15px; font-weight:700; color:#1a2a44; margin-bottom:4px; }
+.card-desc { font-size:12px; color:#888; margin-bottom:16px; }
+
+/* ── 버튼 ── */
+.btn { padding:7px 16px; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:all .2s; font-family:inherit; }
+.btn-primary { background:#1a73e8; color:#fff; }
+.btn-primary:hover { background:#1557b0; }
+.btn-success { background:#0d9f6e; color:#fff; }
+.btn-success:hover { background:#0b8a5e; }
+.btn-danger { background:#e74c3c; color:#fff; }
+.btn-danger:hover { background:#c0392b; }
+.btn-outline { background:#fff; color:#555; border:1px solid #ddd; }
+.btn-outline:hover { background:#f5f5f5; border-color:#bbb; }
+.btn-sm { padding:5px 10px; font-size:11px; }
+.btn-group { display:flex; gap:8px; flex-wrap:wrap; }
+
+/* ── 입력 ── */
+input[type=text], input[type=number], select, textarea {
+  padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:13px; font-family:inherit;
+  outline:none; transition:border .2s; width:100%;
+}
+input:focus, select:focus, textarea:focus { border-color:#1a73e8; box-shadow:0 0 0 3px rgba(26,115,232,.1); }
+textarea { resize:vertical; min-height:60px; }
+.form-row { display:flex; gap:12px; margin-bottom:12px; align-items:flex-end; }
+.form-group { flex:1; }
+.form-group label { display:block; font-size:11px; font-weight:600; color:#555; margin-bottom:4px; }
+
+/* ── 테이블 ── */
+.tbl-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { background:#f7f8fa; font-weight:600; color:#555; padding:10px 12px; text-align:left; border-bottom:2px solid #e1e4e8; white-space:nowrap; }
+td { padding:9px 12px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+tr:hover td { background:#f8faff; }
+.badge { display:inline-block; padding:3px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-blue { background:#e8f0fe; color:#1a73e8; }
+.badge-green { background:#e6f7f0; color:#0d9f6e; }
+.badge-orange { background:#fff3e0; color:#e67e22; }
+.badge-red { background:#fde8e8; color:#e74c3c; }
+.badge-purple { background:#f0e6ff; color:#7c3aed; }
+.badge-gray { background:#f0f0f0; color:#888; }
+
+/* ── 항목 태그 ── */
+.tag-list { display:flex; flex-wrap:wrap; gap:6px; }
+.tag { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:#e8f0fe; color:#1a73e8; border-radius:12px; font-size:11px; font-weight:500; }
+.tag .remove { cursor:pointer; font-size:13px; color:#1a73e8; opacity:.6; }
+.tag .remove:hover { opacity:1; }
+.tag-green { background:#e6f7f0; color:#0d9f6e; }
+.tag-orange { background:#fff3e0; color:#e67e22; }
+
+/* ── 모달 ── */
+.modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.4); z-index:1000; justify-content:center; align-items:center; }
+.modal-overlay.show { display:flex; }
+.modal { background:#fff; border-radius:12px; width:600px; max-width:90vw; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+.modal-header { padding:18px 24px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
+.modal-header h3 { font-size:16px; font-weight:700; color:#1a2a44; }
+.modal-close { width:28px; height:28px; border:none; background:#f0f0f0; border-radius:6px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.modal-close:hover { background:#e0e0e0; }
+.modal-body { padding:20px 24px; }
+.modal-footer { padding:16px 24px; border-top:1px solid #eee; display:flex; justify-content:flex-end; gap:8px; }
+.modal-wide { width:750px; }
+
+/* ── 접수번호 미리보기 ── */
+.preview-box { background:#f7f8fa; border:2px dashed #ddd; border-radius:10px; padding:20px; text-align:center; margin:16px 0; }
+.preview-number { font-size:28px; font-weight:700; color:#1a73e8; letter-spacing:3px; font-family:'Courier New',monospace; }
+.preview-label { font-size:12px; color:#888; margin-top:6px; }
+
+/* ── 접수번호 세그먼트 ── */
+.segment-config { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.segment-block { background:#fff; border:2px solid #1a73e8; border-radius:8px; padding:10px 14px; min-width:100px; text-align:center; position:relative; }
+.segment-block label { font-size:10px; color:#888; display:block; margin-bottom:4px; }
+.segment-block select, .segment-block input { width:100%; font-size:12px; padding:4px 6px; border:1px solid #ddd; border-radius:4px; }
+.segment-sep { font-size:24px; font-weight:700; color:#1a73e8; }
+
+/* ── 트리 뷰 (항목 그룹) ── */
+.tree { padding-left:0; list-style:none; }
+.tree-node { margin-bottom:8px; }
+.tree-header { display:flex; align-items:center; padding:10px 14px; background:#f7f8fa; border-radius:8px; cursor:pointer; gap:8px; transition:background .2s; }
+.tree-header:hover { background:#eef2ff; }
+.tree-header .arrow { transition:transform .2s; font-size:12px; }
+.tree-header.open .arrow { transform:rotate(90deg); }
+.tree-children { padding-left:28px; margin-top:6px; display:none; }
+.tree-children.show { display:block; }
+.tree-child { padding:6px 12px; font-size:12px; color:#555; border-left:2px solid #ddd; margin-bottom:2px; display:flex; justify-content:space-between; align-items:center; }
+.tree-child:hover { background:#f8faff; border-left-color:#1a73e8; }
+
+/* ── 토스트 ── */
+.toast { position:fixed; top:20px; right:20px; padding:14px 20px; border-radius:8px; color:#fff; font-size:13px; font-weight:500; z-index:2000; opacity:0; transform:translateY(-10px); transition:all .3s; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+.toast.show { opacity:1; transform:translateY(0); }
+.toast-success { background:#0d9f6e; }
+.toast-info { background:#1a73e8; }
+
+/* ── 드래그 가능 힌트 ── */
+.drag-hint { font-size:11px; color:#aaa; font-style:italic; margin-bottom:10px; }
+
+/* 체크박스 리스트 */
+.check-list { max-height:250px; overflow-y:auto; border:1px solid #eee; border-radius:8px; padding:8px; }
+.check-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:4px; cursor:pointer; font-size:13px; }
+.check-item:hover { background:#f0f4ff; }
+.check-item input[type=checkbox] { width:16px; height:16px; cursor:pointer; }
+
+@media(max-width:768px){
+  .sidebar { display:none; }
+  .tabs { flex-wrap:wrap; }
+  .tab { font-size:11px; padding:8px 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── 사이드바 ── -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>BioFoodLab</h1>
+    <p>통합관리 프로그램</p>
+  </div>
+  <nav>
+    <div class="nav-group">
+      <div class="nav-group-title">접수 관리</div>
+      <div class="nav-item"><span class="icon">🏢</span>업체등록·수정</div>
+      <div class="nav-item"><span class="icon">📋</span>시료 접수</div>
+      <div class="nav-item"><span class="icon">📊</span>접수 현황</div>
+      <div class="nav-item"><span class="icon">📒</span>접수대장</div>
+      <div class="nav-item active"><span class="icon">⚙️</span>검사 관리</div>
+      <div class="nav-item"><span class="icon">📅</span>일정관리</div>
+      <div class="nav-item"><span class="icon">🏛️</span>지부관리</div>
+      <div class="nav-item"><span class="icon">📈</span>실적보고</div>
+      <div class="nav-item"><span class="icon">🔗</span>LIMS 연동</div>
+    </div>
+  </nav>
+  <div class="nav-back" onclick="location.href='index.html'">
+    <span style="margin-right:8px;">←</span> 메인으로 돌아가기
+  </div>
+</aside>
+
+<!-- ── 메인 ── -->
+<div class="main">
+  <div class="top-bar">
+    <div class="breadcrumb">접수 관리 &gt; <span>검사 관리</span></div>
+    <div class="top-bar-right">
+      <span>고객지원팀 · 홍길동</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 탭 -->
+    <div class="tabs">
+      <div class="tab active" onclick="showTab(0)">검사 목적</div>
+      <div class="tab" onclick="showTab(1)">식품의 유형</div>
+      <div class="tab" onclick="showTab(2)">검사 항목</div>
+      <div class="tab" onclick="showTab(3)">항목 그룹</div>
+      <div class="tab" onclick="showTab(4)">접수번호 설정</div>
+    </div>
+
+    <!-- ═══════════ 탭 0: 검사 목적 ═══════════ -->
+    <div class="panel active" id="panel-0">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <div class="card-title">검사 목적 관리</div>
+            <div class="card-desc">시료 접수 시 선택할 검사 목적을 관리합니다. 목적에 따라 검사 항목의 기준·규격이 달라집니다.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-purpose')">+ 검사 목적 추가</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th style="width:50px;">#</th><th>검사 목적명</th><th>코드</th><th>설명</th><th>연결 항목 수</th><th>상태</th><th style="width:120px;">관리</th></tr>
+            </thead>
+            <tbody id="purpose-tbody">
+              <tr>
+                <td>1</td><td><strong>자가품질검사</strong></td><td><span class="badge badge-blue">QC</span></td>
+                <td>식품제조업체 자가품질검사</td><td>42개</td>
+                <td><span class="badge badge-green">사용중</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-purpose')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>2</td><td><strong>의뢰검사</strong></td><td><span class="badge badge-blue">RE</span></td>
+                <td>외부 고객 의뢰 검사</td><td>56개</td>
+                <td><span class="badge badge-green">사용중</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-purpose')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>3</td><td><strong>수입식품검사</strong></td><td><span class="badge badge-blue">IM</span></td>
+                <td>수입식품 통관 검사</td><td>38개</td>
+                <td><span class="badge badge-green">사용중</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-purpose')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>4</td><td><strong>영양성분검사</strong></td><td><span class="badge badge-blue">NU</span></td>
+                <td>영양성분 표시 검사</td><td>14개</td>
+                <td><span class="badge badge-green">사용중</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-purpose')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>5</td><td><strong>유통기한검사</strong></td><td><span class="badge badge-blue">SL</span></td>
+                <td>유통기한 설정 시험</td><td>28개</td>
+                <td><span class="badge badge-gray">미사용</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-purpose')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 탭 1: 식품의 유형 ═══════════ -->
+    <div class="panel" id="panel-1">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <div class="card-title">식품의 유형 관리</div>
+            <div class="card-desc">식품공전 기준 식품의 유형을 관리합니다. 항목 그룹을 식품 유형에 연결하여 시료 접수 시 자동으로 검사 항목을 불러옵니다.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-foodtype')">+ 식품 유형 추가</button>
+        </div>
+        <div class="form-row" style="margin-bottom:16px;">
+          <div class="form-group" style="flex:0 0 200px;">
+            <select id="foodtype-filter" onchange="filterFoodTypes()">
+              <option value="">전체 카테고리</option>
+              <option>과자류·빵류·떡류</option>
+              <option>음료류</option>
+              <option>면류</option>
+              <option>식육가공품</option>
+              <option>유가공품</option>
+              <option>수산가공품</option>
+              <option>건강기능식품</option>
+              <option>기타</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <input type="text" placeholder="식품 유형 검색..." id="foodtype-search">
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th style="width:50px;">#</th><th>카테고리</th><th>식품 유형명</th><th>코드</th><th>연결 그룹</th><th>항목 수</th><th style="width:120px;">관리</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>1</td><td><span class="badge badge-orange">과자류</span></td><td><strong>비스킷</strong></td><td>BIS</td><td>과자류 기본, 중금속</td><td>18개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+              <tr><td>2</td><td><span class="badge badge-orange">과자류</span></td><td><strong>캔디류</strong></td><td>CAN</td><td>과자류 기본</td><td>12개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+              <tr><td>3</td><td><span class="badge badge-blue">음료류</span></td><td><strong>과·채주스</strong></td><td>JUI</td><td>음료 기본, 보존료</td><td>22개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+              <tr><td>4</td><td><span class="badge badge-blue">음료류</span></td><td><strong>탄산음료</strong></td><td>CAR</td><td>음료 기본</td><td>16개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+              <tr><td>5</td><td><span class="badge badge-purple">면류</span></td><td><strong>유탕면류</strong></td><td>FRN</td><td>면류 기본, 산가·과산화</td><td>20개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+              <tr><td>6</td><td><span class="badge badge-green">식육가공품</span></td><td><strong>햄류</strong></td><td>HAM</td><td>식육 기본, 보존료, 중금속</td><td>24개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+              <tr><td>7</td><td><span class="badge badge-green">식육가공품</span></td><td><strong>소시지</strong></td><td>SOS</td><td>식육 기본, 보존료</td><td>20개</td><td><button class="btn btn-outline btn-sm" onclick="openModal('modal-foodtype')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 탭 2: 검사 항목 ═══════════ -->
+    <div class="panel" id="panel-2">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <div class="card-title">검사 항목 관리</div>
+            <div class="card-desc">개별 검사 항목을 관리합니다. 각 항목에 검사 목적별 기준·규격을 설정할 수 있습니다. 여기서 등록된 항목은 시험 결재에서 담당자에게 배정됩니다.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-item')">+ 검사 항목 추가</button>
+        </div>
+        <div class="form-row" style="margin-bottom:16px;">
+          <div class="form-group" style="flex:0 0 150px;">
+            <select>
+              <option value="">전체 분류</option>
+              <option>미생물</option>
+              <option>중금속</option>
+              <option>이화학</option>
+              <option>보존료</option>
+              <option>영양성분</option>
+              <option>잔류농약</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <input type="text" placeholder="항목명 또는 코드 검색...">
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th style="width:40px;">#</th><th>항목명</th><th>영문명</th><th>분류</th><th>단위</th><th>시험법</th><th>기준·규격 수</th><th>배정 가능</th><th style="width:120px;">관리</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td><td><strong>일반세균수</strong></td><td>Total Plate Count</td>
+                <td><span class="badge badge-blue">미생물</span></td><td>CFU/g</td><td>건조필름법</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">3개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>2</td><td><strong>대장균군</strong></td><td>Coliform</td>
+                <td><span class="badge badge-blue">미생물</span></td><td>CFU/g</td><td>건조필름법</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">3개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>3</td><td><strong>대장균</strong></td><td>E. coli</td>
+                <td><span class="badge badge-blue">미생물</span></td><td>CFU/g</td><td>건조필름법</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">2개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>4</td><td><strong>납</strong></td><td>Lead (Pb)</td>
+                <td><span class="badge badge-red">중금속</span></td><td>mg/kg</td><td>ICP-MS</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">4개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>5</td><td><strong>카드뮴</strong></td><td>Cadmium (Cd)</td>
+                <td><span class="badge badge-red">중금속</span></td><td>mg/kg</td><td>ICP-MS</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">4개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>6</td><td><strong>산가</strong></td><td>Acid Value</td>
+                <td><span class="badge badge-orange">이화학</span></td><td>mg KOH/g</td><td>적정법</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">2개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>7</td><td><strong>소르빈산</strong></td><td>Sorbic Acid</td>
+                <td><span class="badge badge-purple">보존료</span></td><td>g/kg</td><td>HPLC</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">3개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+              <tr>
+                <td>8</td><td><strong>열량</strong></td><td>Calories</td>
+                <td><span class="badge badge-green">영양성분</span></td><td>kcal</td><td>계산법</td>
+                <td><a href="#" onclick="openModal('modal-standard');return false;" style="color:#1a73e8;">1개 목적</a></td>
+                <td><span class="badge badge-green">O</span></td>
+                <td><button class="btn btn-outline btn-sm" onclick="openModal('modal-item')">수정</button> <button class="btn btn-danger btn-sm">삭제</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 탭 3: 항목 그룹 ═══════════ -->
+    <div class="panel" id="panel-3">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <div class="card-title">항목 그룹 관리</div>
+            <div class="card-desc">검사 항목을 그룹으로 묶어 식품 유형에 배정합니다. 시료 접수 시 식품 유형을 선택하면 연결된 그룹의 항목이 자동으로 불러와집니다.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-group')">+ 항목 그룹 추가</button>
+        </div>
+
+        <ul class="tree" id="group-tree">
+          <!-- 그룹 1 -->
+          <li class="tree-node">
+            <div class="tree-header" onclick="toggleTree(this)">
+              <span class="arrow">▶</span>
+              <strong style="flex:1;">미생물 기본</strong>
+              <span class="badge badge-blue" style="margin-right:8px;">4개 항목</span>
+              <span class="tag-list" style="gap:4px;">
+                <span class="tag tag-green" style="font-size:10px;">과자류</span>
+                <span class="tag tag-green" style="font-size:10px;">음료류</span>
+                <span class="tag tag-green" style="font-size:10px;">면류</span>
+                <span class="tag tag-green" style="font-size:10px;">식육가공품</span>
+              </span>
+              <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="event.stopPropagation();openModal('modal-group')">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();toast('그룹이 삭제되었습니다','success')">삭제</button>
+            </div>
+            <div class="tree-children">
+              <div class="tree-child"><span>일반세균수 <span class="badge badge-blue" style="font-size:10px;">미생물</span></span><span style="color:#aaa;">CFU/g</span></div>
+              <div class="tree-child"><span>대장균군 <span class="badge badge-blue" style="font-size:10px;">미생물</span></span><span style="color:#aaa;">CFU/g</span></div>
+              <div class="tree-child"><span>대장균 <span class="badge badge-blue" style="font-size:10px;">미생물</span></span><span style="color:#aaa;">CFU/g</span></div>
+              <div class="tree-child"><span>살모넬라 <span class="badge badge-blue" style="font-size:10px;">미생물</span></span><span style="color:#aaa;">불검출</span></div>
+            </div>
+          </li>
+          <!-- 그룹 2 -->
+          <li class="tree-node">
+            <div class="tree-header" onclick="toggleTree(this)">
+              <span class="arrow">▶</span>
+              <strong style="flex:1;">중금속</strong>
+              <span class="badge badge-red" style="margin-right:8px;">4개 항목</span>
+              <span class="tag-list" style="gap:4px;">
+                <span class="tag tag-green" style="font-size:10px;">과자류</span>
+                <span class="tag tag-green" style="font-size:10px;">식육가공품</span>
+              </span>
+              <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="event.stopPropagation();openModal('modal-group')">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();">삭제</button>
+            </div>
+            <div class="tree-children">
+              <div class="tree-child"><span>납 (Pb) <span class="badge badge-red" style="font-size:10px;">중금속</span></span><span style="color:#aaa;">mg/kg</span></div>
+              <div class="tree-child"><span>카드뮴 (Cd) <span class="badge badge-red" style="font-size:10px;">중금속</span></span><span style="color:#aaa;">mg/kg</span></div>
+              <div class="tree-child"><span>비소 (As) <span class="badge badge-red" style="font-size:10px;">중금속</span></span><span style="color:#aaa;">mg/kg</span></div>
+              <div class="tree-child"><span>수은 (Hg) <span class="badge badge-red" style="font-size:10px;">중금속</span></span><span style="color:#aaa;">mg/kg</span></div>
+            </div>
+          </li>
+          <!-- 그룹 3 -->
+          <li class="tree-node">
+            <div class="tree-header" onclick="toggleTree(this)">
+              <span class="arrow">▶</span>
+              <strong style="flex:1;">보존료</strong>
+              <span class="badge badge-purple" style="margin-right:8px;">5개 항목</span>
+              <span class="tag-list" style="gap:4px;">
+                <span class="tag tag-green" style="font-size:10px;">음료류</span>
+                <span class="tag tag-green" style="font-size:10px;">식육가공품</span>
+              </span>
+              <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="event.stopPropagation();openModal('modal-group')">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();">삭제</button>
+            </div>
+            <div class="tree-children">
+              <div class="tree-child"><span>소르빈산 <span class="badge badge-purple" style="font-size:10px;">보존료</span></span><span style="color:#aaa;">g/kg</span></div>
+              <div class="tree-child"><span>안식향산 <span class="badge badge-purple" style="font-size:10px;">보존료</span></span><span style="color:#aaa;">g/kg</span></div>
+              <div class="tree-child"><span>프로피온산 <span class="badge badge-purple" style="font-size:10px;">보존료</span></span><span style="color:#aaa;">g/kg</span></div>
+              <div class="tree-child"><span>파라옥시안식향산 <span class="badge badge-purple" style="font-size:10px;">보존료</span></span><span style="color:#aaa;">g/kg</span></div>
+              <div class="tree-child"><span>디히드로초산 <span class="badge badge-purple" style="font-size:10px;">보존료</span></span><span style="color:#aaa;">g/kg</span></div>
+            </div>
+          </li>
+          <!-- 그룹 4 -->
+          <li class="tree-node">
+            <div class="tree-header" onclick="toggleTree(this)">
+              <span class="arrow">▶</span>
+              <strong style="flex:1;">산가·과산화물가</strong>
+              <span class="badge badge-orange" style="margin-right:8px;">2개 항목</span>
+              <span class="tag-list" style="gap:4px;">
+                <span class="tag tag-green" style="font-size:10px;">면류</span>
+              </span>
+              <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="event.stopPropagation();openModal('modal-group')">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();">삭제</button>
+            </div>
+            <div class="tree-children">
+              <div class="tree-child"><span>산가 <span class="badge badge-orange" style="font-size:10px;">이화학</span></span><span style="color:#aaa;">mg KOH/g</span></div>
+              <div class="tree-child"><span>과산화물가 <span class="badge badge-orange" style="font-size:10px;">이화학</span></span><span style="color:#aaa;">meq/kg</span></div>
+            </div>
+          </li>
+          <!-- 그룹 5 -->
+          <li class="tree-node">
+            <div class="tree-header" onclick="toggleTree(this)">
+              <span class="arrow">▶</span>
+              <strong style="flex:1;">영양성분 9종</strong>
+              <span class="badge badge-green" style="margin-right:8px;">9개 항목</span>
+              <span class="tag-list" style="gap:4px;">
+                <span class="tag tag-orange" style="font-size:10px;">영양성분검사 전용</span>
+              </span>
+              <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="event.stopPropagation();openModal('modal-group')">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();">삭제</button>
+            </div>
+            <div class="tree-children">
+              <div class="tree-child"><span>열량</span><span style="color:#aaa;">kcal</span></div>
+              <div class="tree-child"><span>탄수화물</span><span style="color:#aaa;">g</span></div>
+              <div class="tree-child"><span>당류</span><span style="color:#aaa;">g</span></div>
+              <div class="tree-child"><span>단백질</span><span style="color:#aaa;">g</span></div>
+              <div class="tree-child"><span>지방</span><span style="color:#aaa;">g</span></div>
+              <div class="tree-child"><span>포화지방</span><span style="color:#aaa;">g</span></div>
+              <div class="tree-child"><span>트랜스지방</span><span style="color:#aaa;">g</span></div>
+              <div class="tree-child"><span>콜레스테롤</span><span style="color:#aaa;">mg</span></div>
+              <div class="tree-child"><span>나트륨</span><span style="color:#aaa;">mg</span></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ═══════════ 탭 4: 접수번호 설정 ═══════════ -->
+    <div class="panel" id="panel-4">
+      <div class="card">
+        <div class="card-title">접수번호 형식 설정</div>
+        <div class="card-desc">시료 접수 시 자동 부여되는 접수번호의 형식을 설정합니다. 고객지원팀에서 관리합니다.</div>
+
+        <div style="display:flex;gap:24px;margin-top:16px;flex-wrap:wrap;">
+          <!-- 왼쪽: 설정 -->
+          <div style="flex:1;min-width:300px;">
+            <div class="form-group" style="margin-bottom:16px;">
+              <label>구분 수</label>
+              <select id="seg-count" onchange="updatePreview()" style="width:120px;">
+                <option value="2">2구분 (00-00)</option>
+                <option value="3">3구분 (00-00-00)</option>
+                <option value="4" selected>4구분 (00-00-00-00)</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px;">
+              <label>구분자</label>
+              <select id="seg-separator" onchange="updatePreview()" style="width:120px;">
+                <option value="-">하이픈 (-)</option>
+                <option value="/">슬래시 (/)</option>
+                <option value=".">마침표 (.)</option>
+              </select>
+            </div>
+
+            <div id="segment-settings">
+              <!-- JS에서 동적 생성 -->
+            </div>
+
+            <div class="form-group" style="margin-top:16px;">
+              <label>번호 초기화 주기</label>
+              <select style="width:180px;">
+                <option>매년 초기화 (연 단위)</option>
+                <option>매월 초기화 (월 단위)</option>
+                <option>초기화 안 함 (누적)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 오른쪽: 미리보기 -->
+          <div style="flex:1;min-width:280px;">
+            <div class="preview-box">
+              <div class="preview-label">접수번호 미리보기</div>
+              <div class="preview-number" id="preview-number">BF-26-02-0001</div>
+              <div class="preview-label" id="preview-desc" style="margin-top:8px;">접두어-년도-월-일련번호</div>
+            </div>
+
+            <div style="margin-top:16px;">
+              <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px;">예시 목록</div>
+              <div style="background:#f7f8fa;border-radius:8px;padding:12px;font-family:'Courier New',monospace;font-size:13px;line-height:2;">
+                <div id="example-list">
+                  <div>BF-26-02-0001</div>
+                  <div>BF-26-02-0002</div>
+                  <div>BF-26-02-0003</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px;">
+          <button class="btn btn-outline">초기화</button>
+          <button class="btn btn-primary" onclick="toast('접수번호 형식이 저장되었습니다','success')">설정 저장</button>
+        </div>
+      </div>
+
+      <!-- 현재 설정 정보 -->
+      <div class="card">
+        <div class="card-title">설정 이력</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>변경일</th><th>이전 형식</th><th>변경 형식</th><th>변경자</th><th>사유</th></tr></thead>
+            <tbody>
+              <tr><td>2026-01-15</td><td>26-01-0001</td><td>BF-26-02-0001</td><td>김고객</td><td>접두어 추가 (지부 구분)</td></tr>
+              <tr><td>2025-06-01</td><td>2025-06-001</td><td>26-01-0001</td><td>김고객</td><td>년도 2자리로 변경</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ 모달: 검사 목적 ═══════════ -->
+<div class="modal-overlay" id="modal-purpose">
+  <div class="modal">
+    <div class="modal-header"><h3>검사 목적 추가/수정</h3><button class="modal-close" onclick="closeModal('modal-purpose')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>검사 목적명 *</label><input type="text" placeholder="예: 자가품질검사" value="자가품질검사"></div>
+        <div class="form-group" style="flex:0 0 120px;"><label>코드 *</label><input type="text" placeholder="예: QC" value="QC" maxlength="4"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;"><label>설명</label><textarea placeholder="검사 목적에 대한 설명">식품제조업체 자가품질검사</textarea></div>
+      <div class="form-group"><label>상태</label>
+        <select><option>사용중</option><option>미사용</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-purpose')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-purpose');toast('검사 목적이 저장되었습니다','success')">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 모달: 식품 유형 ═══════════ -->
+<div class="modal-overlay" id="modal-foodtype">
+  <div class="modal">
+    <div class="modal-header"><h3>식품 유형 추가/수정</h3><button class="modal-close" onclick="closeModal('modal-foodtype')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>카테고리 *</label>
+          <select><option>과자류·빵류·떡류</option><option>음료류</option><option>면류</option><option>식육가공품</option><option>유가공품</option><option>수산가공품</option><option>건강기능식품</option><option>기타</option></select>
+        </div>
+        <div class="form-group" style="flex:0 0 100px;"><label>코드 *</label><input type="text" placeholder="BIS" maxlength="4"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;"><label>식품 유형명 *</label><input type="text" placeholder="예: 비스킷"></div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>연결할 항목 그룹</label>
+        <div class="check-list">
+          <label class="check-item"><input type="checkbox" checked> 미생물 기본 (4개 항목)</label>
+          <label class="check-item"><input type="checkbox" checked> 중금속 (4개 항목)</label>
+          <label class="check-item"><input type="checkbox"> 보존료 (5개 항목)</label>
+          <label class="check-item"><input type="checkbox"> 산가·과산화물가 (2개 항목)</label>
+          <label class="check-item"><input type="checkbox"> 영양성분 9종 (9개 항목)</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-foodtype')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-foodtype');toast('식품 유형이 저장되었습니다','success')">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 모달: 검사 항목 ═══════════ -->
+<div class="modal-overlay" id="modal-item">
+  <div class="modal modal-wide">
+    <div class="modal-header"><h3>검사 항목 추가/수정</h3><button class="modal-close" onclick="closeModal('modal-item')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>항목명 (국문) *</label><input type="text" placeholder="예: 일반세균수" value="일반세균수"></div>
+        <div class="form-group"><label>항목명 (영문)</label><input type="text" placeholder="예: Total Plate Count" value="Total Plate Count"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>분류 *</label>
+          <select><option>미생물</option><option>중금속</option><option>이화학</option><option>보존료</option><option>영양성분</option><option>잔류농약</option><option>기타</option></select>
+        </div>
+        <div class="form-group"><label>단위 *</label><input type="text" placeholder="예: CFU/g" value="CFU/g"></div>
+        <div class="form-group"><label>시험법</label><input type="text" placeholder="예: 건조필름법" value="건조필름법"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;"><label>비고</label><textarea placeholder="항목에 대한 추가 설명"></textarea></div>
+
+      <div style="border-top:1px solid #eee;padding-top:16px;margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:700;color:#1a2a44;">검사 목적별 기준·규격</div>
+          <button class="btn btn-outline btn-sm" onclick="addStandardRow()">+ 기준 추가</button>
+        </div>
+        <table style="font-size:12px;">
+          <thead><tr><th>검사 목적</th><th>기준</th><th>규격</th><th>판정 기준</th><th style="width:50px;"></th></tr></thead>
+          <tbody id="standard-rows">
+            <tr>
+              <td><select style="font-size:12px;padding:4px;"><option>자가품질검사</option><option>의뢰검사</option><option>수입식품검사</option><option>영양성분검사</option></select></td>
+              <td><input type="text" style="font-size:12px;padding:4px;" value="n=5, c=1, m=10,000, M=100,000"></td>
+              <td><input type="text" style="font-size:12px;padding:4px;" value="100,000 이하"></td>
+              <td><select style="font-size:12px;padding:4px;"><option>이하</option><option>미만</option><option>불검출</option><option>범위 내</option></select></td>
+              <td><button class="btn btn-danger btn-sm" style="padding:2px 6px;">✕</button></td>
+            </tr>
+            <tr>
+              <td><select style="font-size:12px;padding:4px;"><option>의뢰검사</option><option>자가품질검사</option><option>수입식품검사</option></select></td>
+              <td><input type="text" style="font-size:12px;padding:4px;" value="n=5, c=1, m=10,000, M=100,000"></td>
+              <td><input type="text" style="font-size:12px;padding:4px;" value="100,000 이하"></td>
+              <td><select style="font-size:12px;padding:4px;"><option>이하</option><option>미만</option><option>불검출</option></select></td>
+              <td><button class="btn btn-danger btn-sm" style="padding:2px 6px;">✕</button></td>
+            </tr>
+            <tr>
+              <td><select style="font-size:12px;padding:4px;"><option>수입식품검사</option><option>자가품질검사</option><option>의뢰검사</option></select></td>
+              <td><input type="text" style="font-size:12px;padding:4px;" value="n=5, c=0, m=0"></td>
+              <td><input type="text" style="font-size:12px;padding:4px;" value="불검출"></td>
+              <td><select style="font-size:12px;padding:4px;"><option>불검출</option><option>이하</option><option>미만</option></select></td>
+              <td><button class="btn btn-danger btn-sm" style="padding:2px 6px;">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-item')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-item');toast('검사 항목이 저장되었습니다. 시험 결재 > 항목배정에서 담당자에게 배정할 수 있습니다.','success')">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 모달: 기준·규격 상세 ═══════════ -->
+<div class="modal-overlay" id="modal-standard">
+  <div class="modal modal-wide">
+    <div class="modal-header"><h3>일반세균수 — 검사 목적별 기준·규격</h3><button class="modal-close" onclick="closeModal('modal-standard')">✕</button></div>
+    <div class="modal-body">
+      <table>
+        <thead><tr><th>검사 목적</th><th>기준</th><th>규격</th><th>판정 기준</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">자가품질검사 (QC)</span></td><td>n=5, c=1, m=10,000, M=100,000</td><td>100,000 이하</td><td>이하</td></tr>
+          <tr><td><span class="badge badge-blue">의뢰검사 (RE)</span></td><td>n=5, c=1, m=10,000, M=100,000</td><td>100,000 이하</td><td>이하</td></tr>
+          <tr><td><span class="badge badge-blue">수입식품검사 (IM)</span></td><td>n=5, c=0, m=0</td><td>불검출</td><td>불검출</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:12px;font-size:12px;color:#888;">
+        ※ 같은 항목이라도 검사 목적에 따라 기준·규격이 다를 수 있습니다. 시료 접수 시 선택한 목적에 따라 해당 기준이 자동 적용됩니다.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-standard')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 모달: 항목 그룹 ═══════════ -->
+<div class="modal-overlay" id="modal-group">
+  <div class="modal modal-wide">
+    <div class="modal-header"><h3>항목 그룹 추가/수정</h3><button class="modal-close" onclick="closeModal('modal-group')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:12px;"><label>그룹명 *</label><input type="text" placeholder="예: 미생물 기본" value="미생물 기본"></div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>포함할 검사 항목 선택</label>
+        <div class="check-list">
+          <label class="check-item"><input type="checkbox" checked> 일반세균수 (미생물, CFU/g)</label>
+          <label class="check-item"><input type="checkbox" checked> 대장균군 (미생물, CFU/g)</label>
+          <label class="check-item"><input type="checkbox" checked> 대장균 (미생물, CFU/g)</label>
+          <label class="check-item"><input type="checkbox" checked> 살모넬라 (미생물, 불검출)</label>
+          <label class="check-item"><input type="checkbox"> 황색포도상구균 (미생물, CFU/g)</label>
+          <label class="check-item"><input type="checkbox"> 리스테리아 (미생물, 불검출)</label>
+          <label class="check-item"><input type="checkbox"> 납 (중금속, mg/kg)</label>
+          <label class="check-item"><input type="checkbox"> 카드뮴 (중금속, mg/kg)</label>
+          <label class="check-item"><input type="checkbox"> 산가 (이화학, mg KOH/g)</label>
+          <label class="check-item"><input type="checkbox"> 소르빈산 (보존료, g/kg)</label>
+          <label class="check-item"><input type="checkbox"> 열량 (영양성분, kcal)</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>연결할 식품 유형 (복수 선택 가능)</label>
+        <div class="check-list" style="max-height:150px;">
+          <label class="check-item"><input type="checkbox" checked> 과자류 > 비스킷</label>
+          <label class="check-item"><input type="checkbox" checked> 과자류 > 캔디류</label>
+          <label class="check-item"><input type="checkbox" checked> 음료류 > 과·채주스</label>
+          <label class="check-item"><input type="checkbox" checked> 음료류 > 탄산음료</label>
+          <label class="check-item"><input type="checkbox" checked> 면류 > 유탕면류</label>
+          <label class="check-item"><input type="checkbox" checked> 식육가공품 > 햄류</label>
+          <label class="check-item"><input type="checkbox" checked> 식육가공품 > 소시지</label>
+          <label class="check-item"><input type="checkbox"> 유가공품 > 우유류</label>
+          <label class="check-item"><input type="checkbox"> 수산가공품 > 어묵류</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-group')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-group');toast('항목 그룹이 저장되었습니다','success')">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 -->
+<div class="toast" id="toast-el"></div>
+
+<script>
+// ── 탭 전환 ──
+function showTab(idx) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.panel').forEach((p,i) => p.classList.toggle('active', i===idx));
+  if(idx===4) initSegments();
+}
+
+// ── 모달 ──
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('show'); });
+});
+
+// ── 토스트 ──
+function toast(msg, type='info') {
+  const el = document.getElementById('toast-el');
+  el.textContent = msg;
+  el.className = 'toast toast-' + type + ' show';
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ── 트리 토글 ──
+function toggleTree(header) {
+  header.classList.toggle('open');
+  const children = header.nextElementSibling;
+  children.classList.toggle('show');
+}
+
+// ── 기준·규격 행 추가 ──
+function addStandardRow() {
+  const tbody = document.getElementById('standard-rows');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select style="font-size:12px;padding:4px;"><option>자가품질검사</option><option>의뢰검사</option><option>수입식품검사</option><option>영양성분검사</option><option>유통기한검사</option></select></td>
+    <td><input type="text" style="font-size:12px;padding:4px;" placeholder="기준 입력"></td>
+    <td><input type="text" style="font-size:12px;padding:4px;" placeholder="규격 입력"></td>
+    <td><select style="font-size:12px;padding:4px;"><option>이하</option><option>미만</option><option>불검출</option><option>범위 내</option></select></td>
+    <td><button class="btn btn-danger btn-sm" style="padding:2px 6px;" onclick="this.closest('tr').remove()">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+// ── 접수번호 미리보기 ──
+var segConfigs = [
+  { label:'접두어', type:'fixed', value:'BF', desc:'고정 문자' },
+  { label:'년도', type:'year', value:'2', desc:'년도 (2자리)' },
+  { label:'월', type:'month', value:'2', desc:'월 (2자리)' },
+  { label:'일련번호', type:'serial', value:'4', desc:'일련번호' },
+];
+
+function initSegments() {
+  const count = parseInt(document.getElementById('seg-count').value);
+  const container = document.getElementById('segment-settings');
+  
+  // 기본 세그먼트 조정
+  var segs;
+  if(count===2) segs = [{label:'접두어',type:'fixed',value:'BF'},{label:'일련번호',type:'serial',value:'4'}];
+  else if(count===3) segs = [{label:'접두어',type:'fixed',value:'BF'},{label:'년도',type:'year',value:'2'},{label:'일련번호',type:'serial',value:'4'}];
+  else segs = [{label:'접두어',type:'fixed',value:'BF'},{label:'년도',type:'year',value:'2'},{label:'월',type:'month',value:'2'},{label:'일련번호',type:'serial',value:'4'}];
+  
+  segConfigs = segs;
+  
+  let html = '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px;">각 구분 설정</div>';
+  segs.forEach((s,i) => {
+    html += `<div class="form-row">
+      <div class="form-group" style="flex:0 0 80px;"><label>구분 ${i+1}</label><input type="text" value="${s.label}" style="font-size:12px;" onchange="segConfigs[${i}].label=this.value;updatePreview()"></div>
+      <div class="form-group" style="flex:0 0 140px;"><label>유형</label>
+        <select style="font-size:12px;" onchange="segConfigs[${i}].type=this.value;updatePreview()">
+          <option value="fixed" ${s.type==='fixed'?'selected':''}>고정 문자 (영문/숫자)</option>
+          <option value="year" ${s.type==='year'?'selected':''}>년도 (자동)</option>
+          <option value="month" ${s.type==='month'?'selected':''}>월 (자동)</option>
+          <option value="day" ${s.type==='day'?'selected':''}>일 (자동)</option>
+          <option value="serial" ${s.type==='serial'?'selected':''}>일련번호 (자동증가)</option>
+          <option value="purpose" ${s.type==='purpose'?'selected':''}>검사목적 코드</option>
+          <option value="branch" ${s.type==='branch'?'selected':''}>지부 코드</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:0 0 100px;"><label>값/자릿수</label><input type="text" value="${s.value}" style="font-size:12px;" onchange="segConfigs[${i}].value=this.value;updatePreview()"></div>
+    </div>`;
+  });
+  container.innerHTML = html;
+  updatePreview();
+}
+
+function updatePreview() {
+  const sep = document.getElementById('seg-separator').value;
+  const now = new Date();
+  const y = String(now.getFullYear()).slice(-2);
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  const d = String(now.getDate()).padStart(2,'0');
+  
+  let parts = [], descs = [];
+  segConfigs.forEach(s => {
+    if(s.type==='fixed') { parts.push(s.value); descs.push(s.label); }
+    else if(s.type==='year') { 
+      parts.push(s.value==='4'? String(now.getFullYear()) : y); 
+      descs.push(s.label);
+    }
+    else if(s.type==='month') { parts.push(m); descs.push(s.label); }
+    else if(s.type==='day') { parts.push(d); descs.push(s.label); }
+    else if(s.type==='serial') { 
+      const digits = parseInt(s.value) || 4;
+      parts.push('0001'.padStart(digits,'0'));
+      descs.push(s.label);
+    }
+    else if(s.type==='purpose') { parts.push('QC'); descs.push(s.label); }
+    else if(s.type==='branch') { parts.push(s.value||'HQ'); descs.push(s.label); }
+  });
+  
+  const preview = parts.join(sep);
+  document.getElementById('preview-number').textContent = preview;
+  document.getElementById('preview-desc').textContent = descs.join(sep.replace(/-/,'−').replace(/\//,'∕'));
+  
+  // 예시 목록
+  const list = document.getElementById('example-list');
+  let examples = '';
+  for(let i=1;i<=5;i++){
+    let pp = [...parts];
+    const serialIdx = segConfigs.findIndex(s=>s.type==='serial');
+    if(serialIdx>=0){
+      const digits = parseInt(segConfigs[serialIdx].value)||4;
+      pp[serialIdx] = String(i).padStart(digits,'0');
+    }
+    examples += `<div>${pp.join(sep)}</div>`;
+  }
+  list.innerHTML = examples;
+}
+
+// 초기화
+initSegments();
+</script>
+</body>
+</html>
