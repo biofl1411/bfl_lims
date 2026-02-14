@@ -544,10 +544,42 @@ function dInitSeg(){
   if(c===2)dSg=[{l:'목적코드',t:'fixed',v:pf},{l:'일련번호',t:'serial',v:'4'}];
   else if(c===3)dSg=[{l:'목적코드',t:'fixed',v:pf},{l:'년도',t:'year',v:'2'},{l:'일련번호',t:'serial',v:'4'}];
   else dSg=[{l:'목적코드',t:'fixed',v:pf},{l:'년도',t:'year',v:'2'},{l:'월',t:'month',v:'2'},{l:'일련번호',t:'serial',v:'4'}];
+  renderSegUI();
+}
+
+function renderSegUI(){
   const a=document.getElementById('d-seg-area');
+  const now=new Date(),y2=String(now.getFullYear()).slice(-2),y4=String(now.getFullYear()),m=String(now.getMonth()+1).padStart(2,'0');
   let h='';
   dSg.forEach((s,i)=>{
-    h+=`<div class="fg-row" style="margin-bottom:6px"><div class="fg" style="flex:0 0 80px"><label>구분 ${i+1}</label><input type="text" value="${s.l}" style="font-size:12px" onchange="dSg[${i}].l=this.value;dUpdatePrev()"></div><div class="fg"><label>유형</label><select style="font-size:12px" onchange="dSg[${i}].t=this.value;dUpdatePrev()"><option value="fixed" ${s.t==='fixed'?'selected':''}>고정 문자</option><option value="year" ${s.t==='year'?'selected':''}>년도</option><option value="month" ${s.t==='month'?'selected':''}>월</option><option value="serial" ${s.t==='serial'?'selected':''}>일련번호</option><option value="branch" ${s.t==='branch'?'selected':''}>지부 코드</option></select></div><div class="fg" style="flex:0 0 80px"><label>값</label><input type="text" value="${s.v}" style="font-size:12px;text-align:center" onchange="dSg[${i}].v=this.value;dUpdatePrev()"></div></div>`;
+    let valHtml='';
+    if(s.t==='fixed'){
+      valHtml=`<input type="text" value="${s.v}" style="font-size:12px;text-align:center" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
+    } else if(s.t==='year'){
+      valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;dUpdatePrev()">
+        <option value="2" ${s.v==='2'?'selected':''}>2자리 (${y2})</option>
+        <option value="4" ${s.v==='4'?'selected':''}>4자리 (${y4})</option></select>`;
+    } else if(s.t==='month'){
+      valHtml=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub);font-weight:600">자동 (${m})</div>`;
+    } else if(s.t==='serial'){
+      valHtml=`<select style="font-size:12px" onchange="dSg[${i}].v=this.value;dUpdatePrev()">
+        <option value="3" ${s.v==='3'?'selected':''}>3자리 (001)</option>
+        <option value="4" ${s.v==='4'?'selected':''}>4자리 (0001)</option>
+        <option value="5" ${s.v==='5'?'selected':''}>5자리 (00001)</option></select>`;
+    } else if(s.t==='branch'){
+      valHtml=`<input type="text" value="${s.v||'HQ'}" style="font-size:12px;text-align:center" onchange="dSg[${i}].v=this.value;dUpdatePrev()">`;
+    }
+    h+=`<div class="fg-row" style="margin-bottom:6px">
+      <div class="fg" style="flex:0 0 80px"><label>구분 ${i+1}</label><input type="text" value="${s.l}" style="font-size:12px" onchange="dSg[${i}].l=this.value;dUpdatePrev()"></div>
+      <div class="fg"><label>유형</label><select style="font-size:12px" onchange="dSg[${i}].t=this.value;renderSegUI();dUpdatePrev()">
+        <option value="fixed" ${s.t==='fixed'?'selected':''}>고정 문자</option>
+        <option value="year" ${s.t==='year'?'selected':''}>년도 (자동)</option>
+        <option value="month" ${s.t==='month'?'selected':''}>월 (자동)</option>
+        <option value="serial" ${s.t==='serial'?'selected':''}>일련번호 (자동증가)</option>
+        <option value="branch" ${s.t==='branch'?'selected':''}>지부 코드</option>
+      </select></div>
+      <div class="fg" style="flex:0 0 110px"><label>${s.t==='fixed'||s.t==='branch'?'값':'설정'}</label>${valHtml}</div>
+    </div>`;
   });
   a.innerHTML=h;
   dUpdatePrev();
