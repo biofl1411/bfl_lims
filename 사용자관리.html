@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 사용자 관리</title>
+<style>
+:root{--primary:#2563eb;--success:#10b981;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-600:#4b5563;--gray-900:#111827}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;background:#f5f5f5;color:#1a1a1a}
+.app-layout{display:flex;height:100vh}
+.sidebar{width:250px;background:#1e293b;color:white;position:fixed;left:0;top:0;bottom:0;z-index:1000;overflow-y:auto}
+.logo{padding:20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.1)}
+.logo-icon{width:40px;height:40px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo-title{font-size:18px;font-weight:700}
+.logo-subtitle{font-size:11px;color:#94a3b8}
+.nav-section{padding:12px 0}
+.nav-section-title{padding:8px 20px;font-size:11px;color:#94a3b8;text-transform:uppercase}
+.nav-menu{list-style:none}
+.nav-item{padding:12px 20px;display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;transition:all .2s;text-decoration:none}
+.nav-item:hover{background:rgba(255,255,255,0.05)}
+.nav-item.active{background:#2563eb;color:white;font-weight:600}
+.nav-icon{font-size:18px;width:24px;text-align:center}
+.main-container{flex:1;margin-left:250px;display:flex;flex-direction:column;overflow:hidden}
+.top-header{background:white;padding:16px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between}
+.breadcrumb{display:flex;align-items:center;gap:8px;font-size:14px;color:#64748b}
+.breadcrumb-current{color:#1e293b;font-weight:600}
+.main-content{flex:1;overflow-y:auto;padding:24px}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:white;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.stat-value{font-size:28px;font-weight:700;margin-bottom:4px}
+.stat-label{font-size:13px;color:#64748b}
+.toolbar{background:white;padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:flex;justify-content:space-between;align-items:center;gap:16px}
+.search-box{flex:1;max-width:400px}
+.search-box input{width:100%;padding:10px 16px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+.filter-group{display:flex;gap:12px}
+.filter-select{padding:10px 16px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+.btn{padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:8px;transition:all .2s}
+.btn-primary{background:var(--primary);color:white}
+.btn-success{background:var(--success);color:white}
+.btn-sm{padding:6px 12px;font-size:12px}
+.table-container{background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+thead{background:var(--gray-50);border-bottom:2px solid var(--gray-200)}
+th{padding:12px 16px;text-align:left;font-size:13px;font-weight:600;color:var(--gray-600)}
+tbody tr{border-bottom:1px solid var(--gray-100);transition:background .2s}
+tbody tr:hover{background:var(--gray-50)}
+td{padding:14px 16px;font-size:14px}
+.badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:500}
+.badge-primary{background:#dbeafe;color:var(--primary)}
+.badge-success{background:#d1fae5;color:var(--success)}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:white;border-radius:12px;width:90%;max-width:600px;max-height:80vh;overflow-y:auto}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between}
+.modal-title{font-size:18px;font-weight:700}
+.modal-close{background:none;border:none;font-size:24px;cursor:pointer}
+.modal-body{padding:24px}
+.form-group{margin-bottom:20px}
+.form-label{display:block;font-size:14px;font-weight:600;margin-bottom:8px;color:var(--gray-600)}
+.form-input,.form-select{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px}
+.form-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+<div class="logo">
+<div class="logo-icon">🧬</div>
+<div style="display:flex;flex-direction:column">
+<div class="logo-title">BioFoodLab</div>
+<div class="logo-subtitle">LIMS 통합관리</div>
+</div>
+</div>
+    <div class="nav-section">
+      <div class="nav-section-title">메인</div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span>대시보드</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">영업</div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <span class="nav-icon">💼</span>
+          <span>영업 관리</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">접수</div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <span class="nav-icon">🏢</span>
+          <span>업체등록·수정</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📝</span>
+          <span>시료 접수</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📋</span>
+          <span>접수 현황</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📔</span>
+          <span>접수대장</span>
+        </li>
+        <li class="nav-item REPLACE_ACTIVE_1">
+          <span class="nav-icon">⚙️</span>
+          <span>검사목적 관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📅</span>
+          <span>일정관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">🏛️</span>
+          <span>지부관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📈</span>
+          <span>실적보고</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">🔗</span>
+          <span>LIMS 연동</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">시험</div>
+      <ul class="nav-menu">
+        <li class="nav-item REPLACE_ACTIVE_2">
+          <span class="nav-icon">👥</span>
+          <span>항목배정</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">🔍</span>
+          <span>시험항목 조회</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">⚗️</span>
+          <span>검사 진행</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">✍️</span>
+          <span>결과 입력</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">✅</span>
+          <span>결재</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📆</span>
+          <span>캘린더</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">성적 / 재무</div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <span class="nav-icon">📄</span>
+          <span>성적 관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">💰</span>
+          <span>재무 관리</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">운영</div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span>통계 분석</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📂</span>
+          <span>문서 관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">🧪</span>
+          <span>재고/시약 관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📢</span>
+          <span>공지</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">설정</div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <span class="nav-icon">👤</span>
+          <span>사용자 설정</span>
+        </li>
+      </ul>
+      <div class="nav-section-title" style="padding-top: 8px;">관리자</div>
+      <ul class="nav-menu">
+        <a href="사용자관리.html" class="nav-item active">
+          <span class="nav-icon">👥</span>
+          <span>사용자 관리</span>
+        </a>
+        <li class="nav-item">
+          <span class="nav-icon">🏢</span>
+          <span>부서 관리</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">🔐</span>
+          <span>권한 설정</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📊</span>
+          <span>대시보드 권한</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">🔔</span>
+          <span>알림 설정</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">📜</span>
+          <span>시스템 로그</span>
+        </li>
+        <li class="nav-item">
+          <span class="nav-icon">💰</span>
+          <span>미수금 관리 설정</span>
+        </li>
+      </ul>
+    </div>
+</aside>
+<div class="main-container">
+<header class="top-header">
+<div class="breadcrumb">
+<span>관리자</span>
+<span>›</span>
+<span class="breadcrumb-current">사용자 관리</span>
+</div>
+</header>
+<main class="main-content">
+<div class="stats-row">
+<div class="stat-card">
+<div class="stat-value" style="color:var(--primary)">56</div>
+<div class="stat-label">전체 사용자</div>
+</div>
+<div class="stat-card">
+<div class="stat-value" style="color:var(--success)">9</div>
+<div class="stat-label">부서 수</div>
+</div>
+<div class="stat-card">
+<div class="stat-value">31</div>
+<div class="stat-label">식품축산분석실</div>
+</div>
+<div class="stat-card">
+<div class="stat-value">6</div>
+<div class="stat-label">고객지원팀</div>
+</div>
+</div>
+<div class="toolbar">
+<div class="search-box">
+<input type="text" id="searchInput" placeholder="이름, 아이디로 검색..." onkeyup="filterUsers()">
+</div>
+<div class="filter-group">
+<select id="deptFilter" class="filter-select" onchange="filterUsers()">
+<option value="">전체 부서</option>
+</select>
+<select id="posFilter" class="filter-select" onchange="filterUsers()">
+<option value="">전체 직급</option>
+</select>
+<button class="btn btn-success" onclick="openAddModal()">➕ 사용자 추가</button>
+</div>
+</div>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>아이디</th>
+<th>부서</th>
+<th>직급</th>
+<th>관리</th>
+</tr>
+</thead>
+<tbody id="userTable"></tbody>
+</table>
+</div>
+</main>
+</div>
+</div>
+
+<div class="modal-overlay" id="userModal">
+<div class="modal">
+<div class="modal-header">
+<div class="modal-title">사용자 추가</div>
+<button class="modal-close" onclick="closeModal()">×</button>
+</div>
+<div class="modal-body">
+<div class="form-group">
+<label class="form-label">아이디</label>
+<input type="text" class="form-input" id="userId" placeholder="사용자 아이디">
+</div>
+<div class="form-group">
+<label class="form-label">부서</label>
+<select class="form-select" id="userDept"></select>
+</div>
+<div class="form-group">
+<label class="form-label">직급</label>
+<select class="form-select" id="userPos"></select>
+</div>
+<div class="form-actions">
+<button class="btn btn-outline" onclick="closeModal()">취소</button>
+<button class="btn btn-primary" onclick="saveUser()">저장</button>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+const USERS_DATA = [
+  {
+    "부서명": "임원",
+    "아이디": "이용표",
+    "직급": "대표이사"
+  },
+  {
+    "부서명": "관리팀",
+    "아이디": "김영기",
+    "직급": "부장"
+  },
+  {
+    "부서명": "고객지원팀",
+    "아이디": "허현미",
+    "직급": "부장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김지영",
+    "직급": "과장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "문유진",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "윤정한",
+    "직급": "차장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "손윤주",
+    "직급": "부장"
+  },
+  {
+    "부서명": "품질보증팀",
+    "아이디": "김주현",
+    "직급": "부장"
+  },
+  {
+    "부서명": "고객지원팀",
+    "아이디": "이은경",
+    "직급": "과장"
+  },
+  {
+    "부서명": "고객지원팀",
+    "아이디": "김수정",
+    "직급": "과장"
+  },
+  {
+    "부서명": "고객관리",
+    "아이디": "김희성",
+    "직급": "부장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "최주리",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김지은",
+    "직급": "과장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김사라",
+    "직급": "과장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "문태성",
+    "직급": "과장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "서세진",
+    "직급": "차장"
+  },
+  {
+    "부서명": "고객지원팀",
+    "아이디": "박신영",
+    "직급": "차장"
+  },
+  {
+    "부서명": "품질보증팀",
+    "아이디": "김민규",
+    "직급": "차장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "장민경",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김민영",
+    "직급": "과장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "이종훈",
+    "직급": "주임"
+  },
+  {
+    "부서명": "경영지원실",
+    "아이디": "김성호",
+    "직급": "전무이사"
+  },
+  {
+    "부서명": "경영지원실",
+    "아이디": "김유빈",
+    "직급": "주임"
+  },
+  {
+    "부서명": "마케팅사업부",
+    "아이디": "조현정",
+    "직급": "주임"
+  },
+  {
+    "부서명": "고객관리",
+    "아이디": "조봉현",
+    "직급": "대리"
+  },
+  {
+    "부서명": "마케팅사업부",
+    "아이디": "이슬기",
+    "직급": "대리"
+  },
+  {
+    "부서명": "고객관리",
+    "아이디": "엄상흠",
+    "직급": "부장"
+  },
+  {
+    "부서명": "고객지원팀",
+    "아이디": "류하늘",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "이진아",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "진미정",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김선화",
+    "직급": "사원"
+  },
+  {
+    "부서명": "고객관리",
+    "아이디": "오세중",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "염하림",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "백지연",
+    "직급": "주임"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "박지수",
+    "직급": "주임"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "송지은",
+    "직급": "주임"
+  },
+  {
+    "부서명": "고객관리",
+    "아이디": "장동주",
+    "직급": "주임"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "신경석",
+    "직급": "대리"
+  },
+  {
+    "부서명": "품질보증팀",
+    "아이디": "김정한",
+    "직급": "차장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김현정",
+    "직급": "주임"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "서진영",
+    "직급": "사원"
+  },
+  {
+    "부서명": "고객지원팀",
+    "아이디": "이진희",
+    "직급": "사원"
+  },
+  {
+    "부서명": "고객관리",
+    "아이디": "오석현",
+    "직급": "주임"
+  },
+  {
+    "부서명": "경영지원실",
+    "아이디": "이주하",
+    "직급": "차장"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "박시은",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "안준이",
+    "직급": "사원"
+  },
+  {
+    "부서명": "품질보증팀",
+    "아이디": "강은애",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "하주신",
+    "직급": "과장"
+  },
+  {
+    "부서명": "마케팅팀",
+    "아이디": "김도희",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "태혁진",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김고은",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김범준",
+    "직급": "대리"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "권혜원",
+    "직급": "사원"
+  },
+  {
+    "부서명": "마케팅팀",
+    "아이디": "송성현",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "김문기",
+    "직급": "사원"
+  },
+  {
+    "부서명": "식품축산분석실",
+    "아이디": "지현정",
+    "직급": "사원"
+  }
+];
+let users = [...USERS_DATA];
+
+// 초기화
+document.addEventListener('DOMContentLoaded', () => {
+  populateFilters();
+  renderUsers();
+});
+
+function populateFilters() {
+  const depts = [...new Set(users.map(u => u.부서명))].sort();
+  const positions = [...new Set(users.map(u => u.직급))].sort();
+  
+  const deptFilter = document.getElementById('deptFilter');
+  const posFilter = document.getElementById('posFilter');
+  const userDept = document.getElementById('userDept');
+  const userPos = document.getElementById('userPos');
+  
+  depts.forEach(d => {
+    deptFilter.innerHTML += `<option value="${d}">${d}</option>`;
+    userDept.innerHTML += `<option value="${d}">${d}</option>`;
+  });
+  
+  positions.forEach(p => {
+    posFilter.innerHTML += `<option value="${p}">${p}</option>`;
+    userPos.innerHTML += `<option value="${p}">${p}</option>`;
+  });
+}
+
+function renderUsers() {
+  const tbody = document.getElementById('userTable');
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const dept = document.getElementById('deptFilter').value;
+  const pos = document.getElementById('posFilter').value;
+  
+  let filtered = users.filter(u => {
+    const matchSearch = !search || u.아이디.toLowerCase().includes(search);
+    const matchDept = !dept || u.부서명 === dept;
+    const matchPos = !pos || u.직급 === pos;
+    return matchSearch && matchDept && matchPos;
+  });
+  
+  tbody.innerHTML = filtered.map((u, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><strong>${u.아이디}</strong></td>
+      <td><span class="badge badge-primary">${u.부서명}</span></td>
+      <td>${u.직급}</td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick="editUser('${u.아이디}')">수정</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterUsers() {
+  renderUsers();
+}
+
+function openAddModal() {
+  document.getElementById('userModal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('userModal').classList.remove('active');
+}
+
+function saveUser() {
+  alert('사용자 저장 기능은 백엔드 연동 후 구현됩니다.');
+  closeModal();
+}
+
+function editUser(id) {
+  alert(`${id} 수정 기능은 백엔드 연동 후 구현됩니다.`);
+}
+</script>
+</body>
+</html>
