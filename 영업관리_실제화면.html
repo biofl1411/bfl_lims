@@ -1,0 +1,2479 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - 영업 관리</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;display:flex;background:#f8f9fb;font-size:13px;overflow:hidden}
+
+/* Sidebar */
+.sb{width:240px;background:#1a2332;display:flex;flex-direction:column;flex-shrink:0;z-index:10}
+.sb-hd{padding:16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between}
+.sb-logo{color:#4fc3f7;font-weight:800;font-size:16px}
+.sb-menu{flex:1;padding:8px;overflow-y:auto}
+.sb-cat{padding:8px 12px;font-size:10px;color:#4a6785;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.sb-item{padding:9px 12px;color:#8ea4c0;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:9px;font-size:13px;margin-bottom:1px;transition:all .15s}
+.sb-item:hover{background:rgba(255,255,255,.05)}
+.sb-item.active{color:#4fc3f7;background:rgba(79,195,247,.1);font-weight:600}
+.sb-item .badge{margin-left:auto;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700}
+.badge-ok{background:rgba(46,125,50,.2);color:#66bb6a}
+.badge-new{background:rgba(21,101,192,.2);color:#64b5f6}
+.badge-later{background:rgba(230,81,0,.2);color:#ffb74d}
+.sb-ft{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px}
+.sb-avatar{width:32px;height:32px;border-radius:50%;background:rgba(79,195,247,.2);display:flex;align-items:center;justify-content:center;font-size:14px}
+.sb-name{color:#c8d6e5;font-size:12px;font-weight:600}
+.sb-role{color:#6b7d93;font-size:10px}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-bell{position:relative;cursor:pointer;font-size:18px}
+.topbar-bell .dot{position:absolute;top:-2px;right:-4px;width:8px;height:8px;background:#e53935;border-radius:50%}
+
+.content{flex:1;padding:24px;overflow-y:auto}
+
+/* Buttons */
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-success{background:#2e7d32;color:#fff}.btn-success:hover{background:#1b5e20}
+.btn-danger{background:#e53935;color:#fff}.btn-danger:hover{background:#c62828}
+.btn-sm{padding:6px 12px;font-size:11px}
+.btn-check{background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb}.btn-check:hover{background:#bbdefb}
+
+/* Cards */
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px}
+.card-bd{padding:20px}
+
+/* Tables */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{background:#f8f9fb;padding:10px 14px;font-size:11px;font-weight:700;color:#5f6b7a;text-align:left;border-bottom:2px solid #e2e6ed;white-space:nowrap}
+.tbl td{padding:10px 14px;border-bottom:1px solid #eef0f4;font-size:12px;color:#333}
+.tbl tr:hover{background:#fafbfc}
+.tbl .center{text-align:center}
+
+/* Traffic dots */
+.tl{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
+.tl-blue{background:#2196f3}.tl-green{background:#4caf50}.tl-yellow{background:#ffeb3b}.tl-orange{background:#ff9800}.tl-red{background:#f44336}
+
+/* Tags */
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.tag-vip{background:#fce4ec;color:#c62828}.tag-a{background:#e3f2fd;color:#1565c0}.tag-b{background:#e8f5e9;color:#2e7d32}.tag-c{background:#f3e5f5;color:#7b1fa2}
+.tag-active{background:#e8f5e9;color:#2e7d32}.tag-dormant{background:#fff3e0;color:#e65100}.tag-terminated{background:#f5f5f5;color:#9e9e9e}
+.tag-pending{background:#fff3e0;color:#e65100}.tag-approved{background:#e8f5e9;color:#2e7d32}.tag-rejected{background:#fce4ec;color:#c62828}
+
+/* Form */
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.fg label{font-size:11px;color:#5f6b7a;font-weight:600}
+.fg label .req{color:#e53935}
+.fg input,.fg select,.fg textarea{padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;outline:none;font-family:inherit;transition:border .15s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#4fc3f7;box-shadow:0 0 0 3px rgba(79,195,247,.1)}
+.fg textarea{resize:vertical;min-height:60px}
+.fg select{cursor:pointer;background:#fff}
+.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fg-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+.sub-card{background:#f8f9fb;border:1px solid #eef0f4;border-radius:10px;padding:14px;margin-bottom:10px;position:relative}
+.sub-card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.sub-card-title{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.sub-card-num{background:#e3f2fd;color:#1565c0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.btn-remove{background:none;border:none;color:#e53935;font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px}
+.btn-remove:hover{background:#fce4ec}
+.btn-add{display:flex;align-items:center;gap:6px;padding:10px;border:2px dashed #c8d6e5;border-radius:10px;background:transparent;color:#5f6b7a;font-size:12px;font-weight:600;cursor:pointer;width:100%;justify-content:center}
+.btn-add:hover{border-color:#1a73e8;color:#1a73e8;background:#f0f7ff}
+.combo{display:flex;gap:6px}.combo select,.combo input{flex:1}
+.hint{font-size:10px;color:#8892a4;margin-top:2px}
+.check-result{margin-top:4px;font-size:11px;padding:6px 10px;border-radius:6px;display:none}
+.check-ok{background:#e8f5e9;color:#2e7d32}.check-dup{background:#fff3e0;color:#e65100}
+
+/* Section title */
+.sec-title{font-size:14px;font-weight:700;color:#1a2332;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:8px}
+.sec-num{background:#1a73e8;color:#fff;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+
+/* Timeline */
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:#e2e6ed}
+.tl-item{position:relative;margin-bottom:16px;padding:14px;background:#fff;border:1px solid #e2e6ed;border-radius:10px}
+.tl-item::before{content:'';position:absolute;left:-20px;top:18px;width:10px;height:10px;border-radius:50%;background:#1a73e8;border:2px solid #fff;box-shadow:0 0 0 2px #1a73e8}
+.tl-item.sys::before{background:#ff9800}
+.tl-date{font-size:10px;color:#8892a4;margin-bottom:4px}
+.tl-content{font-size:12px;color:#333}
+.tl-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.tl-tag{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.tl-tag-call{background:#e3f2fd;color:#1565c0}.tl-tag-sms{background:#f3e5f5;color:#7b1fa2}
+.tl-tag-connected{background:#e8f5e9;color:#2e7d32}.tl-tag-missed{background:#fce4ec;color:#c62828}
+.tl-tag-refused{background:#fff3e0;color:#e65100}
+
+/* Route viz */
+.route{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:12px;background:#f8f9fb;border-radius:10px;margin:8px 0}
+.route-stop{padding:6px 12px;background:#fff;border:1px solid #e2e6ed;border-radius:8px;font-size:11px;font-weight:600;text-align:center}
+.route-stop.home{background:#1a2332;color:#fff;border-color:#1a2332}
+.route-arrow{color:#1a73e8;font-weight:700;font-size:14px}
+
+/* Overlay */
+.overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:100;justify-content:center;align-items:center}
+.overlay.show{display:flex}
+.popup{background:#fff;border-radius:14px;padding:24px;max-width:500px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,.15)}
+.popup h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.popup-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+
+/* Login popup */
+.login-popup{max-width:440px}
+.login-popup .alert{background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:14px;margin:12px 0;font-size:12px;color:#e65100}
+.login-miss{font-size:28px;font-weight:800;color:#e53935;text-align:center;margin:8px 0}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:14px;text-align:center}
+.stat-val{font-size:22px;font-weight:800;color:#1a2332}
+.stat-label{font-size:10px;color:#8892a4;margin-top:2px}
+
+/* Approval flow */
+.approval-flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.af-step{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;text-align:center;min-width:80px}
+.af-arr{font-size:16px;color:#8892a4}
+
+/* Toast */
+.toast{display:none;position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1a2332;color:#fff;padding:14px 28px;border-radius:10px;font-size:14px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:200}
+.toast.show{display:block;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* View toggle */
+.view-mode{display:flex;gap:4px;margin-bottom:12px}
+.vm-btn{padding:6px 14px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:#5f6b7a}
+.vm-btn.active{background:#1a73e8;color:#fff;border-color:#1a73e8}
+
+/* File upload area */
+.file-area{border:2px dashed #e2e6ed;border-radius:10px;padding:16px;text-align:center;color:#8892a4;font-size:12px;cursor:pointer}
+.file-area:hover{border-color:#1a73e8;color:#1a73e8;background:#f0f7ff}
+
+/* Address row */
+.addr-row{display:flex;gap:8px}.addr-row input{flex:1}
+
+.radio-group{display:flex;gap:12px;padding:6px 0}
+.radio-item{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px}
+.radio-item input{accent-color:#1a73e8;width:16px;height:16px}
+
+/* Responsive */
+@media(max-width:768px){.sb{display:none}.stats{grid-template-columns:1fr 1fr}.fg-row,.fg-row3{grid-template-columns:1fr}}
+#koreaMap,#sgMap{cursor:pointer}
+.sg-btn{padding:10px 16px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-weight:600;color:#1a2332;cursor:pointer;transition:all .15s;min-width:80px;text-align:center}
+.sg-btn:hover{background:#e3f2fd;border-color:#90caf9;color:#1565c0}
+.dong-btn{padding:8px 12px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;color:#5f6b7a;cursor:pointer;transition:all .15s}
+.dong-btn:hover{background:#e8f5e9;border-color:#81c784;color:#2e7d32}
+/* API 수집 설정 */
+.api-item{padding:14px 16px;border:1px solid #eef0f4;border-radius:10px;margin-bottom:10px;transition:all .15s;background:#fafbfc}
+.api-item:hover{border-color:#c8d6e5;background:#fff}
+.api-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.api-check{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#1a2332}
+.api-check input[type="checkbox"]{width:18px;height:18px;accent-color:#1a73e8;cursor:pointer}
+.api-check strong{color:#1a73e8;font-family:monospace;font-size:12px;background:#e8f0fe;padding:2px 6px;border-radius:4px}
+.api-count{font-size:11px;color:#8892a4;font-weight:600;background:#f0f2f5;padding:3px 8px;border-radius:4px}
+.api-fields{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.api-tag{font-size:10px;padding:2px 7px;background:#e8f5e9;color:#2e7d32;border-radius:3px;font-family:monospace;cursor:default;border:1px solid #c8e6c9}
+.api-tag:hover{background:#c8e6c9}
+.api-item:has(input:not(:checked)){opacity:.5;background:#f5f5f5}
+.api-item:has(input:not(:checked)) .api-tag{background:#f0f0f0;color:#aaa;border-color:#e0e0e0}
+.collect-row{display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid #f0f2f5;font-size:12px}
+.collect-row:last-child{border-bottom:none}
+.collect-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.collect-dot.ok{background:#4caf50}
+.collect-dot.err{background:#f44336}
+.collect-dot.run{background:#ff9800;animation:pulse 1s infinite}
+.sido-label{background:rgba(255,255,255,.88)!important;border:none!important;box-shadow:0 1px 4px rgba(0,0,0,.18)!important;font-size:12px!important;font-weight:700!important;color:#1a2332!important;padding:3px 8px!important;border-radius:4px!important}
+.sido-label::before{display:none!important}
+.sg-label{background:rgba(255,255,255,.82)!important;border:none!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important;font-size:10px!important;font-weight:600!important;color:#37474f!important;padding:2px 6px!important;border-radius:3px!important}
+.sg-label::before{display:none!important}
+.leaflet-container{font-family:inherit!important}
+</style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=1d5b2febea0c84335256f6a15d9e7c05&libraries=services"></script>
+</head>
+<body>
+
+<!-- Company Dup Popup -->
+<div class="overlay" id="companyDup">
+<div class="popup">
+  <h3>🔍 동일 고객사가 이미 등록되어 있습니다</h3>
+  <div style="background:#f8f9fb;border:1px solid #e2e6ed;border-radius:10px;padding:14px;margin:8px 0">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span class="tl tl-orange"></span>
+      <strong style="font-size:14px">풀무원식품(주)</strong>
+      <span class="tag tag-a">A등급</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:#5f6b7a">
+      <div>사업자번호: 234-56-78901</div>
+      <div>대표자: 원풀무</div>
+      <div>담당 영업: <strong>박주임</strong></div>
+      <div>최근거래: 2026-01-28</div>
+    </div>
+  </div>
+  <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:10px;font-size:12px;color:#e65100">
+    ⚠️ 이미 <strong>박주임</strong>이 담당 중입니다. 담당자를 추가하면 박주임에게 알림이 발송됩니다.
+  </div>
+  <div class="popup-actions">
+    <button class="btn btn-secondary" onclick="closePopup('companyDup')">취소</button>
+    <button class="btn btn-primary" onclick="closePopup('companyDup');toast('📩 박주임에게 알림 발송 완료. 담당자를 추가합니다.')">기존 업체에 담당자 추가</button>
+  </div>
+</div>
+</div>
+
+<!-- Contact Dup Popup -->
+<div class="overlay" id="contactDup">
+<div class="popup">
+  <h3>🔍 동일 담당자가 발견되었습니다</h3>
+  <p style="font-size:12px;color:#5f6b7a;margin-bottom:10px">이름과 전화번호로 조회한 결과입니다.</p>
+  <div style="background:#f8f9fb;border:1px solid #e2e6ed;border-radius:10px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>기존 등록 정보</strong>
+      <span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">담당: 박주임</span>
+    </div>
+    <div style="font-size:12px;color:#333;line-height:1.8">
+      이름: <strong>이규성</strong><br>
+      전화: <strong style="letter-spacing:1px">010-****-5678</strong><br>
+      이메일: <strong style="letter-spacing:1px">lee***@pulmu.com</strong><br>
+      소속: 풀무원식품(주)
+    </div>
+  </div>
+  <p style="font-size:12px;color:#5f6b7a;margin:10px 0">이 사람과 <strong>동일 인물</strong>입니까?</p>
+  <div class="popup-actions">
+    <button class="btn btn-secondary" onclick="closePopup('contactDup')">취소</button>
+    <button class="btn btn-success" onclick="closePopup('contactDup');toast('✅ 신규 담당자로 등록합니다.')">아니오, 신규 등록</button>
+    <button class="btn btn-primary" onclick="closePopup('contactDup');toast('📩 기존 담당 박주임에게 알림 발송 완료')">예, 동일 인물</button>
+  </div>
+</div>
+</div>
+
+<!-- Sidebar -->
+<div class="sb">
+  <div class="sb-hd"><div class="sb-logo" style="cursor:pointer" onclick="location.href='index.html'">🧪 BioFoodLab</div></div>
+  <div class="sb-menu">
+    <div class="sb-item" onclick="location.href='index.html'" style="color:#4fc3f7;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:10px"><span>🏠</span> 홈 (대시보드)</div>
+    <div class="sb-cat">영업 관리</div>
+    <div class="sb-item active" onclick="showPage('customerList')" id="nav-customerList"><span>🏢</span> 고객사 관리 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-item" onclick="showPage('bizSearch')" id="nav-bizSearch"><span>🔍</span> 업체조회 <span class="badge badge-new">신규</span></div>
+    <div class="sb-item" onclick="showPage('daily')" id="nav-daily"><span>📝</span> 업무일지 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-item" onclick="showPage('vehicle')" id="nav-vehicle"><span>🚗</span> 차량일지 <span class="badge badge-new">신규</span></div>
+    <div class="sb-item" onclick="showPage('collection')" id="nav-collection"><span>📞</span> 미수금 활동 내역 <span class="badge badge-new">신규</span></div>
+    <div class="sb-item" onclick="showPage('estimate')" id="nav-estimate"><span>📋</span> 견적서 관리 <span class="badge badge-later">추후</span></div>
+    <div class="sb-item" onclick="showPage('trade')" id="nav-trade"><span>📄</span> 거래명세표 관리 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-item" onclick="showPage('urgent')" id="nav-urgent"><span>🚨</span> 긴급 협조 요청 <span class="badge badge-later">추후</span></div>
+    <div class="sb-item" onclick="showPage('arManage')" id="nav-arManage"><span>💰</span> 미수금 관리 <span class="badge badge-later">추후</span></div>
+    <div class="sb-item" onclick="showPage('invoice')" id="nav-invoice"><span>🧾</span> 계산서 발행 승인 <span class="badge badge-ok">확정</span></div>
+    <div class="sb-cat" style="margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px">관리자</div>
+    <div class="sb-item" onclick="showPage('apiSettings')" id="nav-apiSettings"><span>⚙️</span> API 수집 설정 <span class="badge badge-new">신규</span></div>
+  </div>
+  <div class="sb-ft">
+    <div class="sb-avatar">👤</div>
+    <div><div class="sb-name">이주임</div><div class="sb-role">영업부</div></div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">영업 관리</span>
+    <span class="topbar-sep">/</span>
+    <span class="topbar-sub" id="topSub">고객사 관리</span>
+    <div class="topbar-right">
+      <div class="topbar-bell" onclick="toast('🔔 알림 3건: 입금 약속일 도래 1건, 신호등 변경 1건, 미작성 경고 1건')">🔔<span class="dot"></span></div>
+    </div>
+  </div>
+  <div class="content" id="contentArea">
+
+    <!-- ===== 고객사 관리 - 목록 ===== -->
+    <div class="page" id="page-customerList">
+      <div class="stats">
+        <div class="stat"><div class="stat-val">47</div><div class="stat-label">전체 거래처</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32">38</div><div class="stat-label">활동 중</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e65100">6</div><div class="stat-label">미수금 업체</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e53935">2</div><div class="stat-label">위험 (주황+빨강)</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <h3>고객사 목록</h3>
+          <div class="right">
+            <input type="text" placeholder="🔍 회사명, 사업자번호 검색..." style="padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;width:220px">
+            <button class="btn btn-primary" onclick="showPage('customerReg')">+ 신규 등록</button>
+          </div>
+        </div>
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>신호등</th><th>등급</th><th>회사명</th><th>대표자</th><th>사업자번호</th><th>담당자</th><th>영업담당</th><th>계약상태</th><th>최근거래</th></tr></thead>
+            <tbody>
+              <tr><td class="center"><span class="tl tl-blue"></span></td><td><span class="tag tag-vip">VIP</span></td><td><strong>CJ제일제당(주)</strong></td><td>김CJ</td><td>123-45-67890</td><td>김부장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-10</td></tr>
+              <tr><td class="center"><span class="tl tl-green"></span></td><td><span class="tag tag-a">A</span></td><td><strong>(주)농심</strong></td><td>신농심</td><td>345-67-89012</td><td>이과장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-08</td></tr>
+              <tr><td class="center"><span class="tl tl-yellow"></span></td><td><span class="tag tag-b">B</span></td><td><strong>(주)오뚜기</strong></td><td>함오뚜기</td><td>456-78-90123</td><td>박대리</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2025-12-20</td></tr>
+              <tr style="background:#fff8e1"><td class="center"><span class="tl tl-orange"></span></td><td><span class="tag tag-a">A</span></td><td><strong>풀무원식품(주)</strong></td><td>원풀무</td><td>234-56-78901</td><td>이규성</td><td>박주임</td><td><span class="tag tag-active">활동</span></td><td>2025-12-05</td></tr>
+              <tr style="background:#fce4ec"><td class="center"><span class="tl tl-red"></span></td><td><span class="tag tag-c">C</span></td><td><strong>(주)삼양식품</strong></td><td>전삼양</td><td>567-89-01234</td><td>최팀장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2025-10-15</td></tr>
+              <tr><td class="center"><span class="tl tl-blue"></span></td><td><span class="tag tag-b">B</span></td><td><strong>동원F&B(주)</strong></td><td>김동원</td><td>678-90-12345</td><td>정과장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-12</td></tr>
+              <tr><td class="center"><span class="tl tl-green"></span></td><td><span class="tag tag-a">A</span></td><td><strong>대상(주)</strong></td><td>임대상</td><td>789-01-23456</td><td>한대리</td><td>이주임</td><td><span class="tag tag-dormant">휴면</span></td><td>2025-08-20</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 업체조회 (지도 드릴다운 + 카카오 + 식약처) ===== -->
+    <div class="page" id="page-bizSearch" style="display:none">
+
+      <!-- 상단: 현재 선택 경로 (브레드크럼) -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-bd" style="display:flex;align-items:center;gap:8px;padding:12px 20px;flex-wrap:wrap">
+          <span style="font-size:15px">🗺️</span>
+          <b style="font-size:14px;color:#1a2332">업체조회</b>
+          <span style="color:#c8d6e5">|</span>
+          <div id="bizBreadcrumb" style="display:flex;align-items:center;gap:4px;font-size:13px">
+            <span style="color:#1a73e8;font-weight:600;cursor:pointer" onclick="bizGoStep(0)">전국</span>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <input id="bizQuickSearch" placeholder="업체명 빠른검색..." style="padding:6px 12px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:180px" onkeydown="if(event.key==='Enter')doBizQuickSearch()">
+            <button class="btn btn-primary btn-sm" onclick="doBizQuickSearch()" style="padding:6px 12px">🔍</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 0: 전국 시도 지도 (Leaflet + VWORLD) -->
+      <div id="bizStep0">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <!-- 지도 영역 -->
+          <div class="card" style="flex:1;min-width:480px">
+            <div class="card-hd"><h3>🗺️ 시/도 선택</h3><div class="right" style="font-size:11px;color:#8892a4">지도를 클릭하여 선택</div></div>
+            <div class="card-bd" style="padding:0">
+              <div id="fssLoadStatus" style="display:none;padding:8px 16px;background:#fff3e0;border-bottom:1px solid #ffe0b2;font-size:12px;color:#e65100">
+                <span id="fssLoadText">⏳ 식약처 데이터 로딩 중...</span>
+                <div style="margin-top:4px;height:4px;background:#ffe0b2;border-radius:2px;overflow:hidden"><div id="fssLoadBar" style="height:100%;background:#fb8c00;width:0%;transition:width .3s"></div></div>
+              </div>
+              <div id="koreaMap" style="width:100%;height:480px;border-radius:0 0 12px 12px"></div>
+            </div>
+          </div>
+          <!-- 우측 패널 -->
+          <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:12px">
+            <div class="card">
+              <div class="card-hd"><h3>📋 조회 방법</h3></div>
+              <div class="card-bd" style="font-size:12px;color:#5f6b7a;line-height:2">
+                <b>1단계</b> 시/도 선택 (지도 클릭)<br>
+                <b>2단계</b> 시/군/구 선택<br>
+                <b>3단계</b> 읍/면/동 선택<br>
+                <b>결과</b> 카카오맵 + 식약처 동시 조회<br>
+                <div style="margin-top:8px;padding:8px;background:#e3f2fd;border-radius:6px;font-size:11px;color:#1565c0">
+                  💡 우측 상단 빠른검색으로 업체명 직접 검색도 가능합니다
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><h3>🔑 API 키 설정</h3></div>
+              <div class="card-bd" style="font-size:11px">
+                <label style="font-weight:600;color:#5f6b7a;margin-bottom:4px;display:block">식약처 (식품안전나라)</label>
+                <input id="fssApiKey" placeholder="식품안전나라 인증키" style="font-size:11px;font-family:monospace;padding:7px;margin-bottom:8px" value="e5a1d9f07d6c4424a757">
+                <label style="font-weight:600;color:#5f6b7a;margin-bottom:4px;display:block">VWORLD (국토지리정보)</label>
+                <input id="vworldApiKey" placeholder="VWORLD API 키 (선택)" style="font-size:11px;font-family:monospace;padding:7px;margin-bottom:4px" onchange="applyMapTile()">
+                <div style="font-size:10px;color:#8892a4;margin-bottom:6px">미입력 시 OpenStreetMap 사용</div>
+                <div style="display:flex;gap:6px">
+                  <a href="https://www.foodsafetykorea.go.kr/api/mypage/myPageUser.do" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;font-size:10px;text-decoration:none;text-align:center">식약처 키관리</a>
+                  <a href="https://www.vworld.kr/dev/v4dv_apikey_s001.do" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;font-size:10px;text-decoration:none;text-align:center">VWORLD 발급</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 1: 시군구 선택 (지도 + 버튼) -->
+      <div id="bizStep1" style="display:none">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div class="card" style="flex:1;min-width:400px">
+            <div class="card-hd">
+              <h3 id="step1Title">🏙️ 시/군/구 선택</h3>
+              <div class="right"><button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">← 시/도 다시 선택</button></div>
+            </div>
+            <div class="card-bd" style="padding:0">
+              <div id="sgMap" style="width:100%;height:420px"></div>
+            </div>
+          </div>
+          <div class="card" style="width:260px;flex-shrink:0">
+            <div class="card-hd"><h3>📋 목록에서 선택</h3></div>
+            <div class="card-bd" style="max-height:420px;overflow-y:auto">
+              <div id="sigunguGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: 읍면동 선택 (지도 + 버튼) -->
+      <div id="bizStep2" style="display:none">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div class="card" style="flex:1;min-width:400px">
+            <div class="card-hd">
+              <h3 id="step2Title">🏘️ 읍/면/동 선택</h3>
+              <div class="right">
+                <button class="btn btn-secondary btn-sm" onclick="bizGoStep(1)" style="margin-right:6px">← 시/군/구</button>
+                <button class="btn btn-primary btn-sm" onclick="doRegionSearch()">🔍 시/군/구 전체 검색</button>
+              </div>
+            </div>
+            <div class="card-bd" style="padding:0">
+              <div id="dongMap" style="width:100%;height:420px"></div>
+            </div>
+          </div>
+          <div class="card" style="width:240px;flex-shrink:0">
+            <div class="card-hd"><h3>📋 목록에서 선택</h3></div>
+            <div class="card-bd" style="max-height:420px;overflow-y:auto">
+              <div id="dongGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+              <div id="dongLoading" style="text-align:center;padding:20px;color:#8892a4;display:none">⏳ 읍/면/동 로딩 중...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3: 식약처 결과 목록 -->
+      <div id="bizStep3" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-hd">
+            <h3 id="fssResultTitle">🏭 식약처 인허가 업체 목록</h3>
+            <div class="right">
+              <span id="bizFssCount" style="font-size:22px;font-weight:700;color:#2e7d32;margin-right:12px">0</span>
+              <span style="font-size:12px;color:#8892a4;margin-right:16px">건</span>
+              <button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">🗺️ 새로 검색</button>
+            </div>
+          </div>
+          <div class="card-bd" style="padding:0;overflow-x:auto">
+            <table class="tbl">
+              <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>관할관청</th><th></th></tr></thead>
+              <tbody id="fssTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ===== 고객사 등록 ===== -->
+    <div class="page" id="page-customerReg" style="display:none">
+      <div style="margin-bottom:16px"><button class="btn btn-secondary btn-sm" onclick="showPage('customerList')">← 목록으로</button></div>
+      <div class="card"><div class="card-bd" style="max-width:860px">
+        <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
+        <div class="fg-row">
+          <div class="fg"><label>법인 여부 <span class="req">*</span></label><div class="radio-group"><label class="radio-item"><input type="radio" name="corp" checked> 법인</label><label class="radio-item"><input type="radio" name="corp"> 개인</label></div></div>
+          <div class="fg"><label>거래처 등급</label><select><option>등급 선택</option><option>VIP</option><option>A</option><option>B</option><option>C</option></select></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>회사명 <span class="req">*</span></label><div class="combo"><input id="regCompany" placeholder="예: (주)바이오푸드랩"><button class="btn btn-check btn-sm" onclick="demoCompanyDup()">중복 확인</button></div><div class="check-result" id="compChk"></div></div>
+          <div class="fg"><label>대표자명 <span class="req">*</span></label><input placeholder="대표자 이름"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>사업자번호 <span class="req">*</span></label><div class="combo"><input placeholder="000-00-00000" maxlength="12" oninput="fmtBiz(this)"><button class="btn btn-check btn-sm" onclick="toast('✅ 중복 없음')">중복 확인</button></div></div>
+          <div class="fg"><label>법인번호 <span class="req">*</span></label><input placeholder="000000-0000000" maxlength="14"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>업태 <span class="req">*</span></label><input placeholder="예: 제조업"></div>
+          <div class="fg"><label>종목 <span class="req">*</span></label><input placeholder="예: 식품"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>계약 상태</label><select><option selected>활동</option><option>휴면</option><option>해지</option></select></div>
+          <div class="fg"><label>신호등</label><div style="display:flex;align-items:center;gap:6px;padding:8px 0"><span class="tl tl-blue"></span><span style="font-size:11px;color:#5f6b7a">파랑 (신규 등록 시 기본값)</span></div></div>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">2</span> 주소</div>
+        <div class="fg"><label>주소 <span class="req">*</span></label><div class="addr-row"><input placeholder="우편번호" style="max-width:120px" readonly><button class="btn btn-secondary btn-sm" onclick="toast('🔍 카카오 우편번호 API 연동 예정')">우편번호 찾기</button></div></div>
+        <div class="fg"><input placeholder="기본주소 (자동입력)" readonly></div>
+        <div class="fg"><input placeholder="상세주소 입력"></div>
+
+        <div class="sec-title"><span class="sec-num">3</span> 인허가 정보 <span style="margin-left:auto;font-size:11px;color:#8892a4;font-weight:400">여러 개 등록 가능</span></div>
+        <div id="licenseArea">
+          <div class="sub-card">
+            <div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">1</span> 인허가</div></div>
+            <div class="fg-row">
+              <div class="fg"><label>분야 <span class="req">*</span></label><select><option>선택</option><option>식품</option><option>축산</option></select></div>
+              <div class="fg"><label>영업의 형태 <span class="req">*</span></label><div class="combo"><select><option>선택</option><option>식품제조가공업</option><option>즉석판매제조가공업</option><option>식품소분업</option><option>유통전문판매업</option><option>축산물가공업</option><option>식육포장처리업</option><option value="etc">✏️ 직접 입력</option></select></div></div>
+            </div>
+            <div class="fg-row">
+              <div class="fg"><label>대표자 <span class="req">*</span></label><input placeholder="인허가 대표자"></div>
+              <div class="fg"><label>인허가번호 <span class="req">*</span></label><input placeholder="인허가번호"></div>
+            </div>
+            <div class="fg-row">
+              <div class="fg"><label>영업소명칭 <span class="req">*</span></label><input placeholder="영업소 명칭"></div>
+              <div class="fg"><label>소재지 <span class="req">*</span></label><input placeholder="소재지"></div>
+            </div>
+            <div class="fg"><label>인허가 문서 첨부</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div class="file-area" style="flex:1;padding:10px" onclick="toast('📁 파일 선택 (PDF, JPG, PNG)')">📁 클릭하여 파일 선택 또는 드래그</div>
+                <button class="btn btn-secondary btn-sm" disabled style="opacity:.5">🤖 OCR 인식<br><span style="font-size:9px">(추후 구현)</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" onclick="toast('+ 인허가 정보 추가됨')">+ 인허가 정보 추가</button>
+
+        <div class="sec-title"><span class="sec-num">4</span> 고객사 담당자 <span style="margin-left:auto;font-size:11px;color:#8892a4;font-weight:400">여러 명 등록 가능</span></div>
+        <div id="contactArea">
+          <div class="sub-card">
+            <div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">1</span> 담당자</div></div>
+            <div class="fg-row3">
+              <div class="fg"><label>이름 <span class="req">*</span></label><input id="regCName" placeholder="담당자 이름"></div>
+              <div class="fg"><label>전화번호 <span class="req">*</span></label><input placeholder="010-0000-0000" oninput="fmtPhone(this)"></div>
+              <div class="fg"><label>이메일</label><input type="email" placeholder="email@example.com"></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+              <button class="btn btn-check btn-sm" onclick="demoContactDup()">🔍 중복 확인</button>
+              <div class="check-result" id="cntChk"></div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:#8892a4">
+                자사 담당: <select style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px"><option>선택</option><option>박주임</option><option selected>이주임</option><option>김사원</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" onclick="toast('+ 담당자 추가됨')">+ 담당자 추가</button>
+
+        <div class="sec-title"><span class="sec-num">5</span> 세금계산서 담당자 <button class="btn btn-check btn-sm" style="margin-left:auto" onclick="toast('📋 1번 담당자 정보 복사 완료')">📋 1번 담당자 복사</button></div>
+        <div class="fg-row3">
+          <div class="fg"><label>이름 <span class="req">*</span></label><input placeholder="담당자 이름"></div>
+          <div class="fg"><label>전화번호 <span class="req">*</span></label><input placeholder="010-0000-0000"></div>
+          <div class="fg"><label>이메일 <span class="req">*</span></label><input type="email" placeholder="세금계산서 수신 이메일"></div>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">6</span> 메모 / 비고</div>
+        <div class="fg"><textarea placeholder="특이사항, 계약 조건, 참고사항 등..."></textarea></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+          <button class="btn btn-secondary" onclick="showPage('customerList')">취소</button>
+          <button class="btn btn-primary" onclick="toast('✅ 고객사가 등록되었습니다!');setTimeout(()=>showPage('customerList'),1500)">✅ 고객사 등록</button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ===== 업무일지 - 목록 ===== -->
+    <div class="page" id="page-daily" style="display:none">
+      <!-- 요약 통계 -->
+      <div class="stats">
+        <div class="stat"><div class="stat-val" style="color:#1565c0">12</div><div class="stat-label">이번 주 작성</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32">8</div><div class="stat-label">방문 건수</div></div>
+        <div class="stat"><div class="stat-val" style="color:#1a2332">9,680,000</div><div class="stat-label">이번 주 매출합계</div></div>
+        <div class="stat"><div class="stat-val" style="color:#7b1fa2">2</div><div class="stat-label">신규영업 활동</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-hd">
+          <h3>📝 업무일지</h3>
+          <div class="right">
+            <span style="font-size:11px;color:#8892a4;margin-right:8px">영업부만 작성 · 부서원 조회 가능</span>
+            <button class="btn btn-primary" onclick="showPage('dailyWrite')">+ 업무일지 작성</button>
+          </div>
+        </div>
+        <!-- 필터 영역 -->
+        <div style="padding:14px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fafbfc">
+          <div class="fg" style="margin:0;flex-shrink:0">
+            <input type="date" value="2026-02-10" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          </div>
+          <span style="color:#c8d6e5">~</span>
+          <div class="fg" style="margin:0;flex-shrink:0">
+            <input type="date" value="2026-02-13" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          </div>
+          <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#fff;cursor:pointer">
+            <option>전체 작성자</option>
+            <option selected>이주임</option>
+            <option>김영업</option>
+            <option>박철수</option>
+          </select>
+          <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#fff;cursor:pointer">
+            <option>전체 시료수거</option>
+            <option>방문</option>
+            <option>택배·퀵</option>
+            <option>내방</option>
+          </select>
+          <input placeholder="업체명 검색..." style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:160px">
+          <button class="btn btn-secondary btn-sm" onclick="toast('🔍 검색 완료')">검색</button>
+        </div>
+        <!-- 테이블 -->
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th style="width:40px;text-align:center">📎</th><th>날짜</th><th>작성자</th><th>업체명</th><th>시료수거</th><th style="text-align:right">매출(VAT포함)</th><th>특이사항</th><th>신규영업</th><th>익일계획</th><th style="width:60px"></th></tr></thead>
+            <tbody>
+              <tr onclick="showPage('dailyDetail')" style="cursor:pointer">
+                <td class="center">📄</td>
+                <td><b>2026-02-13</b></td><td>이주임</td><td><b>CJ제일제당(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">2,200,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">신제품 출시 관련 추가 검사 요청</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">농심 택배 접수 예정</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px" title="상세보기">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td><b>2026-02-13</b></td><td>이주임</td><td><b>(주)농심</b></td>
+                <td><span class="tag" style="background:#e8f5e9;color:#2e7d32">택배·퀵</span></td>
+                <td style="text-align:right;font-weight:600">880,000</td>
+                <td>-</td><td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">-</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-12</td><td>이주임</td><td><b>동원F&B(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">1,500,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">경쟁사 견적 비교 요청 — A사 가격 비교 자료 요청</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">CJ 방문 예정</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-12</td><td>이주임</td><td><b>(신규) 하림그룹</b></td>
+                <td><span class="tag" style="background:#f3e5f5;color:#7b1fa2">내방</span></td>
+                <td style="text-align:right;color:#8892a4">-</td>
+                <td>-</td>
+                <td style="color:#7b1fa2;font-weight:600">식품안전팀 미팅</td>
+                <td style="font-size:11px;color:#5f6b7a">견적서 발송</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-11</td><td>이주임</td><td><b>CJ제일제당(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">3,100,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">반기 계약 갱신 논의</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">동원F&B 방문</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-11</td><td>김영업</td><td><b>풀무원식품(주)</b></td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗</span></td>
+                <td style="text-align:right;font-weight:600">1,800,000</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">미수금 건 수금 활동 병행</td>
+                <td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">서울유통 수금 전화</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+              <tr style="cursor:pointer" onclick="showPage('dailyDetail')">
+                <td class="center">📄</td>
+                <td>2026-02-10</td><td>이주임</td><td><b>오뚜기(주)</b></td>
+                <td><span class="tag" style="background:#e8f5e9;color:#2e7d32">택배·퀵</span></td>
+                <td style="text-align:right;font-weight:600">650,000</td>
+                <td>-</td><td>-</td>
+                <td style="font-size:11px;color:#5f6b7a">CJ 계약 갱신 논의</td>
+                <td class="center"><span style="cursor:pointer;font-size:14px">👁️</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 페이지네이션 -->
+        <div style="padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eef0f4">
+          <span style="font-size:11px;color:#8892a4">총 7건 (1/1 페이지)</span>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-secondary btn-sm" disabled>← 이전</button>
+            <button class="btn btn-sm" style="background:#1a73e8;color:#fff;border:none;border-radius:6px;min-width:28px">1</button>
+            <button class="btn btn-secondary btn-sm" disabled>다음 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 업무일지 - 작성 폼 ===== -->
+    <div class="page" id="page-dailyWrite" style="display:none">
+      <div style="margin-bottom:16px"><button class="btn btn-secondary btn-sm" onclick="showPage('daily')">← 목록으로</button></div>
+      <div class="card"><div class="card-bd" style="max-width:860px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3 style="font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px">📝 업무일지 작성</h3>
+          <span style="font-size:11px;color:#8892a4">작성자: 이주임 (영업부) · 2026-02-13</span>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
+        <div class="fg-row">
+          <div class="fg"><label>날짜 <span class="req">*</span></label><input type="date" value="2026-02-13"></div>
+          <div class="fg"><label>업체명 <span class="req">*</span></label>
+            <div class="combo">
+              <select id="dailyCompany" onchange="dailyCompanyChange(this)">
+                <option>업체 선택...</option>
+                <option>CJ제일제당(주)</option>
+                <option>(주)농심</option>
+                <option>동원F&B(주)</option>
+                <option>풀무원식품(주)</option>
+                <option>오뚜기(주)</option>
+                <option value="_new">✏️ 신규 업체 직접 입력</option>
+              </select>
+            </div>
+            <input id="dailyCompanyNew" placeholder="신규 업체명 입력" style="display:none;margin-top:6px;padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;width:100%">
+          </div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>시료수거 방법 <span class="req">*</span></label>
+            <select id="dailySample" onchange="dailySampleChange(this)">
+              <option value="">선택...</option>
+              <option value="visit">방문</option>
+              <option value="delivery">택배·퀵</option>
+              <option value="walkin">내방</option>
+            </select>
+          </div>
+          <div class="fg"><label>매출 (VAT 포함)</label><input type="text" placeholder="숫자만 입력 (예: 2200000)" oninput="fmtMoney(this)"></div>
+        </div>
+
+        <!-- 방문 시 차량일지 연동 안내 -->
+        <div id="dailyVehicleNotice" style="display:none;background:#e3f2fd;border:1px solid #bbdefb;border-radius:10px;padding:14px;margin:8px 0 16px;font-size:12px;color:#1565c0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="font-size:16px">🚗</span>
+            <b>차량일지 자동 연동</b>
+            <span style="font-size:10px;background:#bbdefb;padding:2px 8px;border-radius:4px;margin-left:auto">카카오모빌리티 길찾기 API</span>
+          </div>
+
+          <div class="fg-row" style="margin-bottom:8px">
+            <div class="fg" style="margin:0"><label style="color:#1565c0">출발지 <span class="req">*</span></label>
+              <select id="vStartType" onchange="calcRoutePreview()" style="border-color:#90caf9">
+                <option value="office">🏢 회사 (기본)</option>
+                <option value="home">🏠 현지출근 (자택)</option>
+              </select>
+            </div>
+            <div class="fg" style="margin:0"><label style="color:#1565c0">방문지 (업체 주소 자동)</label>
+              <input id="vDestPreview" value="서울 중구 을지로 (CJ제일제당)" style="background:#e3f2fd;border-color:#90caf9" readonly>
+            </div>
+          </div>
+          <div class="fg-row" style="margin-bottom:8px">
+            <div class="fg" style="margin:0"><label style="color:#1565c0">도착지 <span class="req">*</span></label>
+              <select id="vEndType" onchange="calcRoutePreview()" style="border-color:#90caf9">
+                <option value="office">🏢 회사 (기본)</option>
+                <option value="home">🏠 자택 (퇴근)</option>
+              </select>
+            </div>
+            <div class="fg" style="margin:0"><label style="color:#1565c0">예상 주행거리</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input id="vDistPreview" type="number" value="42" style="border-color:#90caf9;width:100px;text-align:right;font-weight:700;font-size:15px">
+                <span style="font-weight:600">km</span>
+                <span style="font-size:10px;color:#1565c0;background:#bbdefb;padding:2px 6px;border-radius:4px" id="vDistLabel">API 자동계산</span>
+              </div>
+              <div class="hint" style="color:#1565c0;margin-top:4px">💡 자동 계산 후 수동 조정 가능 (퇴근 거리, 우회 등)</div>
+            </div>
+          </div>
+
+          <!-- 경유지 추가 -->
+          <div id="vWaypointArea"></div>
+          <button type="button" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px dashed #90caf9;border-radius:6px;background:transparent;color:#1565c0;font-size:11px;font-weight:600;cursor:pointer;margin-top:6px" onclick="addWaypoint()">+ 경유지 추가</button>
+        </div>
+
+        <div class="sec-title"><span class="sec-num">2</span> 업무 상세</div>
+        <div class="fg"><label>특이사항</label><textarea placeholder="방문 또는 접수 관련 특이사항을 작성하세요.&#10;예: 신제품 출시 관련 추가 검사 요청, 단가 협의 필요 등"></textarea></div>
+        <div class="fg"><label>경쟁사 동향</label><textarea placeholder="경쟁사 관련 정보가 있다면 작성하세요.&#10;예: A검사기관에서 5% 저렴한 단가 제시, B기관 신규 서비스 시작 등" style="min-height:50px"></textarea></div>
+        <div class="fg"><label>건의사항</label><textarea placeholder="회사에 건의할 사항이 있다면 작성하세요.&#10;예: 신규 검사 항목 도입 필요, 장비 추가 요청 등" style="min-height:50px"></textarea></div>
+
+        <div class="sec-title"><span class="sec-num">3</span> 영업 활동</div>
+        <div class="fg"><label>신규영업 활동</label><textarea placeholder="신규 영업 관련 활동이 있다면 작성하세요.&#10;예: 하림그룹 식품안전팀 미팅 — 제안서 전달, 견적서 발송 예정" style="min-height:50px"></textarea></div>
+        <div class="fg"><label>익일 계획 <span class="req">*</span></label><textarea placeholder="다음 영업일에 할 계획을 작성하세요.&#10;예: 농심 택배 접수 예정, CJ 계약 갱신 최종 확인"></textarea></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid #eef0f4">
+          <button class="btn btn-secondary" onclick="showPage('daily')">취소</button>
+          <button class="btn btn-secondary" onclick="toast('💾 임시저장 되었습니다')">임시저장</button>
+          <button class="btn btn-primary" onclick="dailySave()">✅ 저장</button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ===== 업무일지 - 상세 보기 ===== -->
+    <div class="page" id="page-dailyDetail" style="display:none">
+      <div style="margin-bottom:16px;display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="showPage('daily')">← 목록으로</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="toast('✏️ 수정 모드로 전환')">✏️ 수정</button>
+          <button class="btn btn-danger btn-sm" onclick="if(confirm('삭제하시겠습니까?'))toast('🗑️ 삭제되었습니다')">🗑️ 삭제</button>
+        </div>
+      </div>
+
+      <div class="card"><div class="card-bd">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #eef0f4">
+          <div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:4px">📝 업무일지 상세</h3>
+            <span style="font-size:12px;color:#8892a4">2026-02-13 (목) · 이주임 (영업부)</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:#8892a4;margin-bottom:4px">작성일시</div>
+            <div style="font-size:12px;color:#5f6b7a">2026-02-13 17:32</div>
+          </div>
+        </div>
+
+        <!-- 기본 정보 카드 -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">업체명</div>
+            <div style="font-size:14px;font-weight:700;color:#1a2332">CJ제일제당(주)</div>
+          </div>
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">시료수거</div>
+            <div><span class="tag" style="background:#e3f2fd;color:#1565c0">방문</span> <span style="font-size:10px;color:#1565c0">🚗 차량일지 연동</span></div>
+          </div>
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">매출 (VAT 포함)</div>
+            <div style="font-size:14px;font-weight:700;color:#2e7d32">₩ 2,200,000</div>
+          </div>
+          <div style="background:#f8f9fb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;color:#8892a4;margin-bottom:4px">방문 지역</div>
+            <div style="font-size:13px;font-weight:600;color:#1a2332">서울(중구)</div>
+          </div>
+        </div>
+
+        <!-- 상세 내용 -->
+        <div class="sec-title" style="margin-top:8px"><span class="sec-num">1</span> 특이사항</div>
+        <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#333">
+          신제품 출시 관련 추가 검사 요청. 2월 말까지 미생물 5종 + 영양성분 분석이 필요하며, 시료는 오늘 수거 완료. 담당자(식품안전팀 김과장)와 납기 2주 확인.
+        </div>
+
+        <div class="sec-title"><span class="sec-num">2</span> 경쟁사 동향</div>
+        <div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#e65100">
+          <b>⚠️ A검사기관</b> — 미생물 검사 단가를 약 8% 인하한 것으로 파악됨. CJ측에서 가격 비교 자료를 요청함. 대응 필요.
+        </div>
+
+        <div class="sec-title"><span class="sec-num">3</span> 건의사항</div>
+        <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#333">
+          경쟁사 단가 인하에 대응하기 위해 대량 계약 할인 정책 검토가 필요합니다. 반기 계약 갱신 시 활용 가능한 패키지 단가표를 재무부와 협의 요청드립니다.
+        </div>
+
+        <div class="sec-title"><span class="sec-num">4</span> 신규영업 활동</div>
+        <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;color:#8892a4;font-style:italic">
+          해당 없음
+        </div>
+
+        <div class="sec-title"><span class="sec-num">5</span> 익일 계획</div>
+        <div style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:#1565c0">
+          <b>📅 2026-02-14 (금)</b><br>
+          • 농심 택배 접수 예정 (시료 도착 확인 후 접수)<br>
+          • CJ 패키지 단가표 초안 작성 → 재무부 검토 요청
+        </div>
+
+        <!-- 연결 정보 -->
+        <div style="border-top:1px solid #eef0f4;padding-top:16px;margin-top:16px">
+          <div style="font-size:12px;font-weight:700;color:#1a2332;margin-bottom:10px">🔗 연결된 정보</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="showPage('vehicle')">
+              🚗 <b>차량일지</b> — 서울(중구) 왕복 42km
+              <span style="color:#1565c0;font-size:10px">보기 →</span>
+            </div>
+            <div style="background:#f8f9fb;border:1px solid #e2e6ed;border-radius:8px;padding:10px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="showPage('customerList')">
+              🏢 <b>CJ제일제당(주)</b> — 고객사 정보
+              <span style="color:#5f6b7a;font-size:10px">보기 →</span>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ===== 차량일지 ===== -->
+    <div class="page" id="page-vehicle" style="display:none">
+      <!-- 설정 카드 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd">
+          <h3>⚙️ 차량일지 설정</h3>
+          <div class="right"><button class="btn btn-sm btn-secondary" onclick="toast('✅ 설정이 저장되었습니다')">설정 저장</button></div>
+        </div>
+        <div class="card-bd">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+            <div class="fg" style="margin:0">
+              <label>🏢 회사 주소 (기본 출발지/도착지)</label>
+              <input value="경기도 화성시 동탄대로 123 바이오푸드랩" style="background:#f8f9fb;font-size:12px" readonly>
+              <div class="hint">관리자 > 시스템 설정에서 변경</div>
+            </div>
+            <div class="fg" style="margin:0">
+              <label>🏠 자택 주소 (현지출근/퇴근용)</label>
+              <input id="vHomeAddr" placeholder="자택 주소를 입력하세요" style="font-size:12px" value="서울 강남구 역삼동 123">
+              <div class="hint">개인 설정 · 거리 계산에 사용</div>
+            </div>
+            <div class="fg" style="margin:0">
+              <label>🚗 차량 번호</label>
+              <input value="12가 3456" style="font-size:12px">
+              <div class="hint">기본 차량 · 업무일지 연동 시 자동 입력</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;padding:8px 12px;background:#fff3e0;border-radius:8px;font-size:11px;color:#e65100;display:flex;align-items:center;gap:6px">
+            <span>📍</span> 주행거리는 <b>카카오모빌리티 길찾기 API</b>로 자동 계산됩니다 (무료 일 10,000건). 자동 계산 후 수동 조정도 가능합니다.
+          </div>
+        </div>
+      </div>
+
+      <!-- 목록 -->
+      <div class="card">
+        <div class="card-hd">
+          <h3>🚗 차량일지</h3>
+          <div class="right">
+            <span style="font-size:11px;color:#1565c0;background:#e3f2fd;padding:4px 10px;border-radius:6px">🔗 업무일지 방문 기록에서 자동 생성</span>
+          </div>
+        </div>
+        <!-- 필터 -->
+        <div style="padding:12px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fafbfc">
+          <input type="date" value="2026-02-10" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          <span style="color:#c8d6e5">~</span>
+          <input type="date" value="2026-02-13" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+          <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#fff">
+            <option>전체 운전자</option><option selected>이주임</option><option>김영업</option>
+          </select>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px">
+            <span style="color:#5f6b7a">합계:</span>
+            <span style="font-weight:700;color:#1a2332">1,002 km</span>
+            <span style="color:#8892a4">|</span>
+            <span style="color:#e65100;font-weight:600">주유비 165,000</span>
+            <span style="color:#8892a4">|</span>
+            <span style="color:#1565c0;font-weight:600">통행료 49,600</span>
+          </div>
+        </div>
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>날짜</th><th>운전자</th><th>차량</th>
+                <th>출발지</th><th>경로</th><th>도착지</th>
+                <th style="text-align:right">주행(km)</th>
+                <th style="text-align:center">조정</th>
+                <th style="text-align:right">주유비</th><th style="text-align:right">통행료</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- 2/13 회사→중구→회사 -->
+              <tr>
+                <td><b>2026-02-13</b></td><td>이주임</td><td>12가 3456</td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td>
+                  <div class="route">
+                    <div class="route-stop">서울(중구)</div>
+                  </div>
+                </td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td style="text-align:right;font-weight:700">42</td>
+                <td style="text-align:center"><span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 6px;border-radius:4px">API</span></td>
+                <td style="text-align:right">-</td>
+                <td style="text-align:right">4,800</td>
+                <td class="center"><span style="cursor:pointer;font-size:12px" onclick="toast('✏️ 수정 모드')">✏️</span></td>
+              </tr>
+              <!-- 2/12 회사→강남→양천→회사 -->
+              <tr>
+                <td><b>2026-02-12</b></td><td>이주임</td><td>12가 3456</td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td>
+                  <div class="route">
+                    <div class="route-stop">서울(강남구)</div>
+                    <span class="route-arrow">→</span>
+                    <div class="route-stop">서울(양천구)</div>
+                  </div>
+                </td>
+                <td><span class="tag" style="background:#e3f2fd;color:#1565c0">🏢 회사</span></td>
+                <td style="text-align:right;font-weight:700">68</td>
+                <td style="text-align:center"><span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 6px;border-radius:4px">API</span></td>
+                <td style="text-align:right">45,000</td>
+                <td style="text-align:right">6,400</td>
+                <td class="center"><span style="cursor:pointer;font-size:12px" onclick="toast('✏️ 수정 모드')">✏️</span></td>
+              </tr>
+              <!-- 2/11 현지출근→중구→인천→부산→자택 (수동 조정 예시) -->
+              <tr style="background:#fffde7">
+                <td><b>2026-02-11</b></td><td>이주임</td><td>12가 3456</td>
+                <td><span class="tag" style="background:#f3e5f5;color:#7b1fa2">🏠 현지출근</span></td>
+                <td>
+                  <div class="route">
+                    <div class="route-stop">서울(중구)</div>
+                    <span class="route-arrow">→</span>
+                    <div class="route-stop">인천(연수구)</div>
+                    <span class="route-arrow">→</span>
+                    <div class="route-stop">부산(해운대구)</div>
+                  </div>
+                </td>
+                <td><span class="tag" style="background:#f3e5f5;color:#7b1fa2">🏠 자택</span></td>
+                <td style="text-align:right;font-weight:700;color:#e65100">
+                  <span style="text-decoration:line-through;color:#8892a4;font-weight:400;font-size:10px">878</span>
+                  892
+                </td>
+                <td style="text-align:center"><span style="font-size:10px;color:#e65100;background:#fff3e0;padding:1px 6px;border-radius:4px">수동</span></td>
+                <td style="text-align:right">120,000</td>
+                <td style="text-align:right">38,400</td>
+                <td class="center"><span style="cursor:pointer;font-size:12px" onclick="toast('✏️ 수정 모드')">✏️</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 범례 -->
+        <div style="padding:10px 20px;border-top:1px solid #eef0f4;display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:#8892a4">
+          <span><span class="tag" style="background:#e3f2fd;color:#1565c0;font-size:9px">🏢 회사</span> 회사 출발/도착</span>
+          <span><span class="tag" style="background:#f3e5f5;color:#7b1fa2;font-size:9px">🏠 현지출근</span> 자택 출발/도착</span>
+          <span><span style="background:#e8f5e9;padding:1px 6px;border-radius:4px;font-size:9px;color:#2e7d32">API</span> 카카오 길찾기 자동계산</span>
+          <span><span style="background:#fff3e0;padding:1px 6px;border-radius:4px;font-size:9px;color:#e65100">수동</span> 운전자가 직접 조정</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 미수금 활동 내역 ===== -->
+    <div class="page" id="page-collection" style="display:none">
+      <div class="card">
+        <div class="card-hd">
+          <h3>📞 미수금 활동 내역</h3>
+          <div class="right">
+            <select style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px">
+              <option>풀무원식품(주) — 🟠 주황</option>
+              <option>(주)오뚜기 — 🟡 노랑</option>
+              <option>(주)삼양식품 — 🔴 빨강</option>
+            </select>
+            <button class="btn btn-primary">+ 수금 활동 기록</button>
+          </div>
+        </div>
+        <div class="card-bd">
+          <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#e65100">미수금액</div>
+              <div style="font-size:20px;font-weight:800;color:#e65100">4,500,000원</div>
+            </div>
+            <div style="background:#fce4ec;border:1px solid #ef9a9a;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#c62828">연체일</div>
+              <div style="font-size:20px;font-weight:800;color:#c62828">68일</div>
+            </div>
+            <div style="background:#e3f2fd;border:1px solid #90caf9;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#1565c0">수금 시도</div>
+              <div style="font-size:20px;font-weight:800;color:#1565c0">5회</div>
+            </div>
+            <div style="background:#f3e5f5;border:1px solid #ce93d8;border-radius:10px;padding:12px 20px;flex:1;min-width:140px;text-align:center">
+              <div style="font-size:10px;color:#7b1fa2">입금 약속일</div>
+              <div style="font-size:20px;font-weight:800;color:#7b1fa2">02/20</div>
+            </div>
+          </div>
+
+          <div class="timeline">
+            <div class="tl-item sys">
+              <div class="tl-date">2026-02-13 09:00 · 시스템</div>
+              <div class="tl-content">🚦 <strong>신호등 변경:</strong> 노랑 → <span style="color:#e65100;font-weight:700">주황</span> (연체 68일, 미연결 2회)</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-02-12 14:30 · 이주임</div>
+              <div class="tl-content">이규성 과장에게 전화 연결 성공. "이번 달 20일까지 입금하겠다"고 약속.</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-connected">✅ 연결</span>
+                <span class="tl-tag" style="background:#e8f5e9;color:#2e7d32">📅 약속: 02/20</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-02-10 11:15 · 이주임</div>
+              <div class="tl-content">전화 연결 안됨. 문자 발송 — "미수금 확인 부탁드립니다."</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-missed">❌ 미연결</span>
+                <span class="tl-tag tl-tag-sms">💬 문자 발송</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-02-05 16:00 · 이주임</div>
+              <div class="tl-content">이규성 과장 전화 수신 거절.</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-refused">🚫 수신거절</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-01-28 10:00 · 이주임</div>
+              <div class="tl-content">카카오톡 메시지 발송. 읽음 확인됨. 회신 없음.</div>
+              <div class="tl-tags">
+                <span class="tl-tag" style="background:#fff9c4;color:#f57f17">💬 카카오톡</span>
+                <span class="tl-tag tl-tag-missed">회신 없음</span>
+              </div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-date">2026-01-20 09:30 · 이주임</div>
+              <div class="tl-content">전화 연결. 김부장 "다음 달 초 처리하겠다" 응답. (미이행)</div>
+              <div class="tl-tags">
+                <span class="tl-tag tl-tag-call">📞 전화</span>
+                <span class="tl-tag tl-tag-connected">✅ 연결</span>
+                <span class="tl-tag" style="background:#fce4ec;color:#c62828">❌ 약속 미이행</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 견적서 관리 ===== -->
+    <div class="page" id="page-estimate" style="display:none">
+      <div class="card"><div class="card-bd" style="text-align:center;padding:60px">
+        <div style="font-size:48px;margin-bottom:12px">⏸️</div>
+        <div style="font-size:16px;font-weight:700;color:#e65100;margin-bottom:8px">추후 검토 항목</div>
+        <div style="font-size:13px;color:#5f6b7a">홈페이지 기존 기능 활용 예정<br>단가는 검사항목 DB 자동 연동 방식으로 구현 예정</div>
+      </div></div>
+    </div>
+
+    <!-- ===== 거래명세표 관리 ===== -->
+    <div class="page" id="page-trade" style="display:none">
+      <div class="card">
+        <div class="card-hd"><h3>📄 거래명세표 관리</h3><div class="right"><button class="btn btn-secondary btn-sm">📅 월별 일괄 발행</button><button class="btn btn-primary btn-sm">+ 거래명세표 작성</button></div></div>
+        <div class="card-bd" style="padding:0;overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>발행일</th><th>거래명세표 번호</th><th>업체명</th><th>항목 수</th><th>금액(합계)</th><th>상태</th><th>비고</th></tr></thead>
+            <tbody>
+              <tr><td>2026-02-10</td><td>TM-2026-0213</td><td>CJ제일제당(주)</td><td>4건</td><td style="text-align:right">2,200,000</td><td><span class="tag tag-approved">발송완료</span></td><td><button class="btn btn-secondary btn-sm">PDF</button> <button class="btn btn-secondary btn-sm">📧</button></td></tr>
+              <tr><td>2026-02-08</td><td>TM-2026-0198</td><td>(주)농심</td><td>2건</td><td style="text-align:right">880,000</td><td><span class="tag tag-approved">발송완료</span></td><td><button class="btn btn-secondary btn-sm">PDF</button></td></tr>
+              <tr><td>2026-02-05</td><td>TM-2026-0185</td><td>동원F&B(주)</td><td>3건</td><td style="text-align:right">1,500,000</td><td><span class="tag tag-pending">대기</span></td><td><button class="btn btn-secondary btn-sm">PDF</button> <button class="btn btn-primary btn-sm">📧 발송</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:12px 16px;font-size:12px;color:#e65100">
+        ⚠️ 세부 구현은 <strong>접수관리</strong> 완성 후 구체화 예정 — 접수 완료 시 자동 생성
+      </div>
+    </div>
+
+    <!-- ===== 긴급 협조 요청 ===== -->
+    <div class="page" id="page-urgent" style="display:none">
+      <div class="card"><div class="card-bd" style="text-align:center;padding:60px">
+        <div style="font-size:48px;margin-bottom:12px">⏸️</div>
+        <div style="font-size:16px;font-weight:700;color:#e65100;margin-bottom:8px">추후 검토 항목</div>
+        <div style="font-size:13px;color:#5f6b7a">검사 목적별 표기 항목이 다르므로 반영 필요<br>기능 방향: 요청 등록, 현황 조회(대기/처리중/완료), 담당자 배정, 완료 알림</div>
+      </div></div>
+    </div>
+
+    <!-- ===== 미수금 관리 ===== -->
+    <div class="page" id="page-arManage" style="display:none">
+      <div class="card"><div class="card-bd" style="text-align:center;padding:60px">
+        <div style="font-size:48px;margin-bottom:12px">⏸️</div>
+        <div style="font-size:16px;font-weight:700;color:#e65100;margin-bottom:8px">추후 검토 항목</div>
+        <div style="font-size:13px;color:#5f6b7a">재무관리 설계 후 구체화 예정</div>
+      </div></div>
+    </div>
+
+    <!-- ===== 계산서 발행 승인 ===== -->
+    <div class="page" id="page-invoice" style="display:none">
+      <div class="stats">
+        <div class="stat"><div class="stat-val">12</div><div class="stat-label">이번 달 요청</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e65100">3</div><div class="stat-label">대기</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32">8</div><div class="stat-label">승인</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e53935">1</div><div class="stat-label">반려</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><h3>🧾 계산서 발행 승인요청</h3><div class="right"><button class="btn btn-primary">+ 승인 요청</button></div></div>
+        <div class="card-bd">
+          <div style="background:#f8f9fb;border:1px solid #eef0f4;border-radius:10px;padding:14px;margin-bottom:16px">
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px">승인 흐름</div>
+            <div class="approval-flow">
+              <div class="af-step" style="background:#e3f2fd;color:#1565c0">영업사원<br><small>요청</small></div>
+              <span class="af-arr">→</span>
+              <div class="af-step" style="background:#fff3e0;color:#e65100">재무부<br><small>검토</small></div>
+              <span class="af-arr">→</span>
+              <div class="af-step" style="background:#e8f5e9;color:#2e7d32">승인</div>
+              <span class="af-arr">→</span>
+              <div class="af-step" style="background:#f3e5f5;color:#7b1fa2">세금계산서<br><small>자동 발행</small></div>
+            </div>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>요청일</th><th>업체명</th><th>금액</th><th>발행사유</th><th>상태</th><th>처리자</th><th>처리일</th></tr></thead>
+            <tbody>
+              <tr><td>2026-02-13</td><td>CJ제일제당(주)</td><td style="text-align:right">2,200,000</td><td>월 정기 검사 비용</td><td><span class="tag tag-pending">대기</span></td><td>-</td><td>-</td></tr>
+              <tr><td>2026-02-12</td><td>동원F&B(주)</td><td style="text-align:right">1,500,000</td><td>긴급 검사 비용</td><td><span class="tag tag-pending">대기</span></td><td>-</td><td>-</td></tr>
+              <tr><td>2026-02-10</td><td>(주)농심</td><td style="text-align:right">880,000</td><td>영양성분 분석 비용</td><td><span class="tag tag-approved">승인</span></td><td>재무부 김과장</td><td>2026-02-11</td></tr>
+              <tr><td>2026-02-08</td><td>(주)오뚜기</td><td style="text-align:right">650,000</td><td>유통기한 연장 검사</td><td><span class="tag tag-approved">승인</span></td><td>재무부 김과장</td><td>2026-02-09</td></tr>
+              <tr style="background:#fce4ec"><td>2026-02-05</td><td>풀무원식품(주)</td><td style="text-align:right">4,500,000</td><td>미수금 정산 요청</td><td><span class="tag tag-rejected">반려</span></td><td>재무부 김과장</td><td>2026-02-06</td></tr>
+              <tr><td colspan="7" style="background:#fce4ec;font-size:11px;color:#c62828;padding:6px 14px">↳ 반려 사유: 미수금 업체 — 수금 활동 기록 후 재요청 바랍니다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== API 수집 설정 ===== -->
+    <div class="page" id="page-apiSettings" style="display:none">
+
+      <!-- 상단 요약 -->
+      <div class="stats">
+        <div class="stat"><div class="stat-val" id="apiTotalCount">16</div><div class="stat-label">전체 API</div></div>
+        <div class="stat"><div class="stat-val" style="color:#2e7d32" id="apiActiveCount">0</div><div class="stat-label">수집 활성</div></div>
+        <div class="stat"><div class="stat-val" style="color:#1a73e8" id="apiLastCollect">-</div><div class="stat-label">최근 수집</div></div>
+        <div class="stat"><div class="stat-val" style="color:#e65100" id="apiNextCollect">03:00</div><div class="stat-label">다음 수집(KST)</div></div>
+      </div>
+
+      <!-- 수집 시간 설정 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd"><h3>🕐 수집 스케줄 설정</h3></div>
+        <div class="card-bd">
+          <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;font-weight:600;white-space:nowrap">수집 시각 (KST):</label>
+              <input type="time" id="collectTime" value="03:00" style="padding:8px 12px;border:1px solid #dde2ea;border-radius:6px;font-size:14px;font-weight:600;width:120px">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;font-weight:600;white-space:nowrap">수집 방식:</label>
+              <select id="collectMode" style="padding:8px 12px;border:1px solid #dde2ea;border-radius:6px;font-size:13px">
+                <option value="incremental">증분 수집 (변경분만)</option>
+                <option value="full">전체 수집 (매일 전체)</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:13px;font-weight:600;white-space:nowrap">API 서버:</label>
+              <input type="text" id="apiServerUrl" value="http://localhost:5050" placeholder="http://서버IP:5050" style="padding:8px 12px;border:1px solid #dde2ea;border-radius:6px;font-size:12px;font-family:monospace;width:200px">
+            </div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="saveApiSettings()" style="padding:8px 20px">💾 설정 저장</button>
+            <button class="btn btn-secondary" onclick="testApiConnection()" style="padding:8px 20px">🔌 연결 테스트</button>
+            <button class="btn btn-secondary" onclick="checkAllApis(true)" style="padding:8px 16px">☑️ 전체 선택</button>
+            <button class="btn btn-secondary" onclick="checkAllApis(false)" style="padding:8px 16px">⬜ 전체 해제</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- API 카테고리 1: 업소 인허가 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpBiz')">
+          <h3>🏭 업소 인허가 대장 <span style="font-size:12px;font-weight:400;color:#8892a4">(9개 API)</span></h3>
+          <div class="right"><span id="grpBizArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpBiz">
+
+          <div class="api-item" id="api-I1220">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1220</strong> — 식품제조가공업</label>
+              <span class="api-count">~30,279건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag" title="인허가번호">LCNS_NO</span>
+              <span class="api-tag" title="업소명">BSSH_NM</span>
+              <span class="api-tag" title="대표자명">PRSDNT_NM</span>
+              <span class="api-tag" title="업종">INDUTY_NM</span>
+              <span class="api-tag" title="허가일자">PRMS_DT</span>
+              <span class="api-tag" title="전화번호">TELNO</span>
+              <span class="api-tag" title="주소">LOCP_ADDR</span>
+              <span class="api-tag" title="기관명">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2829">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2829</strong> — 즉석판매제조가공업</label>
+              <span class="api-count">~97,696건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I-0020">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I-0020</strong> — 건강기능식품 전문/벤처제조업</label>
+              <span class="api-count">~551건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">TELNO</span><span class="api-tag">LOCP_ADDR</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1300">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1300</strong> — 축산물 가공업</label>
+              <span class="api-count">~4,233건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span><span class="api-tag">TELNO</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1320">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1320</strong> — 축산물 식육포장처리업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">CLSBIZ_DVS_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span><span class="api-tag">TELNO</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2835">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2835</strong> — 식육즉석판매가공업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2831">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2831</strong> — 식품소분업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-C001">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C001</strong> — 수입식품등영업신고</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span><span class="api-tag">TELNO</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1260">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1260</strong> — 식품등수입판매업</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRSDNT_NM</span><span class="api-tag">INDUTY_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">TELNO</span><span class="api-tag">LOCP_ADDR</span><span class="api-tag">INSTT_NM</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- API 카테고리 2: 품목 제조 보고 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpPrd')">
+          <h3>📦 품목 제조 보고 <span style="font-size:12px;font-weight:400;color:#8892a4">(2개 API)</span></h3>
+          <div class="right"><span id="grpPrdArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpPrd">
+
+          <div class="api-item" id="api-I1250">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1250</strong> — 식품(첨가물)품목제조보고</label>
+              <span class="api-count" style="color:#e65100">~1,043,828건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">PRODUCTION</span><span class="api-tag">HIENG_LNTRT_DVS_NM</span><span class="api-tag">CHILD_CRTFC_YN</span><span class="api-tag">POG_DAYCNT</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LAST_UPDT_DTM</span><span class="api-tag">USAGE</span><span class="api-tag">PRPOS</span><span class="api-tag">DISPOS</span><span class="api-tag">FRMLC_MTRQLT</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I1310">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I1310</strong> — 축산물 품목제조정보</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">PRODUCTION</span><span class="api-tag">POG_DAYCNT</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LAST_UPDT_DTM</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- API 카테고리 3: 원재료 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpMat')">
+          <h3>🧪 원재료 정보 <span style="font-size:12px;font-weight:400;color:#8892a4">(3개 API)</span></h3>
+          <div class="right"><span id="grpMatArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpMat">
+
+          <div class="api-item" id="api-C002">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C002</strong> — 식품(첨가물)품목제조보고(원재료)</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">RAWMTRL_NM</span><span class="api-tag">RAWMTRL_ORDNO</span><span class="api-tag">CHNG_DT</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-C003">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C003</strong> — 건강기능식품 품목제조신고(원재료)</label>
+              <span class="api-count">~44,272건</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">LCNS_NO</span><span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRMS_DT</span><span class="api-tag">POG_DAYCNT</span><span class="api-tag">DISPOS</span><span class="api-tag">NTK_MTHD</span><span class="api-tag">PRIMARY_FNCLTY</span><span class="api-tag">IFTKN_ATNT_MATR_CN</span><span class="api-tag">CSTDY_MTHD</span><span class="api-tag">SHAP</span><span class="api-tag">STDR_STND</span><span class="api-tag">RAWMTRL_NM</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-C006">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>C006</strong> — 축산물품목제조보고(원재료)</label>
+              <span class="api-count">확인필요</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">BSSH_NM</span><span class="api-tag">PRDLST_REPORT_NO</span><span class="api-tag">PRMS_DT</span><span class="api-tag">PRDLST_NM</span><span class="api-tag">PRDLST_DCNM</span><span class="api-tag">RAWMTRL_NM</span><span class="api-tag">LCNS_NO</span><span class="api-tag">CHNG_DT</span><span class="api-tag">RAWMTRL_ORDNO</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- API 카테고리 4: 변경 이력 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="cursor:pointer" onclick="toggleApiGroup('grpChg')">
+          <h3>📝 인허가 변경 이력 <span style="font-size:12px;font-weight:400;color:#8892a4">(2개 API)</span></h3>
+          <div class="right"><span id="grpChgArrow" style="font-size:16px">▼</span></div>
+        </div>
+        <div class="card-bd" id="grpChg">
+
+          <div class="api-item" id="api-I2859">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2859</strong> — 식품업소 인허가 변경 정보</label>
+              <span class="api-count">변경분</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">BSSH_NM</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LCNS_NO</span><span class="api-tag">TELNO</span><span class="api-tag">SITE_ADDR</span><span class="api-tag">CHNG_DT</span><span class="api-tag">CHNG_BF_CN</span><span class="api-tag">CHNG_AF_CN</span><span class="api-tag">CHNG_PRVNS</span>
+            </div>
+          </div>
+
+          <div class="api-item" id="api-I2860">
+            <div class="api-header">
+              <label class="api-check"><input type="checkbox" checked onchange="updateApiCount()"><strong>I2860</strong> — 건강기능식품업소 인허가 변경 정보</label>
+              <span class="api-count">변경분</span>
+            </div>
+            <div class="api-fields">
+              <span class="api-tag">BSSH_NM</span><span class="api-tag">INDUTY_CD_NM</span><span class="api-tag">LCNS_NO</span><span class="api-tag">TELNO</span><span class="api-tag">SITE_ADDR</span><span class="api-tag">CHNG_DT</span><span class="api-tag">CHNG_BF_CN</span><span class="api-tag">CHNG_AF_CN</span><span class="api-tag">CHNG_PRVNS</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 수집 현황 -->
+      <div class="card">
+        <div class="card-hd"><h3>📊 수집 현황</h3><div class="right"><button class="btn btn-secondary btn-sm" onclick="loadCollectStatus()">🔄 새로고침</button></div></div>
+        <div class="card-bd">
+          <div id="collectStatusArea" style="font-size:12px;color:#8892a4;text-align:center;padding:20px">
+            API 서버 연결 후 수집 현황을 확인할 수 있습니다.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toastEl"></div>
+
+<script>
+const pageNames = {
+  customerList:'고객사 관리', customerReg:'고객사 관리 > 신규 등록',
+  bizSearch:'업체조회',
+  daily:'업무일지', dailyWrite:'업무일지 > 작성', dailyDetail:'업무일지 > 상세',
+  vehicle:'차량일지', collection:'미수금 활동 내역',
+  estimate:'견적서 관리', trade:'거래명세표 관리', urgent:'긴급 협조 요청',
+  arManage:'미수금 관리', invoice:'계산서 발행 승인요청',
+  apiSettings:'API 수집 설정'
+};
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  document.getElementById('page-' + id).style.display = 'block';
+  document.getElementById('topSub').textContent = pageNames[id] || '';
+  document.querySelectorAll('.sb-item').forEach(el => el.classList.remove('active'));
+  const navId = (id === 'customerReg') ? 'customerList' : (id === 'dailyWrite' || id === 'dailyDetail') ? 'daily' : id;
+  const nav = document.getElementById('nav-' + navId);
+  if (nav) nav.classList.add('active');
+  document.getElementById('contentArea').scrollTop = 0;
+  // 업체조회 페이지 → Leaflet 지도 초기화
+  if(id === 'bizSearch') setTimeout(initSidoMap, 150);
+  // API 설정 페이지 → 카운트 업데이트
+  if(id === 'apiSettings') setTimeout(updateApiCount, 100);
+}
+function closePopup(id) { document.getElementById(id).classList.remove('show'); }
+function toast(msg) {
+  const t = document.getElementById('toastEl');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+function fmtBiz(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>10)v=v.slice(0,10);
+  if(v.length>5)v=v.slice(0,3)+'-'+v.slice(3,5)+'-'+v.slice(5);
+  else if(v.length>3)v=v.slice(0,3)+'-'+v.slice(3);
+  el.value=v;
+}
+function fmtPhone(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>11)v=v.slice(0,11);
+  if(v.length>7)v=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7);
+  else if(v.length>3)v=v.slice(0,3)+'-'+v.slice(3);
+  el.value=v;
+}
+function demoCompanyDup() {
+  const name = document.getElementById('regCompany').value.trim();
+  if(!name){alert('회사명을 입력하세요.');return;}
+  if(name.includes('풀무원')){document.getElementById('companyDup').classList.add('show');}
+  else{const el=document.getElementById('compChk');el.style.display='block';el.className='check-result check-ok';el.textContent='✅ 중복 없음 — 등록 가능';}
+}
+function demoContactDup() {
+  const name = document.getElementById('regCName').value.trim();
+  if(!name){alert('이름을 입력하세요.');return;}
+  if(name==='이규성'){document.getElementById('contactDup').classList.add('show');}
+  else{const el=document.getElementById('cntChk');el.style.display='inline-block';el.className='check-result check-ok';el.textContent='✅ 중복 없음';}
+}
+// ── 업무일지 함수 ──
+function dailyCompanyChange(sel) {
+  const newInput = document.getElementById('dailyCompanyNew');
+  if (sel.value === '_new') {
+    newInput.style.display = 'block';
+    newInput.focus();
+  } else {
+    newInput.style.display = 'none';
+  }
+}
+function dailySampleChange(sel) {
+  const notice = document.getElementById('dailyVehicleNotice');
+  if (sel.value === 'visit') {
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
+}
+function fmtMoney(el) {
+  let v = el.value.replace(/[^0-9]/g, '');
+  if (v) {
+    el.value = Number(v).toLocaleString('ko-KR');
+  }
+}
+function dailySave() {
+  const company = document.getElementById('dailyCompany').value;
+  const sample = document.getElementById('dailySample').value;
+  if (!company || company === '업체 선택...') { toast('⚠️ 업체를 선택하세요.'); return; }
+  if (!sample) { toast('⚠️ 시료수거 방법을 선택하세요.'); return; }
+  toast('✅ 업무일지가 저장되었습니다!');
+  if (sample === 'visit') {
+    setTimeout(() => toast('🚗 차량일지에 자동 반영되었습니다.'), 1500);
+  }
+  setTimeout(() => showPage('daily'), 2500);
+}
+
+// ── 차량일지 경로 계산 ──
+var wpCount = 0;
+function calcRoutePreview() {
+  const startType = document.getElementById('vStartType').value;
+  const endType = document.getElementById('vEndType').value;
+  const distEl = document.getElementById('vDistPreview');
+  const labelEl = document.getElementById('vDistLabel');
+  // 데모: 출발/도착 조합에 따라 다른 예상 거리
+  const demoDistMap = {
+    'office-office': 42,
+    'home-office': 38,
+    'office-home': 45,
+    'home-home': 52
+  };
+  const key = startType + '-' + endType;
+  const dist = demoDistMap[key] || 42;
+  distEl.value = dist;
+  labelEl.textContent = 'API 자동계산';
+  labelEl.style.background = '#bbdefb';
+  labelEl.style.color = '#1565c0';
+  toast('📍 경로 재계산: ' + (startType==='office'?'회사':'자택') + ' → 방문지 → ' + (endType==='office'?'회사':'자택') + ' = ' + dist + 'km');
+}
+// km 수동 조정 감지
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'vDistPreview') {
+    const labelEl = document.getElementById('vDistLabel');
+    labelEl.textContent = '수동 조정';
+    labelEl.style.background = '#fff3e0';
+    labelEl.style.color = '#e65100';
+  }
+});
+function addWaypoint() {
+  wpCount++;
+  const area = document.getElementById('vWaypointArea');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px';
+  div.innerHTML = '<span style="font-size:11px;color:#1565c0;flex-shrink:0">경유지 ' + wpCount + '</span>' +
+    '<select style="flex:1;padding:7px 10px;border:1px solid #90caf9;border-radius:6px;font-size:12px;background:#fff">' +
+    '<option>업체 선택...</option><option>CJ제일제당(주) — 서울 중구</option><option>(주)농심 — 서울 동작구</option><option>동원F&B(주) — 서울 서초구</option><option>풀무원식품(주) — 서울 강남구</option>' +
+    '</select>' +
+    '<button onclick="this.parentElement.remove();calcRoutePreview()" style="background:none;border:1px solid #ef9a9a;color:#e53935;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px">✕</button>';
+  area.appendChild(div);
+  toast('+ 경유지 ' + wpCount + ' 추가됨 (여러 업체 방문 시)');
+}
+
+// ── 업체조회 (지도 드릴다운 + 카카오 + 식약처) ──
+const KAKAO_REST_KEY = '8e5dab09aacd882449bd3865699a9d69';
+const COMPANY_ORIGIN = {x:'127.0741', y:'37.2004'};
+var bizMap2 = null, bizMarkers2 = [];
+var bizState = {sido:'', sigungu:'', dong:''};
+
+var regionData = {
+  '서울':['강남구','강동구','강북구','강서구','관악구','광진구','구로구','금천구','노원구','도봉구','동대문구','동작구','마포구','서대문구','서초구','성동구','성북구','송파구','양천구','영등포구','용산구','은평구','종로구','중구','중랑구'],
+  '부산':['강서구','금정구','기장군','남구','동구','동래구','부산진구','북구','사상구','사하구','서구','수영구','연제구','영도구','중구','해운대구'],
+  '대구':['남구','달서구','달성군','동구','북구','서구','수성구','중구'],
+  '인천':['강화군','계양구','남동구','동구','미추홀구','부평구','서구','연수구','옹진군','중구'],
+  '광주':['광산구','남구','동구','북구','서구'],
+  '대전':['대덕구','동구','서구','유성구','중구'],
+  '울산':['남구','동구','북구','울주군','중구'],
+  '세종':['세종시'],
+  '경기':['가평군','고양시','과천시','광명시','광주시','구리시','군포시','김포시','남양주시','동두천시','부천시','성남시','수원시','시흥시','안산시','안성시','안양시','양주시','양평군','여주시','연천군','오산시','용인시','의왕시','의정부시','이천시','파주시','평택시','포천시','하남시','화성시'],
+  '강원':['강릉시','고성군','동해시','삼척시','속초시','양구군','양양군','영월군','원주시','인제군','정선군','철원군','춘천시','태백시','평창군','홍천군','화천군','횡성군'],
+  '충북':['괴산군','단양군','보은군','영동군','옥천군','음성군','제천시','증평군','진천군','청주시','충주시'],
+  '충남':['계룡시','공주시','금산군','논산시','당진시','보령시','부여군','서산시','서천군','아산시','예산군','천안시','청양군','태안군','홍성군'],
+  '전북':['고창군','군산시','김제시','남원시','무주군','부안군','순창군','완주군','익산시','임실군','장수군','전주시','정읍시','진안군'],
+  '전남':['강진군','고흥군','곡성군','광양시','구례군','나주시','담양군','목포시','무안군','보성군','순천시','신안군','여수시','영광군','영암군','완도군','장성군','장흥군','진도군','함평군','해남군','화순군'],
+  '경북':['경산시','경주시','고령군','구미시','군위군','김천시','문경시','봉화군','상주시','성주군','안동시','영덕군','영양군','영주시','영천시','예천군','울릉군','울진군','의성군','청도군','청송군','칠곡군','포항시'],
+  '경남':['거제시','거창군','고성군','김해시','남해군','밀양시','사천시','산청군','양산시','의령군','진주시','창녕군','창원시','통영시','하동군','함안군','함양군','합천군'],
+  '제주':['서귀포시','제주시']
+};
+
+// ── Leaflet 지도 (VWORLD/OSM + 시도/시군구 GeoJSON) ──
+var sidoMap = null, sidoGeoLayer = null, sgGeoData = null, dongGeoData = null;
+var SIDO_GEO_URL = 'data/sido.json';
+var SG_GEO_URL = 'data/sigungu.json';
+var DONG_GEO_URL = 'data/dong.json';
+var SIDO_NAME_MAP = {
+  '서울특별시':'서울','부산광역시':'부산','대구광역시':'대구','인천광역시':'인천',
+  '광주광역시':'광주','대전광역시':'대전','울산광역시':'울산','세종특별자치시':'세종',
+  '경기도':'경기','강원도':'강원','충청북도':'충북','충청남도':'충남',
+  '전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주특별자치도':'제주'
+};
+var SIDO_COLORS = ['#1a73e8','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','#f4511e','#6d4c41',
+  '#3949ab','#c0ca33','#00acc1','#d81b60','#5e35b1','#039be5','#7cb342','#ff6f00','#546e7a'];
+
+// ── 식약처 전체 데이터 (정적 JSON) ──
+var fssAllData = null;
+var fssLoading = false;
+var SIDO_ADDR = {'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종',
+  '경기':'경기도','강원':'강원도','충북':'충청북도','충남':'충청남도','전북':'전라북도','전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주'};
+
+function loadFssData() {
+  if(fssAllData || fssLoading) return;
+  fssLoading = true;
+  fetch('data/fss_all.json').then(function(r){
+    if(!r.ok) throw new Error('파일 없음');
+    return r.json();
+  }).then(function(data){
+    fssAllData = data;
+    fssLoading = false;
+    console.log('식약처 데이터 로드:', fssAllData.length + '건');
+    toast('📊 식약처 ' + fssAllData.length.toLocaleString() + '건 로드 완료');
+    updateSidoLabels();
+  }).catch(function(e){
+    fssLoading = false;
+    console.error('fss_all.json 로드 실패:', e);
+    toast('⚠️ 식약처 데이터 파일이 없습니다. download_fss.py를 실행하세요.');
+  });
+}
+
+function fssFilterSido(sido) {
+  if(!fssAllData) return [];
+  var key = SIDO_ADDR[sido] || sido;
+  return fssAllData.filter(function(r){ return r.addr && r.addr.indexOf(key) >= 0; });
+}
+function fssFilterSg(sido, sg) {
+  var list = fssFilterSido(sido);
+  var sgClean = sg.replace(/시$|군$|구$/,'');
+  return list.filter(function(r){ return r.addr.indexOf(sg) >= 0 || r.addr.indexOf(sgClean) >= 0; });
+}
+function fssFilterDong(sido, sg, dong) {
+  var list = fssFilterSg(sido, sg);
+  return list.filter(function(r){ return r.addr.indexOf(dong) >= 0; });
+}
+
+function updateSidoLabels() {
+  if(!fssAllData || !sidoGeoLayer) return;
+  sidoGeoLayer.eachLayer(function(layer){
+    var fullName = layer.feature.properties.name || '';
+    var shortName = SIDO_NAME_MAP[fullName] || fullName;
+    var cnt = fssFilterSido(shortName).length;
+    layer.unbindTooltip();
+    layer.bindTooltip(shortName + '<br><b style="color:#e53935">' + cnt.toLocaleString() + '</b>', {permanent:true, direction:'center', className:'sido-label'});
+  });
+}
+
+function initSidoMap() {
+  if(sidoMap) { sidoMap.invalidateSize(); if(fssAllData) updateSidoLabels(); return; }
+  var el = document.getElementById('koreaMap');
+  if(!el || el.offsetHeight === 0) return;
+  sidoMap = L.map('koreaMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 7);
+  // 타일 레이어
+  applyMapTile();
+  // 식약처 전체 데이터 로드
+  loadFssData();
+  // 시도 경계 GeoJSON 로드
+  fetch(SIDO_GEO_URL).then(function(r){return r.json()}).then(function(geo){
+    sidoGeoLayer = L.geoJSON(geo, {
+      style: function(feature){
+        var idx = geo.features.indexOf(feature) % SIDO_COLORS.length;
+        return {color:'#fff', weight:2, fillColor:SIDO_COLORS[idx], fillOpacity:0.45};
+      },
+      onEachFeature: function(feature, layer){
+        var fullName = feature.properties.name || '';
+        var shortName = SIDO_NAME_MAP[fullName] || fullName;
+        layer.bindTooltip(shortName, {permanent:true, direction:'center', className:'sido-label'});
+        layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.75, weight:3}); });
+        layer.on('mouseout', function(e){ sidoGeoLayer.resetStyle(e.target); });
+        layer.on('click', function(){ selectSido(shortName); });
+      }
+    }).addTo(sidoMap);
+    sidoMap.fitBounds(sidoGeoLayer.getBounds(), {padding:[10,10]});
+  }).catch(function(e){ console.error('시도 GeoJSON 로드 실패:', e); });
+  // 시군구 GeoJSON 프리로드
+  fetch(SG_GEO_URL).then(function(r){return r.json()}).then(function(geo){ sgGeoData = geo; });
+  // 읍면동 GeoJSON 프리로드
+  fetch(DONG_GEO_URL).then(function(r){return r.json()}).then(function(geo){ dongGeoData = geo; });
+}
+
+function applyMapTile() {
+  if(!sidoMap) return;
+  sidoMap.eachLayer(function(l){ if(l instanceof L.TileLayer) sidoMap.removeLayer(l); });
+  var vkey = document.getElementById('vworldApiKey') ? document.getElementById('vworldApiKey').value.trim() : '';
+  if(vkey) {
+    L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19, minZoom:5}).addTo(sidoMap);
+  } else {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, minZoom:5}).addTo(sidoMap);
+  }
+  if(sidoGeoLayer) sidoGeoLayer.bringToFront();
+}
+
+var sgMap = null, sgGeoLayer = null;
+var SG_COLORS = ['#42a5f5','#66bb6a','#ffa726','#ef5350','#ab47bc','#26c6da','#8d6e63','#78909c',
+  '#5c6bc0','#d4e157','#ec407a','#29b6f6','#9ccc65','#ffca28','#7e57c2','#26a69a'];
+var SIDO_CODE_MAP = {
+  '서울':'11','부산':'21','대구':'22','인천':'23','광주':'24','대전':'25','울산':'26','세종':'29',
+  '경기':'31','강원':'32','충북':'33','충남':'34','전북':'35','전남':'36','경북':'37','경남':'38','제주':'39'
+};
+
+function selectSido(sido) {
+  bizState = {sido:sido, sigungu:'', dong:''};
+  var list = regionData[sido] || [];
+  var html = '';
+  list.forEach(function(g){
+    html += '<div class="sg-btn" onclick="selectSigungu(\'' + g + '\')">' + g + '</div>';
+  });
+  document.getElementById('sigunguGrid').innerHTML = html;
+  document.getElementById('step1Title').textContent = '🏙️ ' + sido + ' > 시/군/구 선택';
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'block';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'none';
+  updateBreadcrumb();
+  toast('📍 ' + sido + ' 선택');
+  // 시군구 지도 생성/업데이트
+  setTimeout(function(){ initSgMap(sido); }, 100);
+}
+
+function initSgMap(sido) {
+  var el = document.getElementById('sgMap');
+  if(!el) return;
+  if(sgMap) { sgMap.remove(); sgMap = null; }
+  sgMap = L.map('sgMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 9);
+  // 타일
+  var vkey = document.getElementById('vworldApiKey') ? document.getElementById('vworldApiKey').value.trim() : '';
+  if(vkey) {
+    L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19}).addTo(sgMap);
+  } else {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(sgMap);
+  }
+  // 시군구 경계
+  var sidoCode = SIDO_CODE_MAP[sido] || '';
+  if(!sgGeoData || !sidoCode) return;
+  var filtered = {
+    type: 'FeatureCollection',
+    features: sgGeoData.features.filter(function(f){ return f.properties.code.substring(0,2) === sidoCode; })
+  };
+  sgGeoLayer = L.geoJSON(filtered, {
+    style: function(feature){
+      var idx = filtered.features.indexOf(feature) % SG_COLORS.length;
+      return {color:'#fff', weight:2, fillColor:SG_COLORS[idx], fillOpacity:0.45};
+    },
+    onEachFeature: function(feature, layer){
+      var name = feature.properties.name || '';
+      var cnt = fssAllData ? fssFilterSg(sido, name).length : 0;
+      var label = name + (cnt ? '<br><b style="color:#e53935;font-size:9px">' + cnt.toLocaleString() + '</b>' : '');
+      layer.bindTooltip(label, {permanent:true, direction:'center', className:'sg-label'});
+      layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.75, weight:3}); });
+      layer.on('mouseout', function(e){ sgGeoLayer.resetStyle(e.target); });
+      layer.on('click', function(){
+        var matched = matchSigungu(sido, name);
+        if(matched) selectSigungu(matched);
+      });
+    }
+  }).addTo(sgMap);
+  if(filtered.features.length > 0) sgMap.fitBounds(sgGeoLayer.getBounds(), {padding:[15,15]});
+}
+
+function matchSigungu(sido, geoName) {
+  var list = regionData[sido] || [];
+  // 정확히 일치
+  for(var i=0; i<list.length; i++) {
+    if(geoName === list[i] || geoName.indexOf(list[i]) >= 0 || list[i].indexOf(geoName) >= 0) return list[i];
+  }
+  // 앞 2글자 매칭 (수원시장안구 → 수원시 등)
+  for(var i=0; i<list.length; i++) {
+    if(geoName.substring(0,2) === list[i].substring(0,2)) return list[i];
+  }
+  return geoName;
+}
+
+var dongMap = null, dongGeoLayer = null;
+var DONG_COLORS = ['#4fc3f7','#81c784','#ffb74d','#e57373','#ba68c8','#4dd0e1','#a1887f','#90a4ae',
+  '#7986cb','#dce775','#f06292','#4db6ac','#aed581','#ffd54f','#9575cd','#64b5f6'];
+
+function selectSigungu(sg) {
+  bizState.sigungu = sg;
+  bizState.dong = '';
+  document.getElementById('step2Title').textContent = '🏘️ ' + bizState.sido + ' ' + sg + ' > 읍/면/동 선택';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'block';
+  document.getElementById('dongGrid').style.display = 'none';
+  document.getElementById('dongLoading').style.display = 'block';
+  updateBreadcrumb();
+  // 읍면동 지도 + 목록 로드
+  setTimeout(function(){ initDongMap(bizState.sido, sg); }, 100);
+}
+
+function findSgCode(sido, sgName) {
+  if(!sgGeoData) return '';
+  var sidoCode = SIDO_CODE_MAP[sido] || '';
+  // 매칭되는 모든 시군구 코드 수집
+  var matched = [];
+  for(var i = 0; i < sgGeoData.features.length; i++) {
+    var f = sgGeoData.features[i];
+    var code = f.properties.code;
+    if(code.substring(0,2) !== sidoCode) continue;
+    var name = f.properties.name;
+    // "수원시" → "수원시장안구", "수원시권선구" 등 모두 매칭
+    if(name === sgName || name.indexOf(sgName) >= 0 || sgName.indexOf(name) >= 0
+       || name.substring(0,2) === sgName.substring(0,2)) {
+      matched.push(code);
+    }
+  }
+  if(matched.length === 0) return sidoCode;
+  if(matched.length === 1) return matched[0];
+  // 복합도시: 공통 prefix 계산 (수원시 31011,31012,31013,31014 → "3101")
+  var prefix = matched[0];
+  for(var j = 1; j < matched.length; j++) {
+    while(matched[j].substring(0, prefix.length) !== prefix && prefix.length > 2) {
+      prefix = prefix.substring(0, prefix.length - 1);
+    }
+  }
+  return prefix;
+}
+
+function initDongMap(sido, sg) {
+  var el = document.getElementById('dongMap');
+  if(!el) return;
+  if(dongMap) { dongMap.remove(); dongMap = null; }
+  dongMap = L.map('dongMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 11);
+  // 타일
+  var vkey = document.getElementById('vworldApiKey') ? document.getElementById('vworldApiKey').value.trim() : '';
+  if(vkey) {
+    L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/'+vkey+'/Base/{z}/{y}/{x}.png', {maxZoom:19}).addTo(dongMap);
+  } else {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(dongMap);
+  }
+
+  // 시군구 코드 찾기
+  var sgCode = findSgCode(sido, sg);
+  var dongButtons = [];
+
+  if(dongGeoData && sgCode.length >= 4) {
+    // 시군구에 하위구가 있는 경우 (예: 수원시→장안구,권선구...) sgCode 5자리 앞 4자리로 필터
+    // 일반 시군구는 5자리 전체로 필터
+    var prefix = sgCode;
+    var filtered = {
+      type: 'FeatureCollection',
+      features: dongGeoData.features.filter(function(f){ return f.properties.code.substring(0, prefix.length) === prefix; })
+    };
+    // 하위구 포함 매칭이 안 되면 앞 3~4자리로 재시도
+    if(filtered.features.length === 0 && sgCode.length >= 3) {
+      prefix = sgCode.substring(0, 4);
+      filtered.features = dongGeoData.features.filter(function(f){ return f.properties.code.substring(0, 4) === prefix; });
+    }
+    if(filtered.features.length === 0 && sgCode.length >= 2) {
+      prefix = sgCode.substring(0, 3);
+      filtered.features = dongGeoData.features.filter(function(f){ return f.properties.code.substring(0, 3) === prefix; });
+    }
+
+    if(filtered.features.length > 0) {
+      dongGeoLayer = L.geoJSON(filtered, {
+        style: function(feature){
+          var idx = filtered.features.indexOf(feature) % DONG_COLORS.length;
+          return {color:'#fff', weight:1.5, fillColor:DONG_COLORS[idx], fillOpacity:0.4};
+        },
+        onEachFeature: function(feature, layer){
+          var name = feature.properties.name || '';
+          var cnt = fssAllData ? fssFilterDong(sido, sg, name).length : 0;
+          var label = name + (cnt ? '<br><b style="color:#e53935;font-size:9px">' + cnt.toLocaleString() + '</b>' : '');
+          layer.bindTooltip(label, {permanent:true, direction:'center', className:'sg-label'});
+          layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.7, weight:2.5}); });
+          layer.on('mouseout', function(e){ dongGeoLayer.resetStyle(e.target); });
+          layer.on('click', function(){
+            selectDong(name);
+          });
+        }
+      }).addTo(dongMap);
+      dongMap.fitBounds(dongGeoLayer.getBounds(), {padding:[15,15]});
+
+      // GeoJSON에서 동 목록 생성
+      filtered.features.forEach(function(f){ dongButtons.push(f.properties.name); });
+    }
+  }
+
+  // 동 버튼 목록 렌더링
+  if(dongButtons.length > 0) {
+    dongButtons.sort();
+    var html = '';
+    dongButtons.forEach(function(d){
+      html += '<div class="dong-btn" onclick="selectDong(\'' + d + '\')">' + d + '</div>';
+    });
+    document.getElementById('dongGrid').innerHTML = html;
+  } else {
+    // GeoJSON에 없으면 카카오 API 폴백
+    loadDongList(sido, sg);
+    return;
+  }
+  document.getElementById('dongGrid').style.display = 'flex';
+  document.getElementById('dongLoading').style.display = 'none';
+}
+
+async function loadDongList(sido, sigungu) {
+  try {
+    var res = await fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(sido + ' ' + sigungu) + '&size=30', {
+      headers: {'Authorization': 'KakaoAK ' + KAKAO_REST_KEY}
+    });
+    var data = await res.json();
+    var dongs = new Set();
+    (data.documents||[]).forEach(function(d){
+      var a = d.address || d.road_address;
+      if(a){
+        var r3 = a.region_3depth_name || a.region_3depth_h_name || '';
+        if(r3) dongs.add(r3.split(' ')[0]);
+      }
+    });
+    var dongArr = Array.from(dongs).sort();
+    if(dongArr.length === 0){
+      document.getElementById('dongGrid').innerHTML = '<div style="text-align:center;width:100%;padding:16px;color:#8892a4;font-size:12px">읍/면/동 자동 로드 불가 — 시/군/구 전체 검색을 이용하세요.</div>';
+    } else {
+      var html = '';
+      dongArr.forEach(function(d){
+        html += '<div class="dong-btn" onclick="selectDong(\'' + d + '\')">' + d + '</div>';
+      });
+      document.getElementById('dongGrid').innerHTML = html;
+    }
+    document.getElementById('dongGrid').style.display = 'flex';
+    document.getElementById('dongLoading').style.display = 'none';
+  } catch(e) {
+    document.getElementById('dongGrid').innerHTML = '<div style="text-align:center;width:100%;padding:16px;color:#e53935">로드 실패</div>';
+    document.getElementById('dongGrid').style.display = 'flex';
+    document.getElementById('dongLoading').style.display = 'none';
+  }
+}
+
+function selectDong(dong) {
+  bizState.dong = dong;
+  updateBreadcrumb();
+  // 식약처 데이터 필터링
+  var rows = fssAllData ? fssFilterDong(bizState.sido, bizState.sigungu, dong) : [];
+  showFssResults(rows);
+}
+
+function showFssResults(rows) {
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'block';
+  document.getElementById('bizFssCount').textContent = rows.length;
+  if(rows.length === 0) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">해당 지역에 등록된 식품제조가공업체가 없습니다.</td></tr>';
+    return;
+  }
+  var html = '';
+  rows.forEach(function(r, i){
+    var nm = r.nm || '-';
+    var ceo = r.ceo || '-';
+    var biz = r.biz || '-';
+    var lic = r.lic || '-';
+    var addr = r.addr || '-';
+    var org = r.org || '';
+    var tel = r.tel || '';
+    html += '<tr>';
+    html += '<td style="font-size:12px"><b>' + nm + '</b>' + (tel ? '<br><span style="font-size:10px;color:#8892a4">📞 ' + tel + '</span>' : '') + '</td>';
+    html += '<td style="font-size:12px">' + ceo + '</td>';
+    html += '<td><span style="font-size:11px">' + biz + '</span></td>';
+    html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
+    html += '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
+    html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
+    html += '<td><button style="font-size:10px;padding:3px 10px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
+    html += '</tr>';
+  });
+  document.getElementById('fssTableBody').innerHTML = html;
+  toast('🏭 식약처 ' + rows.length + '건 조회');
+}
+
+function bizGoStep(n) {
+  document.getElementById('bizStep0').style.display = n===0 ? 'block' : 'none';
+  document.getElementById('bizStep1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('bizStep2').style.display = n===2 ? 'block' : 'none';
+  document.getElementById('bizStep3').style.display = 'none';
+  if(n===0) { bizState = {sido:'', sigungu:'', dong:''}; setTimeout(function(){ if(sidoMap) sidoMap.invalidateSize(); }, 150); }
+  if(n===1) { bizState.sigungu=''; bizState.dong=''; setTimeout(function(){ if(sgMap) sgMap.invalidateSize(); }, 150); }
+  if(n===2) { bizState.dong=''; setTimeout(function(){ if(dongMap) dongMap.invalidateSize(); }, 150); }
+  updateBreadcrumb();
+}
+
+function updateBreadcrumb() {
+  var html = '<span style="color:#1a73e8;font-weight:600;cursor:pointer" onclick="bizGoStep(0)">전국</span>';
+  if(bizState.sido) html += ' <span style="color:#c8d6e5">›</span> <span style="color:#1a73e8;cursor:pointer" onclick="bizGoStep(1)">' + bizState.sido + '</span>';
+  if(bizState.sigungu) html += ' <span style="color:#c8d6e5">›</span> <span style="color:#1a73e8;cursor:pointer" onclick="bizGoStep(2)">' + bizState.sigungu + '</span>';
+  if(bizState.dong) html += ' <span style="color:#c8d6e5">›</span> <b style="color:#1a2332">' + bizState.dong + '</b>';
+  document.getElementById('bizBreadcrumb').innerHTML = html;
+}
+
+function switchResTab(n) {
+  document.getElementById('resPanel1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('resPanel2').style.display = n===2 ? 'block' : 'none';
+  ['resTab1','resTab2'].forEach(function(id,i){
+    var el = document.getElementById(id);
+    var active = (i+1)===n;
+    el.style.background = active ? '#1a73e8' : '#fff';
+    el.style.color = active ? '#fff' : '#5f6b7a';
+    el.style.borderColor = active ? '#1a73e8' : '#e2e6ed';
+  });
+}
+
+var lastKakaoNames = []; // 카카오 검색 결과 업체명 저장
+
+async function doRegionSearch() {
+  var region = bizState.sido;
+  if(bizState.sigungu) region += ' ' + bizState.sigungu;
+  if(bizState.dong) region += ' ' + bizState.dong;
+  if(!region) { toast('지역을 선택하세요.'); return; }
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'block';
+  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 해당 지역 전체 업체 검색 중...</div>';
+  document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 식약처 조회 중...</td></tr>';
+  document.getElementById('bizKakaoCount').textContent = '...';
+  document.getElementById('bizFssCount').textContent = '...';
+  // 1. 카카오맵 영역 기반 검색 (다중 키워드 + 페이지네이션)
+  await searchKakaoArea(region);
+  // 2. 카카오 결과의 업체명으로 식약처 검색
+  await searchFss(region);
+  initResultMap(region);
+}
+
+async function doBizQuickSearch() {
+  var q = document.getElementById('bizQuickSearch').value.trim();
+  if(!q) { toast('업체명을 입력하세요.'); return; }
+  bizState = {sido:'검색', sigungu:q, dong:''};
+  updateBreadcrumb();
+  document.getElementById('bizStep0').style.display = 'none';
+  document.getElementById('bizStep1').style.display = 'none';
+  document.getElementById('bizStep2').style.display = 'none';
+  document.getElementById('bizStep3').style.display = 'block';
+  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 검색 중...</div>';
+  document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 조회 중...</td></tr>';
+  document.getElementById('bizKakaoCount').textContent = '...';
+  document.getElementById('bizFssCount').textContent = '...';
+  await searchKakao(q);
+  await searchFss(q);
+  initResultMap(q);
+}
+
+async function searchKakao(query) {
+  lastKakaoNames = [];
+  try {
+    var res = await fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(query) + '&size=15', {
+      headers: {'Authorization': 'KakaoAK ' + KAKAO_REST_KEY}
+    });
+    var data = await res.json();
+    var docs = data.documents || [];
+    document.getElementById('bizKakaoCount').textContent = docs.length;
+    // 업체명 저장 (식약처 검색용)
+    docs.forEach(function(d){ lastKakaoNames.push(d.place_name); });
+    if(docs.length === 0) {
+      document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">카카오맵 결과 없음</div>';
+      return;
+    }
+    bizMarkers2.forEach(function(m){ m.setMap(null); });
+    bizMarkers2 = [];
+    var bounds = bizMap2 ? new kakao.maps.LatLngBounds() : null;
+    var html = '';
+    docs.forEach(function(d, i) {
+      var addr = d.road_address_name || d.address_name || '-';
+      var phone = d.phone || '-';
+      var cat = d.category_name || '';
+      if(bizMap2){
+        var pos = new kakao.maps.LatLng(parseFloat(d.y), parseFloat(d.x));
+        var marker = new kakao.maps.Marker({position:pos, map:bizMap2});
+        bizMarkers2.push(marker);
+        bounds.extend(pos);
+      }
+      html += '<div style="padding:12px 20px;border-bottom:1px solid #eef0f4;display:flex;gap:12px" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'">';
+      html += '<div style="width:28px;height:28px;background:#e3f2fd;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#1565c0;flex-shrink:0">' + (i+1) + '</div>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><b style="font-size:13px;color:#1a2332">' + d.place_name + '</b>';
+      if(cat) html += '<span style="font-size:9px;background:#f1f3f5;padding:1px 5px;border-radius:3px;color:#8892a4">' + cat.split(' > ').pop() + '</span>';
+      html += '</div>';
+      html += '<div style="font-size:11px;color:#5f6b7a">📍 ' + addr + '  ·  📞 ' + phone + '</div>';
+      html += '<div style="display:flex;gap:5px;margin-top:5px">';
+      html += '<span id="kD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 7px;border-radius:4px;cursor:pointer" onclick="calcDist(\'' + d.x + '\',\'' + d.y + '\',\'kD' + i + '\')">📐 거리</span>';
+      if(d.place_url) html += '<a href="' + d.place_url + '" target="_blank" style="font-size:10px;color:#e65100;background:#fff3e0;padding:2px 7px;border-radius:4px;text-decoration:none">🗺️</a>';
+      html += '<button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + d.place_name.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button>';
+      html += '</div></div></div>';
+    });
+    document.getElementById('bizResultList').innerHTML = html;
+    if(bizMap2 && bounds) bizMap2.setBounds(bounds);
+  } catch(e) {
+    document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#e53935">❌ ' + e.message + '</div>';
+    document.getElementById('bizKakaoCount').textContent = '0';
+  }
+}
+
+async function searchFss(region) {
+  var apiKey = document.getElementById('fssApiKey').value.trim();
+  if(!apiKey) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#e65100">🔑 식약처 API 키를 입력하면 인허가 정보도 조회됩니다</td></tr>';
+    document.getElementById('bizFssCount').textContent = '-';
+    return;
+  }
+  var baseUrl = 'https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/I1220/json/1/100';
+  var allRows = [];
+  var searchNames = [];
+
+  if(bizState.sido === '검색' && bizState.sigungu) {
+    // 빠른검색: 입력한 키워드로 직접 검색
+    searchNames = [bizState.sigungu];
+  } else {
+    // 지역 드릴다운: 카카오맵 결과 업체명으로 검색 (최대 10개)
+    if(lastKakaoNames.length === 0) {
+      document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#8892a4;font-size:12px">카카오맵 결과가 없어 식약처 조회를 건너뜁니다.</td></tr>';
+      document.getElementById('bizFssCount').textContent = '0';
+      return;
+    }
+    // 업체명에서 핵심 단어 추출 (괄호/법인 등 제거)
+    var uniqueNames = [];
+    lastKakaoNames.forEach(function(n) {
+      var clean = n.replace(/\(주\)|\(유\)|주식회사|농업회사법인|유한회사/g, '').trim();
+      if(clean && uniqueNames.indexOf(clean) === -1) uniqueNames.push(clean);
+    });
+    searchNames = uniqueNames.slice(0, 10);
+  }
+
+  // 각 업체명으로 식약처 검색
+  for(var i = 0; i < searchNames.length; i++) {
+    try {
+      var apiUrl = baseUrl + '/BSSH_NM=' + encodeURIComponent(searchNames[i]);
+      var text = '';
+      // CORS 프록시
+      try {
+        var res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl));
+        text = await res.text();
+      } catch(e1) {
+        try { var res2 = await fetch(apiUrl); text = await res2.text(); } catch(e2){ text = ''; }
+      }
+      if(!text || !text.startsWith('{')) continue;
+      var data = JSON.parse(text);
+      var key = Object.keys(data)[0];
+      var rows = (data[key] && data[key].row) ? data[key].row : [];
+      rows.forEach(function(r){ r._t = 'food'; });
+      // 중복 제거 (인허가번호 기준)
+      rows.forEach(function(r) {
+        var dup = allRows.some(function(ar){ return ar.LCNS_NO === r.LCNS_NO; });
+        if(!dup) allRows.push(r);
+      });
+    } catch(e){ console.log('FSS error:', searchNames[i], e.message); }
+  }
+
+  // 지역 드릴다운인 경우: 검색 지역 주소로 필터링
+  if(bizState.sido !== '검색' && allRows.length > 0) {
+    var SIDO_FULL = {'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종',
+      '경기':'경기도','강원':'강원도','충북':'충청북도','충남':'충청남도','전북':'전라북도','전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주'};
+    var sidoKey = SIDO_FULL[bizState.sido] || bizState.sido;
+    var sgKey = bizState.sigungu || '';
+    allRows = allRows.filter(function(r) {
+      var addr = (r.LOCP_ADDR || '').replace(/\s+/g, ' ');
+      // 시도 매칭
+      if(addr.indexOf(sidoKey) < 0 && addr.indexOf(bizState.sido) < 0) return false;
+      // 시군구 매칭 (있으면)
+      if(sgKey && addr.indexOf(sgKey) < 0) {
+        // "파주시" → "파주" 로도 매칭 시도
+        var sgShort = sgKey.replace(/시$|군$|구$/,'');
+        if(addr.indexOf(sgShort) < 0) return false;
+      }
+      return true;
+    });
+  }
+
+  document.getElementById('bizFssCount').textContent = allRows.length;
+  if(allRows.length === 0) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#8892a4;font-size:12px">인허가 결과 없음<br><span style="font-size:11px">CORS 차단으로 조회 불가 시, 브라우저에서 직접 확인:<br><a href="https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/I1220/json/1/5/BSSH_NM=' + encodeURIComponent(bizState.sigungu||bizState.sido||'') + '" target="_blank" style="color:#1565c0">🔗 식약처 API 직접 열기</a></span></td></tr>';
+    return;
+  }
+  var html = '';
+  allRows.forEach(function(r, i){
+    var nm = r.BSSH_NM || '-';
+    var ceo = r.PRSDNT_NM || '-';
+    var biz = r.INDUTY_NM || '-';
+    var lic = r.LCNS_NO || '-';
+    var addr = r.LOCP_ADDR || '-';
+    var org = r.INSTT_NM || '';
+    var tel = r.TELNO || '';
+    html += '<tr>';
+    html += '<td><b>' + nm + '</b>' + (tel ? '<br><span style="font-size:10px;color:#8892a4">📞 ' + tel + '</span>' : '') + '</td>';
+    html += '<td>' + ceo + '</td>';
+    html += '<td><span style="font-size:11px">' + biz + '</span></td>';
+    html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
+    html += '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
+    html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
+    html += '<td><span id="fD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 6px;border-radius:4px;cursor:pointer" onclick="calcAddrDist(\'' + addr.replace(/'/g,"\\'") + '\',\'fD' + i + '\')">📐</span></td>';
+    html += '<td><button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
+    html += '</tr>';
+  });
+  document.getElementById('fssTableBody').innerHTML = html;
+  toast('🏭 식약처 ' + allRows.length + '건 조회');
+}
+
+function initResultMap(query) {
+  try {
+    var el = document.getElementById('bizResultMap');
+    if(!bizMap2) bizMap2 = new kakao.maps.Map(el, {center:new kakao.maps.LatLng(36.5,127.5), level:13});
+    fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(query.replace(' 식품','')) + '&size=1', {
+      headers:{'Authorization':'KakaoAK ' + KAKAO_REST_KEY}
+    }).then(function(r){return r.json()}).then(function(data){
+      if(data.documents && data.documents[0]){
+        bizMap2.setCenter(new kakao.maps.LatLng(parseFloat(data.documents[0].y), parseFloat(data.documents[0].x)));
+        bizMap2.setLevel(7);
+      }
+    });
+  } catch(e){ document.getElementById('bizResultMap').innerHTML = '<div style="padding:40px;text-align:center;color:#8892a4">지도 표시 불가</div>'; }
+}
+
+async function calcDist(x, y, elId) {
+  var el = document.getElementById(elId); el.innerHTML = '⏳';
+  try {
+    var res = await fetch('https://apis-navi.kakaomobility.com/v1/directions?origin='+COMPANY_ORIGIN.x+','+COMPANY_ORIGIN.y+'&destination='+x+','+y, {
+      headers:{'Authorization':'KakaoAK '+KAKAO_REST_KEY}
+    });
+    var d = await res.json(), r = d.routes[0];
+    if(r.result_code===0){
+      el.innerHTML = '🚗 '+(r.summary.distance/1000).toFixed(0)+'km · '+Math.round(r.summary.duration/60)+'분';
+      el.style.background='#e8f5e9'; el.style.color='#2e7d32';
+    } else { el.innerHTML='경로없음'; }
+  } catch(e){ el.innerHTML='❌'; }
+}
+
+async function calcAddrDist(addr, elId) {
+  var el = document.getElementById(elId); el.innerHTML = '⏳';
+  try {
+    var g = await fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr),{headers:{'Authorization':'KakaoAK '+KAKAO_REST_KEY}});
+    var gd = await g.json();
+    if(gd.documents && gd.documents[0]) calcDist(gd.documents[0].x, gd.documents[0].y, elId);
+    else el.innerHTML='-';
+  } catch(e){ el.innerHTML='❌'; }
+}
+
+function bizReg(name, addr) {
+  showPage('customerReg');
+  var c = document.getElementById('regCompany');
+  if(c) c.value = name;
+  toast('📋 "'+name+'" → 고객사 등록');
+}
+
+// ── hash 기반 페이지 라우팅 ──
+(function(){
+  var h = location.hash.replace('#','');
+  if (h && pageNames[h]) { showPage(h); }
+})();
+
+// ── API 수집 설정 ──
+var apiSettingsData = {
+  collectTime: '03:00',
+  collectMode: 'incremental',
+  serverUrl: 'http://localhost:5050',
+  activeApis: ['I1220','I2829','I-0020','I1300','I1320','I2835','I2831','C001','I1260',
+               'I1250','I1310','C002','C003','C006','I2859','I2860']
+};
+
+// 저장된 설정 로드
+(function loadSavedSettings(){
+  try {
+    var saved = JSON.parse(sessionStorage.getItem('apiSettings'));
+    if(saved) {
+      apiSettingsData = saved;
+      // UI 반영
+      setTimeout(function(){
+        var timeEl = document.getElementById('collectTime');
+        if(timeEl) timeEl.value = saved.collectTime || '03:00';
+        var modeEl = document.getElementById('collectMode');
+        if(modeEl) modeEl.value = saved.collectMode || 'incremental';
+        var urlEl = document.getElementById('apiServerUrl');
+        if(urlEl) urlEl.value = saved.serverUrl || 'http://localhost:5050';
+        // 체크박스 반영
+        document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]').forEach(function(cb){
+          var apiId = cb.closest('.api-item').id.replace('api-','');
+          cb.checked = saved.activeApis.indexOf(apiId) >= 0;
+        });
+        updateApiCount();
+      }, 100);
+    }
+  } catch(e){}
+})();
+
+function updateApiCount() {
+  var checks = document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]');
+  var active = 0;
+  checks.forEach(function(cb){ if(cb.checked) active++; });
+  var el = document.getElementById('apiActiveCount');
+  if(el) el.textContent = active;
+  var nextEl = document.getElementById('apiNextCollect');
+  var timeEl = document.getElementById('collectTime');
+  if(nextEl && timeEl) nextEl.textContent = timeEl.value;
+}
+
+function toggleApiGroup(groupId) {
+  var el = document.getElementById(groupId);
+  var arrow = document.getElementById(groupId + 'Arrow');
+  if(!el) return;
+  if(el.style.display === 'none') {
+    el.style.display = 'block';
+    if(arrow) arrow.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if(arrow) arrow.textContent = '▶';
+  }
+}
+
+function checkAllApis(checked) {
+  document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]').forEach(function(cb){
+    cb.checked = checked;
+  });
+  updateApiCount();
+}
+
+function saveApiSettings() {
+  var checks = document.querySelectorAll('#page-apiSettings .api-check input[type="checkbox"]');
+  var activeApis = [];
+  checks.forEach(function(cb){
+    if(cb.checked) {
+      var apiId = cb.closest('.api-item').id.replace('api-','');
+      activeApis.push(apiId);
+    }
+  });
+
+  apiSettingsData = {
+    collectTime: document.getElementById('collectTime').value,
+    collectMode: document.getElementById('collectMode').value,
+    serverUrl: document.getElementById('apiServerUrl').value.trim(),
+    activeApis: activeApis
+  };
+
+  // 세션 저장
+  sessionStorage.setItem('apiSettings', JSON.stringify(apiSettingsData));
+
+  // 서버에 설정 전송 시도
+  var url = apiSettingsData.serverUrl + '/api/settings';
+  fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(apiSettingsData)
+  }).then(function(res){ return res.json(); })
+    .then(function(data){
+      if(data.success) {
+        toast('✅ 설정이 서버에 저장되었습니다. 수집 시각: ' + apiSettingsData.collectTime + ' KST');
+      } else {
+        toast('⚠️ 로컬 저장 완료. 서버 저장은 실패: ' + (data.error || ''));
+      }
+    })
+    .catch(function(){
+      toast('💾 로컬 저장 완료. (서버 연결 시 자동 동기화됩니다)');
+    });
+
+  updateApiCount();
+}
+
+function testApiConnection() {
+  var url = document.getElementById('apiServerUrl').value.trim();
+  if(!url) { toast('⚠️ API 서버 주소를 입력하세요.'); return; }
+
+  document.getElementById('collectStatusArea').innerHTML =
+    '<div style="padding:20px;text-align:center;color:#1a73e8">🔄 연결 테스트 중...</div>';
+
+  fetch(url + '/api/status')
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      if(data.success) {
+        toast('✅ API 서버 연결 성공!');
+        renderCollectStatus(data);
+      } else {
+        toast('❌ 서버 응답 오류');
+        document.getElementById('collectStatusArea').innerHTML =
+          '<div style="color:#e53935;padding:20px;text-align:center">서버 응답 오류: ' + JSON.stringify(data) + '</div>';
+      }
+    })
+    .catch(function(e){
+      toast('❌ 서버 연결 실패: ' + e.message);
+      document.getElementById('collectStatusArea').innerHTML =
+        '<div style="color:#e53935;padding:20px;text-align:center">연결 실패: ' + e.message +
+        '<br><br><span style="font-size:11px;color:#8892a4">서버가 실행 중인지 확인하세요.<br>' +
+        'bioflsever에서: <code>sudo systemctl status fss-api</code></span></div>';
+    });
+}
+
+function loadCollectStatus() {
+  var url = document.getElementById('apiServerUrl').value.trim();
+  if(!url) { toast('⚠️ API 서버 주소를 먼저 입력하세요.'); return; }
+  testApiConnection();
+}
+
+function renderCollectStatus(data) {
+  var html = '';
+
+  // 테이블별 요약
+  var tableNames = {
+    'fss_businesses': '업소 인허가',
+    'fss_products': '품목 제조',
+    'fss_materials': '원재료',
+    'fss_changes': '변경 이력'
+  };
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px">';
+  if(data.tables) {
+    for(var tbl in data.tables) {
+      var t = data.tables[tbl];
+      var name = tableNames[tbl] || tbl;
+      var cnt = t.count ? t.count.toLocaleString() : '0';
+      var last = t.last_collected ? t.last_collected.substring(0,16) : '-';
+      html += '<div style="padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #eef0f4">';
+      html += '<div style="font-size:11px;color:#8892a4">' + name + '</div>';
+      html += '<div style="font-size:20px;font-weight:700;color:#1a2332">' + cnt + '</div>';
+      html += '<div style="font-size:10px;color:#b0b8c4">최근: ' + last + '</div>';
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
+  // 최근 수집 로그
+  if(data.recent_logs && data.recent_logs.length > 0) {
+    html += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#1a2332">최근 수집 이력</div>';
+    data.recent_logs.forEach(function(log){
+      var dt = (log.started_at || '').substring(0,16);
+      var dotClass = log.error_count > 0 ? 'err' : 'ok';
+      html += '<div class="collect-row">';
+      html += '<span class="collect-dot ' + dotClass + '"></span>';
+      html += '<span style="color:#8892a4;min-width:100px">' + dt + '</span>';
+      html += '<span style="font-weight:600;min-width:60px">' + log.api_source + '</span>';
+      html += '<span style="flex:1">' + (log.api_name || '') + '</span>';
+      html += '<span style="color:#1a73e8">' + (log.fetched_count||0).toLocaleString() + '건</span>';
+      html += '<span style="color:#2e7d32;margin-left:8px">+' + (log.inserted_count||0) + '</span>';
+      html += '<span style="color:#e65100;margin-left:4px">↻' + (log.updated_count||0) + '</span>';
+      if(log.error_count > 0) html += '<span style="color:#e53935;margin-left:4px">✗' + log.error_count + '</span>';
+      html += '<span style="color:#b0b8c4;margin-left:8px">' + (log.duration_sec||0) + '초</span>';
+      html += '</div>';
+    });
+
+    // 최근 수집일시 업데이트
+    var lastEl = document.getElementById('apiLastCollect');
+    if(lastEl && data.recent_logs[0]) {
+      lastEl.textContent = (data.recent_logs[0].started_at || '').substring(5,16);
+    }
+  } else {
+    html += '<div style="text-align:center;color:#8892a4;padding:16px">수집 이력이 없습니다. 최초 수집을 실행하세요.</div>';
+  }
+
+  document.getElementById('collectStatusArea').innerHTML = html;
+}
+
+// 페이지 진입 시 카운트 업데이트
+(function(){
+  setTimeout(updateApiCount, 200);
+})();
+</script>
+</body>
+</html>

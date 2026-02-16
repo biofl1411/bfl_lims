@@ -3,600 +3,455 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BioFoodLab LIMS - 대시보드</title>
+<title>BioFoodLab 통합관리</title>
 <style>
-:root {
-  --primary: #2563eb;
-  --primary-light: #dbeafe;
-  --success: #10b981;
-  --success-light: #d1fae5;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-900: #111827;
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Noto Sans KR',sans-serif;height:100vh;display:flex;background:#f8f9fb;font-size:13px;overflow:hidden}
+
+/* ── Sidebar ── */
+.sb{width:250px;background:#1a2332;display:flex;flex-direction:column;flex-shrink:0;z-index:10;transition:width .25s}
+.sb.collapsed{width:64px}
+.sb-hd{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px;min-height:56px}
+.sb-logo{color:#4fc3f7;font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.sb-logo em{color:#8ea4c0;font-weight:400;font-size:11px;font-style:normal;margin-left:4px}
+.sb-toggle{margin-left:auto;background:none;border:none;color:#5a7a9b;cursor:pointer;font-size:16px;padding:4px;border-radius:6px;flex-shrink:0}
+.sb-toggle:hover{background:rgba(255,255,255,.08);color:#8ea4c0}
+.sb.collapsed .sb-logo em,.sb.collapsed .sb-text,.sb.collapsed .sb-cat-text,.sb.collapsed .sb-badge,.sb.collapsed .sb-arrow,.sb.collapsed .sb-sub{display:none}
+.sb.collapsed .sb-logo{font-size:18px}
+.sb.collapsed .sb-item{justify-content:center;padding:10px}
+.sb.collapsed .sb-item .sb-icon{margin:0}
+.sb.collapsed .sb-cat{padding:6px;text-align:center}
+.sb.collapsed .sb-ft .sb-uinfo{display:none}
+
+.sb-menu{flex:1;padding:6px 8px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.sb-menu::-webkit-scrollbar{width:4px}
+.sb-menu::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+
+.sb-cat{padding:8px 12px 4px;font-size:10px;color:#4a6785;font-weight:700;letter-spacing:.5px;margin-top:8px;display:flex;align-items:center;gap:6px}
+.sb-cat:first-child{margin-top:0}
+
+.sb-item{padding:8px 12px;color:#8ea4c0;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:9px;font-size:13px;margin-bottom:1px;transition:all .15s;position:relative}
+.sb-item:hover{background:rgba(255,255,255,.05)}
+.sb-item.active{color:#4fc3f7;background:rgba(79,195,247,.1);font-weight:600}
+.sb-item .sb-arrow{margin-left:auto;font-size:10px;transition:transform .2s;color:#4a6785}
+.sb-item.open .sb-arrow{transform:rotate(90deg)}
+.sb-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.sb-text{white-space:nowrap;overflow:hidden}
+.sb-badge{margin-left:auto;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;white-space:nowrap}
+.badge-done{background:rgba(46,125,50,.2);color:#66bb6a}
+.badge-next{background:rgba(255,152,0,.2);color:#ffb74d}
+
+.sb-sub{max-height:0;overflow:hidden;transition:max-height .3s ease;padding-left:16px}
+.sb-sub.open{max-height:600px}
+.sb-sub .sb-item{font-size:12px;padding:6px 12px;color:#6b8aab}
+.sb-sub .sb-item.active{color:#4fc3f7}
+.sb-sub .sb-item:hover{color:#b0c8e0}
+
+.sb-ft{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px}
+.sb-avatar{width:32px;height:32px;border-radius:50%;background:rgba(79,195,247,.2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.sb-uinfo{overflow:hidden}
+.sb-name{color:#c8d6e5;font-size:12px;font-weight:600;white-space:nowrap}
+.sb-role{color:#6b7d93;font-size:10px}
+
+/* ── Main ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5;font-size:12px}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.topbar-search{padding:7px 12px 7px 32px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;width:200px;outline:none;background:#f8f9fb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7' stroke='%238892a4' stroke-width='2' fill='none'/%3E%3Cpath d='M16 16l5 5' stroke='%238892a4' stroke-width='2'/%3E%3C/svg%3E") 10px center no-repeat}
+.topbar-search:focus{border-color:#4fc3f7;background-color:#fff}
+.topbar-bell{position:relative;cursor:pointer;font-size:18px;padding:4px}
+.topbar-bell .dot{position:absolute;top:0;right:0;width:8px;height:8px;background:#e53935;border-radius:50%;border:2px solid #fff}
+.topbar-date{font-size:11px;color:#8892a4}
+
+.content{flex:1;padding:24px;overflow-y:auto}
+
+/* ── Dashboard ── */
+.page{display:none}.page.active{display:block}
+
+.dash-hello{margin-bottom:24px}
+.dash-hello h2{font-size:22px;font-weight:800;color:#1a2332;margin-bottom:4px}
+.dash-hello p{color:#5f6b7a;font-size:14px}
+
+.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.ds{background:#fff;border:1px solid #e2e6ed;border-radius:12px;padding:20px;position:relative;overflow:hidden}
+.ds::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;border-radius:2px}
+.ds.c1::before{background:#4fc3f7}.ds.c2::before{background:#66bb6a}.ds.c3::before{background:#ffa726}.ds.c4::before{background:#ef5350}
+.ds-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ds-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.c1 .ds-icon{background:#e3f2fd}.c2 .ds-icon{background:#e8f5e9}.c3 .ds-icon{background:#fff3e0}.c4 .ds-icon{background:#fce4ec}
+.ds-chg{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#e8f5e9;color:#2e7d32}
+.ds-chg.down{background:#fce4ec;color:#c62828}
+.ds-val{font-size:28px;font-weight:800;color:#1a2332}
+.ds-lbl{font-size:12px;color:#8892a4;margin-top:2px}
+
+.row2{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+
+.dcard{background:#fff;border:1px solid #e2e6ed;border-radius:12px;overflow:hidden}
+.dcard-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;justify-content:space-between}
+.dcard-hd h3{font-size:14px;font-weight:700;color:#1a2332;display:flex;align-items:center;gap:8px}
+.dcard-hd .more{font-size:11px;color:#4fc3f7;cursor:pointer;font-weight:600;text-decoration:none}
+.dcard-hd .more:hover{text-decoration:underline}
+.dcard-bd{padding:16px 20px}
+
+.dtbl{width:100%;border-collapse:collapse}
+.dtbl th{padding:8px 10px;font-size:11px;font-weight:700;color:#5f6b7a;text-align:left;border-bottom:2px solid #e2e6ed;background:#f8f9fb}
+.dtbl td{padding:9px 10px;border-bottom:1px solid #eef0f4;font-size:12px;color:#333}
+.dtbl tr:hover{background:#fafbfc}
+
+.tl{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
+.tl-blue{background:#2196f3}.tl-green{background:#4caf50}.tl-yellow{background:#ffeb3b}.tl-orange{background:#ff9800}.tl-red{background:#f44336}
+
+.act-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f0f2f5}
+.act-item:last-child{border-bottom:none}
+.act-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.act-txt{font-size:12px;color:#333;line-height:1.5}
+.act-txt .t{color:#8892a4;font-size:10px;display:block;margin-top:2px}
+
+.sch-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f2f5}
+.sch-item:last-child{border-bottom:none}
+.sch-d{width:44px;height:44px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+.sch-d .dy{font-size:16px;font-weight:800;line-height:1}
+.sch-d .mo{font-size:9px;font-weight:600;margin-top:2px}
+.sch-d.today{background:#e3f2fd;color:#1565c0}
+.sch-d.fut{background:#f8f9fb;color:#5f6b7a}
+.sch-info .ti{font-size:12px;font-weight:600;color:#1a2332}
+.sch-info .de{font-size:11px;color:#8892a4;margin-top:2px}
+
+.qgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.qi{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;border-radius:10px;background:#f8f9fb;cursor:pointer;transition:all .15s;border:1px solid transparent;text-decoration:none;color:inherit}
+.qi:hover{background:#fff;border-color:#e2e6ed;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.qi .icon{font-size:24px}
+.qi .txt{font-size:11px;font-weight:600;color:#5f6b7a;text-align:center}
+
+/* ── Placeholder ── */
+.placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center}
+.ph-icon{font-size:64px;margin-bottom:16px;opacity:.6}
+.ph-title{font-size:20px;font-weight:700;color:#1a2332;margin-bottom:8px}
+.ph-desc{font-size:14px;color:#8892a4;max-width:420px;line-height:1.6}
+.ph-badge{margin-top:16px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600}
+.ph-badge.upcoming{background:#e3f2fd;color:#1565c0}
+.ph-badge.later{background:#fff3e0;color:#e65100}
+
+/* ── Docs section ── */
+.doc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
+.doc-card{background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;text-decoration:none;color:inherit;transition:all .15s}
+.doc-card:hover{border-color:#4fc3f7;box-shadow:0 2px 12px rgba(79,195,247,.1)}
+.doc-icon{font-size:28px;flex-shrink:0}
+.doc-info h4{font-size:13px;font-weight:700;color:#1a2332;margin-bottom:3px}
+.doc-info p{font-size:11px;color:#8892a4}
+.doc-arrow{margin-left:auto;color:#c8d6e5;font-size:16px}
+.doc-card:hover .doc-arrow{color:#4fc3f7}
+
+/* Mobile */
+.sb-mob{display:none;position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:#1a2332;color:#4fc3f7;border:none;font-size:20px;cursor:pointer;z-index:20;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+@media(max-width:900px){
+  .sb{position:fixed;left:-250px;height:100vh;z-index:20;transition:left .25s}
+  .sb.mopen{left:0}
+  .sb-mob{display:flex;align-items:center;justify-content:center}
+  .dash-stats{grid-template-columns:repeat(2,1fr)}
+  .row2{grid-template-columns:1fr}
+  .qgrid{grid-template-columns:repeat(2,1fr)}
+  .doc-cards{grid-template-columns:1fr}
 }
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
-  background: #f5f5f5;
-  color: #1a1a1a;
-}
-
-.app-layout { display: flex; height: 100vh; }
-
-.sidebar {
-  width: 250px;
-  background: #1e293b;
-  color: white;
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 1000;
-  overflow-y: auto;
-}
-
-.logo {
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-}
-
-.logo-icon {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-}
-
-.logo-title { font-size: 18px; font-weight: 700; }
-.logo-subtitle { font-size: 11px; color: #94a3b8; }
-
-.nav-section { padding: 12px 0; }
-.nav-section-title {
-  padding: 8px 20px;
-  font-size: 11px;
-  color: #94a3b8;
-  text-transform: uppercase;
-}
-
-.nav-menu { list-style: none; }
-.nav-item {
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  color: #cbd5e1;
-  font-size: 14px;
-  transition: all 0.2s;
-  text-decoration: none;
-}
-
-.nav-item:hover { background: rgba(255,255,255,0.05); }
-.nav-item.active { background: #2563eb; color: white; font-weight: 600; }
-.nav-icon { font-size: 18px; width: 24px; text-align: center; }
-
-.main-container {
-  flex: 1;
-  margin-left: 250px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.top-header {
-  background: white;
-  padding: 16px 24px;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: space-between;
-}
-
-.page-title { font-size: 24px; font-weight: 700; }
-
-.main-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.stat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: var(--gray-600);
-}
-
-.stat-change {
-  font-size: 13px;
-  font-weight: 500;
-  margin-top: 8px;
-}
-
-.stat-change.up { color: var(--success); }
-
-.content-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.card {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  padding: 24px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--gray-200);
-}
-
-.card-title {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.btn-link {
-  color: var(--primary);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.table-simple {
-  width: 100%;
-}
-
-.table-simple th {
-  text-align: left;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--gray-600);
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--gray-200);
-}
-
-.table-simple td {
-  padding: 12px 8px;
-  font-size: 14px;
-  border-bottom: 1px solid var(--gray-100);
-}
-
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.badge-success { background: var(--success-light); color: var(--success); }
-.badge-warning { background: #fef3c7; color: var(--warning); }
-
-.notice-item {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--gray-100);
-  cursor: pointer;
-}
-
-.notice-item:hover { background: var(--gray-50); padding-left: 8px; }
-
-.notice-title {
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.notice-meta {
-  font-size: 12px;
-  color: var(--gray-600);
-}
-
-.chart-placeholder {
-  height: 300px;
-  background: var(--gray-50);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gray-600);
-  font-size: 14px;
+@media(max-width:600px){
+  .dash-stats{grid-template-columns:1fr}
+  .topbar-search,.topbar-date{display:none}
 }
 </style>
 </head>
 <body>
 
-<div class="app-layout">
-  <aside class="sidebar">
-    <div class="logo">
-      <div class="logo-icon">🧬</div>
-      <div style="display: flex; flex-direction: column;">
-        <div class="logo-title">BioFoodLab</div>
-        <div class="logo-subtitle">LIMS 통합관리</div>
+<!-- ═══ Sidebar ═══ -->
+<nav class="sb" id="sidebar">
+  <div class="sb-hd">
+    <div class="sb-logo" onclick="goHome()">🧪 BFL<em>통합관리</em></div>
+    <button class="sb-toggle" onclick="document.getElementById('sidebar').classList.toggle('collapsed')">☰</button>
+  </div>
+  <div class="sb-menu">
+
+    <div class="sb-item active" id="nav-dash" onclick="goHome()">
+      <span class="sb-icon">📊</span><span class="sb-text">대시보드</span>
+    </div>
+
+    <div class="sb-cat"><span class="sb-cat-text">영업</span></div>
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">💼</span><span class="sb-text">영업 관리</span>
+      <span class="sb-badge badge-done">설계완료</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub" id="sub-sales">
+      <div class="sb-item" onclick="goSales('customerList')"><span class="sb-icon">🏢</span><span class="sb-text">고객사 관리</span></div>
+      <div class="sb-item" onclick="goSales('bizSearch')"><span class="sb-icon">🔍</span><span class="sb-text">업체조회</span><span style="font-size:9px;background:#4fc3f7;color:#fff;padding:1px 5px;border-radius:3px;margin-left:6px">NEW</span></div>
+      <div class="sb-item" onclick="goSales('daily')"><span class="sb-icon">📝</span><span class="sb-text">업무일지</span></div>
+      <div class="sb-item" onclick="goSales('vehicle')"><span class="sb-icon">🚗</span><span class="sb-text">차량일지</span></div>
+      <div class="sb-item" onclick="goSales('collection')"><span class="sb-icon">📞</span><span class="sb-text">미수금 활동 내역</span></div>
+      <div class="sb-item" onclick="goSales('estimate')"><span class="sb-icon">📋</span><span class="sb-text">견적서 관리</span></div>
+      <div class="sb-item" onclick="goSales('trade')"><span class="sb-icon">📄</span><span class="sb-text">거래명세표 관리</span></div>
+      <div class="sb-item" onclick="goSales('urgent')"><span class="sb-icon">🚨</span><span class="sb-text">긴급 협조 요청</span></div>
+      <div class="sb-item" onclick="goSales('arManage')"><span class="sb-icon">💰</span><span class="sb-text">미수금 관리</span></div>
+      <div class="sb-item" onclick="goSales('invoice')"><span class="sb-icon">🧾</span><span class="sb-text">계산서 발행 승인</span></div>
+    </div>
+
+    <div class="sb-cat"><span class="sb-cat-text">검사</span></div>
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">📥</span><span class="sb-text">접수 관리</span>
+      <span class="sb-badge badge-next">다음</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub">
+      <div class="sb-item" onclick="goPH('접수 관리','업체등록·수정','upcoming')"><span class="sb-icon">🏭</span><span class="sb-text">업체등록·수정</span></div>
+      <div class="sb-item" onclick="goPH('접수 관리','시료 접수','upcoming')"><span class="sb-icon">🧪</span><span class="sb-text">시료 접수</span></div>
+      <div class="sb-item" onclick="goPH('접수 관리','접수 현황','upcoming')"><span class="sb-icon">📋</span><span class="sb-text">접수 현황</span></div>
+      <div class="sb-item" onclick="goPH('접수 관리','접수대장','upcoming')"><span class="sb-icon">📒</span><span class="sb-text">접수대장</span></div>
+      <div class="sb-item" onclick="window.location.href='검사관리.html'"><span class="sb-icon">🎯</span><span class="sb-text">검사목적 관리</span></div>
+      <div class="sb-item" onclick="goPH('접수 관리','일정관리','upcoming')"><span class="sb-icon">📅</span><span class="sb-text">일정관리</span></div>
+      <div class="sb-item" onclick="goPH('접수 관리','LIMS 연동','upcoming')"><span class="sb-icon">🔗</span><span class="sb-text">LIMS 연동</span></div>
+    </div>
+
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">🔬</span><span class="sb-text">시험 결재</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub">
+      <div class="sb-item" onclick="goPH('시험 결재','항목배정','later')"><span class="sb-icon">📌</span><span class="sb-text">항목배정</span></div>
+      <div class="sb-item" onclick="goPH('시험 결재','결과 입력','later')"><span class="sb-icon">✏️</span><span class="sb-text">결과 입력</span></div>
+      <div class="sb-item" onclick="goPH('시험 결재','결재 승인/반려','later')"><span class="sb-icon">✅</span><span class="sb-text">결재 승인/반려</span></div>
+      <div class="sb-item" onclick="goPH('시험 결재','검사 일정 캘린더','later')"><span class="sb-icon">🗓️</span><span class="sb-text">검사 일정 캘린더</span></div>
+    </div>
+
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">📜</span><span class="sb-text">성적 관리</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub">
+      <div class="sb-item" onclick="goPH('성적 관리','성적서 출력','later')"><span class="sb-icon">🖨️</span><span class="sb-text">성적서 출력</span></div>
+      <div class="sb-item" onclick="goPH('성적 관리','성적서 조회','later')"><span class="sb-icon">🔎</span><span class="sb-text">성적서 조회</span></div>
+      <div class="sb-item" onclick="goPH('성적 관리','부적합대장','later')"><span class="sb-icon">⚠️</span><span class="sb-text">부적합대장</span></div>
+    </div>
+
+    <div class="sb-cat"><span class="sb-cat-text">재무/통계</span></div>
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">💳</span><span class="sb-text">재무 관리</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub">
+      <div class="sb-item" onclick="goPH('재무 관리','매출 관리','later')"><span class="sb-icon">💹</span><span class="sb-text">매출 관리</span></div>
+      <div class="sb-item" onclick="goPH('재무 관리','입금 관리','later')"><span class="sb-icon">🏦</span><span class="sb-text">입금 관리</span></div>
+      <div class="sb-item" onclick="goPH('재무 관리','세금계산서 일괄발행','later')"><span class="sb-icon">🧾</span><span class="sb-text">세금계산서 일괄발행</span></div>
+    </div>
+    <div class="sb-item" onclick="goPH('통계 분석','','later')" style="opacity:.6">
+      <span class="sb-icon">📉</span><span class="sb-text">통계 분석</span>
+    </div>
+
+    <div class="sb-cat"><span class="sb-cat-text">관리</span></div>
+    <div class="sb-item" onclick="goPH('문서 관리','','later')"><span class="sb-icon">📁</span><span class="sb-text">문서 관리</span></div>
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">🧫</span><span class="sb-text">재고/시약 관리</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub">
+      <div class="sb-item" onclick="goPH('재고/시약 관리','시약 등록·관리','later')"><span class="sb-icon">🧪</span><span class="sb-text">시약 등록·관리</span></div>
+      <div class="sb-item" onclick="goPH('재고/시약 관리','바코드 관리','later')"><span class="sb-icon">📱</span><span class="sb-text">바코드 관리</span></div>
+      <div class="sb-item" onclick="goPH('재고/시약 관리','재고 현황','later')"><span class="sb-icon">📦</span><span class="sb-text">재고 현황</span></div>
+    </div>
+    <div class="sb-item" onclick="goPH('공지','','later')"><span class="sb-icon">📢</span><span class="sb-text">공지</span></div>
+
+    <div class="sb-cat"><span class="sb-cat-text">시스템</span></div>
+    <div class="sb-item" onclick="goPH('사용자 설정','내 정보 수정','later')"><span class="sb-icon">👤</span><span class="sb-text">사용자 설정</span></div>
+    <div class="sb-item" onclick="toggleSub(this)">
+      <span class="sb-icon">⚙️</span><span class="sb-text">관리자</span><span class="sb-arrow">▶</span>
+    </div>
+    <div class="sb-sub">
+      <div class="sb-item" onclick="goPH('관리자','사용자 관리','later')"><span class="sb-icon">👥</span><span class="sb-text">사용자 관리</span></div>
+      <div class="sb-item" onclick="goPH('관리자','권한 설정','later')"><span class="sb-icon">🔑</span><span class="sb-text">권한 설정</span></div>
+      <div class="sb-item" onclick="goPH('관리자','미수금 관리 설정','later')"><span class="sb-icon">🚦</span><span class="sb-text">미수금 관리 설정</span></div>
+      <div class="sb-item" onclick="goPH('관리자','시스템 로그','later')"><span class="sb-icon">📋</span><span class="sb-text">시스템 로그</span></div>
+    </div>
+  </div>
+
+  <div class="sb-ft">
+    <div class="sb-avatar">👤</div>
+    <div class="sb-uinfo"><div class="sb-name">김영업</div><div class="sb-role">영업부 · 대리</div></div>
+  </div>
+</nav>
+
+<!-- ═══ Main ═══ -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="topTitle">대시보드</span>
+    <span class="topbar-sep" id="topSep" style="display:none">›</span>
+    <span class="topbar-sub" id="topSub"></span>
+    <div class="topbar-right">
+      <input class="topbar-search" placeholder="메뉴, 업체명, 시료 검색...">
+      <span class="topbar-bell">🔔<span class="dot"></span></span>
+      <span class="topbar-date" id="todayDate"></span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ══ 대시보드 ══ -->
+    <div class="page active" id="pg-dash">
+      <div class="dash-hello">
+        <h2>안녕하세요, 김영업님 👋</h2>
+        <p>오늘의 업무 현황을 확인하세요.</p>
       </div>
-    </div>
-    
-    <div class="nav-section">
-      <div class="nav-section-title">메인</div>
-      <ul class="nav-menu">
-        <li class="nav-item active">
-          <span class="nav-icon">📊</span>
-          <span>대시보드</span>
-        </li>
-      </ul>
-    </div>
 
-    <div class="nav-section">
-      <div class="nav-section-title">영업</div>
-      <ul class="nav-menu">
-        <li class="nav-item">
-          <span class="nav-icon">💼</span>
-          <span>영업 관리</span>
-        </li>
-      </ul>
-    </div>
+      <div class="dash-stats">
+        <div class="ds c1"><div class="ds-top"><div class="ds-icon">📥</div><span class="ds-chg">+12%</span></div><div class="ds-val">847</div><div class="ds-lbl">이번 달 접수 건수</div></div>
+        <div class="ds c2"><div class="ds-top"><div class="ds-icon">💰</div><span class="ds-chg">+8%</span></div><div class="ds-val">2.4억</div><div class="ds-lbl">이번 달 매출</div></div>
+        <div class="ds c3"><div class="ds-top"><div class="ds-icon">⏳</div></div><div class="ds-val">23</div><div class="ds-lbl">검사 진행 중</div></div>
+        <div class="ds c4"><div class="ds-top"><div class="ds-icon">🚨</div><span class="ds-chg down">6건</span></div><div class="ds-val">6</div><div class="ds-lbl">미수금 주의 업체</div></div>
+      </div>
 
-    <div class="nav-section">
-      <div class="nav-section-title">접수</div>
-      <ul class="nav-menu">
-        <li class="nav-item">
-          <span class="nav-icon">🏢</span>
-          <span>업체등록·수정</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📝</span>
-          <span>시료 접수</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📋</span>
-          <span>접수 현황</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📔</span>
-          <span>접수대장</span>
-        </li>
-        <a href="검사관리.html" class="nav-item">
-          <span class="nav-icon">⚙️</span>
-          <span>검사목적 관리</span>
-        </a>
-        <li class="nav-item">
-          <span class="nav-icon">📅</span>
-          <span>일정관리</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">🏛️</span>
-          <span>지부관리</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📈</span>
-          <span>실적보고</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">🔗</span>
-          <span>LIMS 연동</span>
-        </li>
-      </ul>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-section-title">시험</div>
-      <ul class="nav-menu">
-        <a href="항목배정.html" class="nav-item">
-          <span class="nav-icon">👥</span>
-          <span>항목배정</span>
-        </a>
-        <li class="nav-item">
-          <span class="nav-icon">🔍</span>
-          <span>시험항목 조회</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">⚗️</span>
-          <span>검사 진행</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">✍️</span>
-          <span>결과 입력</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">✅</span>
-          <span>결재</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📆</span>
-          <span>캘린더</span>
-        </li>
-      </ul>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-section-title">성적 / 재무</div>
-      <ul class="nav-menu">
-        <li class="nav-item">
-          <span class="nav-icon">📄</span>
-          <span>성적 관리</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">💰</span>
-          <span>재무 관리</span>
-        </li>
-      </ul>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-section-title">운영</div>
-      <ul class="nav-menu">
-        <li class="nav-item">
-          <span class="nav-icon">📊</span>
-          <span>통계 분석</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📂</span>
-          <span>문서 관리</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">🧪</span>
-          <span>재고/시약 관리</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📢</span>
-          <span>공지</span>
-        </li>
-      </ul>
-    </div>
-
-        <div class="nav-section">
-      <div class="nav-section-title">설정</div>
-      <ul class="nav-menu">
-        <li class="nav-item">
-          <span class="nav-icon">👤</span>
-          <span>사용자 설정</span>
-        </li>
-      </ul>
-      <div class="nav-section-title" style="padding-top: 8px;">관리자</div>
-      <ul class="nav-menu">
-        <a href="사용자관리.html" class="nav-item ">
-          <span class="nav-icon">👥</span>
-          <span>사용자 관리</span>
-        </a>
-        <li class="nav-item">
-          <span class="nav-icon">🏢</span>
-          <span>부서 관리</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">🔐</span>
-          <span>권한 설정</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📊</span>
-          <span>대시보드 권한</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">🔔</span>
-          <span>알림 설정</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">📜</span>
-          <span>시스템 로그</span>
-        </li>
-        <li class="nav-item">
-          <span class="nav-icon">💰</span>
-          <span>미수금 관리 설정</span>
-        </li>
-      </ul>
-    </div>
-
-          <div class="stat-value" style="color: var(--primary);">₩125.4M</div>
-          <div class="stat-label">이번 달 매출</div>
-          <div class="stat-change up">▲ 12.5% 전월 대비</div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: var(--success-light); color: var(--success);">📝</div>
+      <div class="row2">
+        <div class="dcard">
+          <div class="dcard-hd"><h3>🚦 미수금 주의 업체</h3><a class="more" href="영업관리_실제화면.html#collection">전체보기 →</a></div>
+          <div class="dcard-bd" style="padding:0">
+            <table class="dtbl">
+              <thead><tr><th>업체명</th><th>신호등</th><th style="text-align:right">미수금</th><th>연체일</th><th>담당</th></tr></thead>
+              <tbody>
+                <tr><td><b>한솔식품(주)</b></td><td><span class="tl tl-red"></span></td><td style="text-align:right;color:#e53935;font-weight:700">12,500,000</td><td>96일</td><td>김영업</td></tr>
+                <tr><td><b>대한푸드</b></td><td><span class="tl tl-orange"></span></td><td style="text-align:right;color:#e65100;font-weight:700">8,200,000</td><td>72일</td><td>이수진</td></tr>
+                <tr><td><b>서울유통(주)</b></td><td><span class="tl tl-orange"></span></td><td style="text-align:right;color:#e65100;font-weight:700">5,100,000</td><td>65일</td><td>김영업</td></tr>
+                <tr><td><b>그린바이오</b></td><td><span class="tl tl-yellow"></span></td><td style="text-align:right">3,800,000</td><td>62일</td><td>박철수</td></tr>
+              </tbody>
+            </table>
           </div>
-          <div class="stat-value" style="color: var(--success);">1,248</div>
-          <div class="stat-label">이번 달 접수</div>
-          <div class="stat-change up">▲ 8.3% 전월 대비</div>
         </div>
-
-        <div class="stat-card">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: #fef3c7; color: var(--warning);">⚗️</div>
+        <div class="dcard">
+          <div class="dcard-hd"><h3>📅 이번 주 일정</h3></div>
+          <div class="dcard-bd">
+            <div class="sch-item"><div class="sch-d today"><span class="dy">13</span><span class="mo">2월</span></div><div class="sch-info"><div class="ti">한솔식품 방문 (시료 수거)</div><div class="de">오후 2시 · 서울(동작구)</div></div></div>
+            <div class="sch-item"><div class="sch-d today"><span class="dy">13</span><span class="mo">2월</span></div><div class="sch-info"><div class="ti">대한푸드 수금 활동 전화</div><div class="de">오후 4시 · 미수금 8,200,000원</div></div></div>
+            <div class="sch-item"><div class="sch-d fut"><span class="dy">14</span><span class="mo">2월</span></div><div class="sch-info"><div class="ti">풀무원식품 정기 검사 접수</div><div class="de">오전 10시 · 택배 접수</div></div></div>
+            <div class="sch-item"><div class="sch-d fut"><span class="dy">17</span><span class="mo">2월</span></div><div class="sch-info"><div class="ti">월간 매출 보고</div><div class="de">오전 9시 · 재무부 제출</div></div></div>
           </div>
-          <div class="stat-value" style="color: var(--warning);">342</div>
-          <div class="stat-label">진행 중 검사</div>
-          <div class="stat-change">실시간 현황</div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: #ddd6fe; color: #7c3aed;">🧪</div>
-          </div>
-          <div class="stat-value" style="color: #7c3aed;">89%</div>
-          <div class="stat-label">시약 재고율</div>
-          <div class="stat-change">적정 수준</div>
         </div>
       </div>
 
-      <!-- 차트 & 공지 -->
-      <div class="content-grid">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">📈 월별 매출 추이</div>
-            <a href="#" class="btn-link">상세보기 →</a>
-          </div>
-          <div class="chart-placeholder">
-            차트 영역 (추후 구현)
+      <div class="row2">
+        <div class="dcard">
+          <div class="dcard-hd"><h3>🕐 최근 활동</h3></div>
+          <div class="dcard-bd">
+            <div class="act-item"><div class="act-dot" style="background:#4fc3f7"></div><div class="act-txt"><b>CJ프레시웨이</b> 시료 접수 완료 (미생물 5종)<span class="t">10분 전</span></div></div>
+            <div class="act-item"><div class="act-dot" style="background:#66bb6a"></div><div class="act-txt"><b>롯데푸드</b> 검사 성적서 발급 완료<span class="t">30분 전</span></div></div>
+            <div class="act-item"><div class="act-dot" style="background:#ffa726"></div><div class="act-txt"><b>한솔식품</b> 수금 활동 기록 — 통화 미연결<span class="t">1시간 전</span></div></div>
+            <div class="act-item"><div class="act-dot" style="background:#4fc3f7"></div><div class="act-txt"><b>오뚜기</b> 거래명세표 이메일 발송 완료<span class="t">2시간 전</span></div></div>
+            <div class="act-item"><div class="act-dot" style="background:#ef5350"></div><div class="act-txt"><b>대한푸드</b> 신호등 변경: 🟡→🟠 (연체 72일)<span class="t">3시간 전</span></div></div>
           </div>
         </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">📢 공지사항</div>
-            <a href="#" class="btn-link">전체보기 →</a>
-          </div>
-          <div>
-            <div class="notice-item">
-              <div class="notice-title">[공지] 2월 시약 재고 점검 안내</div>
-              <div class="notice-meta">2026-02-15 · 관리팀</div>
-            </div>
-            <div class="notice-item">
-              <div class="notice-title">[중요] 검사 일정 변경 안내</div>
-              <div class="notice-meta">2026-02-14 · 식품축산분석실</div>
-            </div>
-            <div class="notice-item">
-              <div class="notice-title">설날 연휴 업무 안내</div>
-              <div class="notice-meta">2026-02-10 · 경영지원실</div>
+        <div class="dcard">
+          <div class="dcard-hd"><h3>⚡ 바로가기</h3></div>
+          <div class="dcard-bd">
+            <div class="qgrid">
+              <a class="qi" href="영업관리_실제화면.html#customerReg"><span class="icon">🏢</span><span class="txt">고객사 등록</span></a>
+              <a class="qi" href="영업관리_실제화면.html#daily"><span class="icon">📝</span><span class="txt">업무일지</span></a>
+              <a class="qi" href="영업관리_실제화면.html#collection"><span class="icon">📞</span><span class="txt">수금 활동</span></a>
+              <div class="qi" onclick="goPH('접수 관리','시료 접수','upcoming')"><span class="icon">📥</span><span class="txt">시료 접수</span></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 최근 접수 & 검사 진행 -->
-      <div class="content-grid">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">📋 최근 접수 현황</div>
-            <a href="#" class="btn-link">전체보기 →</a>
-          </div>
-          <table class="table-simple">
-            <thead>
-              <tr>
-                <th>접수번호</th>
-                <th>업체명</th>
-                <th>검체유형</th>
-                <th>접수일</th>
-                <th>상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>2026-0215-001</td>
-                <td>삼성식품(주)</td>
-                <td>조미김</td>
-                <td>2026-02-15</td>
-                <td><span class="badge badge-success">검사중</span></td>
-              </tr>
-              <tr>
-                <td>2026-0215-002</td>
-                <td>농심(주)</td>
-                <td>라면</td>
-                <td>2026-02-15</td>
-                <td><span class="badge badge-warning">대기중</span></td>
-              </tr>
-              <tr>
-                <td>2026-0214-089</td>
-                <td>CJ제일제당</td>
-                <td>햄</td>
-                <td>2026-02-14</td>
-                <td><span class="badge badge-success">완료</span></td>
-              </tr>
-              <tr>
-                <td>2026-0214-088</td>
-                <td>롯데제과</td>
-                <td>과자</td>
-                <td>2026-02-14</td>
-                <td><span class="badge badge-success">완료</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">⚗️ 검사 진행 현황</div>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 16px;">
-            <div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 14px; font-weight: 500;">식품 검사</span>
-                <span style="font-size: 14px; color: var(--success);">78%</span>
-              </div>
-              <div style="height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden;">
-                <div style="width: 78%; height: 100%; background: var(--success);"></div>
-              </div>
-            </div>
-
-            <div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 14px; font-weight: 500;">축산 검사</span>
-                <span style="font-size: 14px; color: var(--primary);">65%</span>
-              </div>
-              <div style="height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden;">
-                <div style="width: 65%; height: 100%; background: var(--primary);"></div>
-              </div>
-            </div>
-
-            <div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="font-size: 14px; font-weight: 500;">환경 검사</span>
-                <span style="font-size: 14px; color: var(--warning);">45%</span>
-              </div>
-              <div style="height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden;">
-                <div style="width: 45%; height: 100%; background: var(--warning);"></div>
-              </div>
-            </div>
+      <!-- 기획 산출물 -->
+      <div class="dcard">
+        <div class="dcard-hd"><h3>📂 기획 산출물</h3></div>
+        <div class="dcard-bd">
+          <div class="doc-cards">
+            <a class="doc-card" href="영업관리_실제화면.html"><span class="doc-icon">🖥️</span><div class="doc-info"><h4>영업 관리 실제 화면</h4><p>9개 하위메뉴 인터랙티브 데모</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="영업관리_설계검토.html"><span class="doc-icon">📋</span><div class="doc-info"><h4>영업 관리 설계 검토</h4><p>10개 탭 상세 설계 문서</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="영업관리_전체시연.html"><span class="doc-icon">▶️</span><div class="doc-info"><h4>영업 관리 전체 시연</h4><p>통합 데모 페이지</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="고객사_등록폼_v2.html"><span class="doc-icon">📝</span><div class="doc-info"><h4>고객사 등록 폼 (v2)</h4><p>6개 섹션 완성 폼</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="고객사_등록폼_시연.html"><span class="doc-icon">🎬</span><div class="doc-info"><h4>고객사 등록 시연</h4><p>단계별 인터랙티브 데모</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="고객사관리_목록vs카드_비교.html"><span class="doc-icon">⚖️</span><div class="doc-info"><h4>목록 vs 카드 비교</h4><p>목록형 최종 선택</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="미수금활동_타임라인vs목록_비교.html"><span class="doc-icon">⚖️</span><div class="doc-info"><h4>타임라인 vs 목록 비교</h4><p>타임라인형 최종 선택</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="B_좌측사이드바.html"><span class="doc-icon">🅱️</span><div class="doc-info"><h4>B타입 좌측사이드바 ✓</h4><p>최종 채택 레이아웃</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="A_상단메뉴바.html"><span class="doc-icon">🅰️</span><div class="doc-info"><h4>A타입 상단메뉴바</h4><p>레이아웃 비교</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="C_상단좌측병행.html"><span class="doc-icon">©️</span><div class="doc-info"><h4>C타입 상단+좌측</h4><p>레이아웃 비교</p></div><span class="doc-arrow">→</span></a>
+            <a class="doc-card" href="BioFoodLab_기획서_v2.0.docx"><span class="doc-icon">📘</span><div class="doc-info"><h4>기획서 v2.0 다운로드</h4><p>15페이지 · DOCX</p></div><span class="doc-arrow">↓</span></a>
           </div>
         </div>
       </div>
-    </main>
+    </div>
+
+    <!-- ══ Placeholder ══ -->
+    <div class="page" id="pg-ph">
+      <div class="placeholder">
+        <div class="ph-icon" id="phIcon">🚧</div>
+        <div class="ph-title" id="phTitle">준비 중입니다</div>
+        <div class="ph-desc" id="phDesc"></div>
+        <div class="ph-badge" id="phBadge"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
+<button class="sb-mob" onclick="document.getElementById('sidebar').classList.toggle('mopen')">☰</button>
+
+<script>
+const d=new Date();
+document.getElementById('todayDate').textContent=`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${['일','월','화','수','목','금','토'][d.getDay()]}`;
+
+function toggleSub(el){
+  const sub=el.nextElementSibling;
+  if(!sub||!sub.classList.contains('sb-sub'))return;
+  const open=sub.classList.contains('open');
+  document.querySelectorAll('.sb-sub.open').forEach(s=>{s.classList.remove('open');s.previousElementSibling.classList.remove('open')});
+  if(!open){sub.classList.add('open');el.classList.add('open')}
+}
+
+function setActive(el){
+  document.querySelectorAll('.sb-item.active').forEach(i=>i.classList.remove('active'));
+  if(el)el.classList.add('active');
+}
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function setTop(title,sub){
+  document.getElementById('topTitle').textContent=title;
+  document.getElementById('topSub').textContent=sub||'';
+  document.getElementById('topSep').style.display=sub?'inline':'none';
+}
+
+function goHome(){
+  showPage('pg-dash');
+  setTop('대시보드','');
+  setActive(document.getElementById('nav-dash'));
+  document.getElementById('sidebar').classList.remove('mopen');
+}
+
+function goSales(page){
+  window.location.href='영업관리_실제화면.html#'+page;
+}
+
+const phInfo={
+  '접수 관리':{icon:'📥',desc:'접수 관리는 영업 관리 다음으로 설계 예정입니다. 업체등록, 시료 접수, 접수 현황 등 9개 하위메뉴가 포함됩니다.'},
+  '시험 결재':{icon:'🔬',desc:'항목배정부터 결재 승인까지 전체 프로세스를 관리합니다. 8개 하위메뉴가 포함됩니다.'},
+  '성적 관리':{icon:'📜',desc:'성적서 출력(국문/영문), 조회, 재발급, 부적합/연장 대장 등을 관리합니다.'},
+  '재무 관리':{icon:'💳',desc:'매출, 정산, 입금 관리(자동매칭), 세금계산서 일괄발행 등 5개 하위메뉴가 포함됩니다.'},
+  '통계 분석':{icon:'📉',desc:'매출 통계, 접수 통계, 재료비 통계 등 각종 분석 기능이 추후 보완됩니다.'},
+  '문서 관리':{icon:'📁',desc:'발송문서 보관·열람, 양식 관리 등을 담당합니다.'},
+  '재고/시약 관리':{icon:'🧫',desc:'시약/표준품 등록, 바코드 관리, 입출고, 재고 현황, 재료비 연동 등 7개 하위메뉴가 포함됩니다.'},
+  '공지':{icon:'📢',desc:'공지사항, 업무 알림, 사내 메시지 등 3개 하위메뉴가 포함됩니다.'},
+  '사용자 설정':{icon:'👤',desc:'개인 정보·비밀번호 변경 등을 관리합니다.'},
+  '관리자':{icon:'⚙️',desc:'사용자/부서 관리, 권한 설정, 미수금 관리 설정, 알림 설정, 시스템 로그 등 7개 하위메뉴가 포함됩니다.'}
+};
+
+function goPH(menu,sub,type){
+  showPage('pg-ph');
+  setTop(menu,sub);
+  const info=phInfo[menu]||{icon:'🚧',desc:'이 메뉴는 아직 설계가 진행되지 않았습니다.'};
+  document.getElementById('phIcon').textContent=info.icon;
+  document.getElementById('phTitle').textContent=sub?menu+' > '+sub:menu;
+  document.getElementById('phDesc').textContent=info.desc;
+  const b=document.getElementById('phBadge');
+  b.textContent=type==='upcoming'?'다음 설계 예정':'추후 설계 예정';
+  b.className='ph-badge '+(type==='upcoming'?'upcoming':'later');
+  if(event&&event.target)setActive(event.target.closest('.sb-item'));
+  document.getElementById('sidebar').classList.remove('mopen');
+}
+</script>
 </body>
 </html>

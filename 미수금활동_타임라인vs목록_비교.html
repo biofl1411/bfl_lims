@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>미수금 활동 내역 - 화면 형태 비교</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f2f5; padding: 20px; color: #1a2332; }
+
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { font-size: 20px; margin-bottom: 6px; }
+  .header p { font-size: 13px; color: #8892a4; }
+
+  .toggle-wrap { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+  .toggle-btn { padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; border: 2px solid #e2e6ed; background: #fff; color: #5f6b7a; transition: all 0.2s; }
+  .toggle-btn.active { background: #1a2332; color: #fff; border-color: #4fc3f7; }
+
+  .view-container { display: none; }
+  .view-container.active { display: block; }
+
+  /* 공통 상단 업체 정보 */
+  .company-header { background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; padding: 18px 20px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .company-left { display: flex; align-items: center; gap: 12px; }
+  .traffic-dot { width: 14px; height: 14px; border-radius: 50%; }
+  .dot-orange { background: #ff9800; }
+  .company-name { font-size: 18px; font-weight: 700; }
+  .company-meta { font-size: 12px; color: #8892a4; margin-top: 2px; }
+  .company-right { display: flex; gap: 8px; align-items: center; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-orange { background: #fff3e0; color: #e65100; }
+  .badge-amount { background: #fce4ec; color: #c62828; font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 8px; }
+  .record-btn { padding: 10px 18px; border: none; border-radius: 8px; background: #1a73e8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .record-btn:hover { background: #1557b0; }
+
+  /* ===== 타임라인형 ===== */
+  .timeline { position: relative; padding-left: 28px; margin-top: 8px; }
+  .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e2e6ed; }
+  .timeline-item { position: relative; margin-bottom: 20px; background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; padding: 16px 18px; }
+  .timeline-item::before { content: ''; position: absolute; left: -23px; top: 20px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; }
+  .timeline-item.connected::before { background: #4caf50; }
+  .timeline-item.missed::before { background: #f44336; }
+  .timeline-item.rejected::before { background: #ff9800; }
+  .timeline-item.promise::before { background: #1a73e8; }
+
+  .tl-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .tl-date { font-size: 13px; font-weight: 700; color: #1a2332; }
+  .tl-status { font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+  .st-connected { background: #e8f5e9; color: #2e7d32; }
+  .st-missed { background: #fce4ec; color: #c62828; }
+  .st-rejected { background: #fff3e0; color: #e65100; }
+  .st-promise { background: #e3f2fd; color: #1565c0; }
+
+  .tl-body { font-size: 13px; color: #5f6b7a; line-height: 1.7; }
+  .tl-label { color: #8892a4; font-size: 11px; font-weight: 600; display: inline-block; width: 80px; }
+  .tl-value { color: #1a2332; }
+  .tl-memo { margin-top: 8px; padding: 10px 12px; background: #f8f9fb; border-radius: 8px; font-size: 12px; color: #5f6b7a; border-left: 3px solid #4fc3f7; }
+  .tl-promise-box { margin-top: 8px; padding: 10px 12px; background: #e3f2fd; border-radius: 8px; font-size: 12px; color: #1565c0; font-weight: 600; }
+
+  /* ===== 목록형 ===== */
+  .list-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e6ed; }
+  .list-table thead { background: #f8f9fb; }
+  .list-table th { padding: 12px 14px; font-size: 12px; color: #8892a4; font-weight: 600; text-align: left; border-bottom: 1px solid #e2e6ed; white-space: nowrap; }
+  .list-table td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid #f0f2f5; }
+  .list-table tr:hover { background: #f8fbff; }
+  .list-table tr:last-child td { border-bottom: none; }
+  .overflow-table { overflow-x: auto; }
+
+  /* 연결상태 아이콘 */
+  .status-icon { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+
+  /* 비교 요약 */
+  .info-box { border-radius: 10px; padding: 14px 18px; margin-top: 16px; font-size: 13px; line-height: 1.7; }
+  .info-green { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; }
+  .info-blue { background: #e3f2fd; border: 1px solid #bbdefb; color: #1565c0; }
+
+  /* 알림 섹션 */
+  .section-divider { margin: 30px 0 16px; padding: 14px 20px; background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; }
+  .section-divider h2 { font-size: 17px; margin-bottom: 6px; }
+  .section-divider p { font-size: 13px; color: #8892a4; }
+
+  .alert-demo { display: flex; flex-direction: column; gap: 12px; }
+  .alert-card { background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start; }
+  .alert-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .alert-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .alert-icon-orange { background: #fff3e0; }
+  .alert-icon-red { background: #fce4ec; }
+  .alert-icon-blue { background: #e3f2fd; }
+  .alert-icon-yellow { background: #fffde7; }
+  .alert-body h4 { font-size: 14px; margin-bottom: 4px; }
+  .alert-body p { font-size: 12px; color: #5f6b7a; line-height: 1.5; }
+  .alert-body .alert-time { font-size: 11px; color: #b0b8c4; margin-top: 4px; }
+  .alert-action { margin-top: 6px; display: inline-block; padding: 5px 12px; background: #1a73e8; color: #fff; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; text-decoration: none; }
+</style>
+</head>
+<body>
+<div style="background:#1a2332;padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:999">
+  <a href="index.html" style="color:#4fc3f7;text-decoration:none;font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;font-family:-apple-system,sans-serif">🧪 BFL 홈</a>
+  <span style="color:#4a6785;font-size:12px">›</span>
+  <span style="color:#8ea4c0;font-size:13px;font-family:-apple-system,sans-serif">영업 관리 › 타임라인 vs 목록 비교</span>
+  <a href="index.html" style="margin-left:auto;color:#8ea4c0;text-decoration:none;font-size:12px;padding:4px 12px;border:1px solid rgba(255,255,255,.15);border-radius:6px;font-family:-apple-system,sans-serif">← 대시보드로</a>
+</div>
+
+
+<div class="header">
+  <h1>미수금 활동 내역 — 화면 형태 비교</h1>
+  <p>같은 데이터를 두 가지 방식으로 보여드립니다</p>
+</div>
+
+<!-- 업체 정보 헤더 (공통) -->
+<div class="company-header">
+  <div class="company-left">
+    <div class="traffic-dot dot-orange"></div>
+    <div>
+      <div class="company-name">풀무원식품(주)</div>
+      <div class="company-meta">사업자번호 234-56-78901 · 담당: 박주임</div>
+    </div>
+  </div>
+  <div class="company-right">
+    <span class="badge badge-orange">🟠 주황</span>
+    <span class="badge-amount">미수금 3,500,000원</span>
+    <button class="record-btn">+ 수금 활동 기록</button>
+  </div>
+</div>
+
+<div class="toggle-wrap">
+  <div class="toggle-btn active" onclick="showView('timeline')">📅 타임라인형</div>
+  <div class="toggle-btn" onclick="showView('table')">📋 목록형</div>
+</div>
+
+<!-- ===== 타임라인형 ===== -->
+<div class="view-container active" id="view-timeline">
+  <div class="timeline">
+    <!-- 1 -->
+    <div class="timeline-item promise">
+      <div class="tl-header">
+        <div class="tl-date">2026-02-13 (목) 10:30</div>
+        <div class="tl-status st-promise">📞 연결 → 입금약속</div>
+      </div>
+      <div class="tl-body">
+        <div><span class="tl-label">연락수단</span> <span class="tl-value">전화</span></div>
+        <div><span class="tl-label">상대 담당자</span> <span class="tl-value">최대리 (010-2345-6789)</span></div>
+        <div><span class="tl-label">연결상태</span> <span class="tl-value">연결</span></div>
+      </div>
+      <div class="tl-memo">회신내용: "이번 주 금요일까지 입금 처리하겠다"고 약속함</div>
+      <div class="tl-promise-box">📅 입금 약속일: 2026-02-14 (금) — 내일 입금 미확인 시 재작성 알림</div>
+    </div>
+
+    <!-- 2 -->
+    <div class="timeline-item missed">
+      <div class="tl-header">
+        <div class="tl-date">2026-02-12 (수) 14:15</div>
+        <div class="tl-status st-missed">📞 미연결 (2회차)</div>
+      </div>
+      <div class="tl-body">
+        <div><span class="tl-label">연락수단</span> <span class="tl-value">전화</span></div>
+        <div><span class="tl-label">상대 담당자</span> <span class="tl-value">최대리 (010-2345-6789)</span></div>
+        <div><span class="tl-label">연결상태</span> <span class="tl-value">통화 미연결</span></div>
+      </div>
+      <div class="tl-memo">메모: 오후에 재시도 예정. 문자도 발송함.</div>
+    </div>
+
+    <!-- 3 -->
+    <div class="timeline-item rejected">
+      <div class="tl-header">
+        <div class="tl-date">2026-02-12 (수) 09:40</div>
+        <div class="tl-status st-rejected">💬 카카오톡 수신거절</div>
+      </div>
+      <div class="tl-body">
+        <div><span class="tl-label">연락수단</span> <span class="tl-value">카카오톡</span></div>
+        <div><span class="tl-label">상대 담당자</span> <span class="tl-value">최대리 (010-2345-6789)</span></div>
+        <div><span class="tl-label">연결상태</span> <span class="tl-value">수신거절</span></div>
+      </div>
+      <div class="tl-memo">메모: 카톡 메시지 미확인. 전화로 재시도 필요.</div>
+    </div>
+
+    <!-- 4 -->
+    <div class="timeline-item missed">
+      <div class="tl-header">
+        <div class="tl-date">2026-02-10 (월) 11:00</div>
+        <div class="tl-status st-missed">📞 미연결 (1회차)</div>
+      </div>
+      <div class="tl-body">
+        <div><span class="tl-label">연락수단</span> <span class="tl-value">전화</span></div>
+        <div><span class="tl-label">상대 담당자</span> <span class="tl-value">최대리 (010-2345-6789)</span></div>
+        <div><span class="tl-label">연결상태</span> <span class="tl-value">통화 미연결</span></div>
+      </div>
+      <div class="tl-memo">메모: 첫 수금 시도. 점심 이후 재시도 예정.</div>
+    </div>
+
+    <!-- 시스템 메시지 -->
+    <div class="timeline-item" style="background: #fffde7; border-color: #fff176;">
+      <div class="tl-header">
+        <div class="tl-date" style="color: #f57f17;">⚠️ 2026-02-08 시스템 알림</div>
+      </div>
+      <div class="tl-body" style="color: #f57f17; font-weight: 600;">
+        신호등이 🟡 노랑 → 🟠 주황으로 변경되었습니다. (매출일 기준 62일 경과)
+      </div>
+    </div>
+  </div>
+
+  <div class="info-box info-green">
+    <strong>📅 타임라인형 특징</strong><br>
+    • 시간 순서대로 흐름이 한눈에 보임 — "언제 뭘 했는지" 스토리가 읽힘<br>
+    • 신호등 변경, 시스템 알림도 같은 타임라인에 표시<br>
+    • 연결/미연결/수신거절이 색으로 직관적 구분<br>
+    • 수금 진행 과정을 파악하기 좋음
+  </div>
+</div>
+
+<!-- ===== 목록형 ===== -->
+<div class="view-container" id="view-table">
+  <div class="overflow-table">
+    <table class="list-table">
+      <thead>
+        <tr>
+          <th>날짜</th>
+          <th>시간</th>
+          <th>연락수단</th>
+          <th>연결상태</th>
+          <th>상대 담당자</th>
+          <th>회신내용 / 메모</th>
+          <th>입금약속일</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;">02-13 (목)</td>
+          <td>10:30</td>
+          <td>전화</td>
+          <td><span class="status-icon st-connected" style="background:#e8f5e9; color:#2e7d32;">✅ 연결</span></td>
+          <td>최대리<div style="font-size:11px; color:#8892a4;">010-2345-6789</div></td>
+          <td>금요일까지 입금 처리하겠다고 약속</td>
+          <td><span style="color:#1565c0; font-weight:600;">02-14 (금)</span></td>
+        </tr>
+        <tr style="background: #fff8f8;">
+          <td style="font-weight:600;">02-12 (수)</td>
+          <td>14:15</td>
+          <td>전화</td>
+          <td><span class="status-icon st-missed" style="background:#fce4ec; color:#c62828;">❌ 미연결 (2회)</span></td>
+          <td>최대리<div style="font-size:11px; color:#8892a4;">010-2345-6789</div></td>
+          <td>오후 재시도 예정. 문자도 발송함.</td>
+          <td>-</td>
+        </tr>
+        <tr style="background: #fffcf5;">
+          <td style="font-weight:600;">02-12 (수)</td>
+          <td>09:40</td>
+          <td>카카오톡</td>
+          <td><span class="status-icon st-rejected" style="background:#fff3e0; color:#e65100;">⚠️ 수신거절</span></td>
+          <td>최대리<div style="font-size:11px; color:#8892a4;">010-2345-6789</div></td>
+          <td>카톡 미확인. 전화로 재시도 필요.</td>
+          <td>-</td>
+        </tr>
+        <tr style="background: #fff8f8;">
+          <td style="font-weight:600;">02-10 (월)</td>
+          <td>11:00</td>
+          <td>전화</td>
+          <td><span class="status-icon st-missed" style="background:#fce4ec; color:#c62828;">❌ 미연결 (1회)</span></td>
+          <td>최대리<div style="font-size:11px; color:#8892a4;">010-2345-6789</div></td>
+          <td>첫 수금 시도. 점심 이후 재시도 예정.</td>
+          <td>-</td>
+        </tr>
+        <tr style="background: #fffde7;">
+          <td style="font-weight:600; color:#f57f17;">02-08</td>
+          <td>-</td>
+          <td colspan="5" style="color:#f57f17; font-weight:600;">⚠️ 시스템: 신호등 🟡→🟠 변경 (매출일 기준 62일 경과)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="info-box info-blue">
+    <strong>📋 목록형 특징</strong><br>
+    • 데이터를 정렬·필터하기 편함 (날짜순, 연결상태별 등)<br>
+    • 엑셀 내보내기나 보고서 출력에 유리<br>
+    • 한 화면에 더 많은 기록을 볼 수 있음<br>
+    • 미연결 횟수 집계가 바로 보임
+  </div>
+</div>
+
+<!-- ===== 알림 기능 설명 ===== -->
+<div class="section-divider">
+  <h2>🔔 알림 기능이란?</h2>
+  <p>프로그램이 자동으로 담당자에게 "이런 일이 있으니 확인하세요"라고 알려주는 기능입니다. 아래 예시를 보시면 이해가 쉬울 거예요.</p>
+</div>
+
+<div class="alert-demo">
+  <!-- 알림 1: 입금 약속일 도래 -->
+  <div class="alert-card">
+    <div class="alert-icon alert-icon-blue">📅</div>
+    <div class="alert-body">
+      <h4>입금 약속일이 오늘입니다</h4>
+      <p><strong>풀무원식품(주)</strong>의 최대리님이 오늘(2/14)까지 입금하겠다고 약속했습니다.<br>입금 확인 후 처리해 주세요.</p>
+      <div class="alert-time">오늘 오전 9:00 · 박주임에게</div>
+      <a class="alert-action">입금 확인하러 가기</a>
+    </div>
+  </div>
+
+  <!-- 알림 2: 신호등 변경 -->
+  <div class="alert-card">
+    <div class="alert-icon alert-icon-orange">🚦</div>
+    <div class="alert-body">
+      <h4>풀무원식품(주) 신호등이 🟡→🟠으로 변경되었습니다</h4>
+      <p>매출 발생일 기준 62일이 경과하여 자동 변경되었습니다.<br>수금 활동을 기록해 주세요.</p>
+      <div class="alert-time">2026-02-08 · 박주임에게</div>
+      <a class="alert-action">수금 활동 기록하기</a>
+    </div>
+  </div>
+
+  <!-- 알림 3: 수금 활동 미작성 -->
+  <div class="alert-card">
+    <div class="alert-icon alert-icon-red">⏰</div>
+    <div class="alert-body">
+      <h4>수금 활동을 기록해 주세요</h4>
+      <p><strong>풀무원식품(주)</strong>에 대한 수금 활동이 3일째 기록되지 않았습니다.<br>🟠 주황 업체는 매일 수금 활동 기록이 필요합니다.</p>
+      <div class="alert-time">2026-02-11 오전 9:00 · 박주임에게</div>
+      <a class="alert-action">수금 활동 기록하기</a>
+    </div>
+  </div>
+
+  <!-- 알림 4: 사전 경고 -->
+  <div class="alert-card">
+    <div class="alert-icon alert-icon-yellow">⚠️</div>
+    <div class="alert-body">
+      <h4>곧 🟠 주황으로 변경될 업체가 있습니다</h4>
+      <p><strong>풀무원식품(주)</strong>의 미수금이 55일째입니다. 5일 후 주황으로 변경됩니다.<br>지금 수금 활동을 시작하면 신호등 변경을 막을 수 있습니다.</p>
+      <div class="alert-time">2026-02-03 오전 9:00 · 박주임에게</div>
+      <a class="alert-action">수금 활동 기록하기</a>
+    </div>
+  </div>
+</div>
+
+<div class="info-box" style="background: #fff3e0; border: 1px solid #ffcc80; color: #e65100; margin-top: 16px;">
+  <strong>💡 쉽게 정리하면</strong><br><br>
+  알림은 프로그램이 영업사원에게 보내는 <b>"할 일 알림"</b>입니다:<br><br>
+  📅 <b>입금 약속일 알림</b> — "오늘 입금하기로 한 업체가 있어요, 확인하세요"<br>
+  🚦 <b>신호등 변경 알림</b> — "이 업체가 노랑→주황으로 바뀌었어요"<br>
+  ⏰ <b>미작성 알림</b> — "이 업체 수금 기록을 안 쓴 지 3일이에요, 기록하세요"<br>
+  ⚠️ <b>사전 경고 알림</b> — "5일 후 주황으로 바뀔 업체가 있어요, 미리 수금 활동하세요"
+</div>
+
+<script>
+function showView(type) {
+  document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.toggle-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + type).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

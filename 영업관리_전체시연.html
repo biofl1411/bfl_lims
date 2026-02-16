@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - 영업 관리 시연</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; height: 100vh; display: flex; background: #f8f9fb; font-size: 13px; }
+
+  /* 사이드바 */
+  .sidebar { width: 230px; background: #1a2332; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .sidebar-header { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .sidebar-logo { color: #4fc3f7; font-weight: 800; font-size: 15px; }
+  .menu-list { flex: 1; padding: 8px; }
+  .menu-item { padding: 9px 12px; color: #8ea4c0; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 9px; margin-bottom: 1px; transition: all 0.15s; font-size: 13px; }
+  .menu-item:hover { background: rgba(255,255,255,0.05); }
+  .menu-item.active { color: #4fc3f7; background: rgba(79,195,247,0.1); font-weight: 600; }
+  .menu-item.disabled { color: #4a5568; cursor: default; }
+  .menu-item.disabled:hover { background: transparent; }
+  .menu-icon { font-size: 14px; }
+  .menu-badge { margin-left: auto; font-size: 10px; padding: 1px 6px; border-radius: 8px; }
+  .badge-done { background: rgba(76,175,80,0.2); color: #66bb6a; }
+  .badge-later { background: rgba(255,152,0,0.2); color: #ffa726; }
+  .sidebar-footer { padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 8px; }
+  .footer-avatar { width: 28px; height: 28px; border-radius: 50%; background: rgba(79,195,247,0.2); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .footer-name { color: #c8d6e5; font-size: 12px; }
+
+  /* 메인 */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .top-bar { background: #fff; border-bottom: 1px solid #e2e6ed; padding: 0 20px; height: 48px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .top-title { font-size: 15px; font-weight: 700; color: #1a2332; }
+  .top-sep { color: #c8d6e5; }
+  .top-sub { font-size: 13px; color: #5f6b7a; }
+  .content { flex: 1; padding: 20px; overflow: auto; }
+
+  /* 공통 컴포넌트 */
+  .toolbar { background: #fff; border-radius: 10px; border: 1px solid #e2e6ed; padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .search-box { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid #e2e6ed; border-radius: 6px; font-size: 12px; outline: none; }
+  .search-box:focus { border-color: #4fc3f7; }
+  .filter-btn { padding: 6px 12px; border: 1px solid #e2e6ed; border-radius: 6px; background: #fff; font-size: 11px; color: #5f6b7a; cursor: pointer; }
+  .btn-primary { padding: 7px 14px; border: none; border-radius: 6px; background: #1a73e8; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-primary:hover { background: #1557b0; }
+
+  /* 테이블 */
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e2e6ed; }
+  thead { background: #f8f9fb; }
+  th { padding: 10px 12px; font-size: 11px; color: #8892a4; font-weight: 600; text-align: left; border-bottom: 1px solid #e2e6ed; white-space: nowrap; }
+  td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid #f0f2f5; }
+  tr:hover { background: #f8fbff; }
+  tr:last-child td { border-bottom: none; }
+
+  .traffic-light { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .tl-blue { background: #2196f3; }
+  .tl-green { background: #4caf50; }
+  .tl-yellow { background: #ffeb3b; }
+  .tl-orange { background: #ff9800; }
+  .tl-red { background: #f44336; }
+
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+  .b-active { background: #e8f5e9; color: #2e7d32; }
+  .b-dormant { background: #fff3e0; color: #e65100; }
+  .b-vip { background: #e8eaf6; color: #283593; }
+  .b-a { background: #e3f2fd; color: #1565c0; }
+  .b-b { background: #f3e5f5; color: #6a1b9a; }
+  .b-pending { background: #fff8e1; color: #f57f17; }
+  .b-approved { background: #e8f5e9; color: #2e7d32; }
+  .b-rejected { background: #fce4ec; color: #c62828; }
+
+  .company-link { font-weight: 600; color: #1a2332; cursor: pointer; }
+  .company-link:hover { color: #1a73e8; text-decoration: underline; }
+  .sub-text { font-size: 10px; color: #8892a4; margin-top: 1px; }
+  .overflow-x { overflow-x: auto; }
+
+  /* 타임라인 */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #e2e6ed; }
+  .tl-item { position: relative; margin-bottom: 14px; background: #fff; border-radius: 10px; border: 1px solid #e2e6ed; padding: 12px 14px; }
+  .tl-item::before { content: ''; position: absolute; left: -20px; top: 16px; width: 8px; height: 8px; border-radius: 50%; }
+  .tl-item.connected::before { background: #4caf50; }
+  .tl-item.missed::before { background: #f44336; }
+  .tl-item.system::before { background: #ff9800; }
+  .tl-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .tl-date { font-size: 12px; font-weight: 600; }
+  .tl-status { font-size: 10px; padding: 2px 7px; border-radius: 6px; font-weight: 600; }
+  .tl-body { font-size: 12px; color: #5f6b7a; line-height: 1.6; }
+  .tl-memo { margin-top: 6px; padding: 8px 10px; background: #f8f9fb; border-radius: 6px; font-size: 11px; border-left: 3px solid #4fc3f7; }
+  .tl-promise { margin-top: 6px; padding: 8px 10px; background: #e3f2fd; border-radius: 6px; font-size: 11px; color: #1565c0; font-weight: 600; }
+
+  /* 카드 */
+  .card { background: #fff; border-radius: 10px; border: 1px solid #e2e6ed; padding: 16px; margin-bottom: 12px; }
+  .card-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .card-item label { font-size: 10px; color: #8892a4; display: block; margin-bottom: 2px; }
+  .card-item span { font-size: 12px; color: #1a2332; font-weight: 500; }
+
+  /* 차량일지 */
+  .route-visual { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 10px 0; }
+  .route-dot { padding: 4px 10px; background: #e3f2fd; border-radius: 6px; font-size: 11px; color: #1565c0; font-weight: 600; }
+  .route-arrow { color: #b0b8c4; font-size: 12px; }
+
+  /* 팝업 */
+  .popup-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
+  .popup-overlay.show { display: flex; }
+  .popup { background: #fff; border-radius: 14px; padding: 24px; max-width: 420px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
+  .popup h3 { font-size: 16px; margin-bottom: 10px; }
+  .popup p { font-size: 13px; color: #5f6b7a; line-height: 1.6; margin-bottom: 14px; }
+  .popup-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .popup-btn { padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+  .popup-btn-primary { background: #1a73e8; color: #fff; }
+  .popup-btn-secondary { background: #f0f2f5; color: #5f6b7a; }
+
+  .info-banner { background: #fffde7; border: 1px solid #fff176; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; font-size: 12px; color: #f57f17; display: flex; align-items: center; gap: 8px; }
+
+  .page-later { text-align: center; padding: 60px 20px; }
+  .page-later-icon { font-size: 48px; margin-bottom: 12px; }
+  .page-later-text { font-size: 15px; color: #8892a4; font-weight: 600; }
+  .page-later-desc { font-size: 12px; color: #b0b8c4; margin-top: 6px; }
+
+  /* 승인 프로세스 */
+  .process-flow { display: flex; align-items: center; gap: 6px; margin: 14px 0; flex-wrap: wrap; }
+  .process-step { padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+  .ps-active { background: #1a73e8; color: #fff; }
+  .ps-done { background: #e8f5e9; color: #2e7d32; }
+  .ps-wait { background: #f0f2f5; color: #8892a4; }
+  .process-arrow { color: #b0b8c4; }
+</style>
+</head>
+<body>
+<div style="background:#1a2332;padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:999">
+  <a href="index.html" style="color:#4fc3f7;text-decoration:none;font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;font-family:-apple-system,sans-serif">🧪 BFL 홈</a>
+  <span style="color:#4a6785;font-size:12px">›</span>
+  <span style="color:#8ea4c0;font-size:13px;font-family:-apple-system,sans-serif">영업 관리 › 전체 시연</span>
+  <a href="index.html" style="margin-left:auto;color:#8ea4c0;text-decoration:none;font-size:12px;padding:4px 12px;border:1px solid rgba(255,255,255,.15);border-radius:6px;font-family:-apple-system,sans-serif">← 대시보드로</a>
+</div>
+
+
+<!-- 로그인 팝업 -->
+<div class="popup-overlay show" id="loginPopup">
+  <div class="popup">
+    <h3>⚠️ 수금 활동을 기록해 주세요</h3>
+    <p>
+      담당 업체 중 미수금이 있는 업체가 <strong>2건</strong> 있습니다.<br><br>
+      🟠 <strong>풀무원식품(주)</strong> — 미수금 3,500,000원 (62일 경과)<br>
+      🟡 <strong>맛나식품</strong> — 미수금 1,200,000원 (55일 경과)<br><br>
+      <span style="color:#c62828; font-weight:600;">수금 활동 기록 안내를 1회 누락하였습니다.</span>
+    </p>
+    <div class="popup-btns">
+      <button class="popup-btn popup-btn-secondary" onclick="closePopup()">나중에</button>
+      <button class="popup-btn popup-btn-primary" onclick="closePopup(); setPage('collection')">수금 활동 기록하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 사이드바 -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">BioFoodLab</div>
+  </div>
+  <div class="menu-list">
+    <div class="menu-item" style="color: #4a5568; font-size:11px; padding: 6px 12px; cursor:default;">💼 영업 관리</div>
+    <div class="menu-item active" id="nav-client" onclick="setPage('client')"><span class="menu-icon">🏢</span> 고객사 관리 <span class="menu-badge badge-done">확정</span></div>
+    <div class="menu-item" id="nav-daily" onclick="setPage('daily')"><span class="menu-icon">📝</span> 업무일지 <span class="menu-badge badge-done">확정</span></div>
+    <div class="menu-item" id="nav-vehicle" onclick="setPage('vehicle')"><span class="menu-icon">🚗</span> 차량일지 <span class="menu-badge badge-done">신규</span></div>
+    <div class="menu-item" id="nav-collection" onclick="setPage('collection')"><span class="menu-icon">📞</span> 미수금 활동 내역 <span class="menu-badge badge-done">신규</span></div>
+    <div class="menu-item" id="nav-estimate" onclick="setPage('estimate')"><span class="menu-icon">📋</span> 견적서 관리 <span class="menu-badge badge-later">추후</span></div>
+    <div class="menu-item" id="nav-trade" onclick="setPage('trade')"><span class="menu-icon">📄</span> 거래명세표 관리 <span class="menu-badge badge-done">확정</span></div>
+    <div class="menu-item" id="nav-urgent" onclick="setPage('urgent')"><span class="menu-icon">🚨</span> 긴급 협조 요청 <span class="menu-badge badge-later">추후</span></div>
+    <div class="menu-item" id="nav-receivable" onclick="setPage('receivable')"><span class="menu-icon">💰</span> 미수금 관리 <span class="menu-badge badge-later">추후</span></div>
+    <div class="menu-item" id="nav-invoice" onclick="setPage('invoice')"><span class="menu-icon">🧾</span> 계산서 발행 승인 <span class="menu-badge badge-done">확정</span></div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="footer-avatar">👤</div>
+    <div>
+      <div class="footer-name">박주임 (영업부)</div>
+      <div style="font-size:10px; color:#5a6a7e;"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5828392a33183a31373e34763b3776332a">[email&#160;protected]</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- 메인 -->
+<div class="main">
+  <div class="top-bar">
+    <span class="top-title">영업 관리</span>
+    <span class="top-sep">/</span>
+    <span class="top-sub" id="topSub">고객사 관리</span>
+  </div>
+  <div class="content" id="contentArea">
+  </div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// 페이지 데이터
+const pages = {
+  client: {
+    title: "고객사 관리",
+    html: `
+      <div class="toolbar">
+        <input class="search-box" placeholder="회사명, 사업자번호, 담당자명 검색..." />
+        <div class="filter-btn">🔽 등급</div>
+        <div class="filter-btn">🔽 상태</div>
+        <div class="filter-btn">🚦 신호등</div>
+        <button class="btn-primary">+ 고객사 등록</button>
+      </div>
+      <div style="margin-bottom:10px; font-size:11px; color:#5f6b7a; display:flex; gap:14px; align-items:center;">
+        <span style="font-weight:600;">신호등:</span>
+        <span>🔵 당월결제</span> <span>🟢 익월결제</span> <span>🟡 60일+</span> <span>🟠 60일+위험</span> <span>🔴 90일+</span>
+        <span style="margin-left:auto; color:#8892a4;">※ 영업부는 본인/부서 거래처만 표시</span>
+      </div>
+      <div class="overflow-x">
+        <table>
+          <thead>
+            <tr><th>신호</th><th>회사명</th><th>사업자번호</th><th>대표자</th><th>등급</th><th>상태</th><th>담당자(고객)</th><th>담당자(자사)</th><th>최근거래일</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="traffic-light tl-blue"></span></td><td><span class="company-link">삼양식품(주)</span><div class="sub-text">서울 강남구 · 법인</div></td><td>123-45-67890</td><td>김삼양</td><td><span class="badge b-vip">VIP</span></td><td><span class="badge b-active">활동</span></td><td>이과장 외 2명</td><td>박주임</td><td>2026-02-10</td></tr>
+            <tr><td><span class="traffic-light tl-orange"></span></td><td><span class="company-link">풀무원식품(주)</span><div class="sub-text">서울 서초구 · 법인</div></td><td>234-56-78901</td><td>원풀무</td><td><span class="badge b-a">A</span></td><td><span class="badge b-active">활동</span></td><td>최대리</td><td>박주임, 이주임</td><td>2026-01-28</td></tr>
+            <tr><td><span class="traffic-light tl-yellow"></span></td><td><span class="company-link">맛나식품</span><div class="sub-text">경기 성남시 · 개인</div></td><td>345-67-89012</td><td>박맛나</td><td><span class="badge b-b">B</span></td><td><span class="badge b-dormant">휴면</span></td><td>정과장</td><td>박주임</td><td>2025-08-15</td></tr>
+            <tr><td><span class="traffic-light tl-green"></span></td><td><span class="company-link">(주)한국건강식품</span><div class="sub-text">부산 해운대구 · 법인</div></td><td>456-78-90123</td><td>한건강</td><td><span class="badge b-a">A</span></td><td><span class="badge b-active">활동</span></td><td>윤부장 외 1명</td><td>김사원</td><td>2026-02-12</td></tr>
+            <tr><td><span class="traffic-light tl-blue"></span></td><td><span class="company-link">CJ제일제당(주)</span><div class="sub-text">서울 중구 · 법인</div></td><td>567-89-01234</td><td>이제일</td><td><span class="badge b-vip">VIP</span></td><td><span class="badge b-active">활동</span></td><td>강부장</td><td>이주임</td><td>2026-02-13</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:#8892a4; text-align:right;">총 5건 · 활동 4 · 휴면 1</div>
+    `
+  },
+
+  daily: {
+    title: "업무일지",
+    html: `
+      <div class="toolbar">
+        <input class="search-box" placeholder="날짜, 업체명 검색..." />
+        <div class="filter-btn">🔽 기간</div>
+        <div class="filter-btn">🔽 부서원</div>
+        <button class="btn-primary">+ 업무일지 작성</button>
+      </div>
+      <div style="margin-bottom:10px; font-size:11px; color:#8892a4;">※ 같은 부서원 일지 조회 가능 · 영업부만 작성</div>
+      <table>
+        <thead><tr><th>날짜</th><th>작성자</th><th>업체명</th><th>시료 수거</th><th>매출(VAT포함)</th><th>특이사항</th><th>경쟁사 동향</th><th>신규 영업</th></tr></thead>
+        <tbody>
+          <tr><td style="font-weight:600;">02-13 (목)</td><td>박주임</td><td>삼양식품(주)</td><td><span class="badge b-active">방문</span></td><td style="text-align:right; font-weight:600;">2,200,000</td><td>신규 항목 추가 요청</td><td>A사 단가 인하</td><td>-</td></tr>
+          <tr><td style="font-weight:600;">02-13 (목)</td><td>박주임</td><td>풀무원식품(주)</td><td><span class="badge" style="background:#e3f2fd; color:#1565c0;">택배</span></td><td style="text-align:right; font-weight:600;">1,500,000</td><td>미수금 회수 약속</td><td>-</td><td>-</td></tr>
+          <tr><td style="font-weight:600;">02-13 (목)</td><td>박주임</td><td>(주)한국건강식품</td><td><span class="badge b-active">방문</span></td><td style="text-align:right; font-weight:600;">3,100,000</td><td>-</td><td>-</td><td>신규 거래 논의</td></tr>
+          <tr><td style="font-weight:600;">02-12 (수)</td><td>이주임</td><td>CJ제일제당(주)</td><td><span class="badge" style="background:#f3e5f5; color:#6a1b9a;">내방</span></td><td style="text-align:right; font-weight:600;">4,500,000</td><td>영양성분 분석 추가</td><td>B사 납기 단축</td><td>-</td></tr>
+        </tbody>
+      </table>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-title">📌 건의사항</div>
+        <div style="font-size:12px; color:#5f6b7a; line-height:1.7;">경쟁사 A사가 단가를 10% 인하한 것으로 확인. 삼양식품 측에서 단가 재검토 요청 가능성 있음. 대응 전략 논의 필요.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">📅 익일 계획 <span style="font-size:11px; color:#8892a4; font-weight:400;">(차후 상세 논의)</span></div>
+        <div style="font-size:12px; color:#5f6b7a; line-height:1.7;">
+          1. 삼양식품 신규 항목 견적서 준비<br>
+          2. 맛나식품 수금 활동 (전화)<br>
+          3. 신규 업체 미팅 (14:00 서울 구로구)
+        </div>
+      </div>
+    `
+  },
+
+  vehicle: {
+    title: "차량일지",
+    html: `
+      <div class="toolbar">
+        <input class="search-box" placeholder="날짜, 운전자 검색..." />
+        <div class="filter-btn">🔽 기간</div>
+        <div class="filter-btn">🔽 차량</div>
+        <button class="btn-primary">+ 차량일지 작성</button>
+      </div>
+      <div class="info-banner">🔗 업무일지에서 '방문' 수거 기록 시 경유지가 자동 연결됩니다. 수동 수정도 가능합니다.</div>
+      <div class="card">
+        <div class="card-title">🚗 2026-02-13 (목) · 박주임</div>
+        <div class="card-grid" style="margin-bottom:12px;">
+          <div class="card-item"><label>차량번호</label><span>12가 3456</span></div>
+          <div class="card-item"><label>주행거리</label><span style="font-weight:700; color:#1a73e8;">87 km</span></div>
+          <div class="card-item"><label>주유비</label><span>45,000원</span></div>
+          <div class="card-item"><label>통행료</label><span>6,200원</span></div>
+          <div class="card-item"><label>주차비</label><span>3,000원</span></div>
+          <div class="card-item"><label>합계</label><span style="font-weight:700; color:#c62828;">54,200원</span></div>
+        </div>
+        <div style="font-size:11px; color:#8892a4; margin-bottom:6px; font-weight:600;">경유지 (업무일지 자동 연결)</div>
+        <div class="route-visual">
+          <span class="route-dot" style="background:#1a2332; color:#fff;">🏢 회사</span>
+          <span class="route-arrow">→</span>
+          <span class="route-dot">서울(강남구)</span>
+          <span class="route-arrow">→</span>
+          <span class="route-dot">부산(해운대구)</span>
+          <span class="route-arrow">→</span>
+          <span class="route-dot" style="background:#1a2332; color:#fff;">🏢 회사</span>
+        </div>
+        <div style="font-size:11px; color:#8892a4; margin-top:6px;">비고: 부산 출장, 고속도로 이용</div>
+      </div>
+      <div class="card">
+        <div class="card-title">🚗 2026-02-12 (수) · 이주임</div>
+        <div class="card-grid" style="margin-bottom:12px;">
+          <div class="card-item"><label>차량번호</label><span>34나 7890</span></div>
+          <div class="card-item"><label>주행거리</label><span style="font-weight:700; color:#1a73e8;">32 km</span></div>
+          <div class="card-item"><label>주유비</label><span>-</span></div>
+          <div class="card-item"><label>통행료</label><span>-</span></div>
+          <div class="card-item"><label>주차비</label><span>2,000원</span></div>
+          <div class="card-item"><label>합계</label><span style="font-weight:700; color:#c62828;">2,000원</span></div>
+        </div>
+        <div class="route-visual">
+          <span class="route-dot" style="background:#1a2332; color:#fff;">🏢 회사</span>
+          <span class="route-arrow">→</span>
+          <span class="route-dot">서울(중구)</span>
+          <span class="route-arrow">→</span>
+          <span class="route-dot" style="background:#1a2332; color:#fff;">🏢 회사</span>
+        </div>
+      </div>
+    `
+  },
+
+  collection: {
+    title: "미수금 활동 내역",
+    html: `
+      <div class="toolbar">
+        <input class="search-box" placeholder="업체명 검색..." />
+        <div class="filter-btn">🚦 신호등</div>
+        <div class="filter-btn">🔽 기간</div>
+        <button class="btn-primary">+ 수금 활동 기록</button>
+      </div>
+      <div class="info-banner">⚠️ 풀무원식품(주) 입금 약속일이 <strong>내일(2/14)</strong>입니다. 입금 확인 후 처리해 주세요.</div>
+      <div class="card" style="border-left:4px solid #ff9800; padding:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="traffic-light tl-orange" style="width:12px;height:12px;"></span>
+            <span style="font-size:16px; font-weight:700;">풀무원식품(주)</span>
+            <span class="badge b-dormant">🟠 주황</span>
+          </div>
+          <span style="background:#fce4ec; color:#c62828; padding:5px 12px; border-radius:8px; font-weight:700; font-size:13px;">미수금 3,500,000원</span>
+        </div>
+        <div class="timeline">
+          <div class="tl-item connected">
+            <div class="tl-header">
+              <span class="tl-date">2026-02-13 10:30</span>
+              <span class="tl-status" style="background:#e8f5e9; color:#2e7d32;">📞 연결 → 입금약속</span>
+            </div>
+            <div class="tl-body">
+              <span style="color:#8892a4;">수단:</span> 전화 · <span style="color:#8892a4;">담당:</span> 최대리 (010-2345-6789)
+            </div>
+            <div class="tl-memo">회신: "금요일까지 입금하겠다"</div>
+            <div class="tl-promise">📅 입금 약속일: 2026-02-14 (금)</div>
+          </div>
+          <div class="tl-item missed">
+            <div class="tl-header">
+              <span class="tl-date">2026-02-12 14:15</span>
+              <span class="tl-status" style="background:#fce4ec; color:#c62828;">📞 미연결 (2회차)</span>
+            </div>
+            <div class="tl-body">
+              <span style="color:#8892a4;">수단:</span> 전화 · <span style="color:#8892a4;">담당:</span> 최대리
+            </div>
+            <div class="tl-memo">메모: 오후 재시도 예정. 문자도 발송.</div>
+          </div>
+          <div class="tl-item missed">
+            <div class="tl-header">
+              <span class="tl-date">2026-02-10 11:00</span>
+              <span class="tl-status" style="background:#fce4ec; color:#c62828;">📞 미연결 (1회차)</span>
+            </div>
+            <div class="tl-body">
+              <span style="color:#8892a4;">수단:</span> 전화 · <span style="color:#8892a4;">담당:</span> 최대리
+            </div>
+          </div>
+          <div class="tl-item system" style="background:#fffde7; border-color:#fff176;">
+            <div class="tl-header">
+              <span class="tl-date" style="color:#f57f17;">⚠️ 시스템 알림</span>
+            </div>
+            <div class="tl-body" style="color:#f57f17; font-weight:600;">신호등 🟡→🟠 변경 (62일 경과)</div>
+          </div>
+        </div>
+      </div>
+    `
+  },
+
+  estimate: {
+    title: "견적서 관리",
+    html: `
+      <div class="page-later">
+        <div class="page-later-icon">📋</div>
+        <div class="page-later-text">추후 검토 예정</div>
+        <div class="page-later-desc">홈페이지에서 견적서 작성 기능을 이미 제공하고 있어<br>홈페이지 이용 독려를 위해 추후 검토합니다.<br><br>검사항목 DB에서 선택 시 단가 자동 연동 방식 예정</div>
+      </div>
+    `
+  },
+
+  trade: {
+    title: "거래명세표 관리",
+    html: `
+      <div class="toolbar">
+        <input class="search-box" placeholder="업체명, 날짜 검색..." />
+        <div class="filter-btn">🔽 기간</div>
+        <div class="filter-btn">🔽 업체</div>
+        <button class="btn-primary">월별 일괄 발행</button>
+        <button class="btn-primary" style="background:#2e7d32;">PDF 출력</button>
+        <button class="btn-primary" style="background:#e65100;">이메일 발송</button>
+      </div>
+      <div class="info-banner">🔗 접수 완료 시 거래명세표가 자동 생성됩니다. 세부 구현은 접수관리 완성 후 구체화 예정.</div>
+      <table>
+        <thead><tr><th>번호</th><th>발행일</th><th>업체명</th><th>항목</th><th>수량</th><th>단가</th><th>금액(VAT포함)</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td>TM-2026-0213</td><td>02-13</td><td>삼양식품(주)</td><td>일반세균, 대장균군 외 3건</td><td>5</td><td style="text-align:right;">440,000</td><td style="text-align:right; font-weight:600;">2,200,000</td><td><span class="badge b-approved">발행완료</span></td></tr>
+          <tr><td>TM-2026-0213</td><td>02-13</td><td>풀무원식품(주)</td><td>영양성분 분석</td><td>3</td><td style="text-align:right;">500,000</td><td style="text-align:right; font-weight:600;">1,500,000</td><td><span class="badge b-approved">발행완료</span></td></tr>
+          <tr><td>TM-2026-0212</td><td>02-12</td><td>CJ제일제당(주)</td><td>잔류농약, 중금속 외 2건</td><td>4</td><td style="text-align:right;">1,125,000</td><td style="text-align:right; font-weight:600;">4,500,000</td><td><span class="badge b-pending">미발송</span></td></tr>
+        </tbody>
+      </table>
+    `
+  },
+
+  urgent: {
+    title: "긴급 협조 요청",
+    html: `
+      <div class="page-later">
+        <div class="page-later-icon">🚨</div>
+        <div class="page-later-text">추후 검토 예정</div>
+        <div class="page-later-desc">검사 목적별로 표기되는 항목이 다르기 때문에<br>해당 내용을 반영하여 추후 검토합니다.<br><br>
+        <span style="color:#5f6b7a;">예정 기능: 요청 등록, 현황 조회(대기/처리중/완료),<br>담당자 배정, 완료 시 알림</span></div>
+      </div>
+    `
+  },
+
+  receivable: {
+    title: "미수금 관리",
+    html: `
+      <div class="page-later">
+        <div class="page-later-icon">💰</div>
+        <div class="page-later-text">추후 검토 예정</div>
+        <div class="page-later-desc">재무관리 메뉴 설계 완료 후 구체화합니다.</div>
+      </div>
+    `
+  },
+
+  invoice: {
+    title: "계산서 발행 승인요청",
+    html: `
+      <div class="toolbar">
+        <input class="search-box" placeholder="업체명, 요청자 검색..." />
+        <div class="filter-btn">🔽 상태</div>
+        <div class="filter-btn">🔽 기간</div>
+        <button class="btn-primary">+ 승인요청 등록</button>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:12px; font-weight:600; color:#1a2332; margin-bottom:8px;">승인 프로세스</div>
+        <div class="process-flow">
+          <span class="process-step ps-active">① 영업사원 요청</span>
+          <span class="process-arrow">→</span>
+          <span class="process-step ps-active">② 재무부 승인</span>
+          <span class="process-arrow">→</span>
+          <span class="process-step ps-done">③ 세금계산서 자동발행</span>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>요청번호</th><th>요청일</th><th>요청자</th><th>업체명</th><th>금액</th><th>발행사유</th><th>상태</th><th>처리자</th></tr></thead>
+        <tbody>
+          <tr><td>INV-0213-001</td><td>02-13</td><td>박주임</td><td>삼양식품(주)</td><td style="text-align:right; font-weight:600;">2,200,000</td><td>2월 검사비 청구</td><td><span class="badge b-approved">승인완료</span></td><td>김재무</td></tr>
+          <tr><td>INV-0213-002</td><td>02-13</td><td>박주임</td><td>(주)한국건강식품</td><td style="text-align:right; font-weight:600;">3,100,000</td><td>2월 검사비 청구</td><td><span class="badge b-pending">대기중</span></td><td>-</td></tr>
+          <tr><td>INV-0212-001</td><td>02-12</td><td>이주임</td><td>CJ제일제당(주)</td><td style="text-align:right; font-weight:600;">4,500,000</td><td>2월 검사비 청구</td><td><span class="badge b-approved">승인완료</span></td><td>김재무</td></tr>
+          <tr><td>INV-0210-001</td><td>02-10</td><td>박주임</td><td>맛나식품</td><td style="text-align:right; font-weight:600;">800,000</td><td>1월 미청구분</td><td><span class="badge b-rejected">반려</span></td><td>김재무</td></tr>
+        </tbody>
+      </table>
+      <div class="card" style="margin-top:14px; border-left:4px solid #f44336;">
+        <div class="card-title" style="color:#c62828;">❌ 반려 사유</div>
+        <div style="font-size:12px; color:#5f6b7a;">INV-0210-001 맛나식품: "미수금 미회수 상태에서 추가 청구 불가. 기존 미수금 회수 후 재요청 바랍니다." — 김재무 (02-10)</div>
+      </div>
+    `
+  }
+};
+
+let currentPage = 'client';
+
+function setPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+  const nav = document.getElementById('nav-' + page);
+  if (nav) nav.classList.add('active');
+  document.getElementById('topSub').textContent = pa

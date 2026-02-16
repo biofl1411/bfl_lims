@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고객사 관리 - 목록형 vs 카드형 비교</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f2f5; padding: 20px; color: #1a2332; }
+
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { font-size: 20px; margin-bottom: 8px; }
+  .header p { font-size: 13px; color: #8892a4; }
+
+  .toggle-wrap { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+  .toggle-btn { padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; border: 2px solid #e2e6ed; background: #fff; color: #5f6b7a; transition: all 0.2s; }
+  .toggle-btn.active { background: #1a2332; color: #fff; border-color: #4fc3f7; }
+
+  .view-container { display: none; }
+  .view-container.active { display: block; }
+
+  /* ===== 공통 ===== */
+  .toolbar { background: #fff; border-radius: 10px; border: 1px solid #e2e6ed; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .search-box { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #e2e6ed; border-radius: 6px; font-size: 13px; outline: none; }
+  .search-box:focus { border-color: #4fc3f7; }
+  .filter-btn { padding: 8px 14px; border: 1px solid #e2e6ed; border-radius: 6px; background: #fff; font-size: 12px; color: #5f6b7a; cursor: pointer; }
+  .filter-btn:hover { background: #f5f7fa; }
+  .add-btn { padding: 8px 16px; border: none; border-radius: 6px; background: #1a73e8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .add-btn:hover { background: #1557b0; }
+
+  .traffic-light { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .traffic-green { background: #4caf50; }
+  .traffic-yellow { background: #ff9800; }
+  .traffic-red { background: #f44336; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-active { background: #e8f5e9; color: #2e7d32; }
+  .badge-dormant { background: #fff3e0; color: #e65100; }
+  .badge-terminated { background: #fce4ec; color: #c62828; }
+
+  .grade-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .grade-vip { background: #e8eaf6; color: #283593; }
+  .grade-a { background: #e3f2fd; color: #1565c0; }
+  .grade-b { background: #f3e5f5; color: #6a1b9a; }
+  .grade-c { background: #eceff1; color: #546e7a; }
+
+  /* ===== 목록형 ===== */
+  .list-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e2e6ed; }
+  .list-table thead { background: #f8f9fb; }
+  .list-table th { padding: 12px 14px; font-size: 12px; color: #8892a4; font-weight: 600; text-align: left; border-bottom: 1px solid #e2e6ed; white-space: nowrap; }
+  .list-table td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid #f0f2f5; }
+  .list-table tr:hover { background: #f8fbff; }
+  .list-table tr:last-child td { border-bottom: none; }
+  .company-name { font-weight: 600; color: #1a2332; cursor: pointer; }
+  .company-name:hover { color: #1a73e8; text-decoration: underline; }
+  .sub-text { font-size: 11px; color: #8892a4; margin-top: 2px; }
+  .담당자-list { font-size: 12px; color: #5f6b7a; }
+
+  /* ===== 카드형 ===== */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .card { background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; padding: 18px; transition: all 0.2s; cursor: pointer; position: relative; }
+  .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); border-color: #c8d6e5; transform: translateY(-1px); }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .card-company { font-size: 16px; font-weight: 700; color: #1a2332; display: flex; align-items: center; gap: 6px; }
+  .card-badges { display: flex; gap: 4px; }
+  .card-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .card-info-item { font-size: 12px; }
+  .card-info-label { color: #8892a4; margin-bottom: 2px; }
+  .card-info-value { color: #1a2332; font-weight: 500; }
+  .card-담당자 { border-top: 1px solid #f0f2f5; padding-top: 10px; }
+  .card-담당자-title { font-size: 11px; color: #8892a4; font-weight: 600; margin-bottom: 6px; }
+  .card-담당자-row { display: flex; justify-content: space-between; font-size: 12px; color: #5f6b7a; margin-bottom: 3px; }
+  .card-담당자-name { font-weight: 600; color: #1a2332; }
+  .card-meta { display: flex; justify-content: space-between; font-size: 11px; color: #8892a4; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f0f2f5; }
+
+  .info-box { background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 10px; padding: 14px 18px; margin-top: 20px; font-size: 13px; color: #2e7d32; line-height: 1.6; }
+  .info-box strong { font-size: 14px; }
+
+  .section-divider { margin: 30px 0 20px; padding: 12px 18px; background: #fff; border-radius: 10px; border: 1px solid #e2e6ed; }
+  .section-divider h2 { font-size: 16px; margin-bottom: 6px; }
+  .section-divider p { font-size: 13px; color: #8892a4; }
+
+  /* 신호등 범례 */
+  .legend { display: flex; gap: 16px; align-items: center; font-size: 12px; color: #5f6b7a; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+
+  .overflow-table { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div style="background:#1a2332;padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:999">
+  <a href="index.html" style="color:#4fc3f7;text-decoration:none;font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;font-family:-apple-system,sans-serif">🧪 BFL 홈</a>
+  <span style="color:#4a6785;font-size:12px">›</span>
+  <span style="color:#8ea4c0;font-size:13px;font-family:-apple-system,sans-serif">영업 관리 › 목록 vs 카드 비교</span>
+  <a href="index.html" style="margin-left:auto;color:#8ea4c0;text-decoration:none;font-size:12px;padding:4px 12px;border:1px solid rgba(255,255,255,.15);border-radius:6px;font-family:-apple-system,sans-serif">← 대시보드로</a>
+</div>
+
+
+<div class="header">
+  <h1>고객사 관리 — 목록형 vs 카드형 비교</h1>
+  <p>각 버튼을 눌러서 비교해 보세요</p>
+</div>
+
+<div class="toggle-wrap">
+  <div class="toggle-btn active" onclick="showView('list')">📋 목록형</div>
+  <div class="toggle-btn" onclick="showView('card')">🗂️ 카드형</div>
+</div>
+
+<!-- ===== 목록형 ===== -->
+<div class="view-container active" id="view-list">
+  <div class="toolbar">
+    <input class="search-box" placeholder="회사명, 사업자번호, 담당자명으로 검색..." />
+    <div class="filter-btn">🔽 등급</div>
+    <div class="filter-btn">🔽 상태</div>
+    <div class="filter-btn">🚦 신호등</div>
+    <div class="add-btn">+ 고객사 등록</div>
+  </div>
+
+  <div style="margin-bottom: 12px; padding: 0 4px;">
+    <div class="legend">
+      <span style="font-weight:600; color:#1a2332;">신호등:</span>
+      <span class="legend-item"><span class="traffic-light traffic-green"></span> 정상 거래</span>
+      <span class="legend-item"><span class="traffic-light traffic-yellow"></span> 주의 필요</span>
+      <span class="legend-item"><span class="traffic-light traffic-red"></span> 위험/미수금</span>
+    </div>
+  </div>
+
+  <div class="overflow-table">
+    <table class="list-table">
+      <thead>
+        <tr>
+          <th>신호</th>
+          <th>회사명</th>
+          <th>사업자번호</th>
+          <th>대표자</th>
+          <th>등급</th>
+          <th>상태</th>
+          <th>담당자(고객)</th>
+          <th>담당자(자사)</th>
+          <th>최근거래일</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="traffic-light traffic-green"></span></td>
+          <td><span class="company-name">삼양식품(주)</span><div class="sub-text">서울 강남구 테헤란로 123</div></td>
+          <td>123-45-67890</td>
+          <td>김삼양</td>
+          <td><span class="grade-badge grade-vip">VIP</span></td>
+          <td><span class="badge badge-active">활동</span></td>
+          <td><div class="담당자-list">이과장 010-1234-5678</div><div class="담당자-list" style="color:#8892a4;">외 2명</div></td>
+          <td><div class="담당자-list">박주임</div></td>
+          <td>2026-02-10</td>
+        </tr>
+        <tr>
+          <td><span class="traffic-light traffic-yellow"></span></td>
+          <td><span class="company-name">풀무원식품(주)</span><div class="sub-text">서울 서초구 바우뫼로 12</div></td>
+          <td>234-56-78901</td>
+          <td>원풀무</td>
+          <td><span class="grade-badge grade-a">A</span></td>
+          <td><span class="badge badge-active">활동</span></td>
+          <td><div class="담당자-list">최대리 010-2345-6789</div></td>
+          <td><div class="담당자-list">김사원, 이주임</div></td>
+          <td>2026-01-28</td>
+        </tr>
+        <tr>
+          <td><span class="traffic-light traffic-red"></span></td>
+          <td><span class="company-name">맛나식품</span><div class="sub-text">경기 성남시 분당구 판교로 45</div></td>
+          <td>345-67-89012</td>
+          <td>박맛나</td>
+          <td><span class="grade-badge grade-b">B</span></td>
+          <td><span class="badge badge-dormant">휴면</span></td>
+          <td><div class="담당자-list">정과장 010-3456-7890</div></td>
+          <td><div class="담당자-list">박주임</div></td>
+          <td>2025-08-15</td>
+        </tr>
+        <tr>
+          <td><span class="traffic-light traffic-green"></span></td>
+          <td><span class="company-name">(주)한국건강식품</span><div class="sub-text">부산 해운대구 센텀로 88</div></td>
+          <td>456-78-90123</td>
+          <td>한건강</td>
+          <td><span class="grade-badge grade-a">A</span></td>
+          <td><span class="badge badge-active">활동</span></td>
+          <td><div class="담당자-list">윤부장 010-4567-8901</div><div class="담당자-list" style="color:#8892a4;">외 1명</div></td>
+          <td><div class="담당자-list">김사원</div></td>
+          <td>2026-02-12</td>
+        </tr>
+        <tr>
+          <td><span class="traffic-light traffic-green"></span></td>
+          <td><span class="company-name">대한제약(주)</span><div class="sub-text">서울 영등포구 여의대로 24</div></td>
+          <td>567-89-01234</td>
+          <td>이대한</td>
+          <td><span class="grade-badge grade-c">C</span></td>
+          <td><span class="badge badge-terminated">해지</span></td>
+          <td><div class="담당자-list">강사원 010-5678-9012</div></td>
+          <td><div class="담당자-list">이주임</div></td>
+          <td>2025-03-20</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="info-box" style="margin-top: 16px;">
+    <strong>📋 목록형 특징</strong><br>
+    • 한 화면에 많은 고객사를 한눈에 비교 가능<br>
+    • 정렬/필터 기능이 강력 (컬럼 헤더 클릭으로 정렬)<br>
+    • 데이터가 많을수록 유리 (100개 이상)<br>
+    • 관리자/재무 담당자에게 적합
+  </div>
+</div>
+
+<!-- ===== 카드형 ===== -->
+<div class="view-container" id="view-card">
+  <div class="toolbar">
+    <input class="search-box" placeholder="회사명, 사업자번호, 담당자명으로 검색..." />
+    <div class="filter-btn">🔽 등급</div>
+    <div class="filter-btn">🔽 상태</div>
+    <div class="filter-btn">🚦 신호등</div>
+    <div class="add-btn">+ 고객사 등록</div>
+  </div>
+
+  <div style="margin-bottom: 12px; padding: 0 4px;">
+    <div class="legend">
+      <span style="font-weight:600; color:#1a2332;">신호등:</span>
+      <span class="legend-item"><span class="traffic-light traffic-green"></span> 정상 거래</span>
+      <span class="legend-item"><span class="traffic-light traffic-yellow"></span> 주의 필요</span>
+      <span class="legend-item"><span class="traffic-light traffic-red"></span> 위험/미수금</span>
+    </div>
+  </div>
+
+  <div class="card-grid">
+    <!-- 카드 1 -->
+    <div class="card" style="border-left: 4px solid #4caf50;">
+      <div class="card-header">
+        <div class="card-company"><span class="traffic-light traffic-green"></span> 삼양식품(주)</div>
+        <div class="card-badges">
+          <span class="grade-badge grade-vip">VIP</span>
+          <span class="badge badge-active">활동</span>
+        </div>
+      </div>
+      <div class="card-info">
+        <div class="card-info-item"><div class="card-info-label">사업자번호</div><div class="card-info-value">123-45-67890</div></div>
+        <div class="card-info-item"><div class="card-info-label">대표자</div><div class="card-info-value">김삼양</div></div>
+        <div class="card-info-item"><div class="card-info-label">업태</div><div class="card-info-value">제조업</div></div>
+        <div class="card-info-item"><div class="card-info-label">종목</div><div class="card-info-value">식품</div></div>
+      </div>
+      <div class="card-담당자">
+        <div class="card-담당자-title">담당자 (고객사 3명 / 자사 1명)</div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">이과장</span> 010-1234-5678</span><span style="color:#1a73e8;">← 박주임</span></div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">김대리</span> 010-1111-2222</span><span style="color:#1a73e8;">← 박주임</span></div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">박사원</span> 010-3333-4444</span><span style="color:#1a73e8;">← 박주임</span></div>
+      </div>
+      <div class="card-meta">
+        <span>첫 거래: 2020-03-15</span>
+        <span>최근 거래: 2026-02-10</span>
+      </div>
+    </div>
+
+    <!-- 카드 2 -->
+    <div class="card" style="border-left: 4px solid #ff9800;">
+      <div class="card-header">
+        <div class="card-company"><span class="traffic-light traffic-yellow"></span> 풀무원식품(주)</div>
+        <div class="card-badges">
+          <span class="grade-badge grade-a">A</span>
+          <span class="badge badge-active">활동</span>
+        </div>
+      </div>
+      <div class="card-info">
+        <div class="card-info-item"><div class="card-info-label">사업자번호</div><div class="card-info-value">234-56-78901</div></div>
+        <div class="card-info-item"><div class="card-info-label">대표자</div><div class="card-info-value">원풀무</div></div>
+        <div class="card-info-item"><div class="card-info-label">업태</div><div class="card-info-value">제조업</div></div>
+        <div class="card-info-item"><div class="card-info-label">종목</div><div class="card-info-value">건강식품</div></div>
+      </div>
+      <div class="card-담당자">
+        <div class="card-담당자-title">담당자 (고객사 1명 / 자사 2명)</div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">최대리</span> 010-2345-6789</span><span style="color:#1a73e8;">← 김사원, 이주임</span></div>
+      </div>
+      <div class="card-meta">
+        <span>첫 거래: 2021-07-20</span>
+        <span>최근 거래: 2026-01-28</span>
+      </div>
+    </div>
+
+    <!-- 카드 3 -->
+    <div class="card" style="border-left: 4px solid #f44336;">
+      <div class="card-header">
+        <div class="card-company"><span class="traffic-light traffic-red"></span> 맛나식품</div>
+        <div class="card-badges">
+          <span class="grade-badge grade-b">B</span>
+          <span class="badge badge-dormant">휴면</span>
+        </div>
+      </div>
+      <div class="card-info">
+        <div class="card-info-item"><div class="card-info-label">사업자번호</div><div class="card-info-value">345-67-89012</div></div>
+        <div class="card-info-item"><div class="card-info-label">대표자</div><div class="card-info-value">박맛나</div></div>
+        <div class="card-info-item"><div class="card-info-label">업태</div><div class="card-info-value">도소매</div></div>
+        <div class="card-info-item"><div class="card-info-label">종목</div><div class="card-info-value">식품유통</div></div>
+      </div>
+      <div class="card-담당자">
+        <div class="card-담당자-title">담당자 (고객사 1명 / 자사 1명)</div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">정과장</span> 010-3456-7890</span><span style="color:#1a73e8;">← 박주임</span></div>
+      </div>
+      <div class="card-meta">
+        <span>첫 거래: 2022-01-10</span>
+        <span>최근 거래: 2025-08-15</span>
+      </div>
+    </div>
+
+    <!-- 카드 4 -->
+    <div class="card" style="border-left: 4px solid #4caf50;">
+      <div class="card-header">
+        <div class="card-company"><span class="traffic-light traffic-green"></span> (주)한국건강식품</div>
+        <div class="card-badges">
+          <span class="grade-badge grade-a">A</span>
+          <span class="badge badge-active">활동</span>
+        </div>
+      </div>
+      <div class="card-info">
+        <div class="card-info-item"><div class="card-info-label">사업자번호</div><div class="card-info-value">456-78-90123</div></div>
+        <div class="card-info-item"><div class="card-info-label">대표자</div><div class="card-info-value">한건강</div></div>
+        <div class="card-info-item"><div class="card-info-label">업태</div><div class="card-info-value">제조업</div></div>
+        <div class="card-info-item"><div class="card-info-label">종목</div><div class="card-info-value">건강기능식품</div></div>
+      </div>
+      <div class="card-담당자">
+        <div class="card-담당자-title">담당자 (고객사 2명 / 자사 1명)</div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">윤부장</span> 010-4567-8901</span><span style="color:#1a73e8;">← 김사원</span></div>
+        <div class="card-담당자-row"><span><span class="card-담당자-name">송대리</span> 010-7777-8888</span><span style="color:#1a73e8;">← 김사원</span></div>
+      </div>
+      <div class="card-meta">
+        <span>첫 거래: 2019-11-05</span>
+        <span>최근 거래: 2026-02-12</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-box" style="margin-top: 16px;">
+    <strong>🗂️ 카드형 특징</strong><br>
+    • 고객사별 정보가 한 카드에 정리되어 직관적<br>
+    • 담당자 관계(고객↔자사)가 한눈에 보임<br>
+    • 신호등 상태가 좌측 테두리 색으로 즉시 파악<br>
+    • 영업부 담당자에게 적합
+  </div>
+</div>
+
+<!-- ===== 신호등 체계 논의 ===== -->
+<div class="section-divider">
+  <h2>🚦 신호등 체계 논의</h2>
+  <p>아래는 신호등 분류 기준 예시입니다. 실제 기준은 BioFoodLab 업무에 맞게 조정이 필요합니다.</p>
+</div>
+
+<div style="background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; overflow: hidden;">
+  <table class="list-table" style="border: none;">
+    <thead>
+      <tr>
+        <th style="width: 80px;">신호</th>
+        <th style="width: 100px;">상태명</th>
+        <th>분류 기준 (예시)</th>
+        <th>권장 조치</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="text-align: center;"><span class="traffic-light traffic-green" style="width: 16px; height: 16px;"></span></td>
+        <td style="font-weight: 700; color: #4caf50;">정상</td>
+        <td>
+          • 미수금 없음 또는 정상 범위 내<br>
+          • 최근 3개월 이내 거래 발생<br>
+          • 입금 기한 준수
+        </td>
+        <td style="color: #5f6b7a;">정상 관리</td>
+      </tr>
+      <tr>
+        <td style="text-align: center;"><span class="traffic-light traffic-yellow" style="width: 16px; height: 16px;"></span></td>
+        <td style="font-weight: 700; color: #ff9800;">주의</td>
+        <td>
+          • 미수금 일부 발생 (30일 이상 연체)<br>
+          • 3~6개월 거래 공백<br>
+          • 입금 지연 이력 있음
+        </td>
+        <td style="color: #5f6b7a;">영업 담당자 확인 필요</td>
+      </tr>
+      <tr>
+        <td style="text-align: center;"><span class="traffic-light traffic-red" style="width: 16px; height: 16px;"></span></td>
+        <td style="font-weight: 700; color: #f44336;">위험</td>
+        <td>
+          • 미수금 장기 미회수 (60일 이상)<br>
+          • 6개월 이상 거래 없음<br>
+          • 연락 두절 또는 폐업 징후
+        </td>
+        <td style="color: #5f6b7a;">즉시 조치 / 관리자 보고</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="info-box" style="background: #fff3e0; border-color: #ffcc80; color: #e65100; margin-top: 16px;">
+  <strong>💡 논의 포인트</strong><br>
+  1. 신호등 기준을 <b>수동 설정</b>(관리자가 직접 지정) vs <b>자동 산출</b>(미수금/거래일 기준 자동 변경) 중 어떤 방식?<br>
+  2. 3단계(초록/노랑/빨강) 외에 <b>4~5단계</b>가 필요한지?<br>
+  3. 신호등 변경 시 <b>알림</b>을 보낼지? (예: 초록→노랑 전환 시 담당자에게 알림)
+</div>
+
+<script>
+function showView(type) {
+  document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.toggle-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + type).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
