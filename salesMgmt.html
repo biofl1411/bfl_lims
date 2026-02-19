@@ -1918,7 +1918,7 @@ function runLicOCR(idx) {
       if (data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result) {
         var res = data.images[0].bizLicense.result;
         fillLicFields(idx, res);
-        var docType = getText(res.documentType) || '문서';
+        var docType = (res.documentType && res.documentType.length) ? res.documentType[0].text : '문서';
         status.textContent = '✅ OCR 인식 완료! (' + docType + ') 필드가 자동 입력되었습니다.';
         status.style.color = '#2e7d32';
         toast('✅ 인허가 문서 OCR 인식 완료 (' + docType + ')');
@@ -2000,10 +2000,24 @@ function fillLicFields(idx, res) {
     }
   }
 
+  // 분야 자동 설정: 축산 키워드 → '축산', 그 외 → '식품'
+  var allText = [bizForm, bizName, getText(res.documentType)].join(' ');
+  var fieldSel = document.getElementById('licField_' + idx);
+  if (fieldSel && fieldSel.value === '선택') {
+    var isLivestock = /축산|식육|도축|식용란|유가공|우유|낙농/.test(allText);
+    for (var k = 0; k < fieldSel.options.length; k++) {
+      if ((isLivestock && fieldSel.options[k].text === '축산') ||
+          (!isLivestock && fieldSel.options[k].text === '식품')) {
+        fieldSel.selectedIndex = k;
+        break;
+      }
+    }
+  }
+
   // 하이라이트
-  ['licNo_','licRepName_','licBizName_','licAddr_','licZipcode_'].forEach(function(prefix) {
+  ['licNo_','licRepName_','licBizName_','licAddr_','licZipcode_','licBizForm_','licField_'].forEach(function(prefix) {
     var el = document.getElementById(prefix + idx);
-    if (el && el.value) {
+    if (el && (el.value || (el.tagName === 'SELECT' && el.selectedIndex > 0))) {
       el.style.background = '#e3f2fd';
       el.style.borderColor = '#42a5f5';
       setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 5000);
