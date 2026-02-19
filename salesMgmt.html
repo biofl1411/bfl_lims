@@ -1984,6 +1984,40 @@ function openCustomerDetail(custId) {
   var ocrStatus = document.getElementById('detailOcrStatus');
   if (ocrStatus) { ocrStatus.style.display = 'none'; ocrStatus.textContent = ''; }
 
+  // 우편번호 미등록 시 카카오 API로 자동 조회 (사업자등록증 주소)
+  if (!cust.zipcode && cust.addr1) {
+    lookupAddressFromKakao(cust.addr1, function(zipcode, roadAddr, detailAddr) {
+      if (zipcode) {
+        document.getElementById('detZipcode').value = zipcode;
+        cust.zipcode = zipcode;
+      }
+      if (roadAddr && roadAddr !== cust.addr1) {
+        document.getElementById('detAddr1').value = roadAddr;
+        cust.addr1 = roadAddr;
+      }
+      // localStorage 업데이트
+      var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+      var ci = custs.findIndex(function(c) { return c.id === custId; });
+      if (ci !== -1) { custs[ci].zipcode = cust.zipcode; custs[ci].addr1 = cust.addr1; localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+    });
+  }
+  // 인허가 우편번호 미등록 시 카카오 API로 자동 조회
+  var lics = cust.licenses || [];
+  lics.forEach(function(lic, i) {
+    if (!lic.licZipcode && lic.licAddr) {
+      lookupAddressFromKakao(lic.licAddr, function(zipcode, roadAddr, detailAddr) {
+        var num = i + 1;
+        if (zipcode) { lic.licZipcode = zipcode; var zEl = document.getElementById('detLicZipcode_' + num); if (zEl) zEl.value = zipcode; }
+        if (roadAddr && roadAddr !== lic.licAddr) { lic.licAddr = roadAddr; var aEl = document.getElementById('detLicAddr_' + num); if (aEl) aEl.value = roadAddr; }
+        if (detailAddr && !lic.licAddr2) { lic.licAddr2 = detailAddr; var a2El = document.getElementById('detLicAddr2_' + num); if (a2El) a2El.value = detailAddr; }
+        // localStorage 업데이트
+        var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+        var ci = custs.findIndex(function(c) { return c.id === custId; });
+        if (ci !== -1) { if (custs[ci].licenses && custs[ci].licenses[i]) { custs[ci].licenses[i] = lic; } localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+      });
+    }
+  });
+
   // 변경 이력 로드
   renderChangeLog(cust.changeLog || []);
 
