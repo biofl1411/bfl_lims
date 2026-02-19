@@ -513,8 +513,12 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             </div>
             <div class="fg-row">
               <div class="fg"><label>영업소명칭 <span class="req">*</span></label><input id="licBizName_1" placeholder="영업소 명칭"></div>
-              <div class="fg"><label>소재지 <span class="req">*</span></label><input id="licAddr_1" placeholder="소재지"></div>
             </div>
+            <div class="fg"><label>소재지 <span class="req">*</span></label>
+              <div class="addr-row"><input id="licZipcode_1" placeholder="우편번호" style="max-width:120px" readonly><button class="btn btn-secondary btn-sm" onclick="openLicPostcodeSearch(1)">우편번호 찾기</button></div>
+            </div>
+            <div class="fg"><input id="licAddr_1" placeholder="기본주소 (자동입력)" readonly></div>
+            <div class="fg"><input id="licAddr2_1" placeholder="상세주소 입력"></div>
             <div class="fg"><label>인허가 문서 첨부</label>
               <div style="display:flex;gap:8px;align-items:center">
                 <div class="file-area" id="licFileArea_1" style="flex:1;padding:10px;position:relative" onclick="document.getElementById('licFileInput_1').click()" ondragover="event.preventDefault();this.style.borderColor='#1a73e8'" ondragleave="this.style.borderColor='#e2e6ed'" ondrop="event.preventDefault();this.style.borderColor='#e2e6ed';handleLicFile(1,event.dataTransfer.files[0])">
@@ -1554,6 +1558,53 @@ function highlightField(id) {
   setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 5000);
 }
 
+// --- 인허가 소재지: 우편번호 찾기 (Daum Postcode API) ---
+function openLicPostcodeSearch(idx) {
+  new daum.Postcode({
+    oncomplete: function(data) {
+      document.getElementById('licZipcode_' + idx).value = data.zonecode;
+      document.getElementById('licAddr_' + idx).value = data.roadAddress || data.jibunAddress;
+      document.getElementById('licAddr2_' + idx).value = '';
+      document.getElementById('licAddr2_' + idx).focus();
+    }
+  }).open();
+}
+
+// --- 인허가 소재지: OCR 주소에서 우편번호 자동 조회 ---
+function lookupLicZipcodeFromAddress(idx, address) {
+  if (!address) return;
+  var cleanAddr = address.replace(/\([^)]*\)/g, '').trim();
+  var mainAddr = cleanAddr;
+  var detailAddr = '';
+  var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,]\s*(.+)$/);
+  if (detailMatch) {
+    mainAddr = detailMatch[1].trim();
+    detailAddr = detailMatch[2].trim();
+  }
+  var apiKey = '8e5dab09aacd882449bd3865699a9d69';
+  fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(mainAddr), {
+    headers: { 'Authorization': 'KakaoAK ' + apiKey }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.documents && data.documents.length > 0) {
+      var doc = data.documents[0];
+      var roadAddr = doc.road_address;
+      if (roadAddr && roadAddr.zone_no) {
+        document.getElementById('licZipcode_' + idx).value = roadAddr.zone_no;
+        document.getElementById('licAddr_' + idx).value = roadAddr.address_name;
+        if (detailAddr) document.getElementById('licAddr2_' + idx).value = detailAddr;
+        highlightField('licZipcode_' + idx);
+        highlightField('licAddr_' + idx);
+      } else if (doc.address) {
+        document.getElementById('licAddr_' + idx).value = doc.address.address_name;
+        if (detailAddr) document.getElementById('licAddr2_' + idx).value = detailAddr;
+      }
+    }
+  })
+  .catch(function(e) { console.log('인허가 우편번호 조회 실패:', e); });
+}
+
 // ============================================================
 // 고객사 신규 등록 폼 초기화
 // ============================================================
@@ -1594,6 +1645,11 @@ function resetCustomerRegForm() {
   if (licOcrBtn) { licOcrBtn.disabled = true; }
   var licOcrStatus = document.getElementById('licOcrStatus_1');
   if (licOcrStatus) { licOcrStatus.style.display = 'none'; licOcrStatus.textContent = ''; }
+  // 인허가 주소 필드 초기화
+  var licZip = document.getElementById('licZipcode_1');
+  if (licZip) licZip.value = '';
+  var licAddr2 = document.getElementById('licAddr2_1');
+  if (licAddr2) licAddr2.value = '';
   // 중복확인 결과 초기화
   var compChk = document.getElementById('compChk');
   if (compChk) compChk.innerHTML = '';
@@ -1881,7 +1937,11 @@ function fillLicFields(idx, fields) {
   if (licNo) document.getElementById('licNo_' + idx).value = licNo;
   if (repName) document.getElementById('licRepName_' + idx).value = repName;
   if (bizName) document.getElementById('licBizName_' + idx).value = bizName;
-  if (addr) document.getElementById('licAddr_' + idx).value = addr;
+  // 주소 → 우편번호 자동 조회 (사업자등록증과 동일)
+  if (addr) {
+    document.getElementById('licAddr_' + idx).value = addr;
+    lookupLicZipcodeFromAddress(idx, addr);
+  }
   // 영업의 형태: select에서 매칭 시도
   if (bizForm) {
     var sel = document.getElementById('licBizForm_' + idx);
@@ -1904,7 +1964,7 @@ function fillLicFields(idx, fields) {
   }
 
   // 하이라이트
-  ['licNo_','licRepName_','licBizName_','licAddr_'].forEach(function(prefix) {
+  ['licNo_','licRepName_','licBizName_','licAddr_','licZipcode_'].forEach(function(prefix) {
     var el = document.getElementById(prefix + idx);
     if (el && el.value) {
       el.style.background = '#e3f2fd';
