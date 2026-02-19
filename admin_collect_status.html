@@ -361,8 +361,16 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
-var API_BASE = window.location.origin;
+// API 서버 주소: 실제 서버가 있으면 그쪽으로, 없으면 origin 사용
+var API_BASE = (function() {
+  // GitHub Pages 등 정적 호스팅이면 실제 API 서버 주소 사용
+  if (location.hostname.includes('github.io')) {
+    return 'http://bioflsever:5060';
+  }
+  return window.location.origin;
+})();
 var refreshTimer = null;
+var serverConnected = false;
 
 var CAT_MAP = {
   'fss_businesses': { label: '업소인허가', cls: 'cat-biz' },
@@ -394,21 +402,46 @@ function showToast(msg) {
 }
 
 function loadData() {
-  fetch(API_BASE + '/api/collect/detail')
-    .then(function(r) { return r.json(); })
+  fetch(API_BASE + '/api/collect/detail', { signal: AbortSignal.timeout(5000) })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function(data) {
       if (!data.success) {
-        showToast('데이터 로드 실패');
+        showOfflineUI();
         return;
       }
+      serverConnected = true;
       renderSummary(data.apis);
       renderTable(data.apis);
       document.getElementById('refreshInfo').textContent =
         '마지막 갱신: ' + new Date().toLocaleTimeString('ko-KR') + ' (30초마다)';
     })
     .catch(function(e) {
-      showToast('서버 연결 실패: ' + e.message);
+      if (!serverConnected) {
+        showOfflineUI();
+      }
     });
+}
+
+function showOfflineUI() {
+  document.getElementById('totalApis').textContent = '16';
+  document.getElementById('completedApis').textContent = '-';
+  document.getElementById('progressApis').textContent = '-';
+  document.getElementById('waitingApis').textContent = '-';
+  document.getElementById('totalRecords').textContent = '-';
+  document.getElementById('refreshInfo').textContent = '⚠️ API 서버 미연결 (오프라인 모드)';
+  document.getElementById('tableWrap').innerHTML =
+    '<div style="text-align:center;padding:60px 20px;color:var(--text3);">' +
+    '<div style="font-size:48px;margin-bottom:16px;">🔌</div>' +
+    '<div style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:8px;">API 서버에 연결할 수 없습니다</div>' +
+    '<div style="font-size:13px;line-height:1.8;">' +
+    'Flask API 서버(bioflsever:5060)가 실행 중이어야 수집 현황을 확인할 수 있습니다.<br>' +
+    '<code style="background:#f0f2f5;padding:4px 10px;border-radius:4px;font-size:12px;">python api_server.py</code> 로 서버를 시작하세요.' +
+    '</div></div>';
+  // 오프라인이면 자동 갱신 중지
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
 }
 
 function renderSummary(apis) {
