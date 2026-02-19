@@ -229,6 +229,7 @@ Flask REST API 서버 (port 5060)
 | `bfl_grade_rules` | 등급 규칙 (복합 점수 5개 항목) | `adminSettings.html`, `salesMgmt.html` |
 | `bfl_holiday_data` | 공휴일 상세 (날짜 + 명칭) | `adminSettings.html` |
 | `bfl_holidays` | 공휴일 날짜 배열 | `sampleReceipt.html` |
+| `bfl_users_data` | 사용자 관리 수정/추가 데이터 | `userMgmt.html` |
 
 ---
 
@@ -473,6 +474,53 @@ Flask REST API 서버 (port 5060)
 | Z | 검사목적 | 자가품질위탁검사용 필터 |
 | AD | 시험법근거 | 시험법 |
 | AH | 항목수수료 | 수수료 |
+
+---
+
+## ⚠️ 주의 사항
+
+### 1. 작업 시작 전 읽기/쓰기 권한 허용
+
+Claude Code로 작업하기 전에 **반드시 프로젝트 폴더의 읽기/쓰기 권한을 허용**해야 합니다.
+
+`.claude/settings.local.json` 파일에 다음 권한이 설정되어 있어야 원활한 작업이 가능합니다:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read", "Write", "Edit",
+      "Bash(git:*)", "Bash(python:*)", "Bash(node:*)", "Bash(npm:*)",
+      "Bash(powershell:*)", "Bash(cmd.exe:*)"
+    ]
+  }
+}
+```
+
+권한이 설정되지 않으면 매번 파일 읽기/쓰기 시 수동 승인이 필요하여 작업 효율이 크게 떨어집니다.
+
+### 2. 데이터 영속성 — localStorage 저장 필수
+
+브라우저에서 입력한 데이터(사용자 정보 수정, 신규 추가 등)는 **반드시 `localStorage`에 저장**해야 합니다.
+
+- JavaScript 변수(메모리)에만 저장된 데이터는 **페이지 새로고침 시 모두 초기화**됩니다
+- 사용자가 인라인 편집 또는 모달로 입력한 데이터가 저장 없이 사라지는 문제 방지
+- 모든 사용자 입력 데이터는 `saveUsersToStorage()` 등 localStorage 저장 함수를 반드시 호출해야 함
+- 현재 사용 중인 localStorage 키는 **데이터 저장소 (localStorage)** 섹션 참조
+
+**관련 저장 함수 패턴**:
+```javascript
+// 데이터 변경 후 반드시 호출
+saveUsersToStorage();  // userMgmt.html
+saveGradeRules();      // adminSettings.html
+saveSignalRules();     // adminSettings.html
+```
+
+### 3. 새로운 페이지/기능 개발 시
+
+- 사용자 입력 데이터가 있는 페이지는 `load___()` / `save___ToStorage()` 패턴을 적용할 것
+- 초기 로드 시 `localStorage`에서 저장된 데이터를 읽어와 기본 데이터와 병합
+- 수정/추가/삭제 후에는 반드시 `localStorage`에 저장
 
 ---
 
