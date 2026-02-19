@@ -210,6 +210,7 @@ Flask REST API 서버 (port 5060)
 | `77a3eb4` | BFL_LIMS_planning.md v1.2 업데이트 + 데이터 저장 위치 섹션 추가 |
 | *(pending)* | 시료접수 통합: sampleReceipt.html 사이드바+API 연동, sidebar.js SSOT 구축 |
 | *(pending)* | sidebar: js/sidebar.js SSOT + 기획서 v2.0 전면 재구성 |
+| `1f4f802` | inspectionMgmt.html 통합 사이드바 적용 + BFL 로고 수정 |
 
 ---
 
@@ -248,6 +249,15 @@ Flask REST API 서버 (port 5060)
 | Z | 검사목적 | 자가품질위탁검사용 필터 |
 | AD | 시험법근거 | 시험법 |
 | AH | 항목수수료 | 수수료 |
+
+## 완료된 작업 (2026-02-19)
+
+### inspectionMgmt.html 통합 사이드바 적용 + BFL 로고 수정
+
+- `inspectionMgmt.html` 자체 사이드바(beautiful-mclean) 제거 → `sidebar.js` 통합
+- 모든 페이지(6개) 동일한 메뉴 구조로 통일
+- BFL 로고 SVG viewBox/letter-spacing 조정으로 글자 잘림 해결
+- 사이드바 접힌 상태에서 로고+삼선(☰) 버튼 세로 배치로 개선
 
 ## 완료된 작업 (2026-02-18)
 
@@ -325,22 +335,19 @@ Flask REST API 서버 (port 5060)
 | 탭 전환 | `showPage()` 감지 → salesMgmt.html 내부 탭 자동 전환 |
 | 아코디언 | `toggleMenu()` 등록 |
 
-**사용하는 HTML 파일** (5개):
-- `index.html`, `salesMgmt.html`, `sampleReceipt.html`, `itemAssign.html`, `userMgmt.html`
+**사용하는 HTML 파일** (6개):
+- `index.html`, `salesMgmt.html`, `sampleReceipt.html`, `itemAssign.html`, `userMgmt.html`, `inspectionMgmt.html`
 
-**예외**: `inspectionMgmt.html`은 자체 사이드바 디자인(beautiful-mclean) 사용. 향후 통합 예정.
-
-**메뉴 변경 시**: `js/sidebar.js`의 `SIDEBAR_MENU` 배열만 수정 → 5개 HTML 전체 자동 반영.
+**메뉴 변경 시**: `js/sidebar.js`의 `SIDEBAR_MENU` 배열만 수정 → 6개 HTML 전체 자동 반영.
 
 ---
 
 ## 향후 계획
 
-1. inspectionMgmt.html 사이드바 통합 (sidebar.js 적용)
-2. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지, 사용자설정)
-3. 백엔드 API 연동
-4. 사용자 인증/권한 시스템
-5. 실제 데이터 연동
+1. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지, 사용자설정)
+2. 백엔드 API 연동
+3. 사용자 인증/권한 시스템
+4. 실제 데이터 연동
 
 ---
 
