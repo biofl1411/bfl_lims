@@ -647,8 +647,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <div class="fg"><label>종목</label><input id="detBizItem" readonly style="background:#f8f9fb"></div>
         </div>
         <div class="sec-title"><span class="sec-num">2</span> 주소</div>
-        <div class="fg"><input id="detAddr1" readonly style="background:#f8f9fb"></div>
-        <div class="fg"><input id="detAddr2" readonly style="background:#f8f9fb"></div>
+        <div class="fg"><label>소재지</label>
+          <div class="addr-row" style="margin-bottom:4px"><input id="detZipcode" placeholder="우편번호" style="max-width:120px;background:#f8f9fb" readonly><button class="btn btn-secondary btn-sm detBizPostBtn" id="detBizPostBtn" onclick="openDetPostcodeSearch()" style="display:none">우편번호 찾기</button></div>
+        </div>
+        <div class="fg"><input id="detAddr1" placeholder="기본주소" readonly style="background:#f8f9fb"></div>
+        <div class="fg"><input id="detAddr2" placeholder="상세주소" readonly style="background:#f8f9fb"></div>
         <div class="eng-toggle" onclick="toggleEngSection('detBizEngSection')" style="margin-top:8px;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;color:#1565c0;font-size:13px;font-weight:500">
           <span id="detBizEngArrow" style="transition:transform .2s;display:inline-block">▶</span> 사업자등록증 (영문 정보)
         </div>
@@ -1621,6 +1624,68 @@ function openPostcodeSearch() {
   }).open();
 }
 
+// 상세 페이지: 사업자등록증 주소 우편번호 찾기
+function openDetPostcodeSearch() {
+  new daum.Postcode({
+    oncomplete: function(data) {
+      document.getElementById('detZipcode').value = data.zonecode;
+      document.getElementById('detAddr1').value = data.roadAddress || data.jibunAddress;
+      document.getElementById('detAddr2').value = '';
+      document.getElementById('detAddr2').focus();
+      // 영문 주소 자동 변환
+      var fullAddr = (data.roadAddress || data.jibunAddress || '').trim();
+      convertToEnglishAddress(fullAddr, function(eng) {
+        var enField = document.getElementById('detAddrEn');
+        if (enField) { enField.value = eng; enField.style.background = '#e3f2fd'; setTimeout(function() { enField.style.background = _detailEditMode ? '#fff' : '#f8f9fb'; }, 3000); }
+      });
+    }
+  }).open();
+}
+
+// 범용: 카카오 주소 API로 주소에서 우편번호/도로명주소/상세주소 파싱
+// callback(zipcode, roadAddr, detailAddr)
+function lookupAddressFromKakao(address, callback) {
+  if (!address) return;
+  // 괄호 안 내용 제거 (동명 등)
+  var cleanAddr = address.replace(/\([^)]*\)/g, '').trim();
+  // 상세주소 분리: 도로명주소 뒤의 ", 상세" 또는 "번지 상세"
+  var mainAddr = cleanAddr;
+  var detailAddr = '';
+  // 쉼표 구분
+  var commaMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,]\s*(.+)$/);
+  if (commaMatch) {
+    mainAddr = commaMatch[1].trim();
+    detailAddr = commaMatch[2].trim();
+  } else {
+    // 쉼표 없으면 건물번호 이후 공백으로 분리 (예: "은행정로4길 5-1 1층")
+    var spaceMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s+(\d+층.*)$/);
+    if (!spaceMatch) {
+      spaceMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s+(.+층.*)$/);
+    }
+    if (spaceMatch) {
+      mainAddr = spaceMatch[1].trim();
+      detailAddr = spaceMatch[2].trim();
+    }
+  }
+  var apiKey = '8e5dab09aacd882449bd3865699a9d69';
+  fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(mainAddr), {
+    headers: { 'Authorization': 'KakaoAK ' + apiKey }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.documents && data.documents.length > 0) {
+      var doc = data.documents[0];
+      var roadAddr = doc.road_address;
+      if (roadAddr && roadAddr.zone_no) {
+        callback(roadAddr.zone_no, roadAddr.address_name, detailAddr);
+      } else if (doc.address) {
+        callback('', doc.address.address_name, detailAddr);
+      }
+    }
+  })
+  .catch(function(e) { console.log('카카오 주소 조회 실패:', e); });
+}
+
 // OCR 주소로 우편번호 자동 조회 (Kakao 주소검색 REST API)
 function lookupZipcodeFromAddress(address) {
   if (!address) return;
@@ -1629,10 +1694,19 @@ function lookupZipcodeFromAddress(address) {
   // 상세주소 분리: 번지/건물번호 뒤의 층/호 등
   var mainAddr = cleanAddr;
   var detailAddr = '';
+  // 1) 쉼표 구분
   var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,]\s*(.+)$/);
   if (detailMatch) {
     mainAddr = detailMatch[1].trim();
     detailAddr = detailMatch[2].trim();
+  } else {
+    // 2) 쉼표 없이 건물번호 뒤의 "N층" 등 분리
+    var spaceMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s+(\d+층.*)$/);
+    if (!spaceMatch) spaceMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s+(.+층.*)$/);
+    if (spaceMatch) {
+      mainAddr = spaceMatch[1].trim();
+      detailAddr = spaceMatch[2].trim();
+    }
   }
   // Kakao 주소검색 REST API (KAKAO_REST_KEY는 하단 스크립트에 정의)
   var apiKey = '8e5dab09aacd882449bd3865699a9d69';
@@ -1698,13 +1772,21 @@ function lookupLicZipcodeFromAddress(idx, address) {
   var cleanAddr = address.replace(/\([^)]*\)/g, '').trim();
   var mainAddr = cleanAddr;
   var detailAddr = '';
+  // 1) 쉼표 구분
   var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,]\s*(.+)$/);
   if (detailMatch) {
     mainAddr = detailMatch[1].trim();
     var candidate = detailMatch[2].trim();
-    // 상세주소가 별도 지번/도로명 주소(시/도/군 포함)이면 무시 (법인주소 등)
     if (!/^\d|^[가-힣]{1,2}(특별|광역)?시|^[가-힣]{1,2}(도)\s|^경기|^충[북남]|^전[북남]|^경[북남]|^강원|^제주|^세종/.test(candidate)) {
       detailAddr = candidate;
+    }
+  } else {
+    // 2) 쉼표 없이 건물번호 뒤의 "N층" 등 분리
+    var spaceMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s+(\d+층.*)$/);
+    if (!spaceMatch) spaceMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s+(.+층.*)$/);
+    if (spaceMatch) {
+      mainAddr = spaceMatch[1].trim();
+      detailAddr = spaceMatch[2].trim();
     }
   }
   var apiKey = '8e5dab09aacd882449bd3865699a9d69';
@@ -1885,6 +1967,7 @@ function openCustomerDetail(custId) {
   document.getElementById('detCorpNo').value = cust.corpNo || '';
   document.getElementById('detBizType').value = cust.bizType || '';
   document.getElementById('detBizItem').value = cust.bizItem || '';
+  document.getElementById('detZipcode').value = cust.zipcode || '';
   document.getElementById('detAddr1').value = cust.addr1 || '';
   document.getElementById('detAddr2').value = cust.addr2 || '';
   document.getElementById('detCompanyEn').value = cust.companyEn || '';
@@ -1981,12 +2064,14 @@ function toggleDetailEdit() {
     el.style.border = '1px solid #1a73e8';
   });
   // 기본 정보 필드도 수정 가능하게
-  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detAddr1','detAddr2',
+  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
       _detailSnapshot[id] = el.value;
-      el.readOnly = false;
+      if (id !== 'detZipcode' && id !== 'detAddr1') { // 우편번호/기본주소는 카카오에서만 입력
+        el.readOnly = false;
+      }
       el.style.background = '#fff';
       el.style.border = '1px solid #1a73e8';
     }
@@ -1995,6 +2080,9 @@ function toggleDetailEdit() {
   document.getElementById('detailEditBtn').style.display = 'none';
   document.getElementById('detailSaveBtn').style.display = '';
   document.getElementById('detailCancelBtn').style.display = '';
+  // 사업자등록증 주소 우편번호 찾기 버튼 표시
+  var bizPostBtn = document.getElementById('detBizPostBtn');
+  if (bizPostBtn) bizPostBtn.style.display = '';
   // 인허가 추가/삭제 버튼 표시
   var addBtn = document.getElementById('detAddLicBtn');
   if (addBtn) addBtn.style.display = '';
@@ -2017,7 +2105,7 @@ function cancelDetailEdit() {
     el.style.background = '#f8f9fb';
     el.style.border = '';
   });
-  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detAddr1','detAddr2',
+  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
@@ -2026,6 +2114,8 @@ function cancelDetailEdit() {
   document.getElementById('detailEditBtn').style.display = '';
   document.getElementById('detailSaveBtn').style.display = 'none';
   document.getElementById('detailCancelBtn').style.display = 'none';
+  var bizPostBtn = document.getElementById('detBizPostBtn');
+  if (bizPostBtn) bizPostBtn.style.display = 'none';
   var addBtn = document.getElementById('detAddLicBtn');
   if (addBtn) addBtn.style.display = 'none';
   document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = 'none'; });
@@ -2053,6 +2143,7 @@ function saveDetailEdit() {
     { id: 'detCorpNo', key: 'corpNo', label: '법인번호' },
     { id: 'detBizType', key: 'bizType', label: '업태' },
     { id: 'detBizItem', key: 'bizItem', label: '종목' },
+    { id: 'detZipcode', key: 'zipcode', label: '우편번호' },
     { id: 'detAddr1', key: 'addr1', label: '주소' },
     { id: 'detAddr2', key: 'addr2', label: '상세주소' },
     { id: 'detCompanyEn', key: 'companyEn', label: 'Company Name (EN)' },
@@ -2135,7 +2226,7 @@ function saveDetailEdit() {
   document.querySelectorAll('#page-customerDetail .det-editable').forEach(function(el) {
     el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = '';
   });
-  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detAddr1','detAddr2',
+  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
@@ -2143,6 +2234,9 @@ function saveDetailEdit() {
   document.getElementById('detailEditBtn').style.display = '';
   document.getElementById('detailSaveBtn').style.display = 'none';
   document.getElementById('detailCancelBtn').style.display = 'none';
+  // 사업자등록증 주소 우편번호 찾기 버튼 숨기기
+  var bizPostBtn = document.getElementById('detBizPostBtn');
+  if (bizPostBtn) bizPostBtn.style.display = 'none';
   var addBtn = document.getElementById('detAddLicBtn');
   if (addBtn) addBtn.style.display = 'none';
   document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = 'none'; });
@@ -2176,6 +2270,18 @@ function addDetailLicenseCard() {
   card.innerHTML =
     '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">' + num + '</span> 인허가</div>' +
       '<button class="btn btn-secondary btn-sm detLicDelBtn" onclick="removeDetailLicenseCard(' + num + ')" style="margin-left:auto;font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
+    '</div>' +
+    // OCR 영역 (추가 인허가 전용)
+    '<div style="background:#f3f0ff;border:1px solid #d1c4e9;border-radius:8px;padding:10px;margin-bottom:10px">' +
+      '<div style="font-size:12px;font-weight:600;color:#5e35b1;margin-bottom:6px">📄 인허가 ' + num + ' 문서 OCR</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<div class="file-area" style="flex:1;min-width:180px;padding:8px;position:relative;cursor:pointer" onclick="document.getElementById(\'detLicFileInput_' + num + '\').click()">' +
+          '<input type="file" id="detLicFileInput_' + num + '" accept="image/*,.pdf" style="display:none" onchange="handleDetLicCardFile(' + num + ',this.files[0])">' +
+          '<span id="detLicFileName_' + num + '" style="font-size:11px">📎 인허가문서 파일</span>' +
+        '</div>' +
+        '<button class="btn btn-check btn-sm" id="detLicOcrBtn_' + num + '" onclick="runDetLicCardOCR(' + num + ')" disabled style="font-size:11px">🤖 OCR</button>' +
+      '</div>' +
+      '<div id="detLicOcrStatus_' + num + '" style="margin-top:4px;font-size:11px;color:#5e35b1;display:none"></div>' +
     '</div>' +
     '<div class="fg-row">' +
       '<div class="fg"><label>분야</label><input id="detLicField_' + num + '" placeholder="식품/축산" style="border:1px solid #1a73e8" class="det-editable"></div>' +
@@ -2211,6 +2317,76 @@ function removeDetailLicenseCard(num) {
   if (!confirm('인허가 ' + num + ' 정보를 삭제하시겠습니까?')) return;
   card.remove();
   toast('🗑️ 인허가 ' + num + ' 카드가 삭제되었습니다.');
+}
+
+// --- 추가 인허가 카드별 파일 핸들러 ---
+var _detLicCardFiles = {}; // { num: File }
+function handleDetLicCardFile(num, file) {
+  if (!file) return;
+  _detLicCardFiles[num] = file;
+  var nameEl = document.getElementById('detLicFileName_' + num);
+  if (nameEl) nameEl.textContent = '📎 ' + file.name;
+  var btn = document.getElementById('detLicOcrBtn_' + num);
+  if (btn) btn.disabled = false;
+}
+
+// --- 추가 인허가 카드별 OCR ---
+function runDetLicCardOCR(num) {
+  var file = _detLicCardFiles[num];
+  if (!file) return;
+  var statusEl = document.getElementById('detLicOcrStatus_' + num);
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '⏳ OCR 인식 중...'; }
+  var btn = document.getElementById('detLicOcrBtn_' + num);
+  if (btn) btn.disabled = true;
+
+  convertPdfToJpegBase64(file).then(function(result) {
+    var payload = { images: [{ format: result.format, name: 'lic' + num, data: result.base64 }], requestId: 'det-lic' + num + '-' + Date.now(), version: 'V2', timestamp: Date.now() };
+    return fetch(OCR_BIZ_LICENSE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  }).then(function(r) { return r.json(); })
+  .then(function(data) {
+    var res = data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result;
+    if (!res) { if (statusEl) statusEl.textContent = '❌ OCR 인식 실패'; return; }
+
+    function gt(f) { return (f && f.length) ? f.map(function(x){return x.text||''}).join(' ') : ''; }
+    var filled = 0;
+    // 대표자
+    var repName = gt(res.repName);
+    if (repName) { var el = document.getElementById('detLicRepName_' + num); if (el) { el.value = repName; filled++; } }
+    // 인허가번호
+    var regNo = gt(res.registerNumber);
+    if (regNo) { var el = document.getElementById('detLicNo_' + num); if (el) { el.value = regNo; filled++; } }
+    // 영업소명칭
+    var compName = gt(res.companyName);
+    if (compName) { var el = document.getElementById('detLicBizName_' + num); if (el) { el.value = compName; filled++; } }
+    // 영업형태
+    var bizForm = gt(res.bisType) || gt(res.bisItem) || '';
+    if (bizForm) { var el = document.getElementById('detLicBizForm_' + num); if (el) { el.value = bizForm.trim(); filled++; } }
+    // 분야 자동 설정
+    var allText = [bizForm, compName, gt(res.documentType)].join(' ');
+    var isLivestock = /축산물?위생|축산물?가공|식육|도축|식용란|유가공|우유|낙농|집유|축산/.test(allText);
+    var fieldEl = document.getElementById('detLicField_' + num);
+    if (fieldEl) { fieldEl.value = isLivestock ? '축산' : '식품'; filled++; }
+    // 소재지 주소 + 카카오 주소 API
+    var ocrAddr = gt(res.bisAddress);
+    if (ocrAddr) {
+      var rawAddr = ocrAddr.trim();
+      var addrEl = document.getElementById('detLicAddr_' + num);
+      if (addrEl) { addrEl.value = rawAddr; filled++; }
+      lookupAddressFromKakao(rawAddr, function(zipcode, roadAddr, detailAddr) {
+        if (zipcode) { var zEl = document.getElementById('detLicZipcode_' + num); if (zEl) zEl.value = zipcode; }
+        if (roadAddr) { var aEl = document.getElementById('detLicAddr_' + num); if (aEl) aEl.value = roadAddr; }
+        if (detailAddr) { var a2El = document.getElementById('detLicAddr2_' + num); if (a2El) a2El.value = detailAddr; }
+        // 영문 주소 변환
+        convertToEnglishAddress(roadAddr || rawAddr, function(eng) {
+          var enEl = document.getElementById('detLicAddrEn_' + num);
+          if (enEl) enEl.value = eng;
+        });
+      });
+    }
+    if (statusEl) statusEl.textContent = '✅ OCR 완료 — ' + filled + '개 필드 반영';
+  }).catch(function(e) {
+    if (statusEl) statusEl.textContent = '❌ OCR 오류: ' + e.message;
+  });
 }
 
 function escHtml(str) {
@@ -2293,17 +2469,27 @@ function runDetailBizOCR() {
       }
     });
 
-    // 주소 처리
+    // 주소 처리: 카카오 주소 API로 우편번호/도로명/상세주소 파싱
     var ocrAddr = gt(res.bisAddress);
     if (ocrAddr) {
-      var addrParts = ocrAddr.split(/,\s*/);
-      var newAddr1 = addrParts[0] || '';
+      var rawAddr = ocrAddr.trim();
+      // 즉시 반영 (raw 기준)
       var oldAddr1 = (cust.addr1 || '').trim();
-      if (newAddr1 && newAddr1 !== oldAddr1) {
-        changes.push({ field: '주소', from: oldAddr1, to: newAddr1 });
-        cust.addr1 = newAddr1;
-        document.getElementById('detAddr1').value = newAddr1;
+      if (rawAddr && rawAddr !== oldAddr1) {
+        changes.push({ field: '주소', from: oldAddr1, to: rawAddr });
+        cust.addr1 = rawAddr;
+        document.getElementById('detAddr1').value = rawAddr;
       }
+      // 카카오 주소 API로 우편번호, 도로명주소, 상세주소 분리
+      lookupAddressFromKakao(rawAddr, function(zipcode, roadAddr, detailAddr) {
+        if (zipcode) { cust.zipcode = zipcode; document.getElementById('detZipcode').value = zipcode; }
+        if (roadAddr) { cust.addr1 = roadAddr; document.getElementById('detAddr1').value = roadAddr; }
+        if (detailAddr) { cust.addr2 = detailAddr; document.getElementById('detAddr2').value = detailAddr; }
+        // localStorage 업데이트
+        var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+        var ci = custs.findIndex(function(c) { return c.id === _detailCustId; });
+        if (ci !== -1) { custs[ci] = cust; localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+      });
     }
 
     // 변경 이력 기록
@@ -2397,17 +2583,28 @@ function runDetailLicOCR() {
       }
     });
 
-    // 소재지 주소
+    // 소재지 주소: 카카오 주소 API로 우편번호/도로명/상세 파싱
     var ocrAddr = gt(res.bisAddress);
     if (ocrAddr) {
+      var rawLicAddr = ocrAddr.trim();
       var oldLicAddr = (lic0.licAddr || '').trim();
-      if (ocrAddr.trim() !== oldLicAddr) {
-        changes.push({ field: '인허가 소재지', from: oldLicAddr, to: ocrAddr.trim() });
-        lic0.licAddr = ocrAddr.trim();
-        cust.licAddr = ocrAddr.trim();
+      if (rawLicAddr !== oldLicAddr) {
+        changes.push({ field: '인허가 소재지', from: oldLicAddr, to: rawLicAddr });
+        lic0.licAddr = rawLicAddr;
+        cust.licAddr = rawLicAddr;
         var detAddrEl = document.getElementById('detLicAddr_1');
-        if (detAddrEl) detAddrEl.value = ocrAddr.trim();
+        if (detAddrEl) detAddrEl.value = rawLicAddr;
       }
+      // 카카오 주소 API로 우편번호, 도로명주소, 상세주소 분리
+      lookupAddressFromKakao(rawLicAddr, function(zipcode, roadAddr, detailAddr) {
+        if (zipcode) { lic0.licZipcode = zipcode; var zEl = document.getElementById('detLicZipcode_1'); if (zEl) zEl.value = zipcode; }
+        if (roadAddr) { lic0.licAddr = roadAddr; cust.licAddr = roadAddr; var aEl = document.getElementById('detLicAddr_1'); if (aEl) aEl.value = roadAddr; }
+        if (detailAddr) { lic0.licAddr2 = detailAddr; cust.licAddr2 = detailAddr; var a2El = document.getElementById('detLicAddr2_1'); if (a2El) a2El.value = detailAddr; }
+        if (cust.licenses && cust.licenses.length > 0) cust.licenses[0] = lic0;
+        var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+        var ci = custs.findIndex(function(c) { return c.id === _detailCustId; });
+        if (ci !== -1) { custs[ci] = cust; localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+      });
     }
 
     // 분야 자동 설정
