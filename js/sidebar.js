@@ -142,19 +142,25 @@ const SIDEBAR_MENU = [
   { id: 'docs',          icon: '📁', label: '문서 관리',      disabled: true },
   { id: 'inventory',     icon: '🧪', label: '재고/시약 관리', disabled: true },
   { id: 'notice',        icon: '📢', label: '공지',           disabled: true },
-  { id: 'user-settings', icon: '⚙️', label: '사용자 설정',   disabled: true },
+  {
+    id: 'user-settings',
+    icon: '⚙️',
+    label: '사용자 설정',
+    sub: [
+      { label: '사용자 관리',   href: 'userMgmt.html',  page: 'admin-users' },
+      { label: '부서 관리',     disabled: true },
+      { label: '권한 설정',     disabled: true }
+    ]
+  },
   {
     id: 'admin',
     icon: '🔧',
     label: '관리자',
     sub: [
-      { label: '사용자 관리',       href: 'userMgmt.html',              page: 'admin-users' },
-      { label: '부서 관리',         disabled: true },
-      { label: '권한 설정',         disabled: true },
+      { label: '기타 설정',         href: 'adminSettings.html',         page: 'admin-settings' },
       { label: '대시보드 권한',     disabled: true },
       { label: '알림 설정',         disabled: true },
       { label: '시스템 로그',       disabled: true },
-      { label: '미수금 관리 설정',  disabled: true },
       { label: 'API 수집 설정',    href: 'admin_api_settings.html',    page: 'admin-api-settings' },
       { label: '수집 현황',         href: 'admin_collect_status.html',  page: 'admin-collect-status' }
     ]

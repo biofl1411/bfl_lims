@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - 기타 설정</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;padding:16px 32px;display:flex;align-items:center;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:50}
+.topbar .crumb{font-size:13px;color:#6b7280}.crumb b{color:#111;font-weight:700}
+.content{flex:1;padding:28px 32px;overflow-y:auto}
+.page-title{font-size:22px;font-weight:800;color:#111;margin-bottom:4px}
+.page-desc{font-size:13px;color:#6b7280;margin-bottom:24px}
+
+/* 탭 */
+.settings-tabs{display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:24px}
+.settings-tab{padding:12px 24px;font-size:14px;font-weight:500;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+.settings-tab:hover{color:#111;background:#f3f4f6}
+.settings-tab.active{color:#2563eb;border-bottom-color:#2563eb;font-weight:700}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* 카드 */
+.card{background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:24px;margin-bottom:20px}
+.card-title{font-size:16px;font-weight:700;color:#111;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+
+/* 테이블 */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th,.tbl td{padding:10px 14px;text-align:left;border-bottom:1px solid #f0f0f0;font-size:13px}
+.tbl th{background:#f9fafb;font-weight:600;color:#374151}
+.tbl tr:hover td{background:#f9fafb}
+.tbl input{padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:100%}
+
+/* 버튼 */
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8}
+.btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-outline{background:#fff;color:#374151;border:1px solid #d1d5db}.btn-outline:hover{background:#f3f4f6}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-group{display:flex;gap:8px;margin-top:16px}
+
+/* 신호등/등급 규칙 */
+.rule-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f0f0}
+.rule-row:last-child{border-bottom:none}
+.color-dot{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+.rule-label{font-weight:600;min-width:60px}
+.rule-desc{flex:1;color:#6b7280;font-size:13px}
+.rule-input{width:80px;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;text-align:center;font-size:13px}
+
+/* 등급 배지 */
+.grade-badge{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;font-weight:700;font-size:12px;color:#fff}
+
+/* 휴일 캘린더 */
+.holiday-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.holiday-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border-radius:8px;border:1px solid #fbbf24}
+.holiday-item .date{font-weight:600;color:#92400e}
+.holiday-item .name{font-size:12px;color:#78350f}
+.holiday-item .del{background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;padding:0 4px}
+.add-holiday{display:flex;gap:8px;margin-bottom:16px;align-items:flex-end;flex-wrap:wrap}
+.add-holiday label{font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px}
+.add-holiday input{padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px}
+
+/* 토스트 */
+.toast{position:fixed;bottom:30px;right:30px;background:#1e293b;color:#fff;padding:14px 24px;border-radius:10px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- Unified Sidebar -->
+<aside class="sidebar" id="sidebar"></aside>
+<script src="js/sidebar.js?v=3"></script>
+
+<div class="main">
+  <div class="topbar"><span class="crumb">관리자 › <b>기타 설정</b></span></div>
+
+  <div class="content">
+    <div class="page-title">기타 설정</div>
+    <div class="page-desc">신호등 규칙, 등급 규칙, 휴일 관리를 설정합니다</div>
+
+    <!-- 탭 -->
+    <div class="settings-tabs">
+      <div class="settings-tab active" onclick="showSettingsTab(0)">🚦 신호등 규칙</div>
+      <div class="settings-tab" onclick="showSettingsTab(1)">🏅 등급 규칙</div>
+      <div class="settings-tab" onclick="showSettingsTab(2)">📅 휴일 관리</div>
+    </div>
+
+    <!-- ======================== 탭 0: 신호등 규칙 ======================== -->
+    <div class="tab-panel active" id="panel-signal">
+      <div class="card">
+        <div class="card-title">🚦 고객사 신호등 규칙</div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:16px">미수금 기간에 따라 고객사 상태를 자동 분류합니다.</p>
+        <div id="signal-rules">
+          <div class="rule-row">
+            <div class="color-dot" style="background:#22c55e"></div>
+            <span class="rule-label">🟢 정상</span>
+            <span class="rule-desc">미수금 없음 또는</span>
+            <input type="number" class="rule-input" id="signal-green-max" value="30" min="0"> <span>일 이내</span>
+          </div>
+          <div class="rule-row">
+            <div class="color-dot" style="background:#3b82f6"></div>
+            <span class="rule-label">🔵 양호</span>
+            <span class="rule-desc">미수금 경과일</span>
+            <input type="number" class="rule-input" id="signal-blue-min" value="31" min="0"> ~
+            <input type="number" class="rule-input" id="signal-blue-max" value="60" min="0"> <span>일</span>
+          </div>
+          <div class="rule-row">
+            <div class="color-dot" style="background:#eab308"></div>
+            <span class="rule-label">🟡 주의</span>
+            <span class="rule-desc">미수금 경과일</span>
+            <input type="number" class="rule-input" id="signal-yellow-min" value="61" min="0"> ~
+            <input type="number" class="rule-input" id="signal-yellow-max" value="90" min="0"> <span>일</span>
+          </div>
+          <div class="rule-row">
+            <div class="color-dot" style="background:#f97316"></div>
+            <span class="rule-label">🟠 경고</span>
+            <span class="rule-desc">미수금 경과일</span>
+            <input type="number" class="rule-input" id="signal-orange-min" value="91" min="0"> ~
+            <input type="number" class="rule-input" id="signal-orange-max" value="120" min="0"> <span>일</span>
+          </div>
+          <div class="rule-row">
+            <div class="color-dot" style="background:#ef4444"></div>
+            <span class="rule-label">🔴 위험</span>
+            <span class="rule-desc">미수금 경과일</span>
+            <input type="number" class="rule-input" id="signal-red-min" value="121" min="0"> <span>일 이상</span>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="saveSignalRules()">💾 저장</button>
+          <button class="btn btn-outline" onclick="resetSignalRules()">↩️ 기본값 복원</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================== 탭 1: 등급 규칙 ======================== -->
+    <div class="tab-panel" id="panel-grade">
+      <div class="card">
+        <div class="card-title">🏅 고객사 등급 규칙</div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:16px">거래 실적에 따라 고객사 등급을 자동 분류합니다.</p>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th style="width:80px">등급</th>
+              <th>조건</th>
+              <th style="width:140px">최소 거래 건수</th>
+              <th style="width:160px">최소 거래 금액(만원)</th>
+            </tr>
+          </thead>
+          <tbody id="grade-rules-body">
+            <tr>
+              <td><span class="grade-badge" style="background:#ef4444">VIP</span></td>
+              <td>최우수 고객</td>
+              <td><input type="number" class="grade-input" data-grade="VIP" data-field="minCount" value="50" min="0"></td>
+              <td><input type="number" class="grade-input" data-grade="VIP" data-field="minAmount" value="5000" min="0"></td>
+            </tr>
+            <tr>
+              <td><span class="grade-badge" style="background:#22c55e">A</span></td>
+              <td>우수 고객</td>
+              <td><input type="number" class="grade-input" data-grade="A" data-field="minCount" value="30" min="0"></td>
+              <td><input type="number" class="grade-input" data-grade="A" data-field="minAmount" value="3000" min="0"></td>
+            </tr>
+            <tr>
+              <td><span class="grade-badge" style="background:#3b82f6">B</span></td>
+              <td>일반 고객</td>
+              <td><input type="number" class="grade-input" data-grade="B" data-field="minCount" value="10" min="0"></td>
+              <td><input type="number" class="grade-input" data-grade="B" data-field="minAmount" value="1000" min="0"></td>
+            </tr>
+            <tr>
+              <td><span class="grade-badge" style="background:#f97316">C</span></td>
+              <td>신규/소량 고객</td>
+              <td><input type="number" class="grade-input" data-grade="C" data-field="minCount" value="0" min="0"></td>
+              <td><input type="number" class="grade-input" data-grade="C" data-field="minAmount" value="0" min="0"></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="saveGradeRules()">💾 저장</button>
+          <button class="btn btn-outline" onclick="resetGradeRules()">↩️ 기본값 복원</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================== 탭 2: 휴일 관리 ======================== -->
+    <div class="tab-panel" id="panel-holiday">
+      <div class="card">
+        <div class="card-title">📅 휴일 관리</div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:16px">등록된 휴일은 처리기한 계산(워킹데이) 시 제외됩니다. 주말(토/일)은 자동 제외됩니다.</p>
+
+        <div class="add-holiday">
+          <div>
+            <label>날짜</label>
+            <input type="date" id="holiday-date">
+          </div>
+          <div>
+            <label>명칭</label>
+            <input type="text" id="holiday-name" placeholder="예: 설날, 추석">
+          </div>
+          <button class="btn btn-primary" onclick="addHoliday()">+ 추가</button>
+          <button class="btn btn-outline" onclick="addDefaultHolidays()">📋 2026년 공휴일 일괄 등록</button>
+        </div>
+
+        <div class="holiday-grid" id="holiday-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================================
+// 탭 전환
+// ============================================================================
+const panels = ['panel-signal', 'panel-grade', 'panel-holiday'];
+function showSettingsTab(idx) {
+    document.querySelectorAll('.settings-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+    panels.forEach((p,i) => document.getElementById(p).classList.toggle('active', i===idx));
+}
+
+// ============================================================================
+// 토스트
+// ============================================================================
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ============================================================================
+// 신호등 규칙
+// ============================================================================
+const SIGNAL_DEFAULTS = {green:30, blueMin:31, blueMax:60, yellowMin:61, yellowMax:90, orangeMin:91, orangeMax:120, redMin:121};
+
+function loadSignalRules() {
+    const saved = JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || SIGNAL_DEFAULTS;
+    document.getElementById('signal-green-max').value = saved.green;
+    document.getElementById('signal-blue-min').value = saved.blueMin;
+    document.getElementById('signal-blue-max').value = saved.blueMax;
+    document.getElementById('signal-yellow-min').value = saved.yellowMin;
+    document.getElementById('signal-yellow-max').value = saved.yellowMax;
+    document.getElementById('signal-orange-min').value = saved.orangeMin;
+    document.getElementById('signal-orange-max').value = saved.orangeMax;
+    document.getElementById('signal-red-min').value = saved.redMin;
+}
+
+function saveSignalRules() {
+    const rules = {
+        green: +document.getElementById('signal-green-max').value,
+        blueMin: +document.getElementById('signal-blue-min').value,
+        blueMax: +document.getElementById('signal-blue-max').value,
+        yellowMin: +document.getElementById('signal-yellow-min').value,
+        yellowMax: +document.getElementById('signal-yellow-max').value,
+        orangeMin: +document.getElementById('signal-orange-min').value,
+        orangeMax: +document.getElementById('signal-orange-max').value,
+        redMin: +document.getElementById('signal-red-min').value
+    };
+    localStorage.setItem('bfl_signal_rules', JSON.stringify(rules));
+    toast('✅ 신호등 규칙이 저장되었습니다');
+}
+
+function resetSignalRules() {
+    localStorage.removeItem('bfl_signal_rules');
+    loadSignalRules();
+    toast('↩️ 기본값으로 복원되었습니다');
+}
+
+// ============================================================================
+// 등급 규칙
+// ============================================================================
+const GRADE_DEFAULTS = {VIP:{minCount:50,minAmount:5000},A:{minCount:30,minAmount:3000},B:{minCount:10,minAmount:1000},C:{minCount:0,minAmount:0}};
+
+function loadGradeRules() {
+    const saved = JSON.parse(localStorage.getItem('bfl_grade_rules') || 'null') || GRADE_DEFAULTS;
+    document.querySelectorAll('.grade-input').forEach(el => {
+        const grade = el.dataset.grade;
+        const field = el.dataset.field;
+        if (saved[grade]) el.value = saved[grade][field];
+    });
+}
+
+function saveGradeRules() {
+    const rules = {};
+    document.querySelectorAll('.grade-input').forEach(el => {
+        const grade = el.dataset.grade;
+        const field = el.dataset.field;
+        if (!rules[grade]) rules[grade] = {};
+        rules[grade][field] = +el.value;
+    });
+    localStorage.setItem('bfl_grade_rules', JSON.stringify(rules));
+    toast('✅ 등급 규칙이 저장되었습니다');
+}
+
+function resetGradeRules() {
+    localStorage.removeItem('bfl_grade_rules');
+    loadGradeRules();
+    toast('↩️ 기본값으로 복원되었습니다');
+}
+
+// ============================================================================
+// 휴일 관리
+// ============================================================================
+function getHolidayData() {
+    return JSON.parse(localStorage.getItem('bfl_holiday_data') || '[]');
+}
+
+function saveHolidayData(data) {
+    localStorage.setItem('bfl_holiday_data', JSON.stringify(data));
+    // bfl_holidays: 날짜 배열 (sampleReceipt.html에서 사용)
+    localStorage.setItem('bfl_holidays', JSON.stringify(data.map(h => h.date)));
+}
+
+function renderHolidays() {
+    const data = getHolidayData().sort((a,b) => a.date.localeCompare(b.date));
+    const el = document.getElementById('holiday-list');
+    if (!data.length) {
+        el.innerHTML = '<p style="color:#9ca3af;font-size:13px">등록된 휴일이 없습니다. 공휴일을 일괄 등록하거나 개별 추가하세요.</p>';
+        return;
+    }
+    el.innerHTML = data.map((h,i) => `
+        <div class="holiday-item">
+            <div><div class="date">${h.date}</div><div class="name">${h.name}</div></div>
+            <button class="del" onclick="deleteHoliday(${i})" title="삭제">✕</button>
+        </div>
+    `).join('');
+}
+
+function addHoliday() {
+    const date = document.getElementById('holiday-date').value;
+    const name = document.getElementById('holiday-name').value.trim();
+    if (!date) { toast('⚠️ 날짜를 선택하세요'); return; }
+    if (!name) { toast('⚠️ 명칭을 입력하세요'); return; }
+    const data = getHolidayData();
+    if (data.some(h => h.date === date)) { toast('⚠️ 이미 등록된 날짜입니다'); return; }
+    data.push({ date, name });
+    saveHolidayData(data);
+    renderHolidays();
+    document.getElementById('holiday-date').value = '';
+    document.getElementById('holiday-name').value = '';
+    toast('✅ 휴일이 추가되었습니다');
+}
+
+function deleteHoliday(idx) {
+    const data = getHolidayData();
+    data.splice(idx, 1);
+    saveHolidayData(data);
+    renderHolidays();
+    toast('🗑️ 삭제되었습니다');
+}
+
+function addDefaultHolidays() {
+    const defaults = [
+        {date:'2026-01-01', name:'신정'},
+        {date:'2026-01-26', name:'설날 전날'}, {date:'2026-01-27', name:'설날'}, {date:'2026-01-28', name:'설날 다음날'},
+        {date:'2026-03-01', name:'삼일절'},
+        {date:'2026-05-05', name:'어린이날'},
+        {date:'2026-05-24', name:'부처님오신날'},
+        {date:'2026-06-06', name:'현충일'},
+        {date:'2026-08-15', name:'광복절'},
+        {date:'2026-09-24', name:'추석 전날'}, {date:'2026-09-25', name:'추석'}, {date:'2026-09-26', name:'추석 다음날'},
+        {date:'2026-10-03', name:'개천절'},
+        {date:'2026-10-09', name:'한글날'},
+        {date:'2026-12-25', name:'크리스마스'}
+    ];
+    const data = getHolidayData();
+    let added = 0;
+    defaults.forEach(d => {
+        if (!data.some(h => h.date === d.date)) { data.push(d); added++; }
+    });
+    saveHolidayData(data);
+    renderHolidays();
+    toast(`✅ 2026년 공휴일 ${added}건 추가 (중복 제외)`);
+}
+
+// ============================================================================
+// 초기화
+// ============================================================================
+window.onload = function() {
+    loadSignalRules();
+    loadGradeRules();
+    renderHolidays();
+};
+</script>
+</body>
+</html>

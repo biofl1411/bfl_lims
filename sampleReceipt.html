@@ -61,6 +61,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 .form-group input,.form-group select,.form-group textarea{padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;transition:all 0.3s;font-family:inherit}
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(102,126,234,0.1)}
 .form-group input:disabled,.form-group select:disabled,.form-group textarea:disabled{background:#f5f5f5;color:#999;cursor:not-allowed}
+.pin-check{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:400;color:#888;cursor:pointer;margin-left:8px;vertical-align:middle}
+.pin-check input[type="checkbox"]{width:14px;height:14px;accent-color:#ff9800;cursor:pointer}
+.pin-check.active{color:#ff9800;font-weight:600}
 .radio-group{display:flex;gap:20px;margin-top:8px}
 .radio-label{display:flex;align-items:center;padding:10px 20px;border:2px solid #ddd;border-radius:8px;cursor:pointer;transition:all 0.3s}
 .radio-label:hover{border-color:var(--accent);background:#f8f9ff}
@@ -164,7 +167,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>검사목적 <span class="required">*</span></label>
+                        <label>검사목적 <span class="required">*</span>
+                            <label class="pin-check" title="고정: 다음 접수에도 이 검사목적을 유지합니다">
+                                <input type="checkbox" id="pin-test-purpose" onchange="togglePin('test-purpose')"> 📌 고정
+                            </label>
+                        </label>
                         <select id="test-purpose" required onchange="onTestPurposeChange()">
                             <option value="">먼저 시험분야를 선택하세요</option>
                         </select>
@@ -193,7 +200,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <small class="field-help" id="receipt-no-status" style="color:#f44336;">❌ 미할당 - 접수번호를 먼저 할당받으세요</small>
                     </div>
                     <div class="form-group">
-                        <label>접수일자 <span class="required">*</span></label>
+                        <label>접수일자 <span class="required">*</span>
+                            <label class="pin-check" title="고정: 다음 접수에도 이 접수일자를 유지합니다">
+                                <input type="checkbox" id="pin-receipt-date" onchange="togglePin('receipt-date')"> 📌 고정
+                            </label>
+                        </label>
                         <input type="date" id="receipt-date" required onchange="calculateProcessingDeadline()">
                     </div>
                 </div>
@@ -215,7 +226,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group">
                         <label>처리기한</label>
                         <input type="date" id="processing-deadline" class="auto-value" readonly>
-                        <small class="field-help">접수일 + 12일</small>
+                        <small class="field-help">접수일 + 워킹데이 12일</small>
                     </div>
                     <div class="form-group">
                         <label>상태</label>
@@ -600,20 +611,100 @@ function toggleSection(header) {
 // 오늘 날짜 설정
 // ============================================================================
 function setTodayDate() {
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('receipt-date').value = today;
+    const pins = getPinnedFields();
+    if (!pins['receipt-date']) {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('receipt-date').value = today;
+    }
+    restorePinnedFields();
     calculateProcessingDeadline();
 }
 
 // ============================================================================
-// 처리기한 계산 (12일 고정)
+// 처리기한 계산 (워킹데이 12일 기준)
 // ============================================================================
+function getHolidays() {
+    try {
+        const stored = localStorage.getItem('bfl_holidays');
+        return stored ? JSON.parse(stored) : [];
+    } catch(e) { return []; }
+}
+
+function isWorkingDay(date) {
+    const day = date.getDay();
+    if (day === 0 || day === 6) return false; // 주말
+    const dateStr = date.toISOString().split('T')[0];
+    const holidays = getHolidays();
+    return !holidays.includes(dateStr);
+}
+
+function addWorkingDays(startDate, workDays) {
+    const date = new Date(startDate);
+    let added = 0;
+    while (added < workDays) {
+        date.setDate(date.getDate() + 1);
+        if (isWorkingDay(date)) added++;
+    }
+    return date;
+}
+
 function calculateProcessingDeadline() {
     const receiptDate = document.getElementById('receipt-date').value;
     if (!receiptDate) return;
-    const date = new Date(receiptDate);
-    date.setDate(date.getDate() + 12);
-    document.getElementById('processing-deadline').value = date.toISOString().split('T')[0];
+    const deadline = addWorkingDays(new Date(receiptDate), 12);
+    document.getElementById('processing-deadline').value = deadline.toISOString().split('T')[0];
+}
+
+// ============================================================================
+// 고정 체크(📌) 기능 — localStorage로 유지
+// ============================================================================
+function togglePin(fieldId) {
+    const checkbox = document.getElementById('pin-' + fieldId);
+    const label = checkbox.closest('.pin-check');
+    const pins = getPinnedFields();
+    if (checkbox.checked) {
+        const el = document.getElementById(fieldId);
+        pins[fieldId] = { value: el.value, field: el.tagName === 'SELECT' ? 'select' : 'input' };
+        if (fieldId === 'test-purpose') {
+            pins['test-field'] = document.querySelector('input[name="test-field"]:checked')?.value || '식품';
+        }
+        label.classList.add('active');
+    } else {
+        delete pins[fieldId];
+        if (fieldId === 'test-purpose') delete pins['test-field'];
+        label.classList.remove('active');
+    }
+    localStorage.setItem('bfl_pinned_fields', JSON.stringify(pins));
+}
+
+function getPinnedFields() {
+    try {
+        return JSON.parse(localStorage.getItem('bfl_pinned_fields')) || {};
+    } catch(e) { return {}; }
+}
+
+function restorePinnedFields() {
+    const pins = getPinnedFields();
+    Object.keys(pins).forEach(fieldId => {
+        if (fieldId === 'test-field') return; // 시험분야는 별도 처리
+        const checkbox = document.getElementById('pin-' + fieldId);
+        const el = document.getElementById(fieldId);
+        if (checkbox && el) {
+            checkbox.checked = true;
+            checkbox.closest('.pin-check').classList.add('active');
+            // 검사목적: 시험분야 먼저 복원 후 옵션 로드 → 값 설정
+            if (fieldId === 'test-purpose' && pins['test-field']) {
+                const radio = document.querySelector(`input[name="test-field"][value="${pins['test-field']}"]`);
+                if (radio) radio.checked = true;
+                updateTestPurposeOptions(pins['test-field']).then(() => {
+                    el.value = pins[fieldId].value;
+                });
+            } else {
+                el.value = pins[fieldId].value;
+            }
+        }
+    });
+    if (pins['receipt-date']) calculateProcessingDeadline();
 }
 
 // ============================================================================
