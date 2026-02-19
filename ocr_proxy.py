@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BFL LIMS - OCR 프록시 서버
+BFL LIMS - OCR 프록시 서버 (HTTPS)
 Naver Clova OCR API를 브라우저에서 호출할 수 있도록 프록시 역할.
 CORS 문제를 해결하고 Secret Key를 서버 측에 보관.
+HTTPS 지원으로 GitHub Pages 등 HTTPS 페이지에서도 Mixed Content 없이 호출 가능.
 
 실행: python ocr_proxy.py
-포트: 5002
+포트: 5002 (HTTPS)
 
 엔드포인트:
   POST /api/ocr/biz-license   — 사업자등록증 OCR (Document OCR)
   POST /api/ocr/general        — 인허가 문서 등 일반 OCR (General OCR)
   GET  /api/ocr/health         — 서버 상태 확인
+
+SSL 인증서:
+  ocr_proxy_cert.pem (자체서명 인증서)
+  ocr_proxy_key.pem  (개인키)
+  생성: openssl req -x509 -newkey rsa:2048 -keyout ocr_proxy_key.pem -out ocr_proxy_cert.pem -days 365 -nodes
 """
 
 from flask import Flask, request, jsonify
@@ -20,6 +26,7 @@ import requests
 import json
 import time
 import os
+import ssl
 
 app = Flask(__name__)
 CORS(app)
@@ -139,8 +146,25 @@ if __name__ == '__main__':
     import sys
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     port = int(os.environ.get('OCR_PROXY_PORT', 5002))
-    print(f'BFL OCR Proxy Server starting on port {port}')
-    print(f'  biz-license OCR: POST http://localhost:{port}/api/ocr/biz-license')
-    print(f'  general OCR:     POST http://localhost:{port}/api/ocr/general')
-    print(f'  health check:    GET  http://localhost:{port}/api/ocr/health')
-    app.run(host='0.0.0.0', port=port, debug=True)
+
+    # SSL 인증서 경로 (스크립트와 같은 디렉터리)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    cert_file = os.path.join(base_dir, 'ocr_proxy_cert.pem')
+    key_file = os.path.join(base_dir, 'ocr_proxy_key.pem')
+
+    if os.path.exists(cert_file) and os.path.exists(key_file):
+        print(f'BFL OCR Proxy Server starting on port {port} (HTTPS)')
+        print(f'  biz-license OCR: POST https://localhost:{port}/api/ocr/biz-license')
+        print(f'  general OCR:     POST https://localhost:{port}/api/ocr/general')
+        print(f'  health check:    GET  https://localhost:{port}/api/ocr/health')
+        print(f'  SSL cert: {cert_file}')
+        app.run(host='0.0.0.0', port=port, debug=True,
+                ssl_context=(cert_file, key_file))
+    else:
+        print(f'[WARNING] SSL 인증서 없음 - HTTP 모드로 실행')
+        print(f'  인증서 생성: openssl req -x509 -newkey rsa:2048 -keyout ocr_proxy_key.pem -out ocr_proxy_cert.pem -days 365 -nodes')
+        print(f'BFL OCR Proxy Server starting on port {port} (HTTP)')
+        print(f'  biz-license OCR: POST http://localhost:{port}/api/ocr/biz-license')
+        print(f'  general OCR:     POST http://localhost:{port}/api/ocr/general')
+        print(f'  health check:    GET  http://localhost:{port}/api/ocr/health')
+        app.run(host='0.0.0.0', port=port, debug=True)

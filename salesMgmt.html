@@ -1605,14 +1605,39 @@ function resetCustomerRegForm() {
 // OCR: Naver Clova Document OCR
 // ============================================================
 // OCR 프록시 서버 URL (ocr_proxy.py — CORS 우회 + Secret Key 서버 보관)
+// HTTPS: Mixed Content 방지 (GitHub Pages 등 HTTPS 페이지에서 호출 가능)
+// 자체서명 인증서 사용 — 최초 접속 시 브라우저에서 인증서 신뢰 필요
 var OCR_PROXY_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
-  ? 'http://127.0.0.1:5002'
-  : 'http://192.168.0.96:5002';
+  ? 'https://127.0.0.1:5002'
+  : 'https://192.168.0.96:5002';
 var OCR_BIZ_LICENSE_URL = OCR_PROXY_BASE + '/api/ocr/biz-license';
 var OCR_GENERAL_URL = OCR_PROXY_BASE + '/api/ocr/general';
 
 var _bizLicFile = null;
 var _licFiles = {};
+
+// --- OCR 프록시 SSL 인증서 신뢰 확인 ---
+// 자체서명 인증서이므로 최초 1회 브라우저에서 수락 필요
+function handleOcrFetchError(err, statusEl, btnEl) {
+  if (btnEl) { btnEl.textContent = '🤖 OCR 인식'; btnEl.disabled = false; }
+  if (err.message === 'Failed to fetch') {
+    // Mixed Content 또는 자체서명 인증서 미신뢰
+    var healthUrl = OCR_PROXY_BASE + '/api/ocr/health';
+    if (statusEl) {
+      statusEl.innerHTML = '❌ OCR 서버 연결 실패. <a href="' + healthUrl + '" target="_blank" style="color:#1565c0;text-decoration:underline;">여기를 클릭</a>하여 인증서를 수락한 후 다시 시도하세요.';
+      statusEl.style.color = '#c62828';
+    }
+    toast('❌ OCR 서버 연결 실패 — 인증서 수락이 필요합니다');
+    // 자동으로 새 탭에서 인증서 수락 페이지 열기
+    window.open(healthUrl, '_blank');
+  } else {
+    if (statusEl) {
+      statusEl.textContent = '❌ OCR 오류: ' + err.message;
+      statusEl.style.color = '#c62828';
+    }
+    toast('❌ OCR 실패: ' + err.message);
+  }
+}
 
 // --- 사업자등록증 파일 선택 ---
 function handleBizLicFile(file) {
@@ -1682,11 +1707,7 @@ function runBizLicOCR() {
       }
     })
     .catch(function(err) {
-      btn.textContent = '🤖 OCR 인식';
-      btn.disabled = false;
-      status.textContent = '❌ OCR 오류: ' + err.message;
-      status.style.color = '#c62828';
-      toast('❌ OCR 실패: ' + err.message);
+      handleOcrFetchError(err, status, btn);
     });
   };
   reader.readAsDataURL(_bizLicFile);
@@ -1809,11 +1830,7 @@ function runLicOCR(idx) {
       }
     })
     .catch(function(err) {
-      btn.textContent = '🤖 OCR 인식';
-      btn.disabled = false;
-      status.textContent = '❌ OCR 오류: ' + err.message;
-      status.style.color = '#c62828';
-      toast('❌ OCR 실패: ' + err.message);
+      handleOcrFetchError(err, status, btn);
     });
   };
   reader.readAsDataURL(file);
