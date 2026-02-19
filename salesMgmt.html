@@ -1582,7 +1582,11 @@ function lookupLicZipcodeFromAddress(idx, address) {
   var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,]\s*(.+)$/);
   if (detailMatch) {
     mainAddr = detailMatch[1].trim();
-    detailAddr = detailMatch[2].trim();
+    var candidate = detailMatch[2].trim();
+    // 상세주소가 별도 지번/도로명 주소(시/도/군 포함)이면 무시 (법인주소 등)
+    if (!/^\d|^[가-힣]{1,2}(특별|광역)?시|^[가-힣]{1,2}(도)\s|^경기|^충[북남]|^전[북남]|^경[북남]|^강원|^제주|^세종/.test(candidate)) {
+      detailAddr = candidate;
+    }
   }
   var apiKey = '8e5dab09aacd882449bd3865699a9d69';
   fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(mainAddr), {
@@ -1972,8 +1976,8 @@ function fillLicFields(idx, res) {
   var bizName = getText(res.companyName) || getText(res.corpName);
   if (bizName) document.getElementById('licBizName_' + idx).value = bizName;
 
-  // 소재지 → 우편번호 자동 조회
-  var addr = getText(res.bisAddress) || getText(res.headAddress);
+  // 소재지 → 우편번호 자동 조회 (headAddress는 법인주소이므로 사용하지 않음)
+  var addr = getText(res.bisAddress);
   if (addr) {
     document.getElementById('licAddr_' + idx).value = addr;
     lookupLicZipcodeFromAddress(idx, addr);
