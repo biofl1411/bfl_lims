@@ -1984,8 +1984,12 @@ function fillLicFields(idx, res) {
   if (bizForm) {
     var sel = document.getElementById('licBizForm_' + idx);
     var matched = false;
+    // 특수문자(·, 중점, 공백) 제거 후 비교 — OCR은 "즉석판매제조·가공업", 셀렉트는 "즉석판매제조가공업"
+    var normalize = function(s) { return s.replace(/[·\s\-·‧・]/g, ''); };
+    var normBiz = normalize(bizForm);
     for (var j = 0; j < sel.options.length; j++) {
-      if (sel.options[j].text.includes(bizForm) || bizForm.includes(sel.options[j].text)) {
+      var normOpt = normalize(sel.options[j].text);
+      if (normOpt && (normOpt.includes(normBiz) || normBiz.includes(normOpt))) {
         sel.selectedIndex = j;
         matched = true;
         break;
@@ -2000,11 +2004,12 @@ function fillLicFields(idx, res) {
     }
   }
 
-  // 분야 자동 설정: 축산 키워드 → '축산', 그 외 → '식품'
+  // 분야 자동 설정: 축산물위생관리법 → '축산', 식품위생법 → '식품'
+  // 근거: 식품위생법=식품, 축산물위생관리법=축산
   var allText = [bizForm, bizName, getText(res.documentType)].join(' ');
   var fieldSel = document.getElementById('licField_' + idx);
   if (fieldSel && fieldSel.value === '선택') {
-    var isLivestock = /축산|식육|도축|식용란|유가공|우유|낙농/.test(allText);
+    var isLivestock = /축산물?위생|축산물?가공|식육|도축|식용란|유가공|우유|낙농|집유|축산/.test(allText);
     for (var k = 0; k < fieldSel.options.length; k++) {
       if ((isLivestock && fieldSel.options[k].text === '축산') ||
           (!isLivestock && fieldSel.options[k].text === '식품')) {
