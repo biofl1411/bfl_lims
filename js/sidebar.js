@@ -15,8 +15,8 @@
  *   4) salesMgmt.html 등 showPage() 내부 탭 전환 자동 처리
  *   5) toggleMenu() 아코디언 함수 등록
  *
- * ※ inspectionMgmt.html은 자체 사이드바 디자인이므로 이 파일 미사용.
- *   향후 통합 시 별도 협의.
+ * 적용 페이지: index.html, salesMgmt.html, sampleReceipt.html,
+ *   itemAssign.html, userMgmt.html, inspectionMgmt.html
  */
 
 // ============================================================
@@ -59,10 +59,10 @@
 .sidebar-collapse-btn:hover{background:rgba(255,255,255,.12);color:#c8d6e5}
 .sidebar.collapsed{width:64px}
 .sidebar.collapsed .logo-text{display:none}
-.sidebar.collapsed .logo{justify-content:center;padding:16px 8px}
+.sidebar.collapsed .logo{flex-direction:column;align-items:center;padding:12px 8px;gap:8px}
 .sidebar.collapsed .logo-icon{margin:0}
-.sidebar.collapsed .logo-img{height:28px}
-.sidebar.collapsed .sidebar-collapse-btn{margin:6px auto 0;transform:rotate(180deg)}
+.sidebar.collapsed .logo-img{height:24px}
+.sidebar.collapsed .sidebar-collapse-btn{margin:0 auto;transform:rotate(180deg)}
 .sidebar.collapsed .nav-label{display:none}
 .sidebar.collapsed .nav-arrow{display:none}
 .sidebar.collapsed .nav-parent{justify-content:center;padding:10px 0}
@@ -176,7 +176,7 @@ function renderSidebar() {
   // 로고 + 접기 버튼
   let html = `
   <div class="logo">
-    <img src="img/bfl_logo.svg?v=2" alt="BFL" class="logo-img">
+    <img src="img/bfl_logo.svg?v=3" alt="BFL" class="logo-img">
     <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">☰</div>
   </div>
   <nav class="sidebar-nav">`;
