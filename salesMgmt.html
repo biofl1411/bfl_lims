@@ -668,16 +668,12 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
         <button class="btn-add" id="detAddLicBtn" onclick="addDetailLicenseCard()" style="display:none">+ 인허가 정보 추가</button>
 
-        <!-- 고객사 담당자 -->
+        <!-- 고객사 담당자 (다중) -->
         <div class="sec-title"><span class="sec-num">4</span> 고객사 담당자</div>
-        <div class="fg-row3">
-          <div class="fg"><label>이름</label><input id="detContactName" readonly style="background:#f8f9fb"></div>
-          <div class="fg"><label>전화번호</label><input id="detContactPhone" readonly style="background:#f8f9fb"></div>
-          <div class="fg"><label>이메일</label><input id="detContactEmail" readonly style="background:#f8f9fb"></div>
+        <div id="detContactContainer">
+          <!-- 동적으로 생성됨 -->
         </div>
-        <div class="fg-row" style="margin-top:4px">
-          <div class="fg" style="max-width:200px"><label>자사 담당</label><input id="detSalesRep" readonly style="background:#f8f9fb"></div>
-        </div>
+        <button class="btn-add" id="detAddContactBtn" onclick="addDetailContactCard()" style="display:none">+ 담당자 추가</button>
 
         <!-- 세금계산서 담당자 -->
         <div class="sec-title"><span class="sec-num">5</span> 세금계산서 담당자</div>
@@ -685,6 +681,19 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <div class="fg"><label>이름</label><input id="detTaxName" readonly style="background:#f8f9fb"></div>
           <div class="fg"><label>전화번호</label><input id="detTaxPhone" readonly style="background:#f8f9fb"></div>
           <div class="fg"><label>이메일</label><input id="detTaxEmail" readonly style="background:#f8f9fb"></div>
+        </div>
+
+        <!-- 인허가 담당자 매칭 모달 -->
+        <div id="licContactMatchModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center">
+          <div style="background:#fff;border-radius:12px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+            <div style="font-weight:700;font-size:16px;margin-bottom:12px">🔗 인허가 담당자 매칭</div>
+            <div style="font-size:13px;color:#5f6368;margin-bottom:16px" id="licMatchDesc">이 담당자를 인허가 담당자로 연결하시겠습니까?</div>
+            <div id="licMatchList" style="max-height:200px;overflow-y:auto;margin-bottom:16px"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-secondary btn-sm" onclick="closeLicMatchModal()" style="padding:6px 16px">건너뛰기</button>
+              <button class="btn btn-primary btn-sm" onclick="applyLicMatch()" style="padding:6px 16px">적용</button>
+            </div>
+          </div>
         </div>
 
         <!-- 메모/비고 -->
@@ -1996,11 +2005,6 @@ function openCustomerDetail(custId) {
   document.getElementById('detCompanyEn').value = cust.companyEn || '';
   document.getElementById('detRepNameEn').value = cust.repNameEn || '';
   document.getElementById('detAddrEn').value = cust.addrEn || '';
-  // 담당자 정보
-  document.getElementById('detContactName').value = cust.contactName || '';
-  document.getElementById('detContactPhone').value = cust.contactPhone || '';
-  document.getElementById('detContactEmail').value = cust.contactEmail || '';
-  document.getElementById('detSalesRep').value = cust.salesRep || '';
   // 세금계산서 담당자
   document.getElementById('detTaxName').value = cust.taxName || '';
   document.getElementById('detTaxPhone').value = cust.taxPhone || '';
@@ -2009,6 +2013,10 @@ function openCustomerDetail(custId) {
   document.getElementById('detMemo').value = cust.memo || '';
   // 다중 인허가 정보 렌더링
   renderDetailLicenses(cust);
+  // 다중 담당자 정보 렌더링 (인허가 후에 해야 매칭 태그 표시 가능)
+  renderDetailContacts(cust);
+  // 인허가 카드에 연결된 담당자 표시
+  updateLicContactDisplay();
 
   // 파일 업로드 초기화
   document.getElementById('detailBizFileName').textContent = '📎 사업자등록증 파일';
@@ -2117,6 +2125,270 @@ function renderDetailLicenses(cust) {
   _detLicCardCount = licenses.length;
 }
 var _detLicCardCount = 0;
+var _detContactCardCount = 0;
+var _licMatchContactNum = null; // 매칭 모달에서 사용 중인 담당자 번호
+
+// --- 상세 페이지: 다중 담당자 렌더링 ---
+function renderDetailContacts(cust) {
+  var container = document.getElementById('detContactContainer');
+  if (!container) return;
+  container.innerHTML = '';
+
+  // contacts 배열이 있으면 사용, 없으면 기존 단일 필드에서 1개 생성
+  var contacts = cust.contacts && cust.contacts.length > 0 ? cust.contacts : [];
+  if (contacts.length === 0 && (cust.contactName || cust.contactPhone || cust.contactEmail)) {
+    contacts = [{ name: cust.contactName || '', phone: cust.contactPhone || '', email: cust.contactEmail || '', role: '', salesRep: cust.salesRep || '', licNums: [] }];
+  }
+  if (contacts.length === 0) {
+    contacts = [{ name: '', phone: '', email: '', role: '', salesRep: '', licNums: [] }];
+  }
+
+  for (var i = 0; i < contacts.length; i++) {
+    var ct = contacts[i];
+    var num = i + 1;
+    var card = document.createElement('div');
+    card.className = 'sub-card';
+    card.id = 'detContactCard_' + num;
+    card.style.cssText = 'margin-bottom:10px;border-left:3px solid #43a047';
+
+    // 인허가 매칭 태그 표시
+    var licTagsHtml = '';
+    var licNums = ct.licNums || [];
+    if (licNums.length > 0) {
+      var lics = cust.licenses || [];
+      licTagsHtml = '<div id="detContactLicTags_' + num + '" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">';
+      for (var j = 0; j < licNums.length; j++) {
+        var ln = licNums[j];
+        var licLabel = (lics[ln - 1] && lics[ln - 1].licBizName) ? lics[ln - 1].licBizName : '인허가 ' + ln;
+        licTagsHtml += '<span class="det-lic-match-tag" style="display:inline-flex;align-items:center;gap:3px;background:#e8f5e9;color:#2e7d32;font-size:11px;padding:2px 8px;border-radius:10px">🔗 ' + escHtml(licLabel) + '</span>';
+      }
+      licTagsHtml += '</div>';
+    } else {
+      licTagsHtml = '<div id="detContactLicTags_' + num + '" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px"></div>';
+    }
+
+    card.innerHTML =
+      '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 담당자</div>' +
+        '<div style="display:flex;gap:4px;margin-left:auto">' +
+          '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="display:none;font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
+          '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="display:none;font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="fg-row" style="gap:8px">' +
+        '<div class="fg" style="flex:1.2"><label>이름</label><input id="detContactName_' + num + '" value="' + escHtml(ct.name) + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+        '<div class="fg" style="flex:1"><label>역할/직책</label><input id="detContactRole_' + num + '" value="' + escHtml(ct.role || '') + '" placeholder="품질관리, 구매 등" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+        '<div class="fg" style="flex:1.2"><label>자사 담당</label><input id="detContactSalesRep_' + num + '" value="' + escHtml(ct.salesRep || '') + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+      '</div>' +
+      '<div class="fg-row" style="gap:8px">' +
+        '<div class="fg"><label>전화번호</label><input id="detContactPhone_' + num + '" value="' + escHtml(ct.phone) + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+        '<div class="fg"><label>이메일</label><input id="detContactEmail_' + num + '" value="' + escHtml(ct.email) + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+      '</div>' +
+      '<input type="hidden" id="detContactLicNums_' + num + '" value=\'' + JSON.stringify(licNums) + '\'>' +
+      licTagsHtml;
+
+    container.appendChild(card);
+  }
+  _detContactCardCount = contacts.length;
+}
+
+// --- 상세 페이지: 담당자 카드 동적 추가 ---
+function addDetailContactCard() {
+  _detContactCardCount++;
+  var num = _detContactCardCount;
+  var container = document.getElementById('detContactContainer');
+  if (!container) return;
+
+  var card = document.createElement('div');
+  card.className = 'sub-card';
+  card.id = 'detContactCard_' + num;
+  card.style.cssText = 'margin-bottom:10px;border-left:3px solid #43a047;animation:fadeIn 0.3s ease';
+
+  card.innerHTML =
+    '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 담당자</div>' +
+      '<div style="display:flex;gap:4px;margin-left:auto">' +
+        '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
+        '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="fg-row" style="gap:8px">' +
+      '<div class="fg" style="flex:1.2"><label>이름</label><input id="detContactName_' + num + '" placeholder="담당자명" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+      '<div class="fg" style="flex:1"><label>역할/직책</label><input id="detContactRole_' + num + '" placeholder="품질관리, 구매 등" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+      '<div class="fg" style="flex:1.2"><label>자사 담당</label><input id="detContactSalesRep_' + num + '" placeholder="자사 담당자" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+    '</div>' +
+    '<div class="fg-row" style="gap:8px">' +
+      '<div class="fg"><label>전화번호</label><input id="detContactPhone_' + num + '" placeholder="전화번호" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+      '<div class="fg"><label>이메일</label><input id="detContactEmail_' + num + '" placeholder="이메일" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+    '</div>' +
+    '<div id="detContactLicTags_' + num + '" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px"></div>';
+
+  container.appendChild(card);
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast('✅ 담당자 ' + num + ' 카드가 추가되었습니다.');
+
+  // 인허가가 있으면 바로 매칭 모달 열기
+  if (_detLicCardCount > 0) {
+    setTimeout(function() { openLicMatchModal(num); }, 400);
+  }
+}
+
+// --- 담당자 카드 삭제 ---
+function removeDetailContactCard(num) {
+  var card = document.getElementById('detContactCard_' + num);
+  if (card) {
+    card.style.animation = 'fadeIn 0.2s ease reverse';
+    setTimeout(function() { card.remove(); }, 200);
+    toast('🗑 담당자 ' + num + ' 카드가 삭제되었습니다.');
+  }
+}
+
+// --- 인허가 담당자 매칭 모달 ---
+function openLicMatchModal(contactNum) {
+  _licMatchContactNum = contactNum;
+  var modal = document.getElementById('licContactMatchModal');
+  if (!modal) return;
+
+  var contactName = (document.getElementById('detContactName_' + contactNum) || {}).value || '담당자 ' + contactNum;
+  document.getElementById('licMatchDesc').innerHTML = '<strong>' + escHtml(contactName) + '</strong> 님을 어떤 인허가의 담당자로 연결하시겠습니까?';
+
+  var listEl = document.getElementById('licMatchList');
+  listEl.innerHTML = '';
+
+  // 현재 이 담당자에 연결된 인허가 번호 수집
+  var currentLicTags = document.getElementById('detContactLicTags_' + contactNum);
+  var currentMatched = [];
+  if (currentLicTags) {
+    var tags = currentLicTags.querySelectorAll('.det-lic-match-tag');
+    // data attribute로부터 추출하기보다는 hidden input에서 추출
+  }
+  // hidden input에서 현재 매칭 정보 읽기
+  var hiddenEl = document.getElementById('detContactLicNums_' + contactNum);
+  if (hiddenEl && hiddenEl.value) {
+    try { currentMatched = JSON.parse(hiddenEl.value); } catch(e) {}
+  }
+
+  for (var li = 1; li <= _detLicCardCount; li++) {
+    if (!document.getElementById('detLicCard_' + li)) continue;
+    var bizName = (document.getElementById('detLicBizName_' + li) || {}).value || '';
+    var licField = (document.getElementById('detLicField_' + li) || {}).value || '';
+    var label = bizName || licField || '인허가 ' + li;
+    var checked = currentMatched.indexOf(li) !== -1 ? ' checked' : '';
+
+    var item = document.createElement('label');
+    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e6ed;border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background 0.15s';
+    item.innerHTML =
+      '<input type="checkbox" class="lic-match-chk" value="' + li + '"' + checked + ' style="width:18px;height:18px;accent-color:#43a047">' +
+      '<div style="flex:1">' +
+        '<div style="font-weight:600;font-size:13px">' + escHtml(label) + '</div>' +
+        '<div style="font-size:11px;color:#8892a4">인허가 ' + li + (licField ? ' · ' + escHtml(licField) : '') + '</div>' +
+      '</div>';
+    listEl.appendChild(item);
+  }
+
+  if (_detLicCardCount === 0) {
+    listEl.innerHTML = '<div style="text-align:center;color:#8892a4;padding:16px">등록된 인허가가 없습니다</div>';
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeLicMatchModal() {
+  var modal = document.getElementById('licContactMatchModal');
+  if (modal) modal.style.display = 'none';
+  _licMatchContactNum = null;
+}
+
+function applyLicMatch() {
+  var num = _licMatchContactNum;
+  if (!num) return;
+
+  var checkedNums = [];
+  document.querySelectorAll('#licMatchList .lic-match-chk:checked').forEach(function(chk) {
+    checkedNums.push(parseInt(chk.value));
+  });
+
+  // hidden input에 매칭 정보 저장
+  var hiddenEl = document.getElementById('detContactLicNums_' + num);
+  if (!hiddenEl) {
+    hiddenEl = document.createElement('input');
+    hiddenEl.type = 'hidden';
+    hiddenEl.id = 'detContactLicNums_' + num;
+    var card = document.getElementById('detContactCard_' + num);
+    if (card) card.appendChild(hiddenEl);
+  }
+  hiddenEl.value = JSON.stringify(checkedNums);
+
+  // 태그 UI 업데이트
+  var tagsEl = document.getElementById('detContactLicTags_' + num);
+  if (tagsEl) {
+    tagsEl.innerHTML = '';
+    for (var j = 0; j < checkedNums.length; j++) {
+      var ln = checkedNums[j];
+      var bizName = (document.getElementById('detLicBizName_' + ln) || {}).value || '';
+      var licField = (document.getElementById('detLicField_' + ln) || {}).value || '';
+      var label = bizName || licField || '인허가 ' + ln;
+      tagsEl.innerHTML += '<span class="det-lic-match-tag" style="display:inline-flex;align-items:center;gap:3px;background:#e8f5e9;color:#2e7d32;font-size:11px;padding:2px 8px;border-radius:10px">🔗 ' + escHtml(label) + '</span>';
+    }
+  }
+
+  // 인허가 카드에도 담당자 표시 업데이트
+  updateLicContactDisplay();
+
+  closeLicMatchModal();
+  var contactName = (document.getElementById('detContactName_' + num) || {}).value || '담당자 ' + num;
+  if (checkedNums.length > 0) {
+    toast('🔗 ' + contactName + ' → ' + checkedNums.length + '개 인허가 연결');
+  } else {
+    toast('ℹ️ ' + contactName + ' 인허가 연결 해제');
+  }
+}
+
+// --- 인허가 카드 내 연결된 담당자 표시 업데이트 ---
+function updateLicContactDisplay() {
+  // 각 인허가 카드에 연결된 담당자 목록 표시
+  for (var li = 1; li <= _detLicCardCount; li++) {
+    var card = document.getElementById('detLicCard_' + li);
+    if (!card) continue;
+
+    // 기존 표시 제거
+    var oldDisplay = card.querySelector('.lic-contact-display');
+    if (oldDisplay) oldDisplay.remove();
+
+    // 이 인허가에 연결된 담당자들 수집
+    var linkedContacts = [];
+    for (var ci = 1; ci <= _detContactCardCount; ci++) {
+      if (!document.getElementById('detContactCard_' + ci)) continue;
+      var hiddenEl = document.getElementById('detContactLicNums_' + ci);
+      if (hiddenEl && hiddenEl.value) {
+        try {
+          var nums = JSON.parse(hiddenEl.value);
+          if (nums.indexOf(li) !== -1) {
+            var cName = (document.getElementById('detContactName_' + ci) || {}).value || '담당자 ' + ci;
+            var cRole = (document.getElementById('detContactRole_' + ci) || {}).value || '';
+            var cSalesRep = (document.getElementById('detContactSalesRep_' + ci) || {}).value || '';
+            linkedContacts.push({ name: cName, role: cRole, salesRep: cSalesRep });
+          }
+        } catch(e) {}
+      }
+    }
+
+    if (linkedContacts.length > 0) {
+      var displayDiv = document.createElement('div');
+      displayDiv.className = 'lic-contact-display';
+      displayDiv.style.cssText = 'margin-top:8px;padding:8px 10px;background:#f1f8e9;border-radius:6px;border:1px solid #c5e1a5';
+      var html = '<div style="font-size:11px;font-weight:600;color:#33691e;margin-bottom:4px">👤 연결된 담당자</div>';
+      linkedContacts.forEach(function(lc) {
+        html += '<div style="font-size:12px;color:#33691e;display:flex;gap:6px;align-items:center">';
+        html += '<span style="font-weight:500">' + escHtml(lc.name) + '</span>';
+        if (lc.role) html += '<span style="color:#689f38;font-size:11px">(' + escHtml(lc.role) + ')</span>';
+        if (lc.salesRep) html += '<span style="color:#8892a4;font-size:11px">↔ ' + escHtml(lc.salesRep) + '</span>';
+        html += '</div>';
+      });
+      displayDiv.innerHTML = html;
+      card.appendChild(displayDiv);
+    }
+  }
+}
+
 var _detailEditMode = false;
 var _detailSnapshot = null; // 수정 전 스냅샷
 
@@ -2134,7 +2406,6 @@ function toggleDetailEdit() {
   // 기본 정보 필드도 수정 가능하게
   ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn',
-   'detContactName','detContactPhone','detContactEmail','detSalesRep',
    'detTaxName','detTaxPhone','detTaxEmail','detMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
@@ -2146,6 +2417,12 @@ function toggleDetailEdit() {
       el.style.border = '1px solid #1a73e8';
     }
   });
+  // 담당자 카드의 hidden licNums도 스냅샷 저장
+  _detailSnapshot._contactsSnapshot = [];
+  for (var ci = 1; ci <= _detContactCardCount; ci++) {
+    var hEl = document.getElementById('detContactLicNums_' + ci);
+    _detailSnapshot._contactsSnapshot.push(hEl ? hEl.value : '[]');
+  }
   // 버튼 전환
   document.getElementById('detailEditBtn').style.display = 'none';
   document.getElementById('detailSaveBtn').style.display = '';
@@ -2158,6 +2435,11 @@ function toggleDetailEdit() {
   if (addBtn) addBtn.style.display = '';
   document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = ''; });
   document.querySelectorAll('.detLicPostBtn').forEach(function(b) { b.style.display = ''; });
+  // 담당자 추가/삭제/매칭 버튼 표시
+  var addContactBtn = document.getElementById('detAddContactBtn');
+  if (addContactBtn) addContactBtn.style.display = '';
+  document.querySelectorAll('.detContactDelBtn').forEach(function(b) { b.style.display = ''; });
+  document.querySelectorAll('.detContactMatchBtn').forEach(function(b) { b.style.display = ''; });
 }
 
 function cancelDetailEdit() {
@@ -2177,7 +2459,6 @@ function cancelDetailEdit() {
   });
   ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn',
-   'detContactName','detContactPhone','detContactEmail','detSalesRep',
    'detTaxName','detTaxPhone','detTaxEmail','detMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
@@ -2192,10 +2473,19 @@ function cancelDetailEdit() {
   if (addBtn) addBtn.style.display = 'none';
   document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = 'none'; });
   document.querySelectorAll('.detLicPostBtn').forEach(function(b) { b.style.display = 'none'; });
+  // 담당자 버튼 숨기기
+  var addContactBtn = document.getElementById('detAddContactBtn');
+  if (addContactBtn) addContactBtn.style.display = 'none';
+  document.querySelectorAll('.detContactDelBtn').forEach(function(b) { b.style.display = 'none'; });
+  document.querySelectorAll('.detContactMatchBtn').forEach(function(b) { b.style.display = 'none'; });
   // 동적 추가된 카드 원복 (원래 데이터 재렌더)
   var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
   var cust = customers.find(function(c) { return c.id === _detailCustId; });
-  if (cust) renderDetailLicenses(cust);
+  if (cust) {
+    renderDetailLicenses(cust);
+    renderDetailContacts(cust);
+    updateLicContactDisplay();
+  }
   _detailSnapshot = null;
 }
 
@@ -2221,10 +2511,6 @@ function saveDetailEdit() {
     { id: 'detCompanyEn', key: 'companyEn', label: 'Company Name (EN)' },
     { id: 'detRepNameEn', key: 'repNameEn', label: 'Representative (EN)' },
     { id: 'detAddrEn', key: 'addrEn', label: 'Address (EN)' },
-    { id: 'detContactName', key: 'contactName', label: '담당자명' },
-    { id: 'detContactPhone', key: 'contactPhone', label: '담당자 전화' },
-    { id: 'detContactEmail', key: 'contactEmail', label: '담당자 이메일' },
-    { id: 'detSalesRep', key: 'salesRep', label: '자사 담당' },
     { id: 'detTaxName', key: 'taxName', label: '세금계산서 담당자명' },
     { id: 'detTaxPhone', key: 'taxPhone', label: '세금계산서 전화' },
     { id: 'detTaxEmail', key: 'taxEmail', label: '세금계산서 이메일' },
@@ -2285,6 +2571,55 @@ function saveDetailEdit() {
     licKeys.forEach(function(k) { cust[k] = first[k] || ''; });
   }
 
+  // 다중 담당자 정보 수집
+  var newContacts = [];
+  for (var cti = 1; cti <= _detContactCardCount; cti++) {
+    if (!document.getElementById('detContactCard_' + cti)) continue;
+    var ctName = (document.getElementById('detContactName_' + cti) || {}).value || '';
+    var ctPhone = (document.getElementById('detContactPhone_' + cti) || {}).value || '';
+    var ctEmail = (document.getElementById('detContactEmail_' + cti) || {}).value || '';
+    var ctRole = (document.getElementById('detContactRole_' + cti) || {}).value || '';
+    var ctSalesRep = (document.getElementById('detContactSalesRep_' + cti) || {}).value || '';
+    var ctLicNums = [];
+    var hiddenEl = document.getElementById('detContactLicNums_' + cti);
+    if (hiddenEl && hiddenEl.value) { try { ctLicNums = JSON.parse(hiddenEl.value); } catch(e) {} }
+    // 빈 담당자는 건너뛰기
+    if (!ctName && !ctPhone && !ctEmail) continue;
+    newContacts.push({ name: ctName, phone: ctPhone, email: ctEmail, role: ctRole, salesRep: ctSalesRep, licNums: ctLicNums });
+  }
+
+  // 담당자 변경 감지
+  var oldContacts = cust.contacts || [];
+  if (newContacts.length !== oldContacts.length) {
+    changes.push({ field: '담당자 수', from: oldContacts.length + '명', to: newContacts.length + '명' });
+  }
+  var ctKeys = ['name','phone','email','role','salesRep'];
+  var ctLabels = { name:'이름', phone:'전화번호', email:'이메일', role:'역할', salesRep:'자사 담당' };
+  for (var cdi = 0; cdi < Math.min(newContacts.length, oldContacts.length); cdi++) {
+    ctKeys.forEach(function(k) {
+      var ov = (oldContacts[cdi][k] || '').trim();
+      var nv = (newContacts[cdi][k] || '').trim();
+      if (ov !== nv) {
+        changes.push({ field: '담당자' + (cdi+1) + ' ' + ctLabels[k], from: ov, to: nv });
+      }
+    });
+    // licNums 변경 감지
+    var oldNums = JSON.stringify(oldContacts[cdi].licNums || []);
+    var newNums = JSON.stringify(newContacts[cdi].licNums || []);
+    if (oldNums !== newNums) {
+      changes.push({ field: '담당자' + (cdi+1) + ' 인허가 매칭', from: oldNums, to: newNums });
+    }
+  }
+
+  cust.contacts = newContacts;
+  // 하위 호환: 첫 번째 담당자 → 기존 단일 필드
+  if (newContacts.length > 0) {
+    cust.contactName = newContacts[0].name || '';
+    cust.contactPhone = newContacts[0].phone || '';
+    cust.contactEmail = newContacts[0].email || '';
+    cust.salesRep = newContacts[0].salesRep || '';
+  }
+
   // 변경 이력 기록
   if (changes.length > 0) {
     var detail = changes.map(function(c) {
@@ -2308,7 +2643,6 @@ function saveDetailEdit() {
   });
   ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn',
-   'detContactName','detContactPhone','detContactEmail','detSalesRep',
    'detTaxName','detTaxPhone','detTaxEmail','detMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
@@ -2323,6 +2657,11 @@ function saveDetailEdit() {
   if (addBtn) addBtn.style.display = 'none';
   document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = 'none'; });
   document.querySelectorAll('.detLicPostBtn').forEach(function(b) { b.style.display = 'none'; });
+  // 담당자 버튼 숨기기
+  var addContactBtn = document.getElementById('detAddContactBtn');
+  if (addContactBtn) addContactBtn.style.display = 'none';
+  document.querySelectorAll('.detContactDelBtn').forEach(function(b) { b.style.display = 'none'; });
+  document.querySelectorAll('.detContactMatchBtn').forEach(function(b) { b.style.display = 'none'; });
 
   // 변경 이력 갱신
   renderChangeLog(cust.changeLog || []);
