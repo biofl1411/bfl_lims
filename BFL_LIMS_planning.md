@@ -8,7 +8,7 @@
 
 - **프로젝트명**: BFL LIMS (BioFoodLab 실험실 정보 관리 시스템)
 - **작성일**: 2026년 2월 16일
-- **버전**: v1.2
+- **버전**: v1.3
 - **최종 업데이트**: 2026년 2월 19일
 - **작성자**: BioFoodLab
 - **목적**: 식품 검사 실험실의 업무 효율화 및 데이터 관리 체계화
@@ -166,7 +166,44 @@
 
 ---
 
-### 3.3 항목 배정 (itemAssign.html) ⭐ 핵심 기능
+### 3.3 시료 접수 등록 (sampleReceipt.html)
+
+#### 개요
+시료 접수를 등록하는 폼 페이지. API 서버(`receipt_api_final.py`, port 5001)와 연동하여 검사목적, 검체유형, 접수번호, 업체를 동적으로 로드합니다.
+
+#### 주요 기능
+- **API 연동**: `receipt_api_final.py` Flask 서버(port 5001)와 fetch 호출
+- **폴백 모드**: API 서버 미실행 시 내장 폴백 데이터로 동작
+- **서버 상태 인디케이터**: 🟢 연결됨 / 🔴 오프라인 (30초 주기 확인)
+- **6개 아코디언 섹션**: 접수 기본정보, 업체정보, 시료정보, 검사정보, 의뢰인 정보, 팀별 메모
+- **접수번호 할당**: 서버 측 스레드 안전 할당 (POST `/api/receipt-no/allocate`)
+- **업체 검색**: 디바운스(300ms) + API 자동완성
+- **팀별 메모 권한**: 현재 팀만 편집 가능, 나머지 읽기 전용
+- **임시저장**: localStorage 기반
+
+#### API 엔드포인트 (receipt_api_final.py)
+
+| 엔드포인트 | 메서드 | 설명 |
+|-----------|--------|------|
+| `/api/health` | GET | 서버 상태 확인 |
+| `/api/test-purposes?field=` | GET | 검사목적 조회 |
+| `/api/food-types?field=&purpose=` | GET | 검체유형 조회 |
+| `/api/receipt-no/allocate` | POST | 접수번호 할당 |
+| `/api/companies/search?q=` | GET | 업체 검색 |
+| `/api/items/search?q=&purpose=` | GET | 검사항목 검색 |
+
+#### 데이터 흐름
+```
+사용자 → sampleReceipt.html
+              ↓ fetch()
+         receipt_api_final.py (port 5001)
+              ↓ parse
+         js/food_item_fee_mapping.js (9,237건)
+```
+
+---
+
+### 3.4 항목 배정 (itemAssign.html) ⭐ 핵심 기능
 
 #### 개요
 검사항목을 담당자에게 자동으로 배정하는 시스템
@@ -252,7 +289,7 @@
 
 ---
 
-### 3.4 사용자 관리 (userMgmt.html)
+### 3.5 사용자 관리 (userMgmt.html)
 
 #### 기능
 - 담당자 정보 관리
@@ -268,7 +305,7 @@
 
 ---
 
-### 3.5 영업 관리 (salesMgmt.html)
+### 3.6 영업 관리 (salesMgmt.html)
 
 #### 기능
 - **지도 3단계 드릴다운**: 시도 → 시군구 → 읍면동 (Leaflet + VWORLD 타일)
@@ -676,3 +713,4 @@ Databases:
 - v1.0 (2026-02-16): 초안 작성
 - v1.1 (2026-02-18): 검사관리 완료 사항 반영 — 수수료 탭(16개 목적, 7,481건), 항목그룹 탭(그룹형/flat형 분리, CRUD), 수수료 데이터 재추출(9,237건), 참고용(기준규격외) 병합(3,374건)
 - v1.2 (2026-02-19): 한글 파일명 영문 전환 반영, 데이터 저장 위치 섹션 추가, 영업관리 섹션 현행화, 기술 스택(MariaDB/Leaflet/Kakao) 수정
+- v1.3 (2026-02-19): 시료접수 등록(sampleReceipt.html) 섹션 추가 — API 연동(receipt_api_final.py, port 5001), 폴백 모드, 서버 상태 인디케이터

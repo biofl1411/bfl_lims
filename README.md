@@ -24,11 +24,14 @@
 bfl_lims/
 ├── index.html                      # 대시보드 (메인)
 ├── inspectionMgmt.html             # 접수관리 > 검사목적관리
+├── sampleReceipt.html              # 접수관리 > 접수 등록 (API 연동)
 ├── itemAssign.html                 # 시험결재 > 항목배정
 ├── userMgmt.html                   # 관리자 > 사용자관리
 ├── salesMgmt.html                  # 영업관리 (지도 + 고객사)
 ├── admin_api_settings.html          # 관리자 > API 수집 설정
 ├── admin_collect_status.html        # 관리자 > 수집 현황
+├── receipt_api_final.py             # 시료접수 API 서버 (Flask, port 5001)
+├── SETUP_GUIDE.md                   # API 서버 실행 가이드
 ├── js/
 │   ├── food_item_fee_mapping.js     # 수수료 매핑 데이터 (9,237건, 16개 검사목적, purpose 태그)
 │   └── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
@@ -57,7 +60,7 @@ bfl_lims/
 |---|------|------|-----------|
 | 1 | 대시보드 | 구현됨 | `index.html` |
 | 2 | 영업 관리 | 부분 구현 | `salesMgmt.html` |
-| 3 | 접수 관리 | 부분 구현 | `inspectionMgmt.html` |
+| 3 | 접수 관리 | 부분 구현 | `inspectionMgmt.html`, `sampleReceipt.html` |
 | 4 | 시험 결재 | 부분 구현 | `itemAssign.html` |
 | 5 | 성적 관리 | 미구현 | — |
 | 6 | 재무 관리 | 미구현 | — |
@@ -95,6 +98,28 @@ bfl_lims/
 - **상세 패널**: 항목 수정, 라벨 태그 관리, 좌우 항목 이동 (◀ ▶), 제목에 검체유형 표시
 - **카드 기능**: 선택 삭제, 8가지 정렬 (기본/항목명/검체유형/담당자/수수료↑↓/항목수↑↓)
 - **변경 감지**: 필드 변경 시 민트색(#00bfa5) "변경사항 있음" 표시 + 저장 버튼 강조 + 패널 테두리
+
+### 시료접수 (`sampleReceipt.html`)
+- **API 연동**: `receipt_api_final.py` (Flask, port 5001)와 연동
+- **폴백 모드**: API 서버 미실행 시에도 내장 폴백 데이터로 동작
+- **서버 상태 표시**: 헤더에 연결 상태 인디케이터 (🟢 연결됨 / 🔴 오프라인)
+- **6개 아코디언 섹션**: 접수 기본정보, 업체정보, 시료정보, 검사정보, 의뢰인 정보, 팀별 메모
+- **API 연동 기능**: 검사목적 로드, 검체유형 검색, 접수번호 할당(스레드 안전), 업체 검색
+- **팀별 메모 권한**: 현재 로그인 팀만 편집, 나머지 읽기 전용
+- **임시저장/불러오기**: localStorage 기반
+
+### 시료접수 API (`receipt_api_final.py`)
+
+Flask REST API 서버 (port 5001) — `food_item_fee_mapping.js` 데이터 기반
+
+| 엔드포인트 | 메서드 | 설명 |
+|-----------|--------|------|
+| `/api/health` | GET | 서버 상태 확인 |
+| `/api/test-purposes` | GET | 검사목적 조회 (`?field=식품\|축산`) |
+| `/api/food-types` | GET | 검체유형 조회 (`?field=&purpose=`) |
+| `/api/receipt-no/allocate` | POST | 접수번호 할당 (스레드 안전) |
+| `/api/companies/search` | GET | 업체 검색 (`?q=`) |
+| `/api/items/search` | GET | 검사항목 검색 (`?q=&purpose=`) |
 
 ### 항목배정 (`itemAssign.html`)
 - 담당자 26명 배정 현황 테이블 (이름/부서/파트/직급/배정항목수/진행완료지연/업무부하율)
@@ -181,6 +206,7 @@ Flask REST API 서버 (port 5060)
 | `b6feabe` | 검사관리 식품유형 기능 개선 + README 추가 + 수수료 매핑 데이터 |
 | `5a83e3d` | 불필요한 파일 정리 - 설계/비교/테스트/데모 파일 9개 삭제 |
 | `7a61f81` | 한글 파일명을 영문 camelCase로 전환 + 내부 참조 수정 |
+| `77a3eb4` | BFL_LIMS_planning.md v1.2 업데이트 + 데이터 저장 위치 섹션 추가 |
 
 ---
 
