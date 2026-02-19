@@ -502,6 +502,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div class="fg"><input id="regAddr1" placeholder="기본주소 (자동입력)" readonly></div>
         <div class="fg"><input id="regAddr2" placeholder="상세주소 입력"></div>
 
+        <!-- 사업자등록증 영문 정보 (접이식) -->
+        <div class="eng-toggle" onclick="toggleEngSection('bizEngSection')" style="margin-top:12px;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;color:#1565c0;font-size:13px;font-weight:500">
+          <span id="bizEngArrow" style="transition:transform .2s;display:inline-block">▶</span> 사업자등록증 (영문 정보)
+        </div>
+        <div id="bizEngSection" style="display:none;padding:8px 0 4px 0;border-top:1px dashed #e2e6ed;margin-bottom:8px">
+          <div class="fg"><label>Company Name (EN)</label><input id="regCompanyNameEn" placeholder="Company name in English"></div>
+          <div class="fg"><label>Representative (EN)</label><input id="regRepNameEn" placeholder="Representative name in English"></div>
+          <div class="fg"><label>Address (EN)</label><input id="regAddrEn" placeholder="Address in English (auto-converted)"></div>
+        </div>
+
         <div class="sec-title"><span class="sec-num">3</span> 인허가 정보 <span style="margin-left:auto;font-size:11px;color:#8892a4;font-weight:400">여러 개 등록 가능</span></div>
         <div id="licenseArea">
           <div class="sub-card" id="licCard_1">
@@ -531,6 +541,15 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 <button class="btn btn-check btn-sm" id="licOcrBtn_1" onclick="runLicOCR(1)" disabled style="white-space:nowrap">🤖 OCR 인식</button>
               </div>
               <div id="licOcrStatus_1" style="margin-top:4px;font-size:11px;color:#1565c0;display:none"></div>
+            </div>
+            <!-- 인허가 영문 정보 (접이식) -->
+            <div class="eng-toggle" onclick="toggleEngSection('licEngSection_1')" style="margin-top:8px;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;color:#1565c0;font-size:13px;font-weight:500">
+              <span id="licEngArrow_1" style="transition:transform .2s;display:inline-block">▶</span> 인허가 정보 (영문)
+            </div>
+            <div id="licEngSection_1" style="display:none;padding:8px 0 4px 0;border-top:1px dashed #e2e6ed">
+              <div class="fg"><label>Business Name (EN)</label><input id="licBizNameEn_1" placeholder="Business name in English"></div>
+              <div class="fg"><label>Representative (EN)</label><input id="licRepNameEn_1" placeholder="Representative name in English"></div>
+              <div class="fg"><label>Address (EN)</label><input id="licAddrEn_1" placeholder="Address in English (auto-converted)"></div>
             </div>
           </div>
         </div>
@@ -1544,9 +1563,11 @@ function lookupZipcodeFromAddress(address) {
         if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
         highlightField('regZipcode');
         highlightField('regAddr1');
+        setTimeout(updateBizEngAddress, 300);
       } else if (doc.address) {
         document.getElementById('regAddr1').value = doc.address.address_name;
         if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
+        setTimeout(updateBizEngAddress, 300);
       }
     }
   })
@@ -1603,9 +1624,11 @@ function lookupLicZipcodeFromAddress(idx, address) {
         if (detailAddr) document.getElementById('licAddr2_' + idx).value = detailAddr;
         highlightField('licZipcode_' + idx);
         highlightField('licAddr_' + idx);
+        setTimeout(function() { updateLicEngAddress(idx); }, 300);
       } else if (doc.address) {
         document.getElementById('licAddr_' + idx).value = doc.address.address_name;
         if (detailAddr) document.getElementById('licAddr2_' + idx).value = detailAddr;
+        setTimeout(function() { updateLicEngAddress(idx); }, 300);
       }
     }
   })
@@ -1879,6 +1902,10 @@ function fillBizLicFields(res) {
       setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 5000);
     }
   });
+  // 영문 주소 자동 변환
+  if (bisAddr) {
+    setTimeout(function() { updateBizEngAddress(); }, 500);
+  }
 }
 
 // --- 인허가 문서 파일 선택 ---
@@ -2031,6 +2058,156 @@ function fillLicFields(idx, res) {
       el.style.borderColor = '#42a5f5';
       setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 5000);
     }
+  });
+  // 영문 주소 자동 변환
+  if (addr) {
+    setTimeout(function() { updateLicEngAddress(idx); }, 500);
+  }
+}
+
+// ============================================================
+// 영문 정보 접이식 토글
+// ============================================================
+function toggleEngSection(sectionId) {
+  var sec = document.getElementById(sectionId);
+  if (!sec) return;
+  var isHidden = sec.style.display === 'none';
+  sec.style.display = isHidden ? 'block' : 'none';
+  // 화살표 회전
+  var arrow = sec.previousElementSibling.querySelector('span');
+  if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : '';
+}
+
+// ============================================================
+// 한글 주소 → 영문 주소 변환 (Kakao 주소 → 좌표 → 영문 조합)
+// ============================================================
+var KR_EN_REGION = {
+  '서울특별시':'Seoul','서울':'Seoul','부산광역시':'Busan','부산':'Busan',
+  '대구광역시':'Daegu','대구':'Daegu','인천광역시':'Incheon','인천':'Incheon',
+  '광주광역시':'Gwangju','광주':'Gwangju','대전광역시':'Daejeon','대전':'Daejeon',
+  '울산광역시':'Ulsan','울산':'Ulsan','세종특별자치시':'Sejong','세종':'Sejong',
+  '경기도':'Gyeonggi-do','경기':'Gyeonggi-do','강원특별자치도':'Gangwon-do','강원도':'Gangwon-do','강원':'Gangwon-do',
+  '충청북도':'Chungcheongbuk-do','충북':'Chungcheongbuk-do',
+  '충청남도':'Chungcheongnam-do','충남':'Chungcheongnam-do',
+  '전북특별자치도':'Jeollabuk-do','전라북도':'Jeollabuk-do','전북':'Jeollabuk-do',
+  '전라남도':'Jeollanam-do','전남':'Jeollanam-do',
+  '경상북도':'Gyeongsangbuk-do','경북':'Gyeongsangbuk-do',
+  '경상남도':'Gyeongsangnam-do','경남':'Gyeongsangnam-do',
+  '제주특별자치도':'Jeju-do','제주도':'Jeju-do','제주':'Jeju-do'
+};
+
+// 한글 → 영문 도로명주소 변환
+function convertToEnglishAddress(korAddr, callback) {
+  if (!korAddr) { callback(''); return; }
+  var apiKey = '8e5dab09aacd882449bd3865699a9d69';
+  var cleanAddr = korAddr.replace(/\([^)]*\)/g, '').trim();
+
+  // Kakao 주소 검색으로 구조화된 주소 획득
+  fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(cleanAddr), {
+    headers: { 'Authorization': 'KakaoAK ' + apiKey }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.documents || !data.documents.length) { callback(korAddr); return; }
+    var doc = data.documents[0];
+    var road = doc.road_address;
+    if (road) {
+      // 도로명 주소 기반 영문 조합
+      var parts = [];
+      // 건물번호
+      var bldgNo = road.main_building_no || '';
+      if (road.sub_building_no) bldgNo += '-' + road.sub_building_no;
+      if (bldgNo) parts.push(bldgNo);
+      // 도로명 (로마자 변환)
+      if (road.road_name) parts.push(romanize(road.road_name));
+      // 읍면동
+      if (road.region_3depth_name) parts.push(romanize(road.region_3depth_name));
+      // 시군구
+      if (road.region_2depth_name) parts.push(romanize(road.region_2depth_name));
+      // 시도
+      var r1 = road.region_1depth_name || '';
+      parts.push(KR_EN_REGION[r1] || romanize(r1));
+
+      callback(parts.join(', '));
+    } else if (doc.address) {
+      // 지번 주소 기반
+      var a = doc.address;
+      var parts2 = [];
+      var mainNo = a.main_address_no || '';
+      if (a.sub_address_no) mainNo += '-' + a.sub_address_no;
+      if (mainNo) parts2.push(mainNo);
+      if (a.region_3depth_name) parts2.push(romanize(a.region_3depth_name));
+      if (a.region_2depth_name) parts2.push(romanize(a.region_2depth_name));
+      var r1b = a.region_1depth_name || '';
+      parts2.push(KR_EN_REGION[r1b] || romanize(r1b));
+      callback(parts2.join(', '));
+    } else {
+      callback(korAddr);
+    }
+  })
+  .catch(function() { callback(korAddr); });
+}
+
+// 간이 한글 → 로마자 변환 (행정구역 접미사 포함)
+function romanize(str) {
+  if (!str) return '';
+  // 행정구역 접미사 변환
+  str = str.replace(/특별자치시$/, '').replace(/특별자치도$/, '-do')
+           .replace(/특별시$/, '').replace(/광역시$/, '')
+           .replace(/(\S)시$/, '$1-si').replace(/(\S)군$/, '$1-gun').replace(/(\S)구$/, '$1-gu')
+           .replace(/(\S)읍$/, '$1-eup').replace(/(\S)면$/, '$1-myeon').replace(/(\S)동$/, '$1-dong')
+           .replace(/(\S)로$/, '$1-ro').replace(/(\S)길$/, '$1-gil')
+           .replace(/(\S)리$/, '$1-ri').replace(/(\S)가$/, '$1-ga');
+  // 초성+중성+종성 → 로마자 (Revised Romanization)
+  var initials = ['g','kk','n','d','tt','r','m','b','pp','s','ss','','j','jj','ch','k','t','p','h'];
+  var medials = ['a','ae','ya','yae','eo','e','yeo','ye','o','wa','wae','oe','yo','u','wo','we','wi','yu','eu','ui','i'];
+  var finals = ['','g','kk','gs','n','nj','nh','d','l','lg','lm','lb','ls','lt','lp','lh','m','b','bs','s','ss','ng','j','ch','k','t','p','h'];
+  var result = '';
+  for (var i = 0; i < str.length; i++) {
+    var code = str.charCodeAt(i);
+    if (code >= 0xAC00 && code <= 0xD7A3) {
+      var offset = code - 0xAC00;
+      var ini = Math.floor(offset / (21 * 28));
+      var med = Math.floor((offset % (21 * 28)) / 28);
+      var fin = offset % 28;
+      result += initials[ini] + medials[med] + finals[fin];
+    } else {
+      result += str.charAt(i);
+    }
+  }
+  // 첫 글자 대문자
+  return result.charAt(0).toUpperCase() + result.slice(1);
+}
+
+// 영문 주소 자동 변환 트리거 (사업자등록증)
+function updateBizEngAddress() {
+  var addr1 = document.getElementById('regAddr1');
+  var addr2 = document.getElementById('regAddr2');
+  var enField = document.getElementById('regAddrEn');
+  if (!addr1 || !enField) return;
+  var fullAddr = (addr1.value || '').trim();
+  if (addr2 && addr2.value) fullAddr += ' ' + addr2.value.trim();
+  if (!fullAddr) return;
+  convertToEnglishAddress(fullAddr, function(engAddr) {
+    enField.value = engAddr;
+    enField.style.background = '#e3f2fd';
+    setTimeout(function() { enField.style.background = ''; }, 3000);
+  });
+}
+
+// 영문 주소 자동 변환 트리거 (인허가)
+function updateLicEngAddress(idx) {
+  var addr1 = document.getElementById('licAddr_' + idx);
+  var addr2 = document.getElementById('licAddr2_' + idx);
+  var enField = document.getElementById('licAddrEn_' + idx);
+  if (!addr1 || !enField) return;
+  var fullAddr = (addr1.value || '').trim();
+  if (addr2 && addr2.value) fullAddr += ' ' + addr2.value.trim();
+  if (!fullAddr) return;
+  convertToEnglishAddress(fullAddr, function(engAddr) {
+    enField.value = engAddr;
+    enField.style.background = '#e3f2fd';
+    setTimeout(function() { enField.style.background = ''; }, 3000);
   });
 }
 
