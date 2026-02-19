@@ -209,6 +209,9 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=1d5b2febea0c84335256f6a15d9e7c05&libraries=services"></script>
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<!-- PDF.js: PDF를 이미지로 변환 (Clova 특화모델은 다중페이지 PDF 미지원) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 
@@ -1670,6 +1673,54 @@ var OCR_BIZ_LICENSE_URL = OCR_PROXY_BASE + '/api/ocr/biz-license';
 var OCR_GENERAL_URL = OCR_PROXY_BASE + '/api/ocr/general';
 
 var _bizLicFile = null;
+
+// --- PDF → JPEG 이미지 변환 (Clova 특화모델은 다중페이지 PDF 미지원) ---
+// PDF 파일이면 첫 페이지를 canvas로 렌더링 → JPEG base64로 변환
+function convertPdfToJpegBase64(file) {
+  return new Promise(function(resolve, reject) {
+    var ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'pdf') {
+      // PDF가 아니면 그대로 FileReader로 읽기
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var base64 = e.target.result.split(',')[1];
+        if (ext === 'jpg' || ext === 'jpeg') ext = 'jpg';
+        else if (ext === 'png') ext = 'png';
+        else ext = 'jpg';
+        resolve({ base64: base64, format: ext });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+    // PDF → 이미지 변환
+    if (!window.pdfjsLib) {
+      reject(new Error('PDF.js 라이브러리 로드 실패'));
+      return;
+    }
+    var reader2 = new FileReader();
+    reader2.onload = function(e) {
+      var typedArray = new Uint8Array(e.target.result);
+      pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
+        // 첫 페이지만 렌더링
+        pdf.getPage(1).then(function(page) {
+          var scale = 2.0; // 고해상도
+          var viewport = page.getViewport({ scale: scale });
+          var canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          var ctx = canvas.getContext('2d');
+          page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function() {
+            var jpegBase64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+            resolve({ base64: jpegBase64, format: 'jpg' });
+          }).catch(reject);
+        }).catch(reject);
+      }).catch(reject);
+    };
+    reader2.onerror = reject;
+    reader2.readAsArrayBuffer(file);
+  });
+}
 var _licFiles = {};
 
 // --- OCR 프록시 SSL 인증서 신뢰 확인 ---
@@ -1725,21 +1776,13 @@ function runBizLicOCR() {
   status.textContent = '🔄 Clova OCR 서버에 전송 중...';
   status.style.color = '#558b2f';
 
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var base64 = e.target.result.split(',')[1];
-    var ext = _bizLicFile.name.split('.').pop().toLowerCase();
-    if (ext === 'jpg' || ext === 'jpeg') ext = 'jpg';
-    else if (ext === 'png') ext = 'png';
-    else if (ext === 'pdf') ext = 'pdf';
-    else if (ext === 'tif' || ext === 'tiff') ext = 'tiff';
-    else ext = 'jpg';
-
+  // PDF → 이미지 자동 변환 후 OCR 전송
+  convertPdfToJpegBase64(_bizLicFile).then(function(result) {
     var payload = {
       version: 'V2',
       requestId: 'bfl-biz-' + Date.now(),
       timestamp: Date.now(),
-      images: [{ format: ext, name: _bizLicFile.name, data: base64 }]
+      images: [{ format: result.format, name: _bizLicFile.name, data: result.base64 }]
     };
 
     fetch(OCR_BIZ_LICENSE_URL, {
@@ -1765,8 +1808,12 @@ function runBizLicOCR() {
     .catch(function(err) {
       handleOcrFetchError(err, status, btn);
     });
-  };
-  reader.readAsDataURL(_bizLicFile);
+  }).catch(function(err) {
+    btn.textContent = '🤖 OCR 인식';
+    btn.disabled = false;
+    status.textContent = '❌ PDF 변환 실패: ' + err.message;
+    status.style.color = '#c62828';
+  });
 }
 
 // --- 사업자등록증 OCR 결과 → 폼 자동입력 ---
@@ -1849,20 +1896,13 @@ function runLicOCR(idx) {
   status.style.display = 'block';
   status.textContent = '🔄 Clova OCR 서버에 전송 중...';
 
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var base64 = e.target.result.split(',')[1];
-    var ext = file.name.split('.').pop().toLowerCase();
-    if (ext === 'jpg' || ext === 'jpeg') ext = 'jpg';
-    else if (ext === 'png') ext = 'png';
-    else if (ext === 'pdf') ext = 'pdf';
-    else ext = 'jpg';
-
+  // PDF → 이미지 자동 변환 후 OCR 전송
+  convertPdfToJpegBase64(file).then(function(result) {
     var payload = {
       version: 'V2',
       requestId: 'bfl-lic-' + Date.now(),
       timestamp: Date.now(),
-      images: [{ format: ext, name: file.name, data: base64 }]
+      images: [{ format: result.format, name: file.name, data: result.base64 }]
     };
 
     // biz-license 엔드포인트를 공용으로 사용 (영업신고증, 사업자등록증 등 모든 문서 처리)
@@ -1890,8 +1930,12 @@ function runLicOCR(idx) {
     .catch(function(err) {
       handleOcrFetchError(err, status, btn);
     });
-  };
-  reader.readAsDataURL(file);
+  }).catch(function(err) {
+    btn.textContent = '🤖 OCR 인식';
+    btn.disabled = false;
+    status.textContent = '❌ PDF 변환 실패: ' + err.message;
+    status.style.color = '#c62828';
+  });
 }
 
 // --- 인허가 문서 OCR 결과 → 폼 자동입력 (biz-license 구조화 응답) ---
