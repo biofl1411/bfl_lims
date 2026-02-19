@@ -205,6 +205,19 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .sg-label{background:rgba(255,255,255,.82)!important;border:none!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important;font-size:10px!important;font-weight:600!important;color:#37474f!important;padding:2px 6px!important;border-radius:3px!important}
 .sg-label::before{display:none!important}
 .leaflet-container{font-family:inherit!important}
+/* ===== Column Settings Panel ===== */
+#colSettingsPanel .col-settings-header{font-size:12px;font-weight:700;color:#5f6b7a;padding-bottom:8px;border-bottom:1px solid #eef0f4;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+#colSettingsPanel .col-settings-reset{font-size:11px;color:#1a73e8;cursor:pointer;font-weight:500}
+#colSettingsPanel .col-settings-reset:hover{text-decoration:underline}
+#colSettingsPanel .col-setting-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px;color:#333;cursor:pointer;transition:background .1s}
+#colSettingsPanel .col-setting-item:hover{background:#f0f2f5}
+#colSettingsPanel .col-setting-item input[type="checkbox"]{width:15px;height:15px;accent-color:#1a73e8;cursor:pointer;flex-shrink:0}
+#colSettingsPanel .col-setting-divider{height:1px;background:#eef0f4;margin:6px 0}
+/* ===== Column Drag ===== */
+.tbl th[draggable="true"]{cursor:grab;user-select:none;position:relative;transition:background .15s}
+.tbl th[draggable="true"]:active{cursor:grabbing}
+.tbl th.col-drag-over{background:#e3f2fd !important;box-shadow:inset 2px 0 0 #1a73e8}
+.tbl th.col-dragging{opacity:.4;background:#bbdefb}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -296,23 +309,17 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       <div class="card">
         <div class="card-hd">
           <h3>고객사 목록</h3>
-          <div class="right">
-            <input type="text" placeholder="🔍 회사명, 사업자번호 검색..." style="padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;width:220px">
+          <div class="right" style="position:relative;display:flex;align-items:center;gap:6px">
+            <input type="text" id="custSearchInput" placeholder="🔍 회사명, 사업자번호 검색..." style="padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;width:220px" oninput="filterCustomerTable(this.value)">
+            <button class="btn btn-secondary btn-sm" id="colSettingsBtn" onclick="toggleColSettings()" title="컬럼 설정" style="font-size:13px;padding:6px 10px;border-radius:8px">⚙️</button>
+            <div id="colSettingsPanel" style="display:none;position:absolute;top:100%;right:40px;margin-top:4px;background:#fff;border:1px solid #e2e6ed;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;width:240px;max-height:400px;overflow-y:auto;padding:12px"></div>
             <button class="btn btn-primary" onclick="showPage('customerReg')">+ 신규 등록</button>
           </div>
         </div>
         <div class="card-bd" style="padding:0;overflow-x:auto">
-          <table class="tbl">
-            <thead><tr><th>신호등</th><th>등급</th><th>회사명</th><th>대표자</th><th>사업자번호</th><th>담당자</th><th>영업담당</th><th>계약상태</th><th>최근거래</th></tr></thead>
-            <tbody id="customerTbody">
-              <tr><td class="center"><span class="tl tl-blue"></span></td><td><span class="tag tag-vip">VIP</span></td><td><strong>CJ제일제당(주)</strong></td><td>김CJ</td><td>123-45-67890</td><td>김부장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-10</td></tr>
-              <tr><td class="center"><span class="tl tl-green"></span></td><td><span class="tag tag-a">A</span></td><td><strong>(주)농심</strong></td><td>신농심</td><td>345-67-89012</td><td>이과장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-08</td></tr>
-              <tr><td class="center"><span class="tl tl-yellow"></span></td><td><span class="tag tag-b">B</span></td><td><strong>(주)오뚜기</strong></td><td>함오뚜기</td><td>456-78-90123</td><td>박대리</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2025-12-20</td></tr>
-              <tr style="background:#fff8e1"><td class="center"><span class="tl tl-orange"></span></td><td><span class="tag tag-a">A</span></td><td><strong>풀무원식품(주)</strong></td><td>원풀무</td><td>234-56-78901</td><td>이규성</td><td>박주임</td><td><span class="tag tag-active">활동</span></td><td>2025-12-05</td></tr>
-              <tr style="background:#fce4ec"><td class="center"><span class="tl tl-red"></span></td><td><span class="tag tag-c">C</span></td><td><strong>(주)삼양식품</strong></td><td>전삼양</td><td>567-89-01234</td><td>최팀장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2025-10-15</td></tr>
-              <tr><td class="center"><span class="tl tl-blue"></span></td><td><span class="tag tag-b">B</span></td><td><strong>동원F&B(주)</strong></td><td>김동원</td><td>678-90-12345</td><td>정과장</td><td>이주임</td><td><span class="tag tag-active">활동</span></td><td>2026-02-12</td></tr>
-              <tr><td class="center"><span class="tl tl-green"></span></td><td><span class="tag tag-a">A</span></td><td><strong>대상(주)</strong></td><td>임대상</td><td>789-01-23456</td><td>한대리</td><td>이주임</td><td><span class="tag tag-dormant">휴면</span></td><td>2025-08-20</td></tr>
-            </tbody>
+          <table class="tbl" id="customerTable">
+            <thead id="customerThead"><tr><!-- 동적 렌더링 --></tr></thead>
+            <tbody id="customerTbody"><!-- 동적 렌더링 --></tbody>
           </table>
         </div>
       </div>
@@ -1618,6 +1625,68 @@ const pageNames = {
   arManage:'세금계산서미발행', invoice:'계산서 발행 승인요청',
   apiSettings:'API 수집 설정'
 };
+
+// ============================================================
+// 데모 고객사 데이터 (기존 하드코딩 행을 JS 배열로 이전)
+// ============================================================
+var DEMO_CUSTOMERS = [
+  { id:'DEMO_01', company:'CJ제일제당(주)', repName:'김CJ', bizNo:'123-45-67890', contactName:'김부장', salesRep:'이주임', grade:'VIP', status:'활동', regDate:'2026-02-10', trafficLight:'blue', bizType:'식품제조업', bizItem:'식품', corpNo:'110111-1234567', contactPhone:'02-1234-5678', contactEmail:'kim@cj.co.kr', zipcode:'04560', addr1:'서울 중구 동호로 330', addr2:'CJ제일제당센터', companyEn:'CJ CheilJedang Corp.', repNameEn:'Kim CJ', addrEn:'330 Dongho-ro, Jung-gu, Seoul' },
+  { id:'DEMO_02', company:'(주)농심', repName:'신농심', bizNo:'345-67-89012', contactName:'이과장', salesRep:'이주임', grade:'A', status:'활동', regDate:'2026-02-08', trafficLight:'green', bizType:'식품제조업', bizItem:'라면·스낵', corpNo:'110111-2345678', contactPhone:'02-2345-6789', contactEmail:'lee@nongshim.com', zipcode:'06764', addr1:'서울 서초구 바우뫼로 68', addr2:'농심빌딩', companyEn:'Nongshim Co., Ltd.', repNameEn:'Shin Nongshim', addrEn:'68 Baumoe-ro, Seocho-gu, Seoul' },
+  { id:'DEMO_03', company:'(주)오뚜기', repName:'함오뚜기', bizNo:'456-78-90123', contactName:'박대리', salesRep:'이주임', grade:'B', status:'활동', regDate:'2025-12-20', trafficLight:'yellow', bizType:'식품제조업', bizItem:'소스·즉석식품', corpNo:'110111-3456789', contactPhone:'02-3456-7890', contactEmail:'park@ottogi.co.kr', zipcode:'14060', addr1:'경기 안양시 동안구 흥안대로 415', addr2:'오뚜기센터', companyEn:'Ottogi Co., Ltd.', repNameEn:'Ham Ottogi', addrEn:'415 Heungan-daero, Dongan-gu, Anyang-si' },
+  { id:'DEMO_04', company:'풀무원식품(주)', repName:'원풀무', bizNo:'234-56-78901', contactName:'이규성', salesRep:'박주임', grade:'A', status:'활동', regDate:'2025-12-05', trafficLight:'orange', bizType:'식품제조업', bizItem:'두부·생면', corpNo:'110111-4567890', contactPhone:'02-4567-8901', contactEmail:'lee@pulmuone.co.kr', zipcode:'05765', addr1:'서울 송파구 충민로 66', addr2:'풀무원타워', companyEn:'Pulmuone Foods Co., Ltd.', repNameEn:'Won Pulmu', addrEn:'66 Chungmin-ro, Songpa-gu, Seoul' },
+  { id:'DEMO_05', company:'(주)삼양식품', repName:'전삼양', bizNo:'567-89-01234', contactName:'최팀장', salesRep:'이주임', grade:'C', status:'활동', regDate:'2025-10-15', trafficLight:'red', bizType:'식품제조업', bizItem:'라면·유지', corpNo:'110111-5678901', contactPhone:'02-5678-9012', contactEmail:'choi@samyang.com', zipcode:'07255', addr1:'서울 영등포구 양산로 45', addr2:'삼양사빌딩', companyEn:'Samyang Foods Co., Ltd.', repNameEn:'Jeon Samyang', addrEn:'45 Yangsan-ro, Yeongdeungpo-gu, Seoul' },
+  { id:'DEMO_06', company:'동원F&B(주)', repName:'김동원', bizNo:'678-90-12345', contactName:'정과장', salesRep:'이주임', grade:'B', status:'활동', regDate:'2026-02-12', trafficLight:'blue', bizType:'식품제조업', bizItem:'수산·통조림', corpNo:'110111-6789012', contactPhone:'02-6789-0123', contactEmail:'jung@dongwon.com', zipcode:'06775', addr1:'서울 서초구 마방로 68', addr2:'동원산업빌딩', companyEn:'Dongwon F&B Co., Ltd.', repNameEn:'Kim Dongwon', addrEn:'68 Mabang-ro, Seocho-gu, Seoul' },
+  { id:'DEMO_07', company:'대상(주)', repName:'임대상', bizNo:'789-01-23456', contactName:'한대리', salesRep:'이주임', grade:'A', status:'휴면', regDate:'2025-08-20', trafficLight:'green', bizType:'식품제조업', bizItem:'조미료·발효', corpNo:'110111-7890123', contactPhone:'02-7890-1234', contactEmail:'han@daesang.co.kr', zipcode:'05765', addr1:'서울 종로구 대학로8길 1', addr2:'대상빌딩', companyEn:'Daesang Corp.', repNameEn:'Lim Daesang', addrEn:'1 Daehak-ro 8-gil, Jongno-gu, Seoul' }
+];
+
+// ============================================================
+// 컬럼 정의 배열 — 테이블 렌더링의 단일 진실 소스
+// ============================================================
+var COLUMNS = [
+  { key:'trafficLight', label:'신호등', defaultVisible:true, render:function(c){ return '<td class="center"><span class="tl tl-' + (c.trafficLight||'blue') + '"></span></td>'; }},
+  { key:'grade', label:'등급', defaultVisible:true, render:function(c){ var t={'VIP':'<span class="tag tag-vip">VIP</span>','A':'<span class="tag tag-a">A</span>','B':'<span class="tag tag-b">B</span>','C':'<span class="tag tag-c">C</span>'}; return '<td>'+(t[c.grade]||'<span class="tag tag-b">B</span>')+'</td>'; }},
+  { key:'company', label:'회사명', defaultVisible:true, render:function(c){ return '<td><strong>'+(c.company||'')+'</strong></td>'; }},
+  { key:'repName', label:'대표자', defaultVisible:true, render:function(c){ return '<td>'+(c.repName||'-')+'</td>'; }},
+  { key:'bizNo', label:'사업자번호', defaultVisible:true, render:function(c){ return '<td>'+(c.bizNo||'-')+'</td>'; }},
+  { key:'contactName', label:'담당자', defaultVisible:true, render:function(c){ return '<td>'+(c.contactName||'-')+'</td>'; }},
+  { key:'salesRep', label:'영업담당', defaultVisible:true, render:function(c){ return '<td>'+(c.salesRep||'-')+'</td>'; }},
+  { key:'status', label:'계약상태', defaultVisible:true, render:function(c){ var t={'활동':'<span class="tag tag-active">활동</span>','휴면':'<span class="tag tag-dormant">휴면</span>','해지':'<span class="tag" style="background:#fce4ec;color:#c62828">해지</span>'}; return '<td>'+(t[c.status]||t['활동'])+'</td>'; }},
+  { key:'regDate', label:'최근거래', defaultVisible:true, render:function(c){ return '<td>'+(c.regDate||'-')+'</td>'; }},
+  // --- 추가 컬럼 (기본 숨김) ---
+  { key:'bizType', label:'업종', defaultVisible:false, render:function(c){ return '<td>'+(c.bizType||'-')+'</td>'; }},
+  { key:'bizItem', label:'업태', defaultVisible:false, render:function(c){ return '<td>'+(c.bizItem||'-')+'</td>'; }},
+  { key:'corpNo', label:'법인번호', defaultVisible:false, render:function(c){ return '<td>'+(c.corpNo||'-')+'</td>'; }},
+  { key:'contactPhone', label:'담당자전화', defaultVisible:false, render:function(c){ return '<td>'+(c.contactPhone||'-')+'</td>'; }},
+  { key:'contactEmail', label:'담당자이메일', defaultVisible:false, render:function(c){ return '<td style="font-size:11px">'+(c.contactEmail||'-')+'</td>'; }},
+  { key:'address', label:'주소', defaultVisible:false, render:function(c){ var a=((c.addr1||'')+' '+(c.addr2||'')).trim(); return '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+a+'">'+(a||'-')+'</td>'; }},
+  { key:'companyEn', label:'영문회사명', defaultVisible:false, render:function(c){ return '<td style="font-size:11px">'+(c.companyEn||'-')+'</td>'; }},
+  { key:'licField', label:'인허가분야', defaultVisible:false, render:function(c){ var v=c.licField||(c.licenses&&c.licenses[0]?c.licenses[0].licField:''); return '<td>'+(v||'-')+'</td>'; }},
+  { key:'licNo', label:'인허가번호', defaultVisible:false, render:function(c){ var v=c.licNo||(c.licenses&&c.licenses[0]?c.licenses[0].licNo:''); return '<td style="font-size:11px">'+(v||'-')+'</td>'; }},
+  { key:'licBizName', label:'인허가사업명', defaultVisible:false, render:function(c){ var v=c.licBizName||(c.licenses&&c.licenses[0]?c.licenses[0].bizName||c.licenses[0].licBizName:''); return '<td>'+(v||'-')+'</td>'; }}
+];
+
+var COL_CONFIG_KEY = 'bfl_colConfig';
+var _colMap = {}; COLUMNS.forEach(function(c){ _colMap[c.key] = c; });
+
+function getColConfig() {
+  var saved = localStorage.getItem(COL_CONFIG_KEY);
+  if (saved) {
+    try {
+      var cfg = JSON.parse(saved);
+      // 새로 추가된 컬럼이 있으면 columns 끝에 추가
+      COLUMNS.forEach(function(c) { if (cfg.columns.indexOf(c.key)===-1) cfg.columns.push(c.key); });
+      return cfg;
+    } catch(e) {}
+  }
+  var keys = COLUMNS.filter(function(c){ return c.defaultVisible; }).map(function(c){ return c.key; });
+  return { columns: COLUMNS.map(function(c){return c.key;}), visible: keys };
+}
+function saveColConfig(cfg) { localStorage.setItem(COL_CONFIG_KEY, JSON.stringify(cfg)); }
+function getVisibleColumns() {
+  var cfg = getColConfig();
+  return cfg.columns.filter(function(k){ return cfg.visible.indexOf(k)!==-1 && _colMap[k]; }).map(function(k){ return _colMap[k]; });
+}
+
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
   document.getElementById('page-' + id).style.display = 'block';
@@ -1939,40 +2008,183 @@ function saveCustomer() {
   setTimeout(function() { showPage('customerList'); }, 1200);
 }
 
+// ============================================================
+// 고객사 목록 테이블 통합 렌더링
+// ============================================================
+var _custSearchQuery = '';
+
 function loadCustomers() {
+  var thead = document.getElementById('customerThead');
   var tbody = document.getElementById('customerTbody');
-  if (!tbody) return;
-  // 기존 동적 추가 행 제거 (data-dynamic 속성으로 구분)
-  tbody.querySelectorAll('tr[data-dynamic]').forEach(function(r) { r.remove(); });
+  if (!thead || !tbody) return;
 
-  var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-  var gradeTag = { 'VIP': '<span class="tag tag-vip">VIP</span>', 'A': '<span class="tag tag-a">A</span>', 'B': '<span class="tag tag-b">B</span>', 'C': '<span class="tag tag-c">C</span>' };
-  var statusTag = { '활동': '<span class="tag tag-active">활동</span>', '휴면': '<span class="tag tag-dormant">휴면</span>', '해지': '<span class="tag" style="background:#fce4ec;color:#c62828">해지</span>' };
+  var visCols = getVisibleColumns();
 
-  customers.forEach(function(c) {
+  // ── thead 동적 렌더링 ──
+  var thRow = thead.querySelector('tr');
+  var thHtml = '';
+  visCols.forEach(function(col) {
+    thHtml += '<th draggable="true" data-col-key="' + col.key + '">' + col.label + '</th>';
+  });
+  thRow.innerHTML = thHtml;
+
+  // ── 데이터 병합: 데모 + localStorage ──
+  var lsCustomers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+  var allCustomers = DEMO_CUSTOMERS.concat(lsCustomers);
+
+  // ── 검색 필터 ──
+  var q = _custSearchQuery.toLowerCase().trim();
+  var filtered = allCustomers;
+  if (q) {
+    filtered = allCustomers.filter(function(c) {
+      return (c.company && c.company.toLowerCase().indexOf(q) !== -1) ||
+             (c.bizNo && c.bizNo.indexOf(q) !== -1) ||
+             (c.contactName && c.contactName.toLowerCase().indexOf(q) !== -1) ||
+             (c.repName && c.repName.toLowerCase().indexOf(q) !== -1) ||
+             (c.salesRep && c.salesRep.toLowerCase().indexOf(q) !== -1);
+    });
+  }
+
+  // ── tbody 렌더링 ──
+  tbody.innerHTML = '';
+  filtered.forEach(function(c) {
     var tr = document.createElement('tr');
-    tr.setAttribute('data-dynamic', c.id);
-    tr.setAttribute('data-cust-id', c.id);
-    tr.style.cursor = 'pointer';
-    tr.onclick = function() { openCustomerDetail(c.id); };
-    tr.innerHTML =
-      '<td class="center"><span class="tl tl-blue"></span></td>' +
-      '<td>' + (gradeTag[c.grade] || '<span class="tag tag-b">B</span>') + '</td>' +
-      '<td><strong>' + c.company + '</strong></td>' +
-      '<td>' + c.repName + '</td>' +
-      '<td>' + c.bizNo + '</td>' +
-      '<td>' + (c.contactName || '-') + '</td>' +
-      '<td>' + (c.salesRep || '-') + '</td>' +
-      '<td>' + (statusTag[c.status] || statusTag['활동']) + '</td>' +
-      '<td>' + c.regDate + '</td>';
+    // 신호등에 따른 행 배경색
+    if (c.trafficLight === 'orange') tr.style.background = '#fff8e1';
+    if (c.trafficLight === 'red') tr.style.background = '#fce4ec';
+    // localStorage 고객만 클릭 가능 (데모 제외)
+    if (c.id && c.id.indexOf('DEMO_') !== 0) {
+      tr.setAttribute('data-cust-id', c.id);
+      tr.style.cursor = 'pointer';
+      tr.onclick = (function(custId) { return function() { openCustomerDetail(custId); }; })(c.id);
+    }
+    var tdHtml = '';
+    visCols.forEach(function(col) { tdHtml += col.render(c); });
+    tr.innerHTML = tdHtml;
     tbody.appendChild(tr);
   });
 
-  // 통계 갱신
+  // ── 통계 갱신 ──
   var statVals = document.querySelectorAll('#page-customerList .stat-val');
-  if (statVals.length >= 1) {
-    statVals[0].textContent = 7 + customers.length; // 전체 거래처 (기본 7 + 추가분)
+  if (statVals.length >= 1) statVals[0].textContent = allCustomers.length;
+  if (statVals.length >= 2) statVals[1].textContent = allCustomers.filter(function(c){return c.status==='활동';}).length;
+
+  // ── 드래그 핸들러 초기화 ──
+  initColumnDrag();
+}
+
+function filterCustomerTable(val) {
+  _custSearchQuery = val || '';
+  loadCustomers();
+}
+
+// ============================================================
+// ⚙️ 컬럼 설정 패널
+// ============================================================
+function toggleColSettings() {
+  var panel = document.getElementById('colSettingsPanel');
+  if (panel.style.display === 'none' || !panel.style.display) {
+    renderColSettings();
+    panel.style.display = 'block';
+    setTimeout(function() { document.addEventListener('click', _closeColSettingsOutside); }, 0);
+  } else {
+    panel.style.display = 'none';
+    document.removeEventListener('click', _closeColSettingsOutside);
   }
+}
+function _closeColSettingsOutside(e) {
+  var panel = document.getElementById('colSettingsPanel');
+  var btn = document.getElementById('colSettingsBtn');
+  if (!panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+    panel.style.display = 'none';
+    document.removeEventListener('click', _closeColSettingsOutside);
+  }
+}
+function renderColSettings() {
+  var cfg = getColConfig();
+  var panel = document.getElementById('colSettingsPanel');
+  var html = '<div class="col-settings-header"><span>⚙️ 컬럼 설정</span><span class="col-settings-reset" onclick="resetColConfig()">초기화</span></div>';
+  // 기본 컬럼 그룹
+  html += '<div style="font-size:10px;color:#999;padding:4px 8px;font-weight:600">기본 컬럼</div>';
+  var defaultKeys = COLUMNS.filter(function(c){return c.defaultVisible;}).map(function(c){return c.key;});
+  cfg.columns.forEach(function(key) {
+    var col = _colMap[key]; if (!col || !col.defaultVisible) return;
+    var chk = cfg.visible.indexOf(key) !== -1 ? 'checked' : '';
+    html += '<label class="col-setting-item"><input type="checkbox" ' + chk + ' onchange="toggleColumn(\'' + key + '\',this.checked)"><span>' + col.label + '</span></label>';
+  });
+  // 추가 컬럼 그룹
+  html += '<div class="col-setting-divider"></div>';
+  html += '<div style="font-size:10px;color:#999;padding:4px 8px;font-weight:600">추가 컬럼</div>';
+  cfg.columns.forEach(function(key) {
+    var col = _colMap[key]; if (!col || col.defaultVisible) return;
+    var chk = cfg.visible.indexOf(key) !== -1 ? 'checked' : '';
+    html += '<label class="col-setting-item"><input type="checkbox" ' + chk + ' onchange="toggleColumn(\'' + key + '\',this.checked)"><span>' + col.label + '</span></label>';
+  });
+  panel.innerHTML = html;
+}
+function toggleColumn(key, show) {
+  var cfg = getColConfig();
+  var idx = cfg.visible.indexOf(key);
+  if (show && idx === -1) {
+    cfg.visible.push(key);
+    if (cfg.columns.indexOf(key) === -1) cfg.columns.push(key);
+  } else if (!show && idx !== -1) {
+    cfg.visible.splice(idx, 1);
+  }
+  saveColConfig(cfg);
+  loadCustomers();
+}
+function resetColConfig() {
+  localStorage.removeItem(COL_CONFIG_KEY);
+  renderColSettings();
+  loadCustomers();
+  toast('✅ 컬럼 설정이 초기화되었습니다');
+}
+
+// ============================================================
+// 컬럼 드래그 이동 (HTML5 Drag & Drop)
+// ============================================================
+var _dragColKey = null;
+
+function initColumnDrag() {
+  var ths = document.querySelectorAll('#customerThead th[draggable="true"]');
+  ths.forEach(function(th) {
+    th.addEventListener('dragstart', _onColDragStart);
+    th.addEventListener('dragover', _onColDragOver);
+    th.addEventListener('dragenter', _onColDragEnter);
+    th.addEventListener('dragleave', _onColDragLeave);
+    th.addEventListener('drop', _onColDrop);
+    th.addEventListener('dragend', _onColDragEnd);
+  });
+}
+function _onColDragStart(e) {
+  _dragColKey = this.getAttribute('data-col-key');
+  this.classList.add('col-dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', _dragColKey);
+}
+function _onColDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function _onColDragEnter(e) { e.preventDefault(); this.classList.add('col-drag-over'); }
+function _onColDragLeave() { this.classList.remove('col-drag-over'); }
+function _onColDrop(e) {
+  e.preventDefault();
+  this.classList.remove('col-drag-over');
+  var targetKey = this.getAttribute('data-col-key');
+  if (!_dragColKey || _dragColKey === targetKey) return;
+  var cfg = getColConfig();
+  var fromIdx = cfg.columns.indexOf(_dragColKey);
+  var toIdx = cfg.columns.indexOf(targetKey);
+  if (fromIdx === -1 || toIdx === -1) return;
+  cfg.columns.splice(fromIdx, 1);
+  cfg.columns.splice(toIdx, 0, _dragColKey);
+  saveColConfig(cfg);
+  loadCustomers();
+}
+function _onColDragEnd() {
+  _dragColKey = null;
+  document.querySelectorAll('#customerThead th').forEach(function(th) {
+    th.classList.remove('col-dragging', 'col-drag-over');
+  });
 }
 
 var _detailCustId = null;
