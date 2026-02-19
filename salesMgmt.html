@@ -208,6 +208,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=1d5b2febea0c84335256f6a15d9e7c05&libraries=services"></script>
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
 
@@ -494,8 +495,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
 
         <div class="sec-title"><span class="sec-num">2</span> 주소</div>
-        <div class="fg"><label>주소 <span class="req">*</span></label><div class="addr-row"><input id="regZipcode" placeholder="우편번호" style="max-width:120px" readonly><button class="btn btn-secondary btn-sm" onclick="toast('🔍 카카오 우편번호 API 연동 예정')">우편번호 찾기</button></div></div>
-        <div class="fg"><input id="regAddr1" placeholder="기본주소 (자동입력)"></div>
+        <div class="fg"><label>주소 <span class="req">*</span></label><div class="addr-row"><input id="regZipcode" placeholder="우편번호" style="max-width:120px" readonly><button class="btn btn-secondary btn-sm" onclick="openPostcodeSearch()">우편번호 찾기</button></div></div>
+        <div class="fg"><input id="regAddr1" placeholder="기본주소 (자동입력)" readonly></div>
         <div class="fg"><input id="regAddr2" placeholder="상세주소 입력"></div>
 
         <div class="sec-title"><span class="sec-num">3</span> 인허가 정보 <span style="margin-left:auto;font-size:11px;color:#8892a4;font-weight:400">여러 개 등록 가능</span></div>
@@ -1494,6 +1495,63 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 // ============================================================
+// 우편번호 검색 (Daum Postcode API)
+// ============================================================
+function openPostcodeSearch() {
+  new daum.Postcode({
+    oncomplete: function(data) {
+      document.getElementById('regZipcode').value = data.zonecode;
+      document.getElementById('regAddr1').value = data.roadAddress || data.jibunAddress;
+      document.getElementById('regAddr2').value = '';
+      document.getElementById('regAddr2').focus();
+    }
+  }).open();
+}
+
+// OCR 주소로 우편번호 자동 조회 (Geocoder → 좌표 → 행정동 → 우편번호)
+function lookupZipcodeFromAddress(address) {
+  if (!address) return;
+  // 주소 텍스트에서 괄호 안 내용 제거 (동명 등) 후 검색
+  var cleanAddr = address.replace(/\([^)]*\)/g, '').trim();
+  // 상세주소 분리: 층/호 이후를 상세주소로
+  var mainAddr = cleanAddr;
+  var detailAddr = '';
+  var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,\s]\s*(.+)$/);
+  if (detailMatch) {
+    mainAddr = detailMatch[1].trim();
+    detailAddr = detailMatch[2].trim();
+  }
+
+  // Daum Postcode를 embed 모드로 사용하여 주소 검색
+  if (typeof daum !== 'undefined' && daum.Postcode) {
+    var geocoder = new kakao.maps.services.Geocoder();
+    geocoder.addressSearch(mainAddr, function(result, status) {
+      if (status === kakao.maps.services.Status.OK && result.length > 0) {
+        var r = result[0];
+        if (r.road_address && r.road_address.zone_no) {
+          document.getElementById('regZipcode').value = r.road_address.zone_no;
+          document.getElementById('regAddr1').value = r.road_address.address_name;
+          if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
+          highlightField('regZipcode');
+        } else if (r.address) {
+          // 지번 주소에서라도 우편번호 추출 시도
+          document.getElementById('regAddr1').value = r.address.address_name;
+          if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
+        }
+      }
+    });
+  }
+}
+
+function highlightField(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.background = '#e8f5e9';
+  el.style.borderColor = '#66bb6a';
+  setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 5000);
+}
+
+// ============================================================
 // 고객사 신규 등록 폼 초기화
 // ============================================================
 function resetCustomerRegForm() {
@@ -1506,7 +1564,7 @@ function resetCustomerRegForm() {
     el.value = '';
     el.style.background = '';
     el.style.borderColor = '';
-    if (el.hasAttribute('readonly') && el.id === 'regAddr1') el.setAttribute('readonly', '');
+    if (el.id === 'regAddr1' || el.id === 'regZipcode') { el.value = ''; return; }
   });
   // select 초기화 (첫번째 option 선택)
   page.querySelectorAll('select').forEach(function(el) { el.selectedIndex = 0; });
@@ -1669,11 +1727,11 @@ function fillBizLicFields(res) {
   // 종목 (중복 제거)
   var bisItem = getUniqueText(res.bisItem);
   if (bisItem) document.getElementById('regBizItem').value = bisItem;
-  // 주소 (bisAddress 또는 headAddress)
+  // 주소 (bisAddress 또는 headAddress) + 우편번호 자동 조회
   var bisAddr = getText(res.bisAddress) || getText(res.headAddress);
   if (bisAddr) {
     document.getElementById('regAddr1').value = bisAddr;
-    document.getElementById('regAddr1').removeAttribute('readonly');
+    lookupZipcodeFromAddress(bisAddr);
   }
   // 법인/개인 판단
   if (corpNo) {
