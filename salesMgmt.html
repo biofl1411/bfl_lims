@@ -1838,7 +1838,7 @@ function handleLicFile(idx, file) {
   document.getElementById('licOcrBtn_' + idx).disabled = false;
 }
 
-// --- 인허가 문서 OCR 실행 (General OCR) ---
+// --- 인허가 문서 OCR 실행 (biz-license 엔드포인트 공용 — 영업신고증 등도 처리 가능) ---
 function runLicOCR(idx) {
   var file = _licFiles[idx];
   if (!file) { toast('파일을 먼저 선택하세요'); return; }
@@ -1865,7 +1865,8 @@ function runLicOCR(idx) {
       images: [{ format: ext, name: file.name, data: base64 }]
     };
 
-    fetch(OCR_GENERAL_URL, {
+    // biz-license 엔드포인트를 공용으로 사용 (영업신고증, 사업자등록증 등 모든 문서 처리)
+    fetch(OCR_BIZ_LICENSE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1874,14 +1875,15 @@ function runLicOCR(idx) {
     .then(function(data) {
       btn.textContent = '🤖 OCR 인식';
       btn.disabled = false;
-      if (data.images && data.images[0] && data.images[0].fields) {
-        var fields = data.images[0].fields;
-        fillLicFields(idx, fields);
-        status.textContent = '✅ OCR 인식 완료! 텍스트를 분석하여 필드에 입력했습니다.';
-        status.style.color = '#1565c0';
-        toast('✅ 인허가 문서 OCR 인식 완료');
+      if (data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result) {
+        var res = data.images[0].bizLicense.result;
+        fillLicFields(idx, res);
+        var docType = getText(res.documentType) || '문서';
+        status.textContent = '✅ OCR 인식 완료! (' + docType + ') 필드가 자동 입력되었습니다.';
+        status.style.color = '#2e7d32';
+        toast('✅ 인허가 문서 OCR 인식 완료 (' + docType + ')');
       } else {
-        status.textContent = '⚠️ OCR 결과가 없습니다.';
+        status.textContent = '⚠️ OCR 결과를 파싱할 수 없습니다.';
         status.style.color = '#e65100';
       }
     })
@@ -1892,57 +1894,49 @@ function runLicOCR(idx) {
   reader.readAsDataURL(file);
 }
 
-// --- 인허가 문서 OCR 결과 → 폼 자동입력 (General OCR 텍스트 파싱) ---
-function fillLicFields(idx, fields) {
-  // General OCR은 모든 텍스트를 fields 배열로 반환.
-  // 텍스트 전체를 합쳐서 키워드 기반 파싱
-  var allText = fields.map(function(f) { return f.inferText || ''; }).join('\n');
-  var lines = allText.split('\n').filter(function(l) { return l.trim(); });
-
-  var licNo = '', repName = '', bizName = '', addr = '', bizForm = '';
-
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i].trim();
-    // 인허가번호 패턴: 숫자-숫자 또는 제XXXX호
-    if (!licNo && (/제?\s*\d{4,}/.test(line) || /\d{4,}[-]\d+/.test(line)) && !/사업자/.test(line)) {
-      // 인허가번호 후보
-      var numMatch = line.match(/(\d[\d\-]+\d)/);
-      if (numMatch && numMatch[1].length >= 4) licNo = numMatch[1];
-    }
-    // 대표자 키워드
-    if (!repName && /대표(자|이사)?[\s:：]*/.test(line)) {
-      var m = line.match(/대표(?:자|이사)?[\s:：]*([가-힣]{2,5})/);
-      if (m) repName = m[1];
-    }
-    // 영업소명칭/상호 키워드
-    if (!bizName && /(영업소\s*명칭|상\s*호|업\s*체\s*명)[\s:：]*/.test(line)) {
-      var m2 = line.match(/(영업소\s*명칭|상\s*호|업\s*체\s*명)[\s:：]*(.*)/);
-      if (m2 && m2[2].trim()) bizName = m2[2].trim();
-    }
-    // 소재지/주소 키워드
-    if (!addr && /(소\s*재\s*지|주\s*소|사업장)[\s:：]*/.test(line)) {
-      var m3 = line.match(/(소\s*재\s*지|주\s*소|사업장)[\s:：]*(.*)/);
-      if (m3 && m3[2].trim()) addr = m3[2].trim();
-      // 다음 줄도 주소일 수 있음
-      if (addr.length < 10 && i + 1 < lines.length) addr += ' ' + lines[i + 1].trim();
-    }
-    // 영업의 형태/업태 키워드
-    if (!bizForm && /(영업(의\s*)?형태|업\s*태|업\s*종)[\s:：]*/.test(line)) {
-      var m4 = line.match(/(영업(?:의\s*)?형태|업\s*태|업\s*종)[\s:：]*(.*)/);
-      if (m4 && m4[2].trim()) bizForm = m4[2].trim();
-    }
+// --- 인허가 문서 OCR 결과 → 폼 자동입력 (biz-license 구조화 응답) ---
+// Clova Document OCR은 영업신고증 등도 사업자등록증 모델로 처리 가능.
+// 응답 필드: companyName(영업소명), corpName(법인명), registerNumber(인허가번호),
+//           repName(대표자), bisAddress(소재지), bisType(업태), bisItem(종목),
+//           documentType(문서유형: "영업신고증" 등)
+function fillLicFields(idx, res) {
+  // getText: biz-license 응답의 배열에서 텍스트 추출 (사업자등록증 OCR과 동일 구조)
+  function getText(arr) {
+    if (!arr || !arr.length) return '';
+    return arr.map(function(item) { return item.text || ''; }).join(' ').trim();
+  }
+  function getUniqueText(arr) {
+    if (!arr || !arr.length) return '';
+    var seen = {};
+    var result = [];
+    arr.forEach(function(item) {
+      var t = (item.text || '').trim();
+      if (t && !seen[t]) { seen[t] = true; result.push(t); }
+    });
+    return result.join(', ');
   }
 
-  // 필드 입력
+  // 인허가번호: registerNumber (예: "제 2024-0109313호")
+  var licNo = getText(res.registerNumber);
   if (licNo) document.getElementById('licNo_' + idx).value = licNo;
+
+  // 대표자
+  var repName = getText(res.repName);
   if (repName) document.getElementById('licRepName_' + idx).value = repName;
+
+  // 영업소명칭: companyName (개인/영업소명), corpName 은 법인명
+  var bizName = getText(res.companyName) || getText(res.corpName);
   if (bizName) document.getElementById('licBizName_' + idx).value = bizName;
-  // 주소 → 우편번호 자동 조회 (사업자등록증과 동일)
+
+  // 소재지 → 우편번호 자동 조회
+  var addr = getText(res.bisAddress) || getText(res.headAddress);
   if (addr) {
     document.getElementById('licAddr_' + idx).value = addr;
     lookupLicZipcodeFromAddress(idx, addr);
   }
-  // 영업의 형태: select에서 매칭 시도
+
+  // 영업의 형태: bisType 또는 bisItem
+  var bizForm = getUniqueText(res.bisType) || getUniqueText(res.bisItem);
   if (bizForm) {
     var sel = document.getElementById('licBizForm_' + idx);
     var matched = false;
@@ -1954,7 +1948,6 @@ function fillLicFields(idx, fields) {
       }
     }
     if (!matched) {
-      // 직접 입력 모드: 옵션 추가
       var opt = document.createElement('option');
       opt.value = bizForm;
       opt.textContent = bizForm + ' (OCR)';
