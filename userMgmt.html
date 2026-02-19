@@ -62,6 +62,10 @@ tbody tr:hover{background:var(--gray-50)}
 td{padding:14px 16px;font-size:14px}
 .badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:500}
 .badge-primary{background:#dbeafe;color:var(--primary)}
+.edit-input{padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px}
+th{cursor:pointer;user-select:none}
+th:hover{background:var(--gray-100)}
+th .sort-arrow{font-size:10px;margin-left:4px;color:#9ca3af}
 .badge-success{background:#d1fae5;color:var(--success)}
 .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;align-items:center;justify-content:center}
 .modal-overlay.active{display:flex}
@@ -126,13 +130,13 @@ td{padding:14px 16px;font-size:14px}
 <table>
 <thead>
 <tr>
-<th>No</th>
-<th>아이디</th>
-<th>부서</th>
-<th>팀</th>
-<th>직급</th>
-<th>입사일</th>
-<th>퇴사일</th>
+<th onclick="sortBy('no')">No<span class="sort-arrow" id="sort-no"></span></th>
+<th onclick="sortBy('아이디')">아이디<span class="sort-arrow" id="sort-아이디"></span></th>
+<th onclick="sortBy('부서명')">부서<span class="sort-arrow" id="sort-부서명"></span></th>
+<th onclick="sortBy('팀명')">팀<span class="sort-arrow" id="sort-팀명"></span></th>
+<th onclick="sortBy('직급')">직급<span class="sort-arrow" id="sort-직급"></span></th>
+<th onclick="sortBy('입사일')">입사일<span class="sort-arrow" id="sort-입사일"></span></th>
+<th onclick="sortBy('퇴사일')">퇴사일<span class="sort-arrow" id="sort-퇴사일"></span></th>
 <th>관리</th>
 </tr>
 </thead>
@@ -496,8 +500,24 @@ function renderUsers() {
     return matchSearch && matchDept && matchPos;
   });
   
-  tbody.innerHTML = filtered.map((u, i) => `
-    <tr>
+  tbody.innerHTML = filtered.map((u, i) => {
+    const editing = editingUserId === u.아이디;
+    if (editing) {
+      return `<tr style="background:#fffbeb">
+        <td>${i + 1}</td>
+        <td><strong>${u.아이디}</strong></td>
+        <td><input type="text" class="edit-input" id="edit-dept" value="${u.부서명}" style="width:100px"></td>
+        <td><input type="text" class="edit-input" id="edit-team" value="${u.팀명 || ''}" style="width:80px"></td>
+        <td><input type="text" class="edit-input" id="edit-pos" value="${u.직급}" style="width:70px"></td>
+        <td><input type="date" class="edit-input" id="edit-join" value="${u.입사일 || ''}"></td>
+        <td><input type="date" class="edit-input" id="edit-leave" value="${u.퇴사일 || ''}"></td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="saveEditUser('${u.아이디}')">저장</button>
+          <button class="btn btn-sm btn-outline" onclick="cancelEdit()">취소</button>
+        </td>
+      </tr>`;
+    }
+    return `<tr>
       <td>${i + 1}</td>
       <td><strong>${u.아이디}</strong></td>
       <td><span class="badge badge-primary">${u.부서명}</span></td>
@@ -509,8 +529,8 @@ function renderUsers() {
         <button class="btn btn-sm btn-outline" onclick="editUser('${u.아이디}')">수정</button>
         <button class="btn btn-sm btn-outline" onclick="resetPassword('${u.아이디}')" style="color:#f97316;border-color:#f97316">🔑 PW초기화</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function filterUsers() {
@@ -530,8 +550,73 @@ function saveUser() {
   closeModal();
 }
 
+let editingUserId = null;
+let currentSort = { key: null, asc: true };
+
+function sortBy(key) {
+  if (currentSort.key === key) {
+    currentSort.asc = !currentSort.asc;
+  } else {
+    currentSort.key = key;
+    currentSort.asc = true;
+  }
+  applySortAndRender();
+}
+
+function applySortAndRender() {
+  if (currentSort.key && currentSort.key !== 'no') {
+    users.sort((a, b) => {
+      const va = (a[currentSort.key] || '').toString();
+      const vb = (b[currentSort.key] || '').toString();
+      return currentSort.asc ? va.localeCompare(vb, 'ko') : vb.localeCompare(va, 'ko');
+    });
+  } else if (currentSort.key === 'no') {
+    if (!currentSort.asc) users.reverse();
+  }
+  updateSortArrows();
+  renderUsers();
+}
+
+function updateSortArrows() {
+  document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '');
+  if (currentSort.key) {
+    const el = document.getElementById('sort-' + currentSort.key);
+    if (el) el.textContent = currentSort.asc ? ' ▲' : ' ▼';
+  }
+}
+
+function resetSort() {
+  currentSort = { key: null, asc: true };
+  users = USERS_DATA.map(u => ({ 팀명: '', 입사일: '', 퇴사일: '', ...u }));
+  updateSortArrows();
+  renderUsers();
+}
+
 function editUser(id) {
-  alert(`${id} 수정 기능은 백엔드 연동 후 구현됩니다.`);
+  editingUserId = id;
+  renderUsers();
+}
+
+function saveEditUser(id) {
+  const u = users.find(u => u.아이디 === id);
+  if (!u) return;
+  u.부서명 = document.getElementById('edit-dept').value;
+  u.팀명 = document.getElementById('edit-team').value;
+  u.직급 = document.getElementById('edit-pos').value;
+  u.입사일 = document.getElementById('edit-join').value;
+  u.퇴사일 = document.getElementById('edit-leave').value;
+  editingUserId = null;
+  populateFilters();
+  if (currentSort.key) {
+    applySortAndRender();
+  } else {
+    renderUsers();
+  }
+}
+
+function cancelEdit() {
+  editingUserId = null;
+  renderUsers();
 }
 
 function resetPassword(id) {
