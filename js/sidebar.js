@@ -54,7 +54,7 @@
 .nav-sub-item.disabled:hover{background:transparent;color:#3d5068}
 /* ── Sidebar Collapse Toggle ── */
 .sidebar{transition:width 0.25s ease}
-.sidebar-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;cursor:pointer;color:#6b7d93;font-size:14px;transition:all .15s;flex-shrink:0;background:rgba(255,255,255,.06);margin-left:auto}
+.sidebar-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;cursor:pointer;color:#e2e8f0;font-size:16px;transition:all .15s;flex-shrink:0;background:rgba(255,255,255,.08);margin-left:auto}
 .sidebar-collapse-btn:hover{background:rgba(255,255,255,.12);color:#c8d6e5}
 .sidebar.collapsed{width:64px}
 .sidebar.collapsed .logo-text{display:none}
@@ -179,7 +179,7 @@ function renderSidebar() {
       <div class="logo-title">BioFoodLab</div>
       <div class="logo-subtitle">LIMS 통합관리</div>
     </div>
-    <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">◀</div>
+    <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">☰</div>
   </div>
   <nav class="sidebar-nav">`;
 
