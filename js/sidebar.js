@@ -52,6 +52,23 @@
 .nav-sub-item.active{color:#4fc3f7;font-weight:600;background:rgba(79,195,247,0.08)}
 .nav-sub-item.disabled{color:#3d5068;cursor:default}
 .nav-sub-item.disabled:hover{background:transparent;color:#3d5068}
+/* ── Sidebar Collapse Toggle ── */
+.sidebar{transition:width 0.25s ease}
+.sidebar-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;cursor:pointer;color:#6b7d93;font-size:14px;transition:all .15s;flex-shrink:0;background:rgba(255,255,255,.06);margin-left:auto}
+.sidebar-collapse-btn:hover{background:rgba(255,255,255,.12);color:#c8d6e5}
+.sidebar.collapsed{width:64px}
+.sidebar.collapsed .logo-text{display:none}
+.sidebar.collapsed .logo{justify-content:center;padding:16px 8px}
+.sidebar.collapsed .logo-icon{margin:0}
+.sidebar.collapsed .sidebar-collapse-btn{margin:6px auto 0;transform:rotate(180deg)}
+.sidebar.collapsed .nav-label{display:none}
+.sidebar.collapsed .nav-arrow{display:none}
+.sidebar.collapsed .nav-parent{justify-content:center;padding:10px 0}
+.sidebar.collapsed .nav-icon{font-size:18px;width:auto}
+.sidebar.collapsed .nav-submenu{display:none!important;max-height:0!important}
+.sidebar.collapsed .nav-sub-item{display:none}
+.main{transition:margin-left 0.25s ease}
+body.sidebar-collapsed .main{margin-left:64px}
 @media(max-width:768px){.sidebar{display:none}}
 /* ====== END UNIFIED SIDEBAR STYLES ====== */
 `;
@@ -154,7 +171,7 @@ function renderSidebar() {
   // salesMgmt.html 등 내부 탭 전환 함수 존재 여부
   const hasShowPage = typeof window.showPage === 'function';
 
-  // 로고
+  // 로고 + 접기 버튼
   let html = `
   <div class="logo">
     <div class="logo-icon">🧬</div>
@@ -162,6 +179,7 @@ function renderSidebar() {
       <div class="logo-title">BioFoodLab</div>
       <div class="logo-subtitle">LIMS 통합관리</div>
     </div>
+    <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">◀</div>
   </div>
   <nav class="sidebar-nav">`;
 
@@ -252,12 +270,40 @@ function toggleMenu(el) {
 }
 
 // ============================================================
+// 3-1. 사이드바 접기/펼치기
+// ============================================================
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed', isCollapsed);
+  // localStorage에 상태 저장
+  try { localStorage.setItem('bfl_sidebar_collapsed', isCollapsed ? '1' : '0'); } catch(e) {}
+}
+
+function _restoreSidebarState() {
+  try {
+    if (localStorage.getItem('bfl_sidebar_collapsed') === '1') {
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar) {
+        sidebar.classList.add('collapsed');
+        document.body.classList.add('sidebar-collapsed');
+      }
+    }
+  } catch(e) {}
+}
+
+// ============================================================
 // 4. 초기화 — DOM 준비 후 실행
 // ============================================================
 (function initSidebar() {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderSidebar);
-  } else {
+  function _init() {
     renderSidebar();
+    _restoreSidebarState();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _init);
+  } else {
+    _init();
   }
 })();
