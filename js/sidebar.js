@@ -31,6 +31,7 @@
 .sidebar{width:250px;background:#1a2332;color:white;position:fixed;left:0;top:0;bottom:0;z-index:1000;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
 .logo{padding:20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0}
 .logo-icon{width:40px;height:40px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo-img{height:36px;width:auto;object-fit:contain;flex-shrink:0}
 .logo-text{display:flex;flex-direction:column}
 .logo-title{font-size:18px;font-weight:700}
 .logo-subtitle{font-size:11px;color:#94a3b8}
@@ -60,6 +61,7 @@
 .sidebar.collapsed .logo-text{display:none}
 .sidebar.collapsed .logo{justify-content:center;padding:16px 8px}
 .sidebar.collapsed .logo-icon{margin:0}
+.sidebar.collapsed .logo-img{height:28px}
 .sidebar.collapsed .sidebar-collapse-btn{margin:6px auto 0;transform:rotate(180deg)}
 .sidebar.collapsed .nav-label{display:none}
 .sidebar.collapsed .nav-arrow{display:none}
@@ -174,11 +176,7 @@ function renderSidebar() {
   // 로고 + 접기 버튼
   let html = `
   <div class="logo">
-    <div class="logo-icon">🧬</div>
-    <div class="logo-text">
-      <div class="logo-title">BioFoodLab</div>
-      <div class="logo-subtitle">LIMS 통합관리</div>
-    </div>
+    <img src="img/bfl_logo.svg" alt="BFL" class="logo-img">
     <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">☰</div>
   </div>
   <nav class="sidebar-nav">`;
