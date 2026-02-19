@@ -1508,39 +1508,42 @@ function openPostcodeSearch() {
   }).open();
 }
 
-// OCR 주소로 우편번호 자동 조회 (Geocoder → 좌표 → 행정동 → 우편번호)
+// OCR 주소로 우편번호 자동 조회 (Kakao 주소검색 REST API)
 function lookupZipcodeFromAddress(address) {
   if (!address) return;
-  // 주소 텍스트에서 괄호 안 내용 제거 (동명 등) 후 검색
+  // 괄호 안 내용 제거 (동명 등)
   var cleanAddr = address.replace(/\([^)]*\)/g, '').trim();
-  // 상세주소 분리: 층/호 이후를 상세주소로
+  // 상세주소 분리: 번지/건물번호 뒤의 층/호 등
   var mainAddr = cleanAddr;
   var detailAddr = '';
-  var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,\s]\s*(.+)$/);
+  var detailMatch = cleanAddr.match(/^(.+?\d+(?:-\d+)?)\s*[,]\s*(.+)$/);
   if (detailMatch) {
     mainAddr = detailMatch[1].trim();
     detailAddr = detailMatch[2].trim();
   }
-
-  // Daum Postcode를 embed 모드로 사용하여 주소 검색
-  if (typeof daum !== 'undefined' && daum.Postcode) {
-    var geocoder = new kakao.maps.services.Geocoder();
-    geocoder.addressSearch(mainAddr, function(result, status) {
-      if (status === kakao.maps.services.Status.OK && result.length > 0) {
-        var r = result[0];
-        if (r.road_address && r.road_address.zone_no) {
-          document.getElementById('regZipcode').value = r.road_address.zone_no;
-          document.getElementById('regAddr1').value = r.road_address.address_name;
-          if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
-          highlightField('regZipcode');
-        } else if (r.address) {
-          // 지번 주소에서라도 우편번호 추출 시도
-          document.getElementById('regAddr1').value = r.address.address_name;
-          if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
-        }
+  // Kakao 주소검색 REST API (KAKAO_REST_KEY는 하단 스크립트에 정의)
+  var apiKey = '8e5dab09aacd882449bd3865699a9d69';
+  fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(mainAddr), {
+    headers: { 'Authorization': 'KakaoAK ' + apiKey }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.documents && data.documents.length > 0) {
+      var doc = data.documents[0];
+      var roadAddr = doc.road_address;
+      if (roadAddr && roadAddr.zone_no) {
+        document.getElementById('regZipcode').value = roadAddr.zone_no;
+        document.getElementById('regAddr1').value = roadAddr.address_name;
+        if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
+        highlightField('regZipcode');
+        highlightField('regAddr1');
+      } else if (doc.address) {
+        document.getElementById('regAddr1').value = doc.address.address_name;
+        if (detailAddr) document.getElementById('regAddr2').value = detailAddr;
       }
-    });
-  }
+    }
+  })
+  .catch(function(e) { console.log('우편번호 조회 실패:', e); });
 }
 
 function highlightField(id) {
