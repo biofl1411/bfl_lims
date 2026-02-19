@@ -8,8 +8,8 @@
 
 - **프로젝트명**: BFL LIMS (BioFoodLab 실험실 정보 관리 시스템)
 - **작성일**: 2026년 2월 16일
-- **버전**: v2.0
-- **최종 업데이트**: 2026년 2월 19일
+- **버전**: v2.1
+- **최종 업데이트**: 2026년 2월 20일
 - **작성자**: BioFoodLab
 - **목적**: 식품 검사 실험실의 업무 효율화 및 데이터 관리 체계화
 
@@ -129,8 +129,10 @@ BFL LIMS
 ├── sampleReceipt.html ─────────── 시료 접수 등록
 ├── itemAssign.html ────────────── 항목 배정 ⭐ 핵심 기능
 ├── userMgmt.html ──────────────── 사용자 관리
+├── img/
+│   └── bfl_logo.svg ──────────── BFL 로고 이미지 (사이드바)
 └── js/
-    ├── sidebar.js ─────────────── 🔑 통합 사이드바 (SSOT)
+    ├── sidebar.js ─────────────── 🔑 통합 사이드바 (SSOT) + 접기/펼치기
     ├── food_item_fee_mapping.js ── 수수료 데이터 (9,237건)
     └── ref_nonstandard_data.js ── 참고용 항목그룹 (3,374건)
 ```
@@ -225,18 +227,38 @@ BFL LIMS
 ```
 js/sidebar.js (Single Source of Truth)
 ├── 0. CSS 자동 주입 — injectSidebarCSS()
-│   └── <style id="sidebar-unified-css"> 동적 삽입 (중복 방지)
+│   ├── <style id="sidebar-unified-css"> 동적 삽입 (중복 방지)
+│   └── 접기/펼치기 CSS (.sidebar.collapsed, .sidebar-collapse-btn)
 ├── 1. 메뉴 데이터 — SIDEBAR_MENU 배열 (유일한 정의 장소)
 │   ├── 12개 메뉴 그룹 (dashboard~admin)
 │   └── 총 37개 하위 메뉴 항목
 ├── 2. HTML 렌더링 — renderSidebar()
+│   ├── BFL 로고 이미지 (img/bfl_logo.svg)
+│   ├── ☰ 접기/펼치기 토글 버튼
 │   ├── 현재 페이지 파일명 자동 감지
 │   ├── showPage() 존재 여부 체크 (salesMgmt.html 대응)
 │   ├── active / expanded 자동 설정
 │   └── internalPage 속성으로 내부 탭 전환 자동 분기
 ├── 3. 토글 메뉴 — toggleMenu() (아코디언)
-└── 4. 초기화 — DOMContentLoaded에서 renderSidebar() 실행
+├── 3-1. 사이드바 접기/펼치기 — toggleSidebar()
+│   ├── .sidebar.collapsed 클래스 토글 (250px → 64px)
+│   ├── body.sidebar-collapsed 클래스 동기화
+│   ├── localStorage('bfl_sidebar_collapsed') 상태 영속 저장
+│   └── _restoreSidebarState() 초기화 시 복원
+└── 4. 초기화 — DOMContentLoaded에서 renderSidebar() + _restoreSidebarState()
 ```
+
+### 4.2.1 사이드바 접기/펼치기
+
+| 상태 | 너비 | 로고 | 메뉴 | 버튼 |
+|------|------|------|------|------|
+| **펼침** (기본) | 250px | BFL 로고 이미지 + ☰ 버튼 | 아이콘 + 라벨 + 화살표 | ☰ (오른쪽 정렬) |
+| **접힘** | 64px | 아이콘만 표시 | 아이콘만 (서브메뉴 숨김) | ☰ (180° 회전, 가운데 정렬) |
+
+- localStorage(`bfl_sidebar_collapsed`) 키에 `'1'`/`'0'` 저장
+- 페이지 새로고침 시 접힌 상태 자동 복원
+- CSS `transition: width 0.25s ease`로 부드러운 애니메이션
+- `body.sidebar-collapsed .main{margin-left:64px}`로 메인 영역 자동 확장
 
 ### 4.3 각 HTML에서의 사용법
 
@@ -302,10 +324,11 @@ inspectionMgmt.html은 완전히 다른 CSS 디자인("beautiful-mclean" 스타�
 
 - **역할**: 고객사/업체 관리, 업무일지, 미수금, 업체조회
 - **사이드바**: `js/sidebar.js` (통합) + `showPage()` 내부 탭 전환
-- **API 의존**: 식품안전나라 API (업체조회), Kakao Maps API, VWORLD
+- **API 의존**: 식품안전나라 API (업체조회), Kakao Maps API, VWORLD, Naver Clova OCR (프록시), Daum 우편번호, Juso.go.kr 영문주소
 - **내부 탭 전환**: `showPage(id)` 함수 — 12개 탭을 단일 HTML에서 전환
 - **해시 라우팅**: `salesMgmt.html#daily` → `showPage('daily')` 자동 호출
 - **CSS 클래스 네임스페이스**: `.page-container`, `.topbar`, `.tab-*`
+- **고객사 데이터**: DEMO_CUSTOMERS 배열(7건) + localStorage(`bfl_customers`) 동적 병합
 
 #### 12개 서브메뉴 (내부 탭)
 | # | 서브메뉴 | data-page ID | 설명 |
@@ -323,11 +346,163 @@ inspectionMgmt.html은 완전히 다른 CSS 디자인("beautiful-mclean" 스타�
 | 11 | 영업 설정 | — | 미구현 |
 | 12 | API 설정 | apiSettings | 식품안전나라 API 설정 |
 
+#### 고객사 목록 테이블 (완료)
+
+고객사 관리 탭의 테이블은 동적 컬럼 시스템으로 구축되어 있습니다.
+
+**데이터 소스**:
+- `DEMO_CUSTOMERS` 배열: 7건의 데모 데이터 (CJ제일제당, 농심, 오뚜기, 풀무원식품, 삼양식품, 농협F&B, 대상 등)
+- localStorage(`bfl_customers`): 사용자가 등록한 실제 고객사 데이터
+- 렌더링 시 DEMO + localStorage를 병합하여 통합 표시
+
+**19개 컬럼 정의 (`COLUMNS` 배열)**:
+| # | 컬럼 키 | 라벨 | 기본 표시 | 설명 |
+|---|---------|------|:---:|------|
+| 1 | trafficLight | 신호등 | ✅ | 활동/거래 상태 색상 표시 |
+| 2 | grade | 등급 | ✅ | VIP/A/B/C 등급 |
+| 3 | company | 회사명 | ✅ | 회사명 |
+| 4 | repName | 대표자 | ✅ | 대표자명 |
+| 5 | bizNo | 사업자번호 | ✅ | 사업자등록번호 |
+| 6 | contactName | 담당자 | ✅ | 담당자명 (다중 담당자 지원) |
+| 7 | salesRep | 영업담당 | ✅ | 영업 담당자 |
+| 8 | status | 계약상태 | ✅ | 활동/휴면/해지 |
+| 9 | regDate | 최근거래 | ✅ | 최근 거래일 |
+| 10 | bizType | 업종 | ❌ | 업종 |
+| 11 | bizItem | 업태 | ❌ | 업태 |
+| 12 | corpNo | 법인번호 | ❌ | 법인등록번호 |
+| 13 | contactPhone | 담당자전화 | ❌ | 담당자 전화번호 |
+| 14 | contactEmail | 이메일 | ❌ | 담당자 이메일 |
+| 15 | address | 주소 | ❌ | 사업장 주소 |
+| 16 | companyEn | 영문회사명 | ❌ | 영문 회사명 |
+| 17 | licField | 인허가분야 | ❌ | 인허가 분야 (다중 표시) |
+| 18 | licNo | 인허가번호 | ❌ | 인허가 번호 (다중 표시) |
+| 19 | licBizName | 인허가사업명 | ❌ | 인허가 사업명 (다중 표시) |
+
+**컬럼 설정 기능**:
+- ⚙️ 버튼 클릭 → 체크박스 드롭다운 패널로 컬럼 표시/숨김 선택
+- localStorage(`bfl_colConfig`) 키에 `{columns: [...순서], visible: [...표시할 키]}` 저장
+- "초기화" 버튼으로 기본 9개 컬럼으로 복원
+
+**컬럼 드래그 이동**:
+- HTML5 Drag & Drop API 활용 (외부 라이브러리 없음)
+- 테이블 헤더(`<th draggable="true">`)를 드래그하여 컬럼 순서 변경
+- 변경된 순서는 `bfl_colConfig`에 자동 저장
+
+**다중 인허가 표시**:
+- licenses 배열이 2건 이상인 경우 번호 매기기 표시 (1. / 2. / ...)
+- 1건인 경우 번호 없이 단순 표시
+- 인허가분야, 인허가번호, 인허가사업명 3개 컬럼 모두 동일 패턴
+
+**검색 기능**:
+- `#custSearchInput` 검색창으로 회사명, 사업자번호 실시간 필터링
+
+#### OCR 기능 (완료)
+
+고객사 신규 등록 및 상세 화면에서 문서를 업로드하면 OCR로 텍스트를 추출하여 폼 필드를 자동 입력합니다.
+
+| OCR 대상 문서 | 자동 입력 섹션 | 추출 필드 | 상태 |
+|-------------|-------------|---------|:---:|
+| **사업자등록증** | ① 기본 정보 | 회사명, 대표자명, 사업자번호, 업태, 종목 | ✅ 완료 |
+| | ② 주소 | 사업장 소재지 (우편번호 자동 조회 + 기본주소) | ✅ 완료 |
+| **인허가 문서** | ③ 인허가 정보 | 인허가번호, 대표자, 영업소명칭, 소재지, 분야, 영업의 형태 | ✅ 완료 |
+
+**구현 방식**:
+- **Naver Clova OCR — Document OCR (사업자등록증 특화모델)**
+- OCR 프록시 서버: `ocr_proxy.py` (Flask, port 5002, HTTPS)
+  - 로컬: `https://127.0.0.1:5002`
+  - 네트워크: `https://192.168.0.15:5002`
+  - CORS 우회 + Clova Secret Key 서버 보관
+  - 자체서명 인증서 사용 (최초 접속 시 브라우저 인증서 신뢰 필요)
+- 사업자등록증 전용 모델 → Key-Value 구조화된 JSON 반환
+- 영업신고증 등 인허가 문서도 biz-license 모델로 처리 가능
+- 지원 포맷: JPG/PNG/PDF/TIFF (50MB 이하, 150dpi 이상)
+- **PDF → JPEG 자동 변환**: PDF.js로 첫 페이지를 canvas 렌더링 → JPEG base64 (Clova 특화모델 다중페이지 PDF 미지원 대응)
+
+**OCR 프록시 엔드포인트**:
+| 엔드포인트 | 메서드 | 설명 |
+|-----------|--------|------|
+| `/api/ocr/biz-license` | POST | 사업자등록증/인허가 문서 OCR (구조화) |
+| `/api/ocr/general` | POST | 일반 문서 OCR |
+| `/api/ocr/health` | GET | OCR 서버 상태 확인 |
+
+**OCR 적용 위치 (3곳)**:
+1. **신규 등록 — 사업자등록증 OCR** (`runBizLicOCR()`): 기본 정보 + 주소 자동 입력
+2. **신규 등록 — 인허가 문서 OCR** (`runLicOCR(idx)`): 인허가 정보 자동 입력 (다중 인허가 지원)
+3. **고객사 상세 — 사업자등록증/인허가 OCR** (`runDetailBizOCR()`, `runDetailLicOCR()`): 기존 고객 정보 수정 시 재인식
+
+**OCR 데이터 흐름**:
+```
+문서 이미지 업로드 (드래그 & 드롭 또는 파일 선택)
+    ↓ PDF인 경우 → PDF.js로 첫 페이지 JPEG 변환
+    ↓ base64 인코딩
+    ↓ fetch (JSON, POST)
+OCR 프록시 서버 (ocr_proxy.py, port 5002)
+    ↓ Naver Clova Document OCR API 호출
+    ↓ JSON 응답 (Key-Value 추출)
+폼 필드 자동 입력
+    ├── ① 기본 정보: 회사명, 대표자명, 사업자번호, 업태, 종목
+    ├── ② 주소: OCR 주소 → Kakao 주소검색 API → 우편번호 자동 조회
+    ├── ③ 인허가: 인허가번호, 대표자, 영업소명칭, 소재지, 분야, 영업의 형태
+    └── 변경 이력 자동 기록 (who: '시스템 (사업자등록증 OCR)')
+```
+
+**Clova OCR 사업자등록증 응답 필드 매핑**:
+| Clova OCR 필드 | 폼 필드 | 섹션 |
+|---------------|---------|------|
+| `corpName` / `companyName` | 회사명 | ① 기본 정보 |
+| `repName` | 대표자명 | ① 기본 정보 |
+| `registerNumber` | 사업자번호 / 인허가번호 | ① / ③ |
+| `bisType` | 업태 | ① 기본 정보 |
+| `bisItem` | 종목 | ① 기본 정보 |
+| `bisAddress` | 사업장 소재지 → Kakao API로 우편번호 조회 | ② 주소 |
+
+#### 우편번호·주소 관련 기능 (완료)
+
+| 기능 | API/서비스 | 사용 위치 |
+|------|-----------|----------|
+| **우편번호 검색** | Daum 우편번호 서비스 (`postcode.v2.js`) | 신규 등록/상세 — "우편번호 찾기" 버튼 |
+| **OCR 주소 → 우편번호 자동 조회** | Kakao 주소검색 REST API | OCR 결과의 bisAddress에서 자동 추출 |
+| **영문 주소 조회** | Juso.go.kr 영문주소 검색 API | 고객사 상세 — 영문 주소 자동 변환 |
+
+**우편번호 찾기 흐름**:
+```
+"우편번호 찾기" 버튼 클릭
+    ↓ Daum Postcode API 팝업
+    ↓ 사용자가 주소 선택
+    ↓ callback(zonecode, roadAddress, jibunAddress)
+    ├── regZipcode / detZipcode 우편번호 자동입력
+    ├── regAddr1 / detAddr1 기본주소 자동입력
+    └── 인허가 주소도 동일 패턴 (licZipcode_N)
+```
+
+**OCR 주소 → 우편번호 자동 조회 흐름**:
+```
+OCR 결과에서 bisAddress 추출
+    ↓ 주소 정제 (번지 이후 제거)
+    ↓ Kakao 주소검색 REST API 호출
+    ↓ zone_no (우편번호) + road_address (도로명) 추출
+    ├── 우편번호 자동 입력
+    └── 기본주소 자동 입력
+```
+
+#### API 키 및 외부 서비스 목록
+
+| API/서비스 | 키 형태 | 용도 | 비고 |
+|-----------|---------|------|------|
+| **Kakao Maps JS SDK** | appkey: `1d5b2fe...` | 지도 렌더링, 주소검색, 길찾기 | `<script>` 태그로 로드 |
+| **Kakao REST API** | REST Key: `8e5dab...` | 주소검색, 장소검색, 키워드검색 | `KakaoAK` 헤더 인증 |
+| **Daum 우편번호** | 키 불필요 | 우편번호 검색 팝업 | `postcode.v2.js` CDN |
+| **Juso.go.kr 영문주소** | confmKey: `U01TX0...` | 영문 도로명주소 조회 | 행정안전부 공식 API |
+| **VWORLD** | 사용자 입력 (API 설정 탭) | 국토지리정보 지도 타일 | 기본값 없음, 사용자가 발급/입력 |
+| **식품안전나라** | 사용자 입력 (API 설정 탭) | 업체조회 (I1220 인허가) | 기본값: `e5a1d9f...` |
+| **Naver Clova OCR** | 프록시 서버 내부 보관 | 사업자등록증/인허가 문서 OCR | `ocr_proxy.py`가 Secret Key 관리 |
+| **PDF.js** | 키 불필요 | PDF → JPEG 변환 (OCR 전처리) | Mozilla CDN |
+
 #### 지도 기능 (업체조회)
 - **3단계 드릴다운**: 시도 → 시군구 → 읍면동
-- VWORLD 타일 서버 (지도 배경)
+- VWORLD 타일 서버 (지도 배경) — 사용자가 API 키 입력 시 고품질 타일, 미입력 시 OSM 폴백
 - Leaflet.js (지도 렌더링 + GeoJSON 경계)
-- Kakao Maps API (주소검색, 길찾기)
+- Kakao Maps API (주소검색, 길찾기, 키워드 장소검색)
 - GeoJSON 데이터: `data/sido.json`, `data/sigungu.json`, `data/dong.json`
 
 ---
@@ -510,13 +685,21 @@ inspectionMgmt.html은 완전히 다른 CSS 디자인("beautiful-mclean" 스타�
 ├── 📁 API 서버 (receipt_api_final.py, port 5001)
 │   └── js/food_item_fee_mapping.js를 파싱하여 메모리에 로드
 │
+├── 📁 OCR 프록시 서버 (ocr_proxy.py, port 5002, HTTPS)
+│   ├── Naver Clova Document OCR 호출 (Secret Key 서버 보관)
+│   ├── CORS 우회 (GitHub Pages → 프록시 → Clova API)
+│   └── 자체서명 인증서 (최초 접속 시 브라우저 신뢰 필요)
+│
 ├── 📁 MariaDB (bioflsever, port 3306)
 │   ├── foodlab DB ─────────── 사용자 관리 (56명)
 │   ├── fss_data DB ────────── 식품안전나라 데이터
 │   └── inspection_data DB ── 검사 데이터 (2025년 692,061건)
 │
 └── 📁 브라우저 localStorage
-    └── sampleReceipt 임시저장 데이터
+    ├── sampleReceipt 임시저장 데이터
+    ├── bfl_customers — 고객사 데이터 (사용자 등록)
+    ├── bfl_colConfig — 고객사 목록 컬럼 설정 {columns:[순서], visible:[표시할 키]}
+    └── bfl_sidebar_collapsed — 사이드바 접힘 상태 ('1'/'0')
 ```
 
 ### 6.2 데이터 연결 구조 (inspectionMgmt.html 기준)
@@ -613,13 +796,17 @@ CREATE TABLE inspections (
 | `SIDEBAR_MENU` | sidebar.js | 모든 페이지 |
 | `renderSidebar()` | sidebar.js | 모든 페이지 |
 | `toggleMenu()` | sidebar.js | 모든 페이지 |
+| `toggleSidebar()` | sidebar.js | 모든 페이지 |
+| `DEMO_CUSTOMERS` | salesMgmt.html | salesMgmt.html만 |
+| `COLUMNS` | salesMgmt.html | salesMgmt.html만 |
+| `loadCustomers()` | salesMgmt.html | salesMgmt.html만 |
 | `showPage()` | salesMgmt.html | salesMgmt.html만 |
 | `API_BASE`, `apiOnline` | sampleReceipt.html | sampleReceipt.html만 |
 | `FOOD_ITEM_FEE_MAPPING` | food_item_fee_mapping.js | inspectionMgmt, itemAssign, receipt_api |
 | `P`, `FULL_FOOD_TYPES`, `FULL_ITEM_GROUPS` | inspectionMgmt.html | inspectionMgmt.html만 |
 
 **규칙**:
-- sidebar.js의 전역 변수(`SIDEBAR_MENU`, `toggleMenu`)는 모든 페이지에서 사용되므로 이름 변경 금지
+- sidebar.js의 전역 변수(`SIDEBAR_MENU`, `toggleMenu`, `toggleSidebar`)는 모든 페이지에서 사용되므로 이름 변경 금지
 - 각 페이지의 전역 변수는 해당 페이지 내에서만 유효
 - 같은 이름의 전역 변수를 다른 페이지에서 사용하지 않도록 주의
 
@@ -628,6 +815,7 @@ CREATE TABLE inspections (
 | API 서버 | 포트 | 사용 페이지 | 용도 |
 |---------|------|-----------|------|
 | `receipt_api_final.py` | **5001** | sampleReceipt.html | 시료접수 전용 |
+| `ocr_proxy.py` | **5002** (HTTPS) | salesMgmt.html | OCR 프록시 (Clova API 중계) |
 | Flask 메인 API | **5060** | index.html, etc. | 검사 데이터, 통계 |
 | MariaDB | **3306** | API 서버들 | 데이터 저장 |
 
@@ -700,17 +888,27 @@ HTML5 / CSS3 / JavaScript (ES6+)
 ├── UI 라이브러리
 │   ├── Chart.js (통계 차트)
 │   ├── Leaflet.js (지도 렌더링)
-│   └── Kakao Maps API (주소검색/길찾기)
+│   ├── Kakao Maps API (주소검색/길찾기/장소검색)
+│   ├── Daum Postcode API (우편번호 검색)
+│   └── PDF.js (PDF → 이미지 변환, OCR 전처리)
+├── 외부 API
+│   ├── Naver Clova Document OCR (사업자등록증/인허가 문서)
+│   ├── Juso.go.kr 영문주소 검색 API (행정안전부)
+│   ├── 식품안전나라 API (16개 엔드포인트)
+│   └── VWORLD 지도 타일 (국토지리정보원)
 ├── 패턴
 │   ├── Fetch API + async/await (서버 통신)
-│   ├── localStorage (임시 데이터 저장)
+│   ├── localStorage (데이터 영속 저장 — 고객사, 컬럼설정, 사이드바상태)
 │   ├── CSS Variables (테마)
+│   ├── HTML5 Drag & Drop API (컬럼 이동)
 │   ├── Flexbox / Grid (레이아웃)
 │   └── AbortSignal.timeout (API 타임아웃)
 └── 특수 처리
     ├── showPage() 내부 탭 전환 (salesMgmt.html)
     ├── 디바운스 (sampleReceipt.html 업체검색)
-    └── GeoJSON 드릴다운 (salesMgmt.html 지도)
+    ├── GeoJSON 드릴다운 (salesMgmt.html 지도)
+    ├── OCR 프록시 (ocr_proxy.py — CORS 우회 + Secret Key 서버 보관)
+    └── PDF → JPEG 자동 변환 (PDF.js canvas 렌더링)
 ```
 
 ### 9.2 백엔드
@@ -719,6 +917,7 @@ HTML5 / CSS3 / JavaScript (ES6+)
 Python 3.12
 ├── Flask
 │   ├── receipt_api_final.py (port 5001) — 시료접수 전용
+│   ├── ocr_proxy.py (port 5002, HTTPS) — Clova OCR 프록시
 │   └── 메인 API (port 5060) — 검사 데이터 CRUD
 │
 MariaDB
@@ -771,6 +970,7 @@ Services:
 ├── MariaDB (포트: 3306)
 ├── Flask 메인 API (포트: 5060)
 ├── receipt_api_final.py (포트: 5001) — 시료접수 전용
+├── ocr_proxy.py (포트: 5002, HTTPS) — Clova OCR 프록시
 └── SSH (포트: 2222)
 
 Databases:
@@ -802,7 +1002,7 @@ Databases:
 |---|------|------|
 | 1 | **메뉴 변경은 `js/sidebar.js`만 수정** | SSOT 원칙. HTML 직접 수정 금지 |
 | 2 | **inspectionMgmt.html은 별도 수정** | 독자 사이드바이므로 sidebar.js 변경 시 수동 동기화 필요 |
-| 3 | **sidebar.js의 전역 변수명 변경 금지** | `SIDEBAR_MENU`, `toggleMenu`, `renderSidebar`는 5개 HTML이 의존 |
+| 3 | **sidebar.js의 전역 변수명 변경 금지** | `SIDEBAR_MENU`, `toggleMenu`, `toggleSidebar`, `renderSidebar`는 5개 HTML이 의존 |
 | 4 | **`<aside id="sidebar">` ID 변경 금지** | sidebar.js가 `getElementById('sidebar')`로 접근 |
 
 ### 11.2 CSS 관련
@@ -854,8 +1054,20 @@ Databases:
 - [x] 항목그룹 CRUD (카테고리 수정/삭제 + 항목 추가/수정/삭제)
 - [x] 시료접수 등록 페이지 (sampleReceipt.html + receipt_api_final.py)
 - [x] 통합 사이드바 (js/sidebar.js SSOT)
+- [x] 사이드바 접기/펼치기 토글 기능 (☰ 버튼, localStorage 영속 저장)
+- [x] BFL 로고 이미지 적용 (img/bfl_logo.svg)
+- [x] 고객사 목록 동적 테이블 (DEMO_CUSTOMERS + localStorage 병합)
+- [x] 고객사 테이블 컬럼 설정 (19개 컬럼 중 선택 표시)
+- [x] 고객사 테이블 컬럼 드래그 이동 (HTML5 Drag & Drop)
+- [x] 다중 인허가 표시 (인허가 컬럼에서 N건 모두 번호 매기기 표시)
+- [x] 고객사 테이블 검색 필터 (회사명, 사업자번호)
 - [ ] 항목배정 페이지 완성
 - [ ] inspectionMgmt.html 사이드바 통합 검토
+- [x] **OCR 적용 — 고객사 신규 등록** (사업자등록증 → 기본정보+주소+우편번호 자동입력)
+- [x] **OCR 적용 — 인허가 정보** (인허가 문서 → 인허가정보+소재지+우편번호 자동입력)
+- [x] **OCR 적용 — 고객사 상세** (기존 고객 정보 수정 시 사업자등록증/인허가 재인식)
+- [x] **우편번호 자동 조회** (OCR 주소 → Kakao REST API → 우편번호 자동 추출)
+- [x] **영문 주소 조회** (Juso.go.kr 영문주소 API → 고객사 상세에 영문 주소 표시)
 
 **Phase 2: 데이터 통합**
 - [x] 2025년 전체 데이터 수집
@@ -891,10 +1103,12 @@ Databases:
 | `sampleReceipt.html` | 시료 접수 | sidebar.js | API+폴백 |
 | `itemAssign.html` | 항목 배정 | sidebar.js | 핵심 기능 |
 | `userMgmt.html` | 사용자 관리 | sidebar.js | |
-| `js/sidebar.js` | 통합 사이드바 | — | SSOT |
+| `js/sidebar.js` | 통합 사이드바 | — | SSOT, 접기/펼치기 |
+| `img/bfl_logo.svg` | BFL 로고 이미지 | — | 사이드바 로고 |
 | `js/food_item_fee_mapping.js` | 수수료 데이터 | — | 9,237건 |
 | `js/ref_nonstandard_data.js` | 참고용 항목그룹 | — | 3,374건 |
 | `receipt_api_final.py` | 시료접수 API | — | Flask, port 5001 |
+| `ocr_proxy.py` | OCR 프록시 서버 | — | Flask, port 5002, HTTPS |
 | `SETUP_GUIDE.md` | 설치 가이드 | — | |
 | `README.md` | 프로젝트 README | — | |
 | `BFL_LIMS_planning.md` | 이 기획서 | — | |
@@ -942,13 +1156,27 @@ Databases:
 
 ---
 
-*본 문서는 2026년 2월 19일 기준으로 최종 업데이트되었으며, 프로젝트 진행에 따라 업데이트됩니다.*
+*본 문서는 2026년 2월 20일 기준으로 최종 업데이트되었으며, 프로젝트 진행에 따라 업데이트됩니다.*
 
 **Version History**
 - v1.0 (2026-02-16): 초안 작성
 - v1.1 (2026-02-18): 검사관리 완료 사항 반영 — 수수료 탭(16개 목적, 7,481건), 항목그룹 탭(그룹형/flat형 분리, CRUD), 수수료 데이터 재추출(9,237건), 참고용(기준규격외) 병합(3,374건)
 - v1.2 (2026-02-19): 한글 파일명 영문 전환 반영, 데이터 저장 위치 섹션 추가, 영업관리 섹션 현행화, 기술 스택(MariaDB/Leaflet/Kakao) 수정
 - v1.3 (2026-02-19): 시료접수 등록(sampleReceipt.html) 섹션 추가 — API 연동(receipt_api_final.py, port 5001), 폴백 모드, 서버 상태 인디케이터
+- **v2.1 (2026-02-20): 영업관리 고객사 기능 강화 + OCR 완성 + 사이드바 UX 개선**
+  - 고객사 목록 동적 테이블: DEMO_CUSTOMERS(7건) + localStorage 병합 렌더링
+  - 19개 컬럼 정의(COLUMNS 배열): 기본 9개 + 추가 10개 (업종, 업태, 법인번호, 담당자전화, 이메일, 주소, 영문회사명, 인허가분야/번호/사업명)
+  - 컬럼 설정 UI: ⚙️ 버튼 → 체크박스 드롭다운, bfl_colConfig localStorage 영속 저장
+  - 컬럼 드래그 이동: HTML5 Drag & Drop API (외부 라이브러리 없음)
+  - 다중 인허가 표시: licenses 배열 전체 순회, 번호 매기기(1./2./...) 패턴
+  - 사이드바 접기/펼치기: ☰ 토글 버튼, 250px↔64px, bfl_sidebar_collapsed localStorage 영속
+  - BFL 로고 이미지: img/bfl_logo.svg 추가, 사이드바 로고 교체
+  - 고객사 테이블 검색 필터: 회사명·사업자번호 실시간 필터링
+  - OCR 기능 완성: 사업자등록증 OCR + 인허가 문서 OCR + 고객사 상세 OCR 재인식
+  - OCR 프록시 서버(ocr_proxy.py, port 5002, HTTPS): Clova Secret Key 서버 보관, CORS 우회
+  - 우편번호 자동 조회: OCR 주소 → Kakao REST API → 우편번호 추출
+  - 영문 주소 조회: Juso.go.kr 영문주소 API 연동
+  - API 키 정보 문서화: Kakao(Maps JS/REST), Daum 우편번호, Juso.go.kr, VWORLD, 식품안전나라, Clova OCR
 - **v2.0 (2026-02-19): 전면 재구성**
   - 통합 사이드바(`js/sidebar.js`) SSOT 아키텍처 반영
   - 페이지 구성 및 연결 구조 맵 추가 (섹션 3)
