@@ -176,7 +176,7 @@ function renderSidebar() {
   // 로고 + 접기 버튼
   let html = `
   <div class="logo">
-    <img src="img/bfl_logo.svg" alt="BFL" class="logo-img">
+    <img src="img/bfl_logo.svg?v=2" alt="BFL" class="logo-img">
     <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">☰</div>
   </div>
   <nav class="sidebar-nav">`;
