@@ -2099,53 +2099,40 @@ var KR_EN_REGION = {
 // 한글 → 영문 도로명주소 변환
 function convertToEnglishAddress(korAddr, callback) {
   if (!korAddr) { callback(''); return; }
-  var apiKey = '8e5dab09aacd882449bd3865699a9d69';
   var cleanAddr = korAddr.replace(/\([^)]*\)/g, '').trim();
+  // Juso.go.kr 영문주소 검색 API (행정안전부 공식)
+  var jusoKey = 'U01TX0FVVEgyMDI2MDIxOTE2MDczMDExNzYyNDM=';
+  var jusoUrl = 'https://business.juso.go.kr/addrlink/addrEngApi.do?confmKey=' + encodeURIComponent(jusoKey)
+    + '&currentPage=1&countPerPage=1&keyword=' + encodeURIComponent(cleanAddr) + '&resultType=json';
 
-  // Kakao 주소 검색으로 구조화된 주소 획득
-  fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(cleanAddr), {
-    headers: { 'Authorization': 'KakaoAK ' + apiKey }
-  })
+  fetch(jusoUrl)
   .then(function(r) { return r.json(); })
   .then(function(data) {
-    if (!data.documents || !data.documents.length) { callback(korAddr); return; }
-    var doc = data.documents[0];
-    var road = doc.road_address;
-    if (road) {
-      // 도로명 주소 기반 영문 조합
-      var parts = [];
-      // 건물번호
-      var bldgNo = road.main_building_no || '';
-      if (road.sub_building_no) bldgNo += '-' + road.sub_building_no;
-      if (bldgNo) parts.push(bldgNo);
-      // 도로명 (로마자 변환)
-      if (road.road_name) parts.push(romanize(road.road_name));
-      // 읍면동
-      if (road.region_3depth_name) parts.push(romanize(road.region_3depth_name));
-      // 시군구
-      if (road.region_2depth_name) parts.push(romanize(road.region_2depth_name));
-      // 시도
-      var r1 = road.region_1depth_name || '';
-      parts.push(KR_EN_REGION[r1] || romanize(r1));
-
-      callback(parts.join(', '));
-    } else if (doc.address) {
-      // 지번 주소 기반
-      var a = doc.address;
-      var parts2 = [];
-      var mainNo = a.main_address_no || '';
-      if (a.sub_address_no) mainNo += '-' + a.sub_address_no;
-      if (mainNo) parts2.push(mainNo);
-      if (a.region_3depth_name) parts2.push(romanize(a.region_3depth_name));
-      if (a.region_2depth_name) parts2.push(romanize(a.region_2depth_name));
-      var r1b = a.region_1depth_name || '';
-      parts2.push(KR_EN_REGION[r1b] || romanize(r1b));
-      callback(parts2.join(', '));
+    var res = data.results;
+    if (res && res.juso && res.juso.length > 0) {
+      // 공식 영문 도로명주소 사용
+      callback(res.juso[0].roadAddr);
     } else {
-      callback(korAddr);
+      // 결과 없음 → 자체 로마자 변환 폴백
+      var fallbackParts = cleanAddr.split(/\s+/);
+      var engParts = [];
+      for (var fp = 0; fp < fallbackParts.length; fp++) {
+        var w = fallbackParts[fp];
+        engParts.push(KR_EN_REGION[w] || romanize(w));
+      }
+      callback(engParts.reverse().join(', '));
     }
   })
-  .catch(function() { callback(korAddr); });
+  .catch(function() {
+    // API 오류 시 자체 로마자 변환 폴백
+    var fallbackParts = cleanAddr.split(/\s+/);
+    var engParts = [];
+    for (var fp = 0; fp < fallbackParts.length; fp++) {
+      var w = fallbackParts[fp];
+      engParts.push(KR_EN_REGION[w] || romanize(w));
+    }
+    callback(engParts.reverse().join(', '));
+  });
 }
 
 // 간이 한글 → 로마자 변환 (행정구역 접미사 포함)
@@ -2162,17 +2149,44 @@ function romanize(str) {
   var initials = ['g','kk','n','d','tt','r','m','b','pp','s','ss','','j','jj','ch','k','t','p','h'];
   var medials = ['a','ae','ya','yae','eo','e','yeo','ye','o','wa','wae','oe','yo','u','wo','we','wi','yu','eu','ui','i'];
   var finals = ['','g','kk','gs','n','nj','nh','d','l','lg','lm','lb','ls','lt','lp','lh','m','b','bs','s','ss','ng','j','ch','k','t','p','h'];
-  var result = '';
+  // 종성이 다음 초성 앞에서 변하는 규칙 (Revised Romanization 표기법)
+  // 종성 index → 자음 앞 표기 (0=없음은 무시)
+  var finBeforeConsonant = ['','k','kk','k','n','n','n','t','l','l','l','l','l','l','l','l','m','p','p','t','t','ng','t','t','k','t','p','t'];
+  // 음절 분해
+  var syllables = [];
   for (var i = 0; i < str.length; i++) {
     var code = str.charCodeAt(i);
     if (code >= 0xAC00 && code <= 0xD7A3) {
       var offset = code - 0xAC00;
-      var ini = Math.floor(offset / (21 * 28));
-      var med = Math.floor((offset % (21 * 28)) / 28);
-      var fin = offset % 28;
-      result += initials[ini] + medials[med] + finals[fin];
+      syllables.push({
+        ini: Math.floor(offset / (21 * 28)),
+        med: Math.floor((offset % (21 * 28)) / 28),
+        fin: offset % 28,
+        isKor: true
+      });
     } else {
-      result += str.charAt(i);
+      syllables.push({ ch: str.charAt(i), isKor: false });
+    }
+  }
+  var result = '';
+  for (var i = 0; i < syllables.length; i++) {
+    var s = syllables[i];
+    if (!s.isKor) { result += s.ch; continue; }
+    result += initials[s.ini] + medials[s.med];
+    if (s.fin === 0) continue; // 종성 없음
+    // 다음 글자가 한글이면 종성 규칙 적용
+    var next = (i + 1 < syllables.length) ? syllables[i + 1] : null;
+    if (next && next.isKor) {
+      if (next.ini === 11) {
+        // 다음 초성이 ㅇ(11) → 종성이 다음 음절 초성으로 연음
+        result += finals[s.fin];
+      } else {
+        // 다음 초성이 자음 → 종성 대표음
+        result += finBeforeConsonant[s.fin];
+      }
+    } else {
+      // 단어 끝이거나 비한글 → 대표음
+      result += finBeforeConsonant[s.fin];
     }
   }
   // 첫 글자 대문자
