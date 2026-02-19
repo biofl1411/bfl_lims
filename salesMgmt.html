@@ -473,7 +473,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
         <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
         <div class="fg-row">
-          <div class="fg"><label>법인 여부 <span class="req">*</span></label><div class="radio-group"><label class="radio-item"><input type="radio" name="corp" id="regCorpYes" checked> 법인</label><label class="radio-item"><input type="radio" name="corp" id="regCorpNo"> 개인</label></div></div>
+          <div class="fg"><label>법인 여부 <span class="req">*</span></label><div class="radio-group"><label class="radio-item"><input type="radio" name="corp" id="regCorpYes" value="법인" checked> 법인</label><label class="radio-item"><input type="radio" name="corp" id="regCorpIndiv" value="개인"> 개인</label></div></div>
           <div class="fg"><label>거래처 등급</label><select><option>등급 선택</option><option>VIP</option><option>A</option><option>B</option><option>C</option></select></div>
         </div>
         <div class="fg-row">
@@ -1495,9 +1495,12 @@ function toast(msg) {
 // ============================================================
 // OCR: Naver Clova Document OCR
 // ============================================================
-var CLOVA_OCR_SECRET = 'QWpOSmx5d1NNb01abHhEQ1R3a01ZWUtMYXhxYVNXWnI=';
-var CLOVA_BIZ_LICENSE_URL = 'https://ialgkho4vv.apigw.ntruss.com/custom/v1/50335/4fd4f84e81ec1035e5c386fb4c1badc8eb704875c19495b491236d28fe232738/document/biz-license';
-var CLOVA_GENERAL_URL = 'https://ialgkho4vv.apigw.ntruss.com/custom/v1/50335/4fd4f84e81ec1035e5c386fb4c1badc8eb704875c19495b491236d28fe232738/general';
+// OCR 프록시 서버 URL (ocr_proxy.py — CORS 우회 + Secret Key 서버 보관)
+var OCR_PROXY_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+  ? 'http://127.0.0.1:5002'
+  : 'http://192.168.0.96:5002';
+var OCR_BIZ_LICENSE_URL = OCR_PROXY_BASE + '/api/ocr/biz-license';
+var OCR_GENERAL_URL = OCR_PROXY_BASE + '/api/ocr/general';
 
 var _bizLicFile = null;
 var _licFiles = {};
@@ -1549,9 +1552,9 @@ function runBizLicOCR() {
       images: [{ format: ext, name: _bizLicFile.name, data: base64 }]
     };
 
-    fetch(CLOVA_BIZ_LICENSE_URL, {
+    fetch(OCR_BIZ_LICENSE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-OCR-SECRET': CLOVA_OCR_SECRET },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -1586,6 +1589,16 @@ function fillBizLicFields(res) {
     if (!arr || !arr.length) return '';
     return arr.map(function(item) { return item.text || ''; }).join(' ').trim();
   }
+  function getUniqueText(arr) {
+    if (!arr || !arr.length) return '';
+    var seen = {};
+    var result = [];
+    arr.forEach(function(item) {
+      var t = (item.text || '').trim();
+      if (t && !seen[t]) { seen[t] = true; result.push(t); }
+    });
+    return result.join(', ');
+  }
   // 회사명
   var companyName = getText(res.companyName);
   if (companyName) document.getElementById('regCompany').value = companyName;
@@ -1596,17 +1609,17 @@ function fillBizLicFields(res) {
   var bisNo = getText(res.bisNo);
   if (bisNo) {
     var el = document.getElementById('regBizNo');
-    el.value = bisNo;
+    el.value = bisNo.replace(/\s/g, '');
     fmtBiz(el);
   }
   // 법인번호
   var corpNo = getText(res.corpNo);
-  if (corpNo) document.getElementById('regCorpNo').value = corpNo;
-  // 업태
-  var bisType = getText(res.bisType);
+  if (corpNo) document.getElementById('regCorpNo').value = corpNo.replace(/\s/g, '');
+  // 업태 (중복 제거)
+  var bisType = getUniqueText(res.bisType);
   if (bisType) document.getElementById('regBizType').value = bisType;
-  // 종목
-  var bisItem = getText(res.bisItem);
+  // 종목 (중복 제거)
+  var bisItem = getUniqueText(res.bisItem);
   if (bisItem) document.getElementById('regBizItem').value = bisItem;
   // 주소
   var bisAddr = getText(res.bisAddress);
@@ -1617,6 +1630,8 @@ function fillBizLicFields(res) {
   // 법인/개인 판단
   if (corpNo) {
     document.getElementById('regCorpYes').checked = true;
+  } else {
+    document.getElementById('regCorpIndiv').checked = true;
   }
   // OCR로 채워진 필드에 하이라이트
   ['regCompany','regRepName','regBizNo','regCorpNo','regBizType','regBizItem','regAddr1'].forEach(function(id) {
@@ -1664,9 +1679,9 @@ function runLicOCR(idx) {
       images: [{ format: ext, name: file.name, data: base64 }]
     };
 
-    fetch(CLOVA_GENERAL_URL, {
+    fetch(OCR_GENERAL_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-OCR-SECRET': CLOVA_OCR_SECRET },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
