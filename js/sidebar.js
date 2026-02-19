@@ -143,20 +143,13 @@ const SIDEBAR_MENU = [
   { id: 'inventory',     icon: '🧪', label: '재고/시약 관리', disabled: true },
   { id: 'notice',        icon: '📢', label: '공지',           disabled: true },
   {
-    id: 'user-settings',
-    icon: '⚙️',
-    label: '사용자 설정',
-    sub: [
-      { label: '사용자 관리',   href: 'userMgmt.html',  page: 'admin-users' },
-      { label: '부서 관리',     disabled: true },
-      { label: '권한 설정',     disabled: true }
-    ]
-  },
-  {
     id: 'admin',
     icon: '🔧',
     label: '관리자',
     sub: [
+      { label: '사용자 관리',       href: 'userMgmt.html',              page: 'admin-users' },
+      { label: '부서 관리',         disabled: true },
+      { label: '권한 설정',         disabled: true },
       { label: '기타 설정',         href: 'adminSettings.html',         page: 'admin-settings' },
       { label: '대시보드 권한',     disabled: true },
       { label: '알림 설정',         disabled: true },
