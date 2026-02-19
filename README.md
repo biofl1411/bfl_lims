@@ -33,6 +33,7 @@ bfl_lims/
 ├── receipt_api_final.py             # 시료접수 API 서버 (Flask, port 5001)
 ├── SETUP_GUIDE.md                   # API 서버 실행 가이드
 ├── js/
+│   ├── sidebar.js                   # ★ 통합 사이드바 (Single Source of Truth) — 전체 메뉴 정의·렌더링·CSS
 │   ├── food_item_fee_mapping.js     # 수수료 매핑 데이터 (9,237건, 16개 검사목적, purpose 태그)
 │   └── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
 ├── data/
@@ -207,6 +208,8 @@ Flask REST API 서버 (port 5060)
 | `5a83e3d` | 불필요한 파일 정리 - 설계/비교/테스트/데모 파일 9개 삭제 |
 | `7a61f81` | 한글 파일명을 영문 camelCase로 전환 + 내부 참조 수정 |
 | `77a3eb4` | BFL_LIMS_planning.md v1.2 업데이트 + 데이터 저장 위치 섹션 추가 |
+| *(pending)* | 시료접수 통합: sampleReceipt.html 사이드바+API 연동, sidebar.js SSOT 구축 |
+| *(pending)* | sidebar: js/sidebar.js SSOT + 기획서 v2.0 전면 재구성 |
 
 ---
 
@@ -309,9 +312,31 @@ Flask REST API 서버 (port 5060)
 
 ---
 
+## 공통 모듈: 통합 사이드바 (`js/sidebar.js`)
+
+사이드바 메뉴가 6개 파일에 중복 복사되어 메뉴 누락이 반복되던 문제를 해결하기 위해,
+**Single Source of Truth** 방식으로 `js/sidebar.js` 하나에 전체 메뉴를 정의하고 모든 HTML이 이를 참조.
+
+| 역할 | 구현 |
+|------|------|
+| 메뉴 데이터 | `SIDEBAR_MENU` 배열 (12그룹, 37개 서브메뉴) |
+| HTML 렌더링 | `renderSidebar()` — 현재 페이지 자동 감지 → active/expanded 설정 |
+| CSS 주입 | `injectSidebarCSS()` — `<style id="sidebar-unified-css">` 자동 삽입 |
+| 탭 전환 | `showPage()` 감지 → salesMgmt.html 내부 탭 자동 전환 |
+| 아코디언 | `toggleMenu()` 등록 |
+
+**사용하는 HTML 파일** (5개):
+- `index.html`, `salesMgmt.html`, `sampleReceipt.html`, `itemAssign.html`, `userMgmt.html`
+
+**예외**: `inspectionMgmt.html`은 자체 사이드바 디자인(beautiful-mclean) 사용. 향후 통합 예정.
+
+**메뉴 변경 시**: `js/sidebar.js`의 `SIDEBAR_MENU` 배열만 수정 → 5개 HTML 전체 자동 반영.
+
+---
+
 ## 향후 계획
 
-1. 네비게이션 통일 완료
+1. inspectionMgmt.html 사이드바 통합 (sidebar.js 적용)
 2. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지, 사용자설정)
 3. 백엔드 API 연동
 4. 사용자 인증/권한 시스템
