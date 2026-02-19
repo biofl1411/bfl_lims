@@ -601,6 +601,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <h3 id="detailCompanyTitle" style="margin:0;font-size:18px"></h3>
           <span id="detailGradeTag"></span>
           <span id="detailStatusTag" style="margin-left:4px"></span>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" id="detailEditBtn" onclick="toggleDetailEdit()">✏️ 수정</button>
+            <button class="btn btn-primary btn-sm" id="detailSaveBtn" onclick="saveDetailEdit()" style="display:none;background:#2e7d32;border-color:#2e7d32">💾 저장</button>
+            <button class="btn btn-secondary btn-sm" id="detailCancelBtn" onclick="cancelDetailEdit()" style="display:none">취소</button>
+          </div>
         </div>
 
         <!-- 사업자등록증 OCR 재인식 -->
@@ -658,6 +663,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div id="detLicenseContainer">
           <!-- 동적으로 생성됨 -->
         </div>
+        <button class="btn-add" id="detAddLicBtn" onclick="addDetailLicenseCard()" style="display:none">+ 인허가 정보 추가</button>
 
         <!-- 변경 이력 -->
         <div class="sec-title" style="margin-top:20px"><span class="sec-num">📋</span> 변경 이력</div>
@@ -1664,13 +1670,24 @@ function highlightField(id) {
 }
 
 // --- 인허가 소재지: 우편번호 찾기 (Daum Postcode API) ---
-function openLicPostcodeSearch(idx) {
+function openLicPostcodeSearch(idx, isDetail) {
+  var prefix = isDetail ? 'detLic' : 'lic';
   new daum.Postcode({
     oncomplete: function(data) {
-      document.getElementById('licZipcode_' + idx).value = data.zonecode;
-      document.getElementById('licAddr_' + idx).value = data.roadAddress || data.jibunAddress;
-      document.getElementById('licAddr2_' + idx).value = '';
-      document.getElementById('licAddr2_' + idx).focus();
+      document.getElementById(prefix + 'Zipcode_' + idx).value = data.zonecode;
+      document.getElementById(prefix + 'Addr_' + idx).value = data.roadAddress || data.jibunAddress;
+      document.getElementById(prefix + 'Addr2_' + idx).value = '';
+      document.getElementById(prefix + 'Addr2_' + idx).focus();
+      // 영문 주소 자동 변환
+      if (isDetail) {
+        var fullAddr = (data.roadAddress || data.jibunAddress || '').trim();
+        convertToEnglishAddress(fullAddr, function(eng) {
+          var enField = document.getElementById('detLicAddrEn_' + idx);
+          if (enField) { enField.value = eng; enField.style.background = '#e3f2fd'; setTimeout(function() { enField.style.background = _detailEditMode ? '#fff' : '#f8f9fb'; }, 3000); }
+        });
+      } else {
+        setTimeout(function() { updateLicEngAddress(idx); }, 300);
+      }
     }
   }).open();
 }
@@ -1914,36 +1931,286 @@ function renderDetailLicenses(cust) {
     var num = i + 1;
     var card = document.createElement('div');
     card.className = 'sub-card';
+    card.id = 'detLicCard_' + num;
     card.style.marginBottom = '12px';
-    var addr = lic.licAddr || '';
-    if (lic.licAddr2) addr = (addr + ' ' + lic.licAddr2).trim();
 
     card.innerHTML =
-      '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">' + num + '</span> 인허가</div></div>' +
-      '<div class="fg-row">' +
-        '<div class="fg"><label>분야</label><input id="detLicField_' + num + '" value="' + escHtml(lic.licField) + '" readonly style="background:#f8f9fb"></div>' +
-        '<div class="fg"><label>영업의 형태</label><input id="detLicBizForm_' + num + '" value="' + escHtml(lic.licBizForm) + '" readonly style="background:#f8f9fb"></div>' +
+      '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">' + num + '</span> 인허가</div>' +
+        '<button class="btn btn-secondary btn-sm detLicDelBtn" onclick="removeDetailLicenseCard(' + num + ')" style="display:none;margin-left:auto;font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
       '</div>' +
       '<div class="fg-row">' +
-        '<div class="fg"><label>대표자</label><input id="detLicRepName_' + num + '" value="' + escHtml(lic.licRepName) + '" readonly style="background:#f8f9fb"></div>' +
-        '<div class="fg"><label>인허가번호</label><input id="detLicNo_' + num + '" value="' + escHtml(lic.licNo) + '" readonly style="background:#f8f9fb"></div>' +
+        '<div class="fg"><label>분야</label><input id="detLicField_' + num + '" value="' + escHtml(lic.licField) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+        '<div class="fg"><label>영업의 형태</label><input id="detLicBizForm_' + num + '" value="' + escHtml(lic.licBizForm) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
       '</div>' +
-      '<div class="fg"><label>영업소명칭</label><input id="detLicBizName_' + num + '" value="' + escHtml(lic.licBizName) + '" readonly style="background:#f8f9fb"></div>' +
-      '<div class="fg"><label>소재지</label><input id="detLicAddr_' + num + '" value="' + escHtml(addr) + '" readonly style="background:#f8f9fb"></div>' +
+      '<div class="fg-row">' +
+        '<div class="fg"><label>대표자</label><input id="detLicRepName_' + num + '" value="' + escHtml(lic.licRepName) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+        '<div class="fg"><label>인허가번호</label><input id="detLicNo_' + num + '" value="' + escHtml(lic.licNo) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+      '</div>' +
+      '<div class="fg"><label>영업소명칭</label><input id="detLicBizName_' + num + '" value="' + escHtml(lic.licBizName) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+      '<div class="fg"><label>소재지</label>' +
+        '<div class="addr-row" style="margin-bottom:4px"><input id="detLicZipcode_' + num + '" value="' + escHtml(lic.licZipcode || '') + '" placeholder="우편번호" style="max-width:120px;background:#f8f9fb" readonly class="det-editable"><button class="btn btn-secondary btn-sm detLicPostBtn" onclick="openLicPostcodeSearch(' + num + ',true)" style="display:none">우편번호 찾기</button></div>' +
+      '</div>' +
+      '<div class="fg"><input id="detLicAddr_' + num + '" value="' + escHtml(lic.licAddr || '') + '" placeholder="기본주소" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+      '<div class="fg"><input id="detLicAddr2_' + num + '" value="' + escHtml(lic.licAddr2 || '') + '" placeholder="상세주소" readonly style="background:#f8f9fb" class="det-editable"></div>' +
       '<div class="eng-toggle" onclick="toggleEngSection(\'detLicEngSection_' + num + '\')" style="margin-top:8px;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;color:#1565c0;font-size:13px;font-weight:500">' +
         '<span style="transition:transform .2s;display:inline-block">▶</span> 인허가 정보 (영문)' +
       '</div>' +
       '<div id="detLicEngSection_' + num + '" style="display:none;padding:8px 0 4px 0;border-top:1px dashed #e2e6ed">' +
-        '<div class="fg"><label>Business Name (EN)</label><input id="detLicBizNameEn_' + num + '" value="' + escHtml(lic.licBizNameEn) + '" readonly style="background:#f8f9fb"></div>' +
-        '<div class="fg"><label>Representative (EN)</label><input id="detLicRepNameEn_' + num + '" value="' + escHtml(lic.licRepNameEn) + '" readonly style="background:#f8f9fb"></div>' +
-        '<div class="fg"><label>Address (EN)</label><input id="detLicAddrEn_' + num + '" value="' + escHtml(lic.licAddrEn) + '" readonly style="background:#f8f9fb"></div>' +
+        '<div class="fg"><label>Business Name (EN)</label><input id="detLicBizNameEn_' + num + '" value="' + escHtml(lic.licBizNameEn) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+        '<div class="fg"><label>Representative (EN)</label><input id="detLicRepNameEn_' + num + '" value="' + escHtml(lic.licRepNameEn) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
+        '<div class="fg"><label>Address (EN)</label><input id="detLicAddrEn_' + num + '" value="' + escHtml(lic.licAddrEn) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
       '</div>';
 
     container.appendChild(card);
   }
+  _detLicCardCount = licenses.length;
+}
+var _detLicCardCount = 0;
+var _detailEditMode = false;
+var _detailSnapshot = null; // 수정 전 스냅샷
 
-  // 하위 호환성: 기존 OCR 변경 감지에서 사용하는 단일 필드 ID도 첫 번째 카드 기준으로 매핑
-  // detLicField, detLicBizForm 등의 ID는 이제 detLicField_1 등으로 참조
+// --- 상세 페이지: 수정 모드 전환 ---
+function toggleDetailEdit() {
+  _detailEditMode = true;
+  // 스냅샷 저장 (변경 전 값)
+  _detailSnapshot = {};
+  document.querySelectorAll('#page-customerDetail .det-editable').forEach(function(el) {
+    _detailSnapshot[el.id] = el.value;
+    el.readOnly = false;
+    el.style.background = '#fff';
+    el.style.border = '1px solid #1a73e8';
+  });
+  // 기본 정보 필드도 수정 가능하게
+  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detAddr1','detAddr2',
+   'detCompanyEn','detRepNameEn','detAddrEn'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      _detailSnapshot[id] = el.value;
+      el.readOnly = false;
+      el.style.background = '#fff';
+      el.style.border = '1px solid #1a73e8';
+    }
+  });
+  // 버튼 전환
+  document.getElementById('detailEditBtn').style.display = 'none';
+  document.getElementById('detailSaveBtn').style.display = '';
+  document.getElementById('detailCancelBtn').style.display = '';
+  // 인허가 추가/삭제 버튼 표시
+  var addBtn = document.getElementById('detAddLicBtn');
+  if (addBtn) addBtn.style.display = '';
+  document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = ''; });
+  document.querySelectorAll('.detLicPostBtn').forEach(function(b) { b.style.display = ''; });
+}
+
+function cancelDetailEdit() {
+  _detailEditMode = false;
+  // 스냅샷으로 복원
+  if (_detailSnapshot) {
+    Object.keys(_detailSnapshot).forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.value = _detailSnapshot[id];
+    });
+  }
+  // readonly 복원
+  document.querySelectorAll('#page-customerDetail .det-editable').forEach(function(el) {
+    el.readOnly = true;
+    el.style.background = '#f8f9fb';
+    el.style.border = '';
+  });
+  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detAddr1','detAddr2',
+   'detCompanyEn','detRepNameEn','detAddrEn'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
+  });
+  // 버튼 복원
+  document.getElementById('detailEditBtn').style.display = '';
+  document.getElementById('detailSaveBtn').style.display = 'none';
+  document.getElementById('detailCancelBtn').style.display = 'none';
+  var addBtn = document.getElementById('detAddLicBtn');
+  if (addBtn) addBtn.style.display = 'none';
+  document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = 'none'; });
+  document.querySelectorAll('.detLicPostBtn').forEach(function(b) { b.style.display = 'none'; });
+  // 동적 추가된 카드 원복 (원래 데이터 재렌더)
+  var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+  var cust = customers.find(function(c) { return c.id === _detailCustId; });
+  if (cust) renderDetailLicenses(cust);
+  _detailSnapshot = null;
+}
+
+function saveDetailEdit() {
+  var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+  var idx = customers.findIndex(function(c) { return c.id === _detailCustId; });
+  if (idx === -1) { toast('⚠️ 고객사 정보를 찾을 수 없습니다'); return; }
+  var cust = customers[idx];
+  var now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  var changes = [];
+
+  // 기본 정보 비교 및 저장
+  var basicFields = [
+    { id: 'detCompany', key: 'company', label: '회사명' },
+    { id: 'detRepName', key: 'repName', label: '대표자명' },
+    { id: 'detBizNo', key: 'bizNo', label: '사업자번호' },
+    { id: 'detCorpNo', key: 'corpNo', label: '법인번호' },
+    { id: 'detBizType', key: 'bizType', label: '업태' },
+    { id: 'detBizItem', key: 'bizItem', label: '종목' },
+    { id: 'detAddr1', key: 'addr1', label: '주소' },
+    { id: 'detAddr2', key: 'addr2', label: '상세주소' },
+    { id: 'detCompanyEn', key: 'companyEn', label: 'Company Name (EN)' },
+    { id: 'detRepNameEn', key: 'repNameEn', label: 'Representative (EN)' },
+    { id: 'detAddrEn', key: 'addrEn', label: 'Address (EN)' }
+  ];
+  basicFields.forEach(function(f) {
+    var el = document.getElementById(f.id);
+    if (!el) return;
+    var newVal = el.value.trim();
+    var oldVal = (cust[f.key] || '').trim();
+    if (newVal !== oldVal) {
+      changes.push({ field: f.label, from: oldVal, to: newVal });
+      cust[f.key] = newVal;
+    }
+  });
+
+  // 인허가 정보 수집
+  var newLicenses = [];
+  for (var li = 1; li <= _detLicCardCount; li++) {
+    if (!document.getElementById('detLicCard_' + li)) continue;
+    var lic = {
+      licField: (document.getElementById('detLicField_' + li) || {}).value || '',
+      licBizForm: (document.getElementById('detLicBizForm_' + li) || {}).value || '',
+      licRepName: (document.getElementById('detLicRepName_' + li) || {}).value || '',
+      licNo: (document.getElementById('detLicNo_' + li) || {}).value || '',
+      licBizName: (document.getElementById('detLicBizName_' + li) || {}).value || '',
+      licZipcode: (document.getElementById('detLicZipcode_' + li) || {}).value || '',
+      licAddr: (document.getElementById('detLicAddr_' + li) || {}).value || '',
+      licAddr2: (document.getElementById('detLicAddr2_' + li) || {}).value || '',
+      licBizNameEn: (document.getElementById('detLicBizNameEn_' + li) || {}).value || '',
+      licRepNameEn: (document.getElementById('detLicRepNameEn_' + li) || {}).value || '',
+      licAddrEn: (document.getElementById('detLicAddrEn_' + li) || {}).value || ''
+    };
+    newLicenses.push(lic);
+  }
+
+  // 인허가 변경 감지 (갯수 변경, 내용 변경)
+  var oldLicenses = cust.licenses || [];
+  if (newLicenses.length !== oldLicenses.length) {
+    changes.push({ field: '인허가 수', from: oldLicenses.length + '건', to: newLicenses.length + '건' });
+  }
+  var licKeys = ['licField','licBizForm','licRepName','licNo','licBizName','licAddr','licAddr2','licBizNameEn','licRepNameEn','licAddrEn'];
+  var licLabels = { licField:'분야', licBizForm:'영업형태', licRepName:'대표자', licNo:'인허가번호', licBizName:'영업소명칭', licAddr:'소재지', licAddr2:'상세주소', licBizNameEn:'Business Name(EN)', licRepNameEn:'Representative(EN)', licAddrEn:'Address(EN)' };
+  for (var ci = 0; ci < Math.min(newLicenses.length, oldLicenses.length); ci++) {
+    licKeys.forEach(function(k) {
+      var ov = (oldLicenses[ci][k] || '').trim();
+      var nv = (newLicenses[ci][k] || '').trim();
+      if (ov !== nv) {
+        changes.push({ field: '인허가' + (ci+1) + ' ' + licLabels[k], from: ov, to: nv });
+      }
+    });
+  }
+
+  cust.licenses = newLicenses;
+  // 하위 호환: 첫 번째 인허가 → 기존 단일 필드
+  if (newLicenses.length > 0) {
+    var first = newLicenses[0];
+    licKeys.forEach(function(k) { cust[k] = first[k] || ''; });
+  }
+
+  // 변경 이력 기록
+  if (changes.length > 0) {
+    var detail = changes.map(function(c) {
+      return '【' + c.field + '】 "' + (c.from || '(없음)') + '" → "' + c.to + '"';
+    }).join(', ');
+    if (!cust.changeLog) cust.changeLog = [];
+    cust.changeLog.push({
+      date: now,
+      who: '담당자 (수동 수정)',
+      detail: '수동 수정에 의해 변경됨 — ' + detail
+    });
+  }
+
+  customers[idx] = cust;
+  localStorage.setItem('bfl_customers', JSON.stringify(customers));
+
+  // UI 복원 (readonly)
+  _detailEditMode = false;
+  document.querySelectorAll('#page-customerDetail .det-editable').forEach(function(el) {
+    el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = '';
+  });
+  ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detAddr1','detAddr2',
+   'detCompanyEn','detRepNameEn','detAddrEn'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
+  });
+  document.getElementById('detailEditBtn').style.display = '';
+  document.getElementById('detailSaveBtn').style.display = 'none';
+  document.getElementById('detailCancelBtn').style.display = 'none';
+  var addBtn = document.getElementById('detAddLicBtn');
+  if (addBtn) addBtn.style.display = 'none';
+  document.querySelectorAll('.detLicDelBtn').forEach(function(b) { b.style.display = 'none'; });
+  document.querySelectorAll('.detLicPostBtn').forEach(function(b) { b.style.display = 'none'; });
+
+  // 변경 이력 갱신
+  renderChangeLog(cust.changeLog || []);
+  document.getElementById('detailCompanyTitle').textContent = cust.company;
+  _detailSnapshot = null;
+
+  if (changes.length > 0) {
+    toast('✅ ' + changes.length + '건 변경사항이 저장되었습니다.');
+  } else {
+    toast('ℹ️ 변경사항이 없습니다.');
+  }
+}
+
+// --- 상세 페이지: 인허가 카드 동적 추가 ---
+function addDetailLicenseCard() {
+  _detLicCardCount++;
+  var num = _detLicCardCount;
+  var container = document.getElementById('detLicenseContainer');
+  if (!container) return;
+
+  var card = document.createElement('div');
+  card.className = 'sub-card';
+  card.id = 'detLicCard_' + num;
+  card.style.marginBottom = '12px';
+  card.style.animation = 'fadeIn 0.3s ease';
+
+  card.innerHTML =
+    '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">' + num + '</span> 인허가</div>' +
+      '<button class="btn btn-secondary btn-sm detLicDelBtn" onclick="removeDetailLicenseCard(' + num + ')" style="margin-left:auto;font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
+    '</div>' +
+    '<div class="fg-row">' +
+      '<div class="fg"><label>분야</label><input id="detLicField_' + num + '" placeholder="식품/축산" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+      '<div class="fg"><label>영업의 형태</label><input id="detLicBizForm_' + num + '" placeholder="영업 형태" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+    '</div>' +
+    '<div class="fg-row">' +
+      '<div class="fg"><label>대표자</label><input id="detLicRepName_' + num + '" placeholder="대표자" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+      '<div class="fg"><label>인허가번호</label><input id="detLicNo_' + num + '" placeholder="인허가번호" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+    '</div>' +
+    '<div class="fg"><label>영업소명칭</label><input id="detLicBizName_' + num + '" placeholder="영업소 명칭" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+    '<div class="fg"><label>소재지</label>' +
+      '<div class="addr-row" style="margin-bottom:4px"><input id="detLicZipcode_' + num + '" placeholder="우편번호" style="max-width:120px;border:1px solid #1a73e8" class="det-editable" readonly><button class="btn btn-secondary btn-sm detLicPostBtn" onclick="openLicPostcodeSearch(' + num + ',true)">우편번호 찾기</button></div>' +
+    '</div>' +
+    '<div class="fg"><input id="detLicAddr_' + num + '" placeholder="기본주소" style="border:1px solid #1a73e8" class="det-editable" readonly></div>' +
+    '<div class="fg"><input id="detLicAddr2_' + num + '" placeholder="상세주소" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+    '<div class="eng-toggle" onclick="toggleEngSection(\'detLicEngSection_' + num + '\')" style="margin-top:8px;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 0;color:#1565c0;font-size:13px;font-weight:500">' +
+      '<span style="transition:transform .2s;display:inline-block">▶</span> 인허가 정보 (영문)' +
+    '</div>' +
+    '<div id="detLicEngSection_' + num + '" style="display:none;padding:8px 0 4px 0;border-top:1px dashed #e2e6ed">' +
+      '<div class="fg"><label>Business Name (EN)</label><input id="detLicBizNameEn_' + num + '" placeholder="Business name" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+      '<div class="fg"><label>Representative (EN)</label><input id="detLicRepNameEn_' + num + '" placeholder="Representative" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+      '<div class="fg"><label>Address (EN)</label><input id="detLicAddrEn_' + num + '" placeholder="Address" style="border:1px solid #1a73e8" class="det-editable"></div>' +
+    '</div>';
+
+  container.appendChild(card);
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast('✅ 인허가 ' + num + ' 카드가 추가되었습니다.');
+}
+
+function removeDetailLicenseCard(num) {
+  var card = document.getElementById('detLicCard_' + num);
+  if (!card) return;
+  if (!confirm('인허가 ' + num + ' 정보를 삭제하시겠습니까?')) return;
+  card.remove();
+  toast('🗑️ 인허가 ' + num + ' 카드가 삭제되었습니다.');
 }
 
 function escHtml(str) {
