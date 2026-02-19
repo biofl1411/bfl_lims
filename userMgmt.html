@@ -119,6 +119,7 @@ td{padding:14px 16px;font-size:14px}
 <option value="">전체 직급</option>
 </select>
 <button class="btn btn-success" onclick="openAddModal()">➕ 사용자 추가</button>
+<button class="btn btn-outline" onclick="exportExcel()">📥 엑셀 내보내기</button>
 </div>
 </div>
 <div class="table-container">
@@ -128,7 +129,10 @@ td{padding:14px 16px;font-size:14px}
 <th>No</th>
 <th>아이디</th>
 <th>부서</th>
+<th>팀</th>
 <th>직급</th>
+<th>입사일</th>
+<th>퇴사일</th>
 <th>관리</th>
 </tr>
 </thead>
@@ -449,7 +453,9 @@ const USERS_DATA = [
     "직급": "사원"
   }
 ];
-let users = [...USERS_DATA];
+let users = USERS_DATA.map(u => ({
+  팀명: '', 입사일: '', 퇴사일: '', ...u
+}));
 
 // 초기화
 document.addEventListener('DOMContentLoaded', () => {
@@ -495,9 +501,13 @@ function renderUsers() {
       <td>${i + 1}</td>
       <td><strong>${u.아이디}</strong></td>
       <td><span class="badge badge-primary">${u.부서명}</span></td>
+      <td>${u.팀명 || '-'}</td>
       <td>${u.직급}</td>
+      <td>${u.입사일 || '-'}</td>
+      <td style="color:${u.퇴사일 ? '#ef4444' : 'inherit'}">${u.퇴사일 || '-'}</td>
       <td>
         <button class="btn btn-sm btn-outline" onclick="editUser('${u.아이디}')">수정</button>
+        <button class="btn btn-sm btn-outline" onclick="resetPassword('${u.아이디}')" style="color:#f97316;border-color:#f97316">🔑 PW초기화</button>
       </td>
     </tr>
   `).join('');
@@ -522,6 +532,29 @@ function saveUser() {
 
 function editUser(id) {
   alert(`${id} 수정 기능은 백엔드 연동 후 구현됩니다.`);
+}
+
+function resetPassword(id) {
+  if (confirm(`${id}의 비밀번호를 초기화하시겠습니까?\n초기 비밀번호: bfl1234`)) {
+    alert(`${id}의 비밀번호가 초기화되었습니다.\n초기 비밀번호: bfl1234`);
+  }
+}
+
+function exportExcel() {
+  const header = ['No', '아이디', '부서', '팀', '직급', '입사일', '퇴사일'];
+  const rows = users.map((u, i) => [
+    i + 1, u.아이디, u.부서명, u.팀명 || '', u.직급, u.입사일 || '', u.퇴사일 || ''
+  ]);
+  let csv = '\uFEFF' + header.join(',') + '\n';
+  rows.forEach(r => {
+    csv += r.map(v => `"${v}"`).join(',') + '\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `사용자목록_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 </script>
