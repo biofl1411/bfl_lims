@@ -587,7 +587,23 @@ function runBizLicOCR() {
       if (corpNo) { setField('regCorpNo', '법인번호', corpNo); formatCorpNo(document.getElementById('regCorpNo')); }
       setField('regBizType', '업태', bizType);
       setField('regBizItem', '종목', bizItem);
-      setField('regAddr1', '주소', addr);
+      // 주소: 쉼표(,) 기준으로 기본주소/상세주소 분리
+      if (addr) {
+        var addrEl = document.getElementById('regAddr1');
+        var commaIdx = addr.indexOf(',');
+        if (commaIdx > -1) {
+          var baseAddr = addr.substring(0, commaIdx).trim();
+          var detailAddr = addr.substring(commaIdx + 1).trim();
+          if (addrEl) { addrEl.removeAttribute('readonly'); }
+          setField('regAddr1', '주소(기본)', baseAddr);
+          if (addrEl) { addrEl.setAttribute('readonly', 'readonly'); }
+          setField('regAddr2', '주소(상세)', detailAddr);
+        } else {
+          if (addrEl) { addrEl.removeAttribute('readonly'); }
+          setField('regAddr1', '주소', addr);
+          if (addrEl) { addrEl.setAttribute('readonly', 'readonly'); }
+        }
+      }
 
       // 변경 이력 기록
       if (changes.length > 0) {
@@ -660,12 +676,25 @@ function runLicOCR(idx) {
       setLicField('licBizName_' + idx, '영업소명칭', bizName);
       setLicField('licNo_' + idx, '인허가번호', licNo);
 
-      // 주소 파싱: OCR 전체 주소를 기본주소에 넣고, 상세주소는 비워둠
+      // 주소 파싱: 쉼표(,) 기준으로 기본주소/상세주소 분리
       if (addr) {
-        setLicField('licAddr_' + idx, '소재지(기본주소)', addr);
-        // 기본주소 readonly 해제하여 OCR 값 입력 후 다시 readonly (자동입력이므로)
+        var commaIdx = addr.indexOf(',');
+        var baseAddr = addr, detailAddr = '';
+        if (commaIdx > -1) {
+          baseAddr = addr.substring(0, commaIdx).trim();
+          detailAddr = addr.substring(commaIdx + 1).trim();
+        }
+        // 기본주소 readonly 해제 → 값 입력 → 다시 readonly
         var addrEl = document.getElementById('licAddr_' + idx);
-        if (addrEl) { addrEl.removeAttribute('readonly'); addrEl.value = addr; addrEl.setAttribute('readonly', 'readonly'); }
+        if (addrEl) {
+          var oldBase = addrEl.value || '';
+          addrEl.removeAttribute('readonly'); addrEl.value = baseAddr; addrEl.setAttribute('readonly', 'readonly');
+          if (oldBase !== baseAddr) licChanges.push({ field: '소재지(기본주소)', from: oldBase, to: baseAddr });
+        }
+        // 상세주소
+        if (detailAddr) {
+          setLicField('licAddrDetail_' + idx, '소재지(상세주소)', detailAddr);
+        }
       }
 
       // 변경 이력 기록
