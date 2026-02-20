@@ -74,6 +74,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 /* Traffic dots */
 .tl{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
 .tl-blue{background:#2196f3}.tl-green{background:#4caf50}.tl-yellow{background:#ffeb3b}.tl-orange{background:#ff9800}.tl-red{background:#f44336}
+/* 커스텀 tooltip */
+[data-tooltip]{position:relative;cursor:help}
+[data-tooltip]:hover::after{content:attr(data-tooltip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 14px;border-radius:8px;font-size:11px;white-space:pre-line;min-width:240px;max-width:320px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);line-height:1.7;pointer-events:none;font-weight:400;letter-spacing:0}
+[data-tooltip]:hover::before{content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#1e293b;z-index:9999;pointer-events:none}
 
 /* Tags */
 .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
@@ -503,6 +507,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div class="fg-row">
           <div class="fg"><label>계약 상태</label><select id="regStatus"><option selected>활동</option><option>휴면</option><option>해지</option></select></div>
           <div class="fg"><label>신호등</label><div style="display:flex;align-items:center;gap:6px;padding:8px 0"><span class="tl tl-blue"></span><span style="font-size:11px;color:#5f6b7a">파랑 (신규 등록 시 기본값)</span></div></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label>담당부서</label><select id="regDepartment"><option value="">선택</option><option>고객지원팀</option><option>마케팅사업부</option><option>고객관리</option><option>지사</option></select></div>
+          <div class="fg"><label>접수형태</label><select id="regReceiptType"><option value="">선택</option><option>홈페이지접수</option><option>방문접수</option><option>택배접수</option></select></div>
         </div>
 
         <div class="sec-title"><span class="sec-num">2</span> 주소</div>
@@ -1630,21 +1638,151 @@ const pageNames = {
 // 데모 고객사 데이터 (기존 하드코딩 행을 JS 배열로 이전)
 // ============================================================
 var DEMO_CUSTOMERS = [
-  { id:'DEMO_01', company:'CJ제일제당(주)', repName:'김CJ', bizNo:'123-45-67890', contactName:'김부장', salesRep:'이주임', grade:'VIP', status:'활동', regDate:'2026-02-10', trafficLight:'blue', bizType:'식품제조업', bizItem:'식품', corpNo:'110111-1234567', contactPhone:'02-1234-5678', contactEmail:'kim@cj.co.kr', zipcode:'04560', addr1:'서울 중구 동호로 330', addr2:'CJ제일제당센터', companyEn:'CJ CheilJedang Corp.', repNameEn:'Kim CJ', addrEn:'330 Dongho-ro, Jung-gu, Seoul' },
-  { id:'DEMO_02', company:'(주)농심', repName:'신농심', bizNo:'345-67-89012', contactName:'이과장', salesRep:'이주임', grade:'A', status:'활동', regDate:'2026-02-08', trafficLight:'green', bizType:'식품제조업', bizItem:'라면·스낵', corpNo:'110111-2345678', contactPhone:'02-2345-6789', contactEmail:'lee@nongshim.com', zipcode:'06764', addr1:'서울 서초구 바우뫼로 68', addr2:'농심빌딩', companyEn:'Nongshim Co., Ltd.', repNameEn:'Shin Nongshim', addrEn:'68 Baumoe-ro, Seocho-gu, Seoul' },
-  { id:'DEMO_03', company:'(주)오뚜기', repName:'함오뚜기', bizNo:'456-78-90123', contactName:'박대리', salesRep:'이주임', grade:'B', status:'활동', regDate:'2025-12-20', trafficLight:'yellow', bizType:'식품제조업', bizItem:'소스·즉석식품', corpNo:'110111-3456789', contactPhone:'02-3456-7890', contactEmail:'park@ottogi.co.kr', zipcode:'14060', addr1:'경기 안양시 동안구 흥안대로 415', addr2:'오뚜기센터', companyEn:'Ottogi Co., Ltd.', repNameEn:'Ham Ottogi', addrEn:'415 Heungan-daero, Dongan-gu, Anyang-si' },
-  { id:'DEMO_04', company:'풀무원식품(주)', repName:'원풀무', bizNo:'234-56-78901', contactName:'이규성', salesRep:'박주임', grade:'A', status:'활동', regDate:'2025-12-05', trafficLight:'orange', bizType:'식품제조업', bizItem:'두부·생면', corpNo:'110111-4567890', contactPhone:'02-4567-8901', contactEmail:'lee@pulmuone.co.kr', zipcode:'05765', addr1:'서울 송파구 충민로 66', addr2:'풀무원타워', companyEn:'Pulmuone Foods Co., Ltd.', repNameEn:'Won Pulmu', addrEn:'66 Chungmin-ro, Songpa-gu, Seoul' },
-  { id:'DEMO_05', company:'(주)삼양식품', repName:'전삼양', bizNo:'567-89-01234', contactName:'최팀장', salesRep:'이주임', grade:'C', status:'활동', regDate:'2025-10-15', trafficLight:'red', bizType:'식품제조업', bizItem:'라면·유지', corpNo:'110111-5678901', contactPhone:'02-5678-9012', contactEmail:'choi@samyang.com', zipcode:'07255', addr1:'서울 영등포구 양산로 45', addr2:'삼양사빌딩', companyEn:'Samyang Foods Co., Ltd.', repNameEn:'Jeon Samyang', addrEn:'45 Yangsan-ro, Yeongdeungpo-gu, Seoul' },
-  { id:'DEMO_06', company:'동원F&B(주)', repName:'김동원', bizNo:'678-90-12345', contactName:'정과장', salesRep:'이주임', grade:'B', status:'활동', regDate:'2026-02-12', trafficLight:'blue', bizType:'식품제조업', bizItem:'수산·통조림', corpNo:'110111-6789012', contactPhone:'02-6789-0123', contactEmail:'jung@dongwon.com', zipcode:'06775', addr1:'서울 서초구 마방로 68', addr2:'동원산업빌딩', companyEn:'Dongwon F&B Co., Ltd.', repNameEn:'Kim Dongwon', addrEn:'68 Mabang-ro, Seocho-gu, Seoul' },
-  { id:'DEMO_07', company:'대상(주)', repName:'임대상', bizNo:'789-01-23456', contactName:'한대리', salesRep:'이주임', grade:'A', status:'휴면', regDate:'2025-08-20', trafficLight:'green', bizType:'식품제조업', bizItem:'조미료·발효', corpNo:'110111-7890123', contactPhone:'02-7890-1234', contactEmail:'han@daesang.co.kr', zipcode:'05765', addr1:'서울 종로구 대학로8길 1', addr2:'대상빌딩', companyEn:'Daesang Corp.', repNameEn:'Lim Daesang', addrEn:'1 Daehak-ro 8-gil, Jongno-gu, Seoul' }
+  { id:'DEMO_01', company:'CJ제일제당(주)', repName:'김CJ', bizNo:'123-45-67890', contactName:'김부장', salesRep:'이주임', grade:'VIP', status:'활동', regDate:'2026-02-10', trafficLight:'blue', bizType:'식품제조업', bizItem:'식품', corpNo:'110111-1234567', contactPhone:'02-1234-5678', contactEmail:'kim@cj.co.kr', zipcode:'04560', addr1:'서울 중구 동호로 330', addr2:'CJ제일제당센터', companyEn:'CJ CheilJedang Corp.', repNameEn:'Kim CJ', addrEn:'330 Dongho-ro, Jung-gu, Seoul', annualRevenue:12000, monthlyFrequency:12, tradeDuration:6, department:'고객지원팀', receiptType:'홈페이지접수' },
+  { id:'DEMO_02', company:'(주)농심', repName:'신농심', bizNo:'345-67-89012', contactName:'이과장', salesRep:'이주임', grade:'A', status:'활동', regDate:'2026-02-08', trafficLight:'green', bizType:'식품제조업', bizItem:'라면·스낵', corpNo:'110111-2345678', contactPhone:'02-2345-6789', contactEmail:'lee@nongshim.com', zipcode:'06764', addr1:'서울 서초구 바우뫼로 68', addr2:'농심빌딩', companyEn:'Nongshim Co., Ltd.', repNameEn:'Shin Nongshim', addrEn:'68 Baumoe-ro, Seocho-gu, Seoul', annualRevenue:8000, monthlyFrequency:8, tradeDuration:4, department:'마케팅사업부', receiptType:'홈페이지접수' },
+  { id:'DEMO_03', company:'(주)오뚜기', repName:'함오뚜기', bizNo:'456-78-90123', contactName:'박대리', salesRep:'이주임', grade:'B', status:'활동', regDate:'2025-12-20', trafficLight:'yellow', bizType:'식품제조업', bizItem:'소스·즉석식품', corpNo:'110111-3456789', contactPhone:'02-3456-7890', contactEmail:'park@ottogi.co.kr', zipcode:'14060', addr1:'경기 안양시 동안구 흥안대로 415', addr2:'오뚜기센터', companyEn:'Ottogi Co., Ltd.', repNameEn:'Ham Ottogi', addrEn:'415 Heungan-daero, Dongan-gu, Anyang-si', annualRevenue:4000, monthlyFrequency:4, tradeDuration:3, department:'고객관리', receiptType:'방문접수' },
+  { id:'DEMO_04', company:'풀무원식품(주)', repName:'원풀무', bizNo:'234-56-78901', contactName:'이규성', salesRep:'박주임', grade:'A', status:'활동', regDate:'2025-12-05', trafficLight:'orange', bizType:'식품제조업', bizItem:'두부·생면', corpNo:'110111-4567890', contactPhone:'02-4567-8901', contactEmail:'lee@pulmuone.co.kr', zipcode:'05765', addr1:'서울 송파구 충민로 66', addr2:'풀무원타워', companyEn:'Pulmuone Foods Co., Ltd.', repNameEn:'Won Pulmu', addrEn:'66 Chungmin-ro, Songpa-gu, Seoul', annualRevenue:6000, monthlyFrequency:6, tradeDuration:5, department:'고객지원팀', receiptType:'홈페이지접수' },
+  { id:'DEMO_05', company:'(주)삼양식품', repName:'전삼양', bizNo:'567-89-01234', contactName:'최팀장', salesRep:'이주임', grade:'C', status:'활동', regDate:'2025-10-15', trafficLight:'red', bizType:'식품제조업', bizItem:'라면·유지', corpNo:'110111-5678901', contactPhone:'02-5678-9012', contactEmail:'choi@samyang.com', zipcode:'07255', addr1:'서울 영등포구 양산로 45', addr2:'삼양사빌딩', companyEn:'Samyang Foods Co., Ltd.', repNameEn:'Jeon Samyang', addrEn:'45 Yangsan-ro, Yeongdeungpo-gu, Seoul', annualRevenue:800, monthlyFrequency:0, tradeDuration:1, department:'지사', receiptType:'택배접수' },
+  { id:'DEMO_06', company:'동원F&B(주)', repName:'김동원', bizNo:'678-90-12345', contactName:'정과장', salesRep:'이주임', grade:'B', status:'활동', regDate:'2026-02-12', trafficLight:'blue', bizType:'식품제조업', bizItem:'수산·통조림', corpNo:'110111-6789012', contactPhone:'02-6789-0123', contactEmail:'jung@dongwon.com', zipcode:'06775', addr1:'서울 서초구 마방로 68', addr2:'동원산업빌딩', companyEn:'Dongwon F&B Co., Ltd.', repNameEn:'Kim Dongwon', addrEn:'68 Mabang-ro, Seocho-gu, Seoul', annualRevenue:3500, monthlyFrequency:3, tradeDuration:2, department:'마케팅사업부', receiptType:'홈페이지접수' },
+  { id:'DEMO_07', company:'대상(주)', repName:'임대상', bizNo:'789-01-23456', contactName:'한대리', salesRep:'이주임', grade:'A', status:'휴면', regDate:'2025-08-20', trafficLight:'green', bizType:'식품제조업', bizItem:'조미료·발효', corpNo:'110111-7890123', contactPhone:'02-7890-1234', contactEmail:'han@daesang.co.kr', zipcode:'05765', addr1:'서울 종로구 대학로8길 1', addr2:'대상빌딩', companyEn:'Daesang Corp.', repNameEn:'Lim Daesang', addrEn:'1 Daehak-ro 8-gil, Jongno-gu, Seoul', annualRevenue:7000, monthlyFrequency:7, tradeDuration:4, department:'고객관리', receiptType:'방문접수' }
 ];
+
+// ============================================================
+// 등급 점수 자동 계산 엔진
+// ============================================================
+var _cachedGradeRules = null;
+var _cachedSignalRules = null;
+
+function getGradeRules() {
+    if (_cachedGradeRules) return _cachedGradeRules;
+    return JSON.parse(localStorage.getItem('bfl_grade_rules') || 'null') || {
+        gradeThresholds: { vip: 90, a: 70, b: 50 },
+        revenue:      { scores: [5,10,20,30,40], thresholds: [1000,3000,5000,10000] },
+        frequency:    { scores: [5,10,15,20,25], thresholds: [1,3,5,10] },
+        duration:     { scores: [3,6,9,12,15],   thresholds: [1,2,3,5] },
+        payment:      { scores: [3,6,9,12,15] },
+        department:   { scores: [1,3,5], conditions: ['지사','고객관리','고객지원팀, 마케팅사업부'] },
+        receiptType:  { scores: [1,3,5], conditions: ['택배접수','방문접수','홈페이지접수'] }
+    };
+}
+
+function getSignalRules() {
+    if (_cachedSignalRules) return _cachedSignalRules;
+    return JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || {
+        green:30, blueMin:31, blueMax:60, yellowMin:61, yellowMax:90,
+        orangeMin:91, orangeMax:120, redMin:121
+    };
+}
+
+function calcCustomerScore(customer) {
+    var rules = getGradeRules();
+    var detail = {};
+    var total = 0;
+
+    // 1. 연간 매출액
+    var rev = rules.revenue || { scores:[5,10,20,30,40], thresholds:[1000,3000,5000,10000] };
+    var revVal = customer.annualRevenue || 0;
+    var revScore = rev.scores[0];
+    for (var i = rev.thresholds.length - 1; i >= 0; i--) {
+        if (revVal >= rev.thresholds[i]) { revScore = rev.scores[i + 1]; break; }
+    }
+    detail.revenue = { label:'연간매출액', value: Number(revVal).toLocaleString() + '만원', score: revScore, max: rev.scores[rev.scores.length-1] };
+    total += revScore;
+
+    // 2. 거래 빈도
+    var freq = rules.frequency || { scores:[5,10,15,20,25], thresholds:[1,3,5,10] };
+    var freqVal = customer.monthlyFrequency || 0;
+    var freqScore = freq.scores[0];
+    for (var i = freq.thresholds.length - 1; i >= 0; i--) {
+        if (freqVal >= freq.thresholds[i]) { freqScore = freq.scores[i + 1]; break; }
+    }
+    detail.frequency = { label:'거래빈도', value: '월 ' + freqVal + '건', score: freqScore, max: freq.scores[freq.scores.length-1] };
+    total += freqScore;
+
+    // 3. 거래 기간
+    var dur = rules.duration || { scores:[3,6,9,12,15], thresholds:[1,2,3,5] };
+    var durVal = customer.tradeDuration || 0;
+    var durScore = dur.scores[0];
+    for (var i = dur.thresholds.length - 1; i >= 0; i--) {
+        if (durVal >= dur.thresholds[i]) { durScore = dur.scores[i + 1]; break; }
+    }
+    detail.duration = { label:'거래기간', value: durVal + '년', score: durScore, max: dur.scores[dur.scores.length-1] };
+    total += durScore;
+
+    // 4. 결제 신뢰도 (신호등 매핑: green=최고, red=최저)
+    var pay = rules.payment || { scores:[3,6,9,12,15] };
+    var tlMap = { red:0, orange:1, yellow:2, blue:3, green:4 };
+    var tlIdx = tlMap[customer.trafficLight] !== undefined ? tlMap[customer.trafficLight] : 3;
+    var payScore = pay.scores[tlIdx];
+    var tlLabels = { green:'정상', blue:'양호', yellow:'주의', orange:'경고', red:'위험' };
+    detail.payment = { label:'결제신뢰도', value: tlLabels[customer.trafficLight] || '양호', score: payScore, max: pay.scores[pay.scores.length-1] };
+    total += payScore;
+
+    // 5. 담당부서
+    var dept = rules.department || { scores:[1,3,5], conditions:['지사','고객관리','고객지원팀, 마케팅사업부'] };
+    var custDept = customer.department || '';
+    var deptScore = 0;
+    for (var i = dept.conditions.length - 1; i >= 0; i--) {
+        if (dept.conditions[i].indexOf(custDept) !== -1 && custDept) { deptScore = dept.scores[i]; break; }
+    }
+    detail.department = { label:'담당부서', value: custDept || '미지정', score: deptScore, max: dept.scores[dept.scores.length-1] };
+    total += deptScore;
+
+    // 6. 접수형태
+    var rcpt = rules.receiptType || { scores:[1,3,5], conditions:['택배접수','방문접수','홈페이지접수'] };
+    var custRcpt = customer.receiptType || '';
+    var rcptScore = 0;
+    for (var i = rcpt.conditions.length - 1; i >= 0; i--) {
+        if (rcpt.conditions[i] === custRcpt) { rcptScore = rcpt.scores[i]; break; }
+    }
+    detail.receiptType = { label:'접수형태', value: custRcpt || '없음', score: rcptScore, max: rcpt.scores[rcpt.scores.length-1] };
+    total += rcptScore;
+
+    // 등급 판정
+    var th = rules.gradeThresholds || { vip:90, a:70, b:50 };
+    var grade = 'C';
+    if (total >= th.vip) grade = 'VIP';
+    else if (total >= th.a) grade = 'A';
+    else if (total >= th.b) grade = 'B';
+
+    return { total: total, grade: grade, detail: detail };
+}
 
 // ============================================================
 // 컬럼 정의 배열 — 테이블 렌더링의 단일 진실 소스
 // ============================================================
 var COLUMNS = [
-  { key:'trafficLight', label:'신호등', defaultVisible:true, render:function(c){ return '<td class="center"><span class="tl tl-' + (c.trafficLight||'blue') + '"></span></td>'; }},
-  { key:'grade', label:'등급', defaultVisible:true, render:function(c){ var t={'VIP':'<span class="tag tag-vip">VIP</span>','A':'<span class="tag tag-a">A</span>','B':'<span class="tag tag-b">B</span>','C':'<span class="tag tag-c">C</span>'}; return '<td>'+(t[c.grade]||'<span class="tag tag-b">B</span>')+'</td>'; }},
+  { key:'trafficLight', label:'신호등', defaultVisible:true, render:function(c){
+    var sr = getSignalRules();
+    var tipMap = {
+      green: '정상: 미수금 없음 또는 ' + sr.green + '일 이내',
+      blue: '양호: 미수금 경과 ' + sr.blueMin + '~' + sr.blueMax + '일',
+      yellow: '주의: 미수금 경과 ' + sr.yellowMin + '~' + sr.yellowMax + '일',
+      orange: '경고: 미수금 경과 ' + sr.orangeMin + '~' + sr.orangeMax + '일',
+      red: '위험: 미수금 경과 ' + sr.redMin + '일 이상'
+    };
+    var tip = tipMap[c.trafficLight] || '';
+    return '<td class="center"><span class="tl tl-' + (c.trafficLight||'blue') + '" data-tooltip="' + tip + '"></span></td>';
+  }},
+  { key:'grade', label:'등급', defaultVisible:true, render:function(c){
+    var si = calcCustomerScore(c);
+    var d = si.detail;
+    var tip = '총점: ' + si.total + '/105\n'
+      + d.revenue.label + ': ' + d.revenue.score + '/' + d.revenue.max + ' (' + d.revenue.value + ')\n'
+      + d.frequency.label + ': ' + d.frequency.score + '/' + d.frequency.max + ' (' + d.frequency.value + ')\n'
+      + d.duration.label + ': ' + d.duration.score + '/' + d.duration.max + ' (' + d.duration.value + ')\n'
+      + d.payment.label + ': ' + d.payment.score + '/' + d.payment.max + ' (' + d.payment.value + ')\n'
+      + d.department.label + ': ' + d.department.score + '/' + d.department.max + ' (' + d.department.value + ')\n'
+      + d.receiptType.label + ': ' + d.receiptType.score + '/' + d.receiptType.max + ' (' + d.receiptType.value + ')';
+    var g = si.grade;
+    var t = {
+      'VIP':'<span class="tag tag-vip" data-tooltip="' + tip + '">VIP</span>',
+      'A':'<span class="tag tag-a" data-tooltip="' + tip + '">A</span>',
+      'B':'<span class="tag tag-b" data-tooltip="' + tip + '">B</span>',
+      'C':'<span class="tag tag-c" data-tooltip="' + tip + '">C</span>'
+    };
+    return '<td>' + (t[g] || t['B']) + '</td>';
+  }},
   { key:'company', label:'회사명', defaultVisible:true, render:function(c){ return '<td><strong>'+(c.company||'')+'</strong></td>'; }},
   { key:'repName', label:'대표자', defaultVisible:true, render:function(c){ return '<td>'+(c.repName||'-')+'</td>'; }},
   { key:'bizNo', label:'사업자번호', defaultVisible:true, render:function(c){ return '<td>'+(c.bizNo||'-')+'</td>'; }},
@@ -1976,6 +2114,11 @@ function saveCustomer() {
     contactPhone: (document.getElementById('regCPhone') || {}).value || '',
     contactEmail: (document.getElementById('regCEmail') || {}).value || '',
     salesRep: salesRepVal,
+    department: (document.getElementById('regDepartment') || {}).value || '',
+    receiptType: (document.getElementById('regReceiptType') || {}).value || '',
+    annualRevenue: 0,
+    monthlyFrequency: 0,
+    tradeDuration: 0,
     // 인허가 정보 (다중 카드 지원)
     licenses: (function() {
       var licArr = [];
@@ -2032,6 +2175,10 @@ function saveCustomer() {
 var _custSearchQuery = '';
 
 function loadCustomers() {
+  // 등급/신호등 규칙 캐싱 (렌더링 루프 밖에서 1회만 로드)
+  _cachedGradeRules = JSON.parse(localStorage.getItem('bfl_grade_rules') || 'null') || getGradeRules();
+  _cachedSignalRules = JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || getSignalRules();
+
   var thead = document.getElementById('customerThead');
   var tbody = document.getElementById('customerTbody');
   if (!thead || !tbody) return;
