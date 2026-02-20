@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - 고객사 등록 (v2)</title>
+<!-- Daum Postcode API -->
+<script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<!-- PDF.js (OCR PDF→이미지 변환) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; height: 100vh; display: flex; background: #f8f9fb; font-size: 13px; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-left: 250px; }
+  .topbar { background: #fff; border-bottom: 1px solid #e2e6ed; padding: 0 24px; height: 52px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .topbar-title { font-size: 15px; font-weight: 700; color: #1a2332; }
+  .topbar-sep { color: #c8d6e5; }
+  .topbar-sub { font-size: 13px; color: #5f6b7a; }
+  .content { flex: 1; padding: 24px; overflow-y: auto; }
+
+  .form-container { max-width: 920px; }
+  .section { background: #fff; border-radius: 12px; border: 1px solid #e2e6ed; padding: 20px; margin-bottom: 16px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2332; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #eef0f4; display: flex; align-items: center; gap: 8px; }
+  .section-title .num { background: #1a73e8; color: #fff; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .section-title .right { margin-left: auto; font-size: 11px; color: #8892a4; font-weight: 400; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .form-full { grid-column: 1 / -1; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; color: #5f6b7a; font-weight: 600; }
+  .form-group label .req { color: #e53935; margin-left: 2px; }
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 9px 12px; border: 1px solid #e2e6ed; border-radius: 8px; font-size: 13px;
+    outline: none; font-family: inherit; transition: border-color 0.15s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #4fc3f7; box-shadow: 0 0 0 3px rgba(79,195,247,0.1); }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+  .form-group select { cursor: pointer; background: #fff; }
+  .hint { font-size: 10px; color: #8892a4; margin-top: 2px; }
+
+  .radio-group { display: flex; gap: 12px; padding: 8px 0; }
+  .radio-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+  .radio-item input[type="radio"] { accent-color: #1a73e8; width: 16px; height: 16px; cursor: pointer; }
+
+  .sub-card { background: #f8f9fb; border-radius: 10px; border: 1px solid #eef0f4; padding: 14px; margin-bottom: 10px; position: relative; }
+  .sub-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .sub-card-title { font-size: 12px; font-weight: 700; color: #1a2332; display: flex; align-items: center; gap: 6px; }
+  .sub-card-num { background: #e3f2fd; color: #1565c0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+  .btn-remove { background: none; border: none; color: #e53935; font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  .btn-remove:hover { background: #fce4ec; }
+
+  .btn-add { display: flex; align-items: center; gap: 6px; padding: 10px 16px; border: 2px dashed #c8d6e5; border-radius: 10px; background: transparent; color: #5f6b7a; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; justify-content: center; transition: all 0.15s; }
+  .btn-add:hover { border-color: #1a73e8; color: #1a73e8; background: #f0f7ff; }
+
+  .address-row { display: flex; gap: 8px; }
+  .address-row input { flex: 1; }
+  .btn-address { padding: 9px 14px; border: 1px solid #e2e6ed; border-radius: 8px; background: #fff; font-size: 12px; color: #5f6b7a; cursor: pointer; white-space: nowrap; font-weight: 600; }
+  .btn-address:hover { background: #f0f2f5; }
+
+  .file-area { border: 2px dashed #e2e6ed; border-radius: 10px; padding: 14px; text-align: center; color: #8892a4; font-size: 12px; cursor: pointer; }
+  .file-area:hover { border-color: #1a73e8; color: #1a73e8; background: #f0f7ff; }
+
+  .dup-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
+  .dup-overlay.show { display: flex; }
+  .dup-popup { background: #fff; border-radius: 14px; padding: 24px; max-width: 520px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
+  .dup-popup h3 { font-size: 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .dup-company-result { border: 1px solid #e2e6ed; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+  .dup-company-name { font-size: 15px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .dup-company-info { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
+  .dup-label { color: #8892a4; width: 70px; flex-shrink: 0; font-size: 12px; }
+  .dup-value { color: #1a2332; font-weight: 500; }
+  .dup-masked { color: #1a2332; font-weight: 500; letter-spacing: 1px; }
+  .dup-result { border: 1px solid #e2e6ed; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .dup-result-header { background: #f8f9fb; padding: 10px 14px; font-size: 12px; font-weight: 600; color: #5f6b7a; display: flex; justify-content: space-between; align-items: center; }
+  .dup-result-body { padding: 12px 14px; }
+  .dup-row { display: flex; gap: 20px; font-size: 13px; margin-bottom: 6px; }
+  .dup-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .dup-btn { flex: 1; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-align: center; }
+  .dup-btn-link { background: #e3f2fd; color: #1565c0; }
+  .dup-btn-link:hover { background: #bbdefb; }
+  .dup-btn-new { background: #e8f5e9; color: #2e7d32; }
+  .dup-btn-new:hover { background: #c8e6c9; }
+  .dup-btn-cancel { background: #f0f2f5; color: #5f6b7a; }
+  .dup-btn-cancel:hover { background: #e2e6ed; }
+  .msg-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; background: #fff3e0; color: #e65100; }
+
+  .our-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .our-row select { padding: 7px 10px; border: 1px solid #e2e6ed; border-radius: 6px; font-size: 12px; flex: 1; min-width: 140px; }
+  .our-arrow { color: #1a73e8; font-size: 13px; font-weight: 700; }
+
+  .tax-copy-btn { font-size: 11px; color: #1a73e8; cursor: pointer; background: #e3f2fd; border: none; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+  .tax-copy-btn:hover { background: #bbdefb; }
+
+  .traffic-preview { display: flex; gap: 6px; align-items: center; padding: 8px 0; }
+  .traffic-dot { width: 14px; height: 14px; border-radius: 50%; }
+
+  .btn-check { padding: 7px 14px; border: 1px solid #1a73e8; border-radius: 8px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-check:hover { background: #bbdefb; }
+
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-success { background: #2e7d32; color: #fff; }
+  .btn-success:hover { background: #1b5e20; }
+  .btn-primary { background: #1565c0; color: #fff; }
+  .btn-primary:hover { background: #0d47a1; }
+
+  .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+  .btn-cancel { padding: 10px 24px; border: 1px solid #e2e6ed; border-radius: 8px; background: #fff; color: #5f6b7a; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-cancel:hover { background: #f0f2f5; }
+  .btn-submit { padding: 10px 24px; border: none; border-radius: 8px; background: #1a73e8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-submit:hover { background: #1557b0; }
+
+  .toast { display: none; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1a2332; color: #fff; padding: 14px 28px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 200; }
+  .toast.show { display: block; animation: fadeUp 0.3s ease; }
+  @keyframes fadeUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
+  .info-banner { background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #1565c0; display: flex; align-items: center; gap: 8px; }
+
+  .combo-input { display: flex; gap: 6px; }
+  .combo-input select { flex: 1; }
+  .combo-input input { flex: 1; }
+  .combo-input input.hidden { display: none; }
+
+  .check-result { margin-top: 6px; font-size: 11px; padding: 6px 10px; border-radius: 6px; }
+  .check-ok { background: #e8f5e9; color: #2e7d32; }
+  .check-dup { background: #fff3e0; color: #e65100; }
+
+  .eng-toggle { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 0; color: #1565c0; font-size: 13px; font-weight: 500; }
+
+  @media(max-width:768px) { .main { margin-left: 0; } }
+  body.sidebar-collapsed .main { margin-left: 64px; }
+</style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR (js/sidebar.js) ===== -->
+<nav class="sidebar" id="sidebar"></nav>
+
+<!-- 회사 중복 확인 팝업 -->
+<div class="dup-overlay" id="companyDupPopup">
+  <div class="dup-popup">
+    <h3>🔍 동일 고객사가 이미 등록되어 있습니다</h3>
+    <div class="dup-company-result">
+      <div class="dup-company-name">
+        <span style="background:#ff9800;width:10px;height:10px;border-radius:50%;display:inline-block;"></span>
+        풀무원식품(주)
+        <span class="msg-badge">🟠 주황</span>
+      </div>
+      <div class="dup-company-info">
+        <div><span class="dup-label">사업자번호</span> 234-56-78901</div>
+        <div><span class="dup-label">대표자</span> 원풀무</div>
+        <div><span class="dup-label">담당 영업</span> 박주임</div>
+        <div><span class="dup-label">최근거래</span> 2026-01-28</div>
+      </div>
+    </div>
+    <div style="background:#fffde7; border:1px solid #fff176; border-radius:8px; padding:10px 12px; font-size:12px; color:#f57f17; margin-bottom:14px;">
+      ⚠️ 이미 <strong>박주임</strong>이 담당하고 있는 업체입니다. 신규 담당자를 추가하면 박주임에게 알림이 발송됩니다.
+    </div>
+    <div class="dup-actions">
+      <button class="dup-btn dup-btn-cancel" onclick="closeDup('companyDupPopup')">취소</button>
+      <button class="dup-btn dup-btn-link" onclick="closeDup('companyDupPopup'); showToastMsg('📩 박주임에게 알림을 발송했습니다. 담당자를 추가합니다.')">기존 업체에 담당자 추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 담당자 중복 확인 팝업 -->
+<div class="dup-overlay" id="contactDupPopup">
+  <div class="dup-popup">
+    <h3>🔍 동일 담당자가 발견되었습니다</h3>
+    <p style="font-size:13px; color:#5f6b7a; margin-bottom:14px;">입력하신 이름과 전화번호로 조회한 결과, 아래 정보가 확인됩니다.</p>
+    <div class="dup-result">
+      <div class="dup-result-header">
+        <span>기존 등록 정보</span>
+        <span class="msg-badge">담당: 박주임</span>
+      </div>
+      <div class="dup-result-body">
+        <div class="dup-row"><span class="dup-label">이름</span><span class="dup-value">이규성</span></div>
+        <div class="dup-row"><span class="dup-label">전화번호</span><span class="dup-masked">010-****-5678</span></div>
+        <div class="dup-row"><span class="dup-label">이메일</span><span class="dup-masked">lee***@pulmu.com</span></div>
+        <div class="dup-row"><span class="dup-label">소속</span><span class="dup-value">풀무원식품(주)</span></div>
+      </div>
+    </div>
+    <div style="font-size:12px; color:#5f6b7a; margin-bottom:14px;">이 사람과 <strong>동일 인물</strong>입니까?</div>
+    <div class="dup-actions" style="flex-wrap:wrap;">
+      <button class="dup-btn dup-btn-cancel" onclick="closeDup('contactDupPopup')">취소</button>
+      <button class="dup-btn dup-btn-new" onclick="closeDup('contactDupPopup'); showToastMsg('✅ 신규 담당자로 등록합니다.')">아니오, 신규 등록</button>
+      <button class="dup-btn dup-btn-link" onclick="closeDup('contactDupPopup'); showToastMsg('📩 기존 담당 박주임에게 알림을 발송했습니다.')">예, 동일 인물 (기존 연결)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">영업 관리</span>
+    <span class="topbar-sep">›</span>
+    <span class="topbar-sub">고객사 관리</span>
+    <span class="topbar-sep">›</span>
+    <span class="topbar-sub" style="color:#1a73e8; font-weight:600;">신규 등록</span>
+  </div>
+  <div class="content">
+    <div class="form-container">
+
+      <!-- 사업자등록증 / 인허가문서 OCR (나란히) -->
+      <div style="background:linear-gradient(135deg,#e3f2fd 0%,#f3e5f5 100%);border:2px solid #90caf9;border-radius:12px;padding:16px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:18px">🔄</span>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1565c0">사업자등록증 / 인허가문서 OCR 자동입력</div>
+            <div style="font-size:11px;color:#5c6bc0">문서를 업로드하면 기본정보 + 주소 + 인허가 정보가 자동으로 입력됩니다</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="file-area" id="bizLicFileArea" style="flex:1;min-width:200px;padding:10px;position:relative" onclick="document.getElementById('bizLicFileInput').click()" ondragover="event.preventDefault();this.style.borderColor='#1565c0'" ondragleave="this.style.borderColor='#90caf9'" ondrop="event.preventDefault();this.style.borderColor='#90caf9';handleBizLicFile(event.dataTransfer.files[0])">
+            <input type="file" id="bizLicFileInput" accept="image/*,.pdf" style="display:none" onchange="handleBizLicFile(this.files[0])">
+            <span id="bizLicFileName" style="font-size:11px">📎 사업자등록증 파일</span>
+          </div>
+          <button class="btn btn-primary" id="bizLicOcrBtn" onclick="runBizLicOCR()" disabled style="white-space:nowrap;padding:8px 14px;font-size:12px">🤖 사업자등록증 OCR</button>
+          <div class="file-area" id="licFileArea_1" style="flex:1;min-width:200px;padding:10px;position:relative" onclick="document.getElementById('licFileInput_1').click()" ondragover="event.preventDefault();this.style.borderColor='#1565c0'" ondragleave="this.style.borderColor='#90caf9'" ondrop="event.preventDefault();this.style.borderColor='#90caf9';handleLicFile(1,event.dataTransfer.files[0])">
+            <input type="file" id="licFileInput_1" accept="image/*,.pdf" style="display:none" onchange="handleLicFile(1,this.files[0])">
+            <span id="licFileName_1" style="font-size:11px">📎 인허가문서 파일</span>
+          </div>
+          <button class="btn btn-check" id="licOcrBtn_1" onclick="runLicOCR(1)" disabled style="white-space:nowrap;padding:8px 14px;font-size:12px">🤖 인허가 OCR</button>
+        </div>
+        <div id="bizLicOcrStatus" style="margin-top:6px;font-size:11px;color:#1565c0;display:none"></div>
+        <div id="bizLicPreview" style="margin-top:10px;display:none"><img id="bizLicPreviewImg" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #90caf9"></div>
+      </div>
+
+      <!-- 1. 기본 정보 -->
+      <div class="section">
+        <div class="section-title"><span class="num">1</span> 기본 정보</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>법인 여부 <span class="req">*</span></label>
+            <div class="radio-group">
+              <label class="radio-item"><input type="radio" name="corpType" value="법인" checked onchange="toggleCorpNo()"> 법인</label>
+              <label class="radio-item"><input type="radio" name="corpType" value="개인" onchange="toggleCorpNo()"> 개인</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>거래처 등급</label>
+            <select id="regGrade"><option value="">등급 선택</option><option>VIP</option><option>A</option><option>B</option><option>C</option></select>
+          </div>
+          <div class="form-group">
+            <label>회사명 <span class="req">*</span></label>
+            <div style="display:flex; gap:6px;">
+              <input type="text" id="companyName" placeholder="예: 풀무원식품(주)" style="flex:1;" />
+              <button class="btn-check" onclick="checkCompanyDup()">중복 확인</button>
+            </div>
+            <div class="check-result check-ok" id="companyCheckResult" style="display:none;"></div>
+          </div>
+          <div class="form-group">
+            <label>대표자명 <span class="req">*</span></label>
+            <input type="text" id="regRepName" placeholder="대표자 이름" />
+          </div>
+          <div class="form-group">
+            <label>사업자번호 <span class="req">*</span></label>
+            <div style="display:flex; gap:6px;">
+              <input type="text" id="bizNo" placeholder="000-00-00000" maxlength="12" oninput="formatBizNo(this)" style="flex:1;" />
+              <button class="btn-check" onclick="checkBizDup()">중복 확인</button>
+            </div>
+            <div class="check-result" id="bizCheckResult" style="display:none;"></div>
+          </div>
+          <div class="form-group" id="corpNoGroup">
+            <label>법인번호 <span class="req">*</span></label>
+            <input type="text" id="regCorpNo" placeholder="000000-0000000" maxlength="14" oninput="formatCorpNo(this)" />
+          </div>
+          <div class="form-group">
+            <label>업태 <span class="req">*</span></label>
+            <input type="text" id="regBizType" placeholder="예: 제조업" />
+          </div>
+          <div class="form-group">
+            <label>종목 <span class="req">*</span></label>
+            <input type="text" id="regBizItem" placeholder="예: 식품" />
+          </div>
+          <div class="form-group">
+            <label>계약 상태</label>
+            <select id="regStatus"><option value="활동" selected>활동</option><option value="휴면">휴면</option><option value="해지">해지</option></select>
+          </div>
+          <div class="form-group">
+            <label>신호등</label>
+            <div class="traffic-preview">
+              <span class="traffic-dot" style="background:#2196f3;"></span>
+              <span style="font-size:11px; color:#5f6b7a;">파랑 (신규 등록 시 기본값 — 자동 산출)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 주소 -->
+      <div class="section">
+        <div class="section-title"><span class="num">2</span> 주소</div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>사업장 주소 <span class="req">*</span></label>
+          <div class="address-row">
+            <input type="text" id="regZipcode" placeholder="우편번호" style="max-width:120px;" readonly />
+            <button class="btn-address" onclick="openPostcodeSearch()">🔍 우편번호 찾기</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <input type="text" id="regAddr1" placeholder="기본주소 (우편번호 검색 시 자동입력)" readonly />
+        </div>
+        <div class="form-group">
+          <input type="text" id="regAddr2" placeholder="상세주소 입력" />
+        </div>
+        <div class="eng-toggle" onclick="toggleEngSection('bizEngSection')" style="margin-top:12px">
+          <span id="bizEngArrow" style="transition:transform .2s;display:inline-block">▶</span> 사업자등록증 (영문 정보)
+        </div>
+        <div id="bizEngSection" style="display:none;padding:8px 0 4px 0;border-top:1px dashed #e2e6ed;margin-bottom:8px">
+          <div class="form-group" style="margin-bottom:8px"><label>Company Name (EN)</label><input id="regCompanyNameEn" placeholder="Company name in English"></div>
+          <div class="form-group" style="margin-bottom:8px"><label>Representative (EN)</label><input id="regRepNameEn" placeholder="Representative name in English"></div>
+          <div class="form-group"><label>Address (EN)</label><input id="regAddrEn" placeholder="Address in English (auto-converted)"></div>
+        </div>
+      </div>
+
+      <!-- 3. 인허가 정보 -->
+      <div class="section">
+        <div class="section-title"><span class="num">3</span> 인허가 정보 <span class="right">여러 개 등록 가능</span></div>
+        <div class="info-banner">📋 식품/축산 분야별 영업등록증, 허가증, 신고필증 등의 인허가 정보를 등록합니다.</div>
+        <div id="licenseList">
+          <div class="sub-card" id="license-1">
+            <div class="sub-card-header">
+              <div class="sub-card-title"><span class="sub-card-num">1</span> 인허가</div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>분야 <span class="req">*</span></label>
+                <select id="licField_1" onchange="updateBizTypeOptions(this)">
+                  <option value="">선택</option>
+                  <option value="식품">식품</option>
+                  <option value="축산">축산</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>영업의 형태 <span class="req">*</span></label>
+                <div class="combo-input">
+                  <select id="licBizForm_1" onchange="toggleCustomInput(this)">
+                    <option value="">선택</option>
+                    <optgroup label="식품">
+                      <option>식품제조가공업</option><option>즉석판매제조가공업</option><option>식품소분업</option><option>유통전문판매업</option><option>식품운반업</option><option>식품냉동냉장업</option>
+                    </optgroup>
+                    <optgroup label="축산">
+                      <option>축산물가공업</option><option>식육포장처리업</option><option>축산물유통전문판매업</option><option>축산물운반업</option><option>축산물보관업</option>
+                    </optgroup>
+                    <option value="직접입력">✏️ 직접 입력</option>
+                  </select>
+                  <input type="text" class="hidden" placeholder="영업의 형태 직접 입력" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>대표자 <span class="req">*</span></label>
+                <input type="text" id="licRepName_1" placeholder="인허가 대표자" />
+              </div>
+              <div class="form-group">
+                <label>인허가번호 <span class="req">*</span></label>
+                <input type="text" id="licNo_1" placeholder="인허가번호 입력" />
+              </div>
+              <div class="form-group">
+                <label>영업소명칭 <span class="req">*</span></label>
+                <input type="text" id="licBizName_1" placeholder="영업소 명칭" />
+              </div>
+              <div class="form-group">
+                <label>소재지 <span class="req">*</span></label>
+                <input type="text" id="licAddr_1" placeholder="인허가 소재지" />
+              </div>
+              <div class="form-group form-full">
+                <div id="licOcrStatus_1" style="font-size:11px;color:#1565c0;display:none"></div>
+              </div>
+            </div>
+            <div class="eng-toggle" onclick="toggleEngSection('licEngSection_1')" style="margin-top:8px">
+              <span id="licEngArrow_1" style="transition:transform .2s;display:inline-block">▶</span> 인허가 정보 (영문)
+            </div>
+            <div id="licEngSection_1" style="display:none;padding:8px 0 4px 0;border-top:1px dashed #e2e6ed">
+              <div class="form-group" style="margin-bottom:8px"><label>Business Name (EN)</label><input id="licBizNameEn_1" placeholder="Business name in English"></div>
+              <div class="form-group" style="margin-bottom:8px"><label>Representative (EN)</label><input id="licRepNameEn_1" placeholder="Representative name in English"></div>
+              <div class="form-group"><label>Address (EN)</label><input id="licAddrEn_1" placeholder="Address in English (auto-converted)"></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" onclick="addLicense()">+ 인허가 정보 추가</button>
+      </div>
+
+      <!-- 4. 고객사 담당자 -->
+      <div class="section">
+        <div class="section-title"><span class="num">4</span> 고객사 담당자 <span class="right">여러 명 등록 가능 · 중복 확인 자동 실행</span></div>
+        <div class="info-banner">🔍 이름 + 전화번호 입력 후 중복 확인을 클릭하면 기존 등록 여부를 조회합니다. 동일 인물 발견 시 기존 담당 영업사원에게 알림이 발송됩니다.</div>
+        <div id="contactList">
+          <div class="sub-card" id="contact-1">
+            <div class="sub-card-header">
+              <div class="sub-card-title"><span class="sub-card-num">1</span> 담당자</div>
+            </div>
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label>이름 <span class="req">*</span></label>
+                <input type="text" id="cName1" placeholder="담당자 이름" />
+              </div>
+              <div class="form-group">
+                <label>전화번호 <span class="req">*</span></label>
+                <input type="text" id="cPhone1" placeholder="010-0000-0000" oninput="formatPhone(this)" />
+              </div>
+              <div class="form-group">
+                <label>이메일</label>
+                <input type="email" placeholder="email@example.com" />
+              </div>
+            </div>
+            <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <button class="btn-check" onclick="checkContactDup()">🔍 중복 확인</button>
+              <div class="check-result check-ok" id="contactCheckResult1" style="display:none;"></div>
+            </div>
+            <div class="our-row">
+              <span style="font-size:11px; color:#8892a4; font-weight:600;">자사 담당자 연결:</span>
+              <select><option value="">선택</option><option>박주임</option><option selected>이주임</option><option>김사원</option></select>
+              <span class="our-arrow">← 담당</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add" onclick="addContact()">+ 담당자 추가</button>
+      </div>
+
+      <!-- 5. 세금계산서 담당자 -->
+      <div class="section">
+        <div class="section-title">
+          <span class="num">5</span> 세금계산서 담당자
+          <button class="tax-copy-btn" style="margin-left:auto;" onclick="showToastMsg('📋 1번 담당자 정보가 복사되었습니다.')">📋 1번 담당자 정보 복사</button>
+        </div>
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label>이름 <span class="req">*</span></label>
+            <input type="text" placeholder="세금계산서 담당자 이름" />
+          </div>
+          <div class="form-group">
+            <label>전화번호 <span class="req">*</span></label>
+            <input type="text" placeholder="010-0000-0000" oninput="formatPhone(this)" />
+          </div>
+          <div class="form-group">
+            <label>이메일 <span class="req">*</span></label>
+            <input type="email" placeholder="세금계산서 수신 이메일" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. 메모 -->
+      <div class="section">
+        <div class="section-title"><span class="num">6</span> 메모 / 비고</div>
+        <div class="form-group">
+          <textarea placeholder="특이사항, 계약 조건, 참고사항 등을 입력하세요..."></textarea>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-cancel" onclick="if(confirm('작성 중인 내용이 사라집니다. 취소하시겠습니까?')) history.back()">취소</button>
+        <button class="btn-submit" onclick="showToastMsg('✅ 고객사가 등록되었습니다!')">✅ 고객사 등록</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/sidebar.js"></script>
+<script>
+/* ===== OCR 설정 ===== */
+var OCR_PROXY_BASE = 'https://localhost:5002';
+var OCR_BIZ_LICENSE_URL = OCR_PROXY_BASE + '/api/ocr/biz-license';
+var OCR_GENERAL_URL = OCR_PROXY_BASE + '/api/ocr/general';
+var _bizLicFile = null;
+var _licFiles = {};
+
+/* ===== 사업자등록증 OCR ===== */
+function handleBizLicFile(file) {
+  if (!file) return;
+  _bizLicFile = file;
+  document.getElementById('bizLicFileName').textContent = '📎 ' + file.name;
+  document.getElementById('bizLicOcrBtn').disabled = false;
+  if (file.type.startsWith('image/')) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('bizLicPreviewImg').src = e.target.result;
+      document.getElementById('bizLicPreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  } else {
+    document.getElementById('bizLicPreview').style.display = 'none';
+  }
+}
+
+function runBizLicOCR() {
+  if (!_bizLicFile) return;
+  var statusEl = document.getElementById('bizLicOcrStatus');
+  statusEl.style.display = 'block';
+  statusEl.textContent = '⏳ OCR 인식 중...';
+  document.getElementById('bizLicOcrBtn').disabled = true;
+
+  fileToBase64(_bizLicFile).then(function(b64) {
+    var fmt = _bizLicFile.name.split('.').pop().toLowerCase();
+    if (fmt === 'pdf') fmt = 'pdf';
+    else if (fmt === 'png') fmt = 'png';
+    else fmt = 'jpg';
+
+    var payload = {
+      version: 'V2',
+      requestId: 'bfl-' + Date.now(),
+      timestamp: Date.now(),
+      images: [{ format: fmt, name: _bizLicFile.name, data: b64 }]
+    };
+
+    return fetch(OCR_BIZ_LICENSE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }).then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result) {
+      var res = data.images[0].bizLicense.result;
+      var getText = function(arr) { return (arr && arr[0] && arr[0].text) ? arr[0].text.trim() : ''; };
+      var companyName = getText(res.companyName) || getText(res.corpName);
+      var repName = getText(res.repName);
+      var bizNo = getText(res.registerNumber) || getText(res.bisRegistrationNumber);
+      var corpNo = getText(res.corporationNumber);
+      var bizType = getText(res.bisType);
+      var bizItem = getText(res.bisItem);
+      var addr = '';
+      if (res.bisAddress && res.bisAddress[0] && res.bisAddress[0].text) addr = res.bisAddress[0].text.trim();
+
+      if (companyName) document.getElementById('companyName').value = companyName;
+      if (repName) document.getElementById('regRepName').value = repName;
+      if (bizNo) { document.getElementById('bizNo').value = bizNo; formatBizNo(document.getElementById('bizNo')); }
+      if (corpNo) { document.getElementById('regCorpNo').value = corpNo; formatCorpNo(document.getElementById('regCorpNo')); }
+      if (bizType) document.getElementById('regBizType').value = bizType;
+      if (bizItem) document.getElementById('regBizItem').value = bizItem;
+      if (addr) document.getElementById('regAddr1').value = addr;
+
+      statusEl.textContent = '✅ OCR 인식 완료! 필드를 확인해주세요.';
+      statusEl.style.color = '#2e7d32';
+    } else {
+      statusEl.textContent = '⚠️ OCR 결과를 파싱할 수 없습니다.';
+      statusEl.style.color = '#e65100';
+    }
+    document.getElementById('bizLicOcrBtn').disabled = false;
+  }).catch(function(err) {
+    statusEl.textContent = '❌ OCR 실패: ' + err.message;
+    statusEl.style.color = '#c62828';
+    document.getElementById('bizLicOcrBtn').disabled = false;
+  });
+}
+
+/* ===== 인허가 OCR ===== */
+function handleLicFile(idx, file) {
+  if (!file) return;
+  _licFiles[idx] = file;
+  document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name;
+  document.getElementById('licOcrBtn_' + idx).disabled = false;
+}
+
+function runLicOCR(idx) {
+  var file = _licFiles[idx];
+  if (!file) return;
+  var statusEl = document.getElementById('licOcrStatus_' + idx);
+  statusEl.style.display = 'block';
+  statusEl.textContent = '⏳ 인허가 OCR 인식 중...';
+  document.getElementById('licOcrBtn_' + idx).disabled = true;
+
+  fileToBase64(file).then(function(b64) {
+    var fmt = file.name.split('.').pop().toLowerCase();
+    if (fmt === 'pdf') fmt = 'pdf'; else if (fmt === 'png') fmt = 'png'; else fmt = 'jpg';
+    var payload = {
+      version: 'V2', requestId: 'bfl-lic-' + Date.now(), timestamp: Date.now(),
+      images: [{ format: fmt, name: file.name, data: b64 }]
+    };
+    return fetch(OCR_BIZ_LICENSE_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+  }).then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result) {
+      var res = data.images[0].bizLicense.result;
+      var getText = function(arr) { return (arr && arr[0] && arr[0].text) ? arr[0].text.trim() : ''; };
+      var repName = getText(res.repName);
+      var bizName = getText(res.companyName) || getText(res.corpName);
+      var licNo = getText(res.registerNumber) || getText(res.bisRegistrationNumber);
+      var addr = (res.bisAddress && res.bisAddress[0]) ? res.bisAddress[0].text.trim() : '';
+
+      if (repName) { var el = document.getElementById('licRepName_' + idx); if(el) el.value = repName; }
+      if (bizName) { var el = document.getElementById('licBizName_' + idx); if(el) el.value = bizName; }
+      if (licNo) { var el = document.getElementById('licNo_' + idx); if(el) el.value = licNo; }
+      if (addr) { var el = document.getElementById('licAddr_' + idx); if(el) el.value = addr; }
+
+      statusEl.textContent = '✅ 인허가 OCR 완료!';
+      statusEl.style.color = '#2e7d32';
+    } else {
+      statusEl.textContent = '⚠️ 인식 결과 없음';
+      statusEl.style.color = '#e65100';
+    }
+    document.getElementById('licOcrBtn_' + idx).disabled = false;
+  }).catch(function(err) {
+    statusEl.textContent = '❌ 실패: ' + err.message;
+    statusEl.style.color = '#c62828';
+    document.getElementById('licOcrBtn_' + idx).disabled = false;
+  });
+}
+
+/* ===== 파일→Base64 변환 ===== */
+function fileToBase64(file) {
+  if (file.type === 'application/pdf' && window.pdfjsLib) {
+    return file.arrayBuffer().then(function(buf) {
+      return pdfjsLib.getDocument({ data: buf }).promise;
+    }).then(function(pdf) {
+      return pdf.getPage(1);
+    }).then(function(page) {
+      var vp = page.getViewport({ scale: 2 });
+      var canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(function() {
+        return canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+      });
+    });
+  }
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result.split(',')[1]); };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ===== 인허가 추가/삭제 ===== */
+let licenseCount = 1;
+function addLicense() {
+  licenseCount++;
+  const idx = licenseCount;
+  const html = `
+    <div class="sub-card" id="license-${idx}">
+      <div class="sub-card-header">
+        <div class="sub-card-title"><span class="sub-card-num">${idx}</span> 인허가</div>
+        <button class="btn-remove" onclick="removeLicense(${idx})" title="삭제">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>분야 <span class="req">*</span></label><select id="licField_${idx}" onchange="updateBizTypeOptions(this)"><option value="">선택</option><option value="식품">식품</option><option value="축산">축산</option></select></div>
+        <div class="form-group"><label>영업의 형태 <span class="req">*</span></label><div class="combo-input"><select id="licBizForm_${idx}" onchange="toggleCustomInput(this)"><option value="">선택</option><optgroup label="식품"><option>식품제조가공업</option><option>즉석판매제조가공업</option><option>식품소분업</option><option>유통전문판매업</option><option>식품운반업</option><option>식품냉동냉장업</option></optgroup><optgroup label="축산"><option>축산물가공업</option><option>식육포장처리업</option><option>축산물유통전문판매업</option><option>축산물운반업</option><option>축산물보관업</option></optgroup><option value="직접입력">✏️ 직접 입력</option></select><input type="text" class="hidden" placeholder="영업의 형태 직접 입력" /></div></div>
+        <div class="form-group"><label>대표자 <span class="req">*</span></label><input type="text" id="licRepName_${idx}" placeholder="인허가 대표자" /></div>
+        <div class="form-group"><label>인허가번호 <span class="req">*</span></label><input type="text" id="licNo_${idx}" placeholder="인허가번호 입력" /></div>
+        <div class="form-group"><label>영업소명칭 <span class="req">*</span></label><input type="text" id="licBizName_${idx}" placeholder="영업소 명칭" /></div>
+        <div class="form-group"><label>소재지 <span class="req">*</span></label><input type="text" id="licAddr_${idx}" placeholder="인허가 소재지" /></div>
+        <div class="form-group form-full"><label>인허가 문서 첨부</label><div style="display:flex;gap:8px;align-items:center"><div class="file-area" id="licFileArea_${idx}" style="flex:1;padding:10px" onclick="document.getElementById('licFileInput_${idx}').click()" ondragover="event.preventDefault();this.style.borderColor='#1a73e8'" ondragleave="this.style.borderColor='#e2e6ed'" ondrop="event.preventDefault();this.style.borderColor='#e2e6ed';handleLicFile(${idx},event.dataTransfer.files[0])"><input type="file" id="licFileInput_${idx}" accept="image/*,.pdf" style="display:none" onchange="handleLicFile(${idx},this.files[0])"><span id="licFileName_${idx}">📁 클릭하여 파일 선택 또는 드래그</span></div><button class="btn-check" id="licOcrBtn_${idx}" onclick="runLicOCR(${idx})" disabled style="white-space:nowrap">🤖 OCR 인식</button></div><div id="licOcrStatus_${idx}" style="margin-top:4px;font-size:11px;color:#1565c0;display:none"></div></div>
+      </div>
+    </div>`;
+  document.getElementById('licenseList').insertAdjacentHTML('beforeend', html);
+}
+function removeLicense(id) { if(confirm('삭제하시겠습니까?')) document.getElementById('license-'+id).remove(); }
+
+/* ===== 담당자 추가/삭제 ===== */
+let contactCount = 1;
+function addContact() {
+  contactCount++;
+  const html = `
+    <div class="sub-card" id="contact-${contactCount}">
+      <div class="sub-card-header">
+        <div class="sub-card-title"><span class="sub-card-num">${contactCount}</span> 담당자</div>
+        <button class="btn-remove" onclick="removeContact(${contactCount})">×</button>
+      </div>
+      <div class="form-grid-3">
+        <div class="form-group"><label>이름 <span class="req">*</span></label><input type="text" placeholder="담당자 이름" /></div>
+        <div class="form-group"><label>전화번호 <span class="req">*</span></label><input type="text" placeholder="010-0000-0000" oninput="formatPhone(this)" /></div>
+        <div class="form-group"><label>이메일</label><input type="email" placeholder="email@example.com" /></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn-check" onclick="showToastMsg('✅ 중복 없음 — 신규 등록 가능')">🔍 중복 확인</button></div>
+      <div class="our-row">
+        <span style="font-size:11px; color:#8892a4; font-weight:600;">자사 담당자 연결:</span>
+        <select><option value="">선택</option><option>박주임</option><option>이주임</option><option>김사원</option></select>
+        <span class="our-arrow">← 담당</span>
+      </div>
+    </div>`;
+  document.getElementById('contactList').insertAdjacentHTML('beforeend', html);
+}
+function removeContact(id) { if(confirm('삭제하시겠습니까?')) document.getElementById('contact-'+id).remove(); }
+
+/* ===== 중복 확인 데모 ===== */
+function checkCompanyDup() {
+  const name = document.getElementById('companyName').value.trim();
+  if (!name) { alert('회사명을 입력해 주세요.'); return; }
+  if (name.includes('풀무원')) {
+    document.getElementById('companyDupPopup').classList.add('show');
+  } else {
+    const el = document.getElementById('companyCheckResult');
+    el.style.display = 'block';
+    el.className = 'check-result check-ok';
+    el.textContent = '✅ 중복 없음 — 등록 가능합니다.';
+  }
+}
+function checkBizDup() {
+  const biz = document.getElementById('bizNo').value.trim();
+  if (!biz) { alert('사업자번호를 입력해 주세요.'); return; }
+  if (biz === '234-56-78901') {
+    const el = document.getElementById('bizCheckResult');
+    el.style.display = 'block'; el.className = 'check-result check-dup';
+    el.textContent = '⚠️ 이미 등록된 사업자번호입니다. (풀무원식품(주) / 담당: 박주임)';
+  } else {
+    const el = document.getElementById('bizCheckResult');
+    el.style.display = 'block'; el.className = 'check-result check-ok';
+    el.textContent = '✅ 중복 없음.';
+  }
+}
+function checkContactDup() {
+  const name = document.getElementById('cName1').value.trim();
+  const phone = document.getElementById('cPhone1').value.trim();
+  if (!name || !phone) { alert('이름과 전화번호를 모두 입력해 주세요.'); return; }
+  if (name === '이규성') {
+    document.getElementById('contactDupPopup').classList.add('show');
+  } else {
+    const el = document.getElementById('contactCheckResult1');
+    el.style.display = 'inline-block'; el.className = 'check-result check-ok';
+    el.textContent = '✅ 중복 없음 — 신규 등록 가능';
+  }
+}
+function closeDup(id) { document.getElementById(id).classList.remove('show'); }
+
+/* ===== 우편번호 검색 ===== */
+function openPostcodeSearch() {
+  new daum.Postcode({
+    oncomplete: function(data) {
+      document.getElementById('regZipcode').value = data.zonecode;
+      document.getElementById('regAddr1').value = data.roadAddress || data.jibunAddress;
+    }
+  }).open();
+}
+
+/* ===== 영문 섹션 토글 ===== */
+function toggleEngSection(id) {
+  var sec = document.getElementById(id);
+  if (!sec) return;
+  var isHidden = sec.style.display === 'none';
+  sec.style.display = isHidden ? 'block' : 'none';
+  var arrowId = id.replace('Section', 'Arrow').replace('biz', 'biz').replace('lic', 'lic');
+  var arrow = document.getElementById(arrowId);
+  if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : '';
+}
+
+/* ===== 포맷 ===== */
+function formatBizNo(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>10) v=v.slice(0,10);
+  if(v.length>5) v=v.slice(0,3)+'-'+v.slice(3,5)+'-'+v.slice(5);
+  else if(v.length>3) v=v.slice(0,3)+'-'+v.slice(3);
+  el.value=v;
+}
+function formatCorpNo(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>13) v=v.slice(0,13);
+  if(v.length>6) v=v.slice(0,6)+'-'+v.slice(6);
+  el.value=v;
+}
+function formatPhone(el) {
+  let v = el.value.replace(/[^0-9]/g,'');
+  if(v.length>11) v=v.slice(0,11);
+  if(v.length>7) v=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7);
+  else if(v.length>3) v=v.slice(0,3)+'-'+v.slice(3);
+  el.value=v;
+}
+
+function toggleCorpNo() {
+  const val = document.querySelector('input[name="corpType"]:checked').value;
+  document.getElementById('corpNoGroup').style.display = val === '개인' ? 'none' : 'flex';
+}
+function toggleCustomInput(sel) {
+  const input = sel.parentElement.querySelector('input');
+  if (sel.value === '직접입력') { input.classList.remove('hidden'); input.focus(); }
+  else { input.classList.add('hidden'); input.value = ''; }
+}
+function updateBizTypeOptions(sel) { /* 향후 확장용 */ }
+
+/* ===== 토스트 ===== */
+function showToastMsg(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
