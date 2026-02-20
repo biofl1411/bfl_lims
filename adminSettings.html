@@ -272,6 +272,14 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
 <div class="toast" id="toast"></div>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+
 <script>
 // ============================================================================
 // 탭 전환
@@ -297,8 +305,12 @@ function toast(msg) {
 // ============================================================================
 const SIGNAL_DEFAULTS = {green:30, blueMin:31, blueMax:60, yellowMin:61, yellowMax:90, orangeMin:91, orangeMax:120, redMin:121};
 
-function loadSignalRules() {
-    const saved = JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || SIGNAL_DEFAULTS;
+async function loadSignalRules() {
+    var saved = SIGNAL_DEFAULTS;
+    try {
+        var fsData = await fsGetSettings('signalRules');
+        if (fsData && fsData.green !== undefined) saved = fsData;
+    } catch(e) { console.warn('Firestore 신호등 규칙 로드 실패, 기본값 사용:', e.message); }
     document.getElementById('signal-green-max').value = saved.green;
     document.getElementById('signal-blue-min').value = saved.blueMin;
     document.getElementById('signal-blue-max').value = saved.blueMax;
@@ -309,7 +321,7 @@ function loadSignalRules() {
     document.getElementById('signal-red-min').value = saved.redMin;
 }
 
-function saveSignalRules() {
+async function saveSignalRules() {
     const rules = {
         green: +document.getElementById('signal-green-max').value,
         blueMin: +document.getElementById('signal-blue-min').value,
@@ -320,14 +332,21 @@ function saveSignalRules() {
         orangeMax: +document.getElementById('signal-orange-max').value,
         redMin: +document.getElementById('signal-red-min').value
     };
-    localStorage.setItem('bfl_signal_rules', JSON.stringify(rules));
-    updatePaymentSignalDisplay();
-    toast('✅ 신호등 규칙이 저장되었습니다');
+    try {
+        await fsSaveSettings('signalRules', rules);
+        updatePaymentSignalDisplay();
+        toast('✅ 신호등 규칙이 저장되었습니다');
+    } catch(e) {
+        console.error('신호등 규칙 저장 실패:', e);
+        toast('❌ 저장 실패: ' + e.message);
+    }
 }
 
-function resetSignalRules() {
-    localStorage.removeItem('bfl_signal_rules');
-    loadSignalRules();
+async function resetSignalRules() {
+    try {
+        await fsSaveSettings('signalRules', SIGNAL_DEFAULTS);
+    } catch(e) { console.warn('Firestore 초기화 실패:', e.message); }
+    await loadSignalRules();
     toast('↩️ 기본값으로 복원되었습니다');
 }
 
@@ -382,8 +401,12 @@ const GRADE_FIELD_IDS = {
     rcptConditions:  ['rcpt-c1', 'rcpt-c2', 'rcpt-c3']
 };
 
-function loadGradeRules() {
-    const saved = JSON.parse(localStorage.getItem('bfl_grade_rules') || 'null') || GRADE_DEFAULTS;
+async function loadGradeRules() {
+    var saved = GRADE_DEFAULTS;
+    try {
+        var fsData = await fsGetSettings('gradeRules');
+        if (fsData && fsData.gradeThresholds) saved = fsData;
+    } catch(e) { console.warn('Firestore 등급 규칙 로드 실패, 기본값 사용:', e.message); }
     // 등급 기준 점수
     const th = saved.gradeThresholds || GRADE_DEFAULTS.gradeThresholds;
     document.getElementById('grade-vip-min').value = th.vip;
@@ -418,7 +441,7 @@ function loadGradeRules() {
     updateGradeDisplays();
 }
 
-function saveGradeRules() {
+async function saveGradeRules() {
     const rules = {
         gradeThresholds: {
             vip: +document.getElementById('grade-vip-min').value,
@@ -449,13 +472,20 @@ function saveGradeRules() {
             conditions: GRADE_FIELD_IDS.rcptConditions.map(id => document.getElementById(id).value)
         }
     };
-    localStorage.setItem('bfl_grade_rules', JSON.stringify(rules));
-    toast('✅ 등급 규칙이 저장되었습니다');
+    try {
+        await fsSaveSettings('gradeRules', rules);
+        toast('✅ 등급 규칙이 저장되었습니다');
+    } catch(e) {
+        console.error('등급 규칙 저장 실패:', e);
+        toast('❌ 저장 실패: ' + e.message);
+    }
 }
 
-function resetGradeRules() {
-    localStorage.removeItem('bfl_grade_rules');
-    loadGradeRules();
+async function resetGradeRules() {
+    try {
+        await fsSaveSettings('gradeRules', GRADE_DEFAULTS);
+    } catch(e) { console.warn('Firestore 초기화 실패:', e.message); }
+    await loadGradeRules();
     toast('↩️ 기본값으로 복원되었습니다');
 }
 
@@ -493,18 +523,35 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================================
 // 휴일 관리
 // ============================================================================
-function getHolidayData() {
-    return JSON.parse(localStorage.getItem('bfl_holiday_data') || '[]');
+// 휴일 데이터 캐시 (Firestore 비동기 → 동기 호환)
+var _holidayCache = [];
+
+async function getHolidayData() {
+    try {
+        var fsData = await fsGetSettings('holidays');
+        if (fsData && Array.isArray(fsData.list)) {
+            _holidayCache = fsData.list;
+            return fsData.list;
+        }
+    } catch(e) { console.warn('Firestore 휴일 로드 실패:', e.message); }
+    return _holidayCache;
 }
 
-function saveHolidayData(data) {
-    localStorage.setItem('bfl_holiday_data', JSON.stringify(data));
-    // bfl_holidays: 날짜 배열 (sampleReceipt.html에서 사용)
-    localStorage.setItem('bfl_holidays', JSON.stringify(data.map(h => h.date)));
+async function saveHolidayData(data) {
+    _holidayCache = data;
+    try {
+        await fsSaveSettings('holidays', {
+            list: data,
+            dates: data.map(function(h) { return h.date; })
+        });
+    } catch(e) {
+        console.error('휴일 저장 실패:', e);
+        toast('❌ 저장 실패: ' + e.message);
+    }
 }
 
-function renderHolidays() {
-    const data = getHolidayData().sort((a,b) => a.date.localeCompare(b.date));
+async function renderHolidays() {
+    const data = (await getHolidayData()).sort((a,b) => a.date.localeCompare(b.date));
     const el = document.getElementById('holiday-list');
     if (!data.length) {
         el.innerHTML = '<p style="color:#9ca3af;font-size:13px">등록된 휴일이 없습니다. 공휴일을 일괄 등록하거나 개별 추가하세요.</p>';
@@ -518,30 +565,30 @@ function renderHolidays() {
     `).join('');
 }
 
-function addHoliday() {
+async function addHoliday() {
     const date = document.getElementById('holiday-date').value;
     const name = document.getElementById('holiday-name').value.trim();
     if (!date) { toast('⚠️ 날짜를 선택하세요'); return; }
     if (!name) { toast('⚠️ 명칭을 입력하세요'); return; }
-    const data = getHolidayData();
+    const data = await getHolidayData();
     if (data.some(h => h.date === date)) { toast('⚠️ 이미 등록된 날짜입니다'); return; }
     data.push({ date, name });
-    saveHolidayData(data);
-    renderHolidays();
+    await saveHolidayData(data);
+    await renderHolidays();
     document.getElementById('holiday-date').value = '';
     document.getElementById('holiday-name').value = '';
     toast('✅ 휴일이 추가되었습니다');
 }
 
-function deleteHoliday(idx) {
-    const data = getHolidayData();
+async function deleteHoliday(idx) {
+    const data = await getHolidayData();
     data.splice(idx, 1);
-    saveHolidayData(data);
-    renderHolidays();
+    await saveHolidayData(data);
+    await renderHolidays();
     toast('🗑️ 삭제되었습니다');
 }
 
-function addDefaultHolidays() {
+async function addDefaultHolidays() {
     const defaults = [
         {date:'2026-01-01', name:'신정'},
         {date:'2026-01-26', name:'설날 전날'}, {date:'2026-01-27', name:'설날'}, {date:'2026-01-28', name:'설날 다음날'},
@@ -555,23 +602,32 @@ function addDefaultHolidays() {
         {date:'2026-10-09', name:'한글날'},
         {date:'2026-12-25', name:'크리스마스'}
     ];
-    const data = getHolidayData();
+    const data = await getHolidayData();
     let added = 0;
     defaults.forEach(d => {
         if (!data.some(h => h.date === d.date)) { data.push(d); added++; }
     });
-    saveHolidayData(data);
-    renderHolidays();
+    await saveHolidayData(data);
+    await renderHolidays();
     toast(`✅ 2026년 공휴일 ${added}건 추가 (중복 제외)`);
 }
 
 // ============================================================================
-// 초기화
+// 초기화 — Firebase 준비 후 데이터 로드
 // ============================================================================
-window.onload = function() {
-    loadSignalRules();
-    loadGradeRules();
-    renderHolidays();
+window.addEventListener('firebase-ready', async function() {
+    console.log('[adminSettings] Firebase 준비 완료, 데이터 로드 시작');
+    await loadSignalRules();
+    await loadGradeRules();
+    await renderHolidays();
+});
+// Firebase 이미 준비된 경우 (캐시 등)
+window.onload = async function() {
+    if (typeof isFirebaseReady === 'function' && isFirebaseReady()) {
+        await loadSignalRules();
+        await loadGradeRules();
+        await renderHolidays();
+    }
 };
 </script>
 </body>
