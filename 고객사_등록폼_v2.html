@@ -449,6 +449,25 @@
         </div>
       </div>
 
+      <!-- 7. 변경 이력 -->
+      <div class="section">
+        <div class="section-title"><span class="num">7</span> 변경 이력</div>
+        <div id="changeLogArea" style="max-height:300px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="border-bottom:2px solid #e2e6ed">
+                <th style="width:140px;text-align:left;padding:8px;color:#5f6b7a">일시</th>
+                <th style="width:80px;text-align:left;padding:8px;color:#5f6b7a">변경자</th>
+                <th style="text-align:left;padding:8px;color:#5f6b7a">변경 내용</th>
+              </tr>
+            </thead>
+            <tbody id="changeLogTbody">
+              <tr><td colspan="3" style="text-align:center;color:#8892a4;padding:20px">변경 이력이 없습니다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="btn-cancel" onclick="if(confirm('작성 중인 내용이 사라집니다. 취소하시겠습니까?')) history.back()">취소</button>
         <button class="btn-submit" onclick="showToastMsg('✅ 고객사가 등록되었습니다!')">✅ 고객사 등록</button>
@@ -466,6 +485,28 @@
 var OCR_PROXY_BASE = 'https://localhost:5002';
 var OCR_BIZ_LICENSE_URL = OCR_PROXY_BASE + '/api/ocr/biz-license';
 var OCR_GENERAL_URL = OCR_PROXY_BASE + '/api/ocr/general';
+
+/* ===== 변경 이력 ===== */
+var changeLog = [];
+
+function renderChangeLog(logs) {
+  var tbody = document.getElementById('changeLogTbody');
+  if (!tbody) return;
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#8892a4;padding:20px">변경 이력이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  var sorted = logs.slice().reverse();
+  sorted.forEach(function(log) {
+    var tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #f0f2f5';
+    tr.innerHTML = '<td style="white-space:nowrap;color:#5f6b7a;padding:8px">' + log.date + '</td>' +
+      '<td style="padding:8px">' + (log.who || '시스템') + '</td>' +
+      '<td style="font-size:11px;padding:8px">' + (log.detail || '') + '</td>';
+    tbody.appendChild(tr);
+  });
+}
 var _bizLicFile = null;
 var _licFiles = {};
 
@@ -526,13 +567,30 @@ function runBizLicOCR() {
       var addr = '';
       if (res.bisAddress && res.bisAddress[0] && res.bisAddress[0].text) addr = res.bisAddress[0].text.trim();
 
-      if (companyName) document.getElementById('companyName').value = companyName;
-      if (repName) document.getElementById('regRepName').value = repName;
-      if (bizNo) { document.getElementById('bizNo').value = bizNo; formatBizNo(document.getElementById('bizNo')); }
-      if (corpNo) { document.getElementById('regCorpNo').value = corpNo; formatCorpNo(document.getElementById('regCorpNo')); }
-      if (bizType) document.getElementById('regBizType').value = bizType;
-      if (bizItem) document.getElementById('regBizItem').value = bizItem;
-      if (addr) document.getElementById('regAddr1').value = addr;
+      var changes = [];
+      function setField(id, label, val) {
+        if (!val) return;
+        var el = document.getElementById(id);
+        if (!el) return;
+        var oldVal = el.value || '';
+        el.value = val;
+        if (oldVal !== val) changes.push({ field: label, from: oldVal, to: val });
+      }
+      setField('companyName', '회사명', companyName);
+      setField('regRepName', '대표자명', repName);
+      if (bizNo) { setField('bizNo', '사업자번호', bizNo); formatBizNo(document.getElementById('bizNo')); }
+      if (corpNo) { setField('regCorpNo', '법인번호', corpNo); formatCorpNo(document.getElementById('regCorpNo')); }
+      setField('regBizType', '업태', bizType);
+      setField('regBizItem', '종목', bizItem);
+      setField('regAddr1', '주소', addr);
+
+      // 변경 이력 기록
+      if (changes.length > 0) {
+        var now = new Date().toISOString().slice(0,16).replace('T',' ');
+        var detail = changes.map(function(c) { return '【'+c.field+'】 "'+(c.from||'(없음)')+'" → "'+c.to+'"'; }).join(', ');
+        changeLog.push({ date: now, who: '시스템 (사업자등록증 OCR)', detail: '사업자등록증 인식에 의해 입력됨 — ' + detail });
+        renderChangeLog(changeLog);
+      }
 
       statusEl.textContent = '✅ OCR 인식 완료! 필드를 확인해주세요.';
       statusEl.style.color = '#2e7d32';
@@ -584,10 +642,27 @@ function runLicOCR(idx) {
       var licNo = getText(res.registerNumber) || getText(res.bisRegistrationNumber);
       var addr = (res.bisAddress && res.bisAddress[0]) ? res.bisAddress[0].text.trim() : '';
 
-      if (repName) { var el = document.getElementById('licRepName_' + idx); if(el) el.value = repName; }
-      if (bizName) { var el = document.getElementById('licBizName_' + idx); if(el) el.value = bizName; }
-      if (licNo) { var el = document.getElementById('licNo_' + idx); if(el) el.value = licNo; }
-      if (addr) { var el = document.getElementById('licAddr_' + idx); if(el) el.value = addr; }
+      var licChanges = [];
+      function setLicField(id, label, val) {
+        if (!val) return;
+        var el = document.getElementById(id);
+        if (!el) return;
+        var oldVal = el.value || '';
+        el.value = val;
+        if (oldVal !== val) licChanges.push({ field: label, from: oldVal, to: val });
+      }
+      setLicField('licRepName_' + idx, '인허가 대표자', repName);
+      setLicField('licBizName_' + idx, '영업소명칭', bizName);
+      setLicField('licNo_' + idx, '인허가번호', licNo);
+      setLicField('licAddr_' + idx, '소재지', addr);
+
+      // 변경 이력 기록
+      if (licChanges.length > 0) {
+        var now = new Date().toISOString().slice(0,16).replace('T',' ');
+        var detail = licChanges.map(function(c) { return '【'+c.field+'】 "'+(c.from||'(없음)')+'" → "'+c.to+'"'; }).join(', ');
+        changeLog.push({ date: now, who: '시스템 (인허가문서 OCR)', detail: '인허가문서 인식에 의해 입력됨 — ' + detail });
+        renderChangeLog(changeLog);
+      }
 
       statusEl.textContent = '✅ 인허가 OCR 완료!';
       statusEl.style.color = '#2e7d32';
