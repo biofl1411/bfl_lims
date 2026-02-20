@@ -128,6 +128,7 @@
   .check-dup { background: #fff3e0; color: #e65100; }
 
   .eng-toggle { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 6px 0; color: #1565c0; font-size: 13px; font-weight: 500; }
+  .law-badge { display:inline-flex; align-items:center; gap:4px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9; margin-top:8px; }
 
   @media(max-width:768px) { .main { margin-left: 0; } }
   body.sidebar-collapsed .main { margin-left: 64px; }
@@ -377,6 +378,7 @@
                 <div id="licOcrStatus_1" style="font-size:11px;color:#1565c0;display:none"></div>
               </div>
             </div>
+            <div id="licLawBadge_1" class="law-badge" style="display:none"></div>
             <div class="eng-toggle" onclick="toggleEngSection('licEngSection_1')" style="margin-top:8px">
               <span id="licEngArrow_1" style="transition:transform .2s;display:inline-block">▶</span> 인허가 정보 (영문)
             </div>
@@ -608,6 +610,14 @@ function runBizLicOCR() {
         }
       }
 
+      // OCR 주소 기반 우편번호 자동검색 팝업 오픈
+      var ocrBaseAddr = document.getElementById('regAddr1').value;
+      if (ocrBaseAddr) {
+        setTimeout(function() {
+          searchPostcodeByAddress(ocrBaseAddr, 'regZipcode', 'regAddr1');
+        }, 500);
+      }
+
       // 변경 이력 기록
       if (changes.length > 0) {
         var now = new Date().toISOString().slice(0,16).replace('T',' ');
@@ -700,6 +710,14 @@ function runLicOCR(idx) {
         }
       }
 
+      // OCR 인허가 주소 기반 우편번호 자동검색 팝업 오픈
+      var ocrLicAddr = document.getElementById('licAddr_' + idx) ? document.getElementById('licAddr_' + idx).value : '';
+      if (ocrLicAddr) {
+        setTimeout(function() {
+          searchPostcodeByAddress(ocrLicAddr, 'licZipcode_' + idx, 'licAddr_' + idx);
+        }, 500);
+      }
+
       // 변경 이력 기록
       if (licChanges.length > 0) {
         var now = new Date().toISOString().slice(0,16).replace('T',' ');
@@ -765,6 +783,7 @@ function addLicense() {
         <div class="form-group form-full"><label>소재지 <span class="req">*</span></label><div class="address-row" style="margin-bottom:6px"><input type="text" id="licZipcode_${idx}" placeholder="우편번호" style="max-width:120px;" readonly /><button type="button" class="btn-address" onclick="openLicPostcode(${idx})">🔍 우편번호 찾기</button></div><input type="text" id="licAddr_${idx}" placeholder="기본주소 (우편번호 검색 시 자동입력)" readonly style="margin-bottom:6px" /><input type="text" id="licAddrDetail_${idx}" placeholder="상세주소 입력" /></div>
         <div class="form-group form-full"><label>인허가 문서 첨부</label><div style="display:flex;gap:8px;align-items:center"><div class="file-area" id="licFileArea_${idx}" style="flex:1;padding:10px" onclick="document.getElementById('licFileInput_${idx}').click()" ondragover="event.preventDefault();this.style.borderColor='#1a73e8'" ondragleave="this.style.borderColor='#e2e6ed'" ondrop="event.preventDefault();this.style.borderColor='#e2e6ed';handleLicFile(${idx},event.dataTransfer.files[0])"><input type="file" id="licFileInput_${idx}" accept="image/*,.pdf" style="display:none" onchange="handleLicFile(${idx},this.files[0])"><span id="licFileName_${idx}">📁 클릭하여 파일 선택 또는 드래그</span></div><button class="btn-check" id="licOcrBtn_${idx}" onclick="runLicOCR(${idx})" disabled style="white-space:nowrap">🤖 OCR 인식</button></div><div id="licOcrStatus_${idx}" style="margin-top:4px;font-size:11px;color:#1565c0;display:none"></div></div>
       </div>
+      <div id="licLawBadge_${idx}" class="law-badge" style="display:none"></div>
     </div>`;
   document.getElementById('licenseList').insertAdjacentHTML('beforeend', html);
 }
@@ -858,6 +877,19 @@ function openLicPostcode(idx) {
   }).open();
 }
 
+/* ===== OCR 후 우편번호 자동검색 ===== */
+function searchPostcodeByAddress(baseAddr, zipcodeId, addrId) {
+  if (!baseAddr || !baseAddr.trim()) return;
+  new daum.Postcode({
+    oncomplete: function(data) {
+      var zipEl = document.getElementById(zipcodeId);
+      var addrEl = document.getElementById(addrId);
+      if (zipEl) zipEl.value = data.zonecode;
+      if (addrEl) addrEl.value = data.roadAddress || data.jibunAddress;
+    }
+  }).open({ q: baseAddr.trim() });
+}
+
 /* ===== 영문 섹션 토글 ===== */
 function toggleEngSection(id) {
   var sec = document.getElementById(id);
@@ -900,7 +932,20 @@ function toggleCustomInput(sel) {
   if (sel.value === '직접입력') { input.classList.remove('hidden'); input.focus(); }
   else { input.classList.add('hidden'); input.value = ''; }
 }
-function updateBizTypeOptions(sel) { /* 향후 확장용 */ }
+function updateBizTypeOptions(sel) {
+  var field = sel.value;
+  var idx = sel.id.split('_').pop();
+  var badgeEl = document.getElementById('licLawBadge_' + idx);
+  if (!badgeEl) return;
+  var lawMap = { '식품': '식품위생법', '축산': '축산물 위생관리법' };
+  if (field && lawMap[field]) {
+    badgeEl.textContent = '📋 근거법: 「' + lawMap[field] + '」';
+    badgeEl.style.display = 'inline-flex';
+  } else {
+    badgeEl.style.display = 'none';
+    badgeEl.textContent = '';
+  }
+}
 
 /* ===== 토스트 ===== */
 function showToastMsg(msg) {
