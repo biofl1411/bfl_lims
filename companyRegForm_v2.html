@@ -485,7 +485,7 @@
 
       <div class="form-actions">
         <button class="btn-cancel" onclick="if(confirm('작성 중인 내용이 사라집니다. 취소하시겠습니까?')) history.back()">취소</button>
-        <button class="btn-submit" onclick="showToastMsg('✅ 고객사가 등록되었습니다!')">✅ 고객사 등록</button>
+        <button class="btn-submit" onclick="submitCompanyForm()">✅ 고객사 등록</button>
       </div>
 
     </div>
@@ -493,6 +493,14 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
 
 <!-- 업체명 선택 모달 -->
 <div class="dup-overlay" id="companySelectModal">
@@ -961,28 +969,32 @@ var USERS_DATA = [
   {"부서명":"식품축산분석실","아이디":"김문기","직급":"사원"},
   {"부서명":"식품축산분석실","아이디":"지현정","직급":"사원"}
 ];
-/* localStorage에서 수정된 사용자 데이터 병합 (userMgmt.html과 동일 로직) */
-function loadSalesUsers() {
-  var base = USERS_DATA.map(function(u) { return Object.assign({ 팀명:'', 접수자:'', 입사일:'', 퇴사일:'' }, u); });
-  var saved = localStorage.getItem('bfl_users_data');
-  if (saved) {
-    try {
-      var savedUsers = JSON.parse(saved);
-      var baseMap = {};
-      base.forEach(function(u) { baseMap[u.아이디] = u; });
-      savedUsers.forEach(function(su) {
-        if (baseMap[su.아이디]) { Object.assign(baseMap[su.아이디], su); }
-        else { base.push(su); }
-      });
-      return base;
-    } catch(e) { /* 파싱 오류 시 기본값 */ }
-  }
-  return base;
+/* 사용자 데이터 로드 (기본값 → Firestore 교체) */
+function loadSalesUsersDefault() {
+  return USERS_DATA.map(function(u) { return Object.assign({ 팀명:'', 접수자:'', 입사일:'', 퇴사일:'' }, u); });
 }
 var SALES_TEAMS = ['고객지원팀', '마케팅사업부', '고객관리', '지사'];
 var salesTeamList = SALES_TEAMS;
-var _allUsers = loadSalesUsers();
+var _allUsers = loadSalesUsersDefault();
 var salesUsersList = _allUsers.filter(function(u) { return SALES_TEAMS.indexOf(u.부서명) !== -1; });
+
+/* Firebase 준비 후 Firestore에서 사용자 로드 */
+window.addEventListener('firebase-ready', async function() {
+  try {
+    var fsUsers = await fsGetUsers();
+    if (fsUsers && fsUsers.length > 0) {
+      _allUsers = fsUsers.map(function(u) {
+        return { 부서명: u.department || u.부서명 || '', 아이디: u.name || u.아이디 || '', 직급: u.position || u.직급 || '', 팀명: u.team || u.팀명 || '', 접수자: u.receiver || u.접수자 || '', 입사일: u.joinDate || u.입사일 || '', 퇴사일: u.leaveDate || u.퇴사일 || '' };
+      });
+      salesUsersList = _allUsers.filter(function(u) { return SALES_TEAMS.indexOf(u.부서명) !== -1; });
+      // 담당자 셀렉트 갱신
+      for (var i = 1; i <= contactCount; i++) {
+        if (document.getElementById('cTeam' + i)) filterRepByTeam(i);
+      }
+      console.log('[companyRegForm] Firestore 사용자 ' + _allUsers.length + '명 로드');
+    }
+  } catch(e) { console.warn('Firestore 사용자 로드 실패:', e.message); }
+});
 /* 부서 <option> HTML 생성 유틸 */
 function buildTeamOptions() {
   return salesTeamList.map(function(t) { return '<option value="' + escHtml(t) + '">' + escHtml(t) + '</option>'; }).join('');
@@ -1395,6 +1407,149 @@ function showToastMsg(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+/* ===== Firestore 저장 — 고객사 등록 ===== */
+async function submitCompanyForm() {
+  // 필수 검증
+  var companyName = (document.getElementById('companyName') || {}).value || '';
+  var bizNo = (document.getElementById('bizNo') || {}).value || '';
+  var repName = (document.getElementById('regRepName') || {}).value || '';
+  if (!companyName.trim()) { alert('회사명을 입력하세요.'); return; }
+  if (!bizNo.trim()) { alert('사업자번호를 입력하세요.'); return; }
+  if (!repName.trim()) { alert('대표자명을 입력하세요.'); return; }
+
+  // 기본 정보 수집
+  var corpType = document.querySelector('input[name="corpType"]:checked');
+  var data = {
+    name: companyName.trim(),
+    businessNo: bizNo.trim(),
+    ceo: repName.trim(),
+    corpType: corpType ? corpType.value : '법인',
+    corpNo: (document.getElementById('regCorpNo') || {}).value || '',
+    bizType: (document.getElementById('regBizType') || {}).value || '',
+    bizItem: (document.getElementById('regBizItem') || {}).value || '',
+    status: (document.getElementById('regStatus') || {}).value || '활동',
+    signalColor: 'blue',
+    grade: 'C'
+  };
+
+  // 주소 수집
+  data.addresses = [];
+  for (var a = 1; a <= addressCount; a++) {
+    if (!document.getElementById('address-' + a)) continue;
+    var zip = (document.getElementById('addrZip' + a) || {}).value || '';
+    var addr1 = (document.getElementById('addrMain' + a) || {}).value || '';
+    var addr2 = (document.getElementById('addrDetail' + a) || {}).value || '';
+    if (addr1.trim()) data.addresses.push({ zipcode: zip, addr1: addr1, addr2: addr2 });
+  }
+
+  // 인허가 수집
+  data.licenses = [];
+  for (var l = 1; l <= licenseCount; l++) {
+    if (!document.getElementById('license-' + l)) continue;
+    var lic = {
+      field: (document.getElementById('licField_' + l) || {}).value || '',
+      bizForm: (document.getElementById('licBizForm_' + l) || {}).value || '',
+      repName: (document.getElementById('licRepName_' + l) || {}).value || '',
+      licenseNo: (document.getElementById('licNo_' + l) || {}).value || '',
+      bizName: (document.getElementById('licBizName_' + l) || {}).value || ''
+    };
+    if (lic.field || lic.licenseNo) data.licenses.push(lic);
+  }
+
+  // 담당자 수집
+  data.contacts = [];
+  for (var c = 1; c <= contactCount; c++) {
+    if (!document.getElementById('contact-' + c)) continue;
+    var ct = {
+      name: (document.getElementById('cName' + c) || {}).value || '',
+      phone: (document.getElementById('cPhone' + c) || {}).value || '',
+      email: (document.getElementById('cEmail' + c) || {}).value || '',
+      salesTeam: (document.getElementById('cTeam' + c) || {}).value || '',
+      salesRep: (document.getElementById('cRep' + c) || {}).value || ''
+    };
+    if (ct.name.trim()) data.contacts.push(ct);
+  }
+
+  // 세금계산서 정보
+  data.taxInfo = {
+    company: (document.getElementById('taxCompany') || {}).value || (document.getElementById('taxCompanyCustom') || {}).value || '',
+    dept: (document.getElementById('taxDept') || {}).value || '',
+    name: (document.getElementById('taxName') || {}).value || '',
+    phone: (document.getElementById('taxPhone') || {}).value || '',
+    email: (document.getElementById('taxEmail') || {}).value || ''
+  };
+
+  // 비고
+  data.note = (document.getElementById('regNote') || {}).value || '';
+
+  try {
+    // Firestore에 업체 저장
+    var docId = await fsSaveCompany(data);
+    console.log('[companyRegForm] 업체 저장 완료, docId:', docId);
+
+    // 사업자등록증 파일 업로드
+    var bizLicFile = document.getElementById('bizLicFileInput');
+    if (bizLicFile && bizLicFile.files && bizLicFile.files[0]) {
+      try {
+        await fsUploadBizLicense(docId, bizLicFile.files[0]);
+        console.log('[companyRegForm] 사업자등록증 업로드 완료');
+      } catch(e) { console.warn('사업자등록증 업로드 실패:', e.message); }
+    }
+
+    // 인허가문서 파일 업로드
+    for (var f = 1; f <= licenseCount; f++) {
+      var licFileInput = document.getElementById('licFileInput_' + f);
+      if (licFileInput && licFileInput.files && licFileInput.files[0]) {
+        try {
+          await fsUploadPermitDoc(docId, licFileInput.files[0]);
+          console.log('[companyRegForm] 인허가문서 ' + f + ' 업로드 완료');
+        } catch(e) { console.warn('인허가문서 ' + f + ' 업로드 실패:', e.message); }
+      }
+    }
+
+    showToastMsg('✅ 고객사가 등록되었습니다!');
+    // 3초 후 업체관리 페이지로 이동
+    setTimeout(function() {
+      location.href = 'companyMgmt.html';
+    }, 2000);
+
+  } catch(e) {
+    console.error('업체 등록 실패:', e);
+    alert('❌ 등록 실패: ' + e.message);
+  }
+}
+
+/* ===== 중복 확인 — Firestore 연동 ===== */
+var _origCheckBizDup = typeof checkBizDup === 'function' ? checkBizDup : null;
+async function checkBizDupFirestore() {
+  var bizNo = (document.getElementById('bizNo') || {}).value || '';
+  if (!bizNo.trim()) { alert('사업자번호를 입력하세요.'); return; }
+  try {
+    var dup = await fsCheckDuplicateBusinessNo(bizNo.trim());
+    var resultEl = document.getElementById('bizCheckResult');
+    if (dup) {
+      resultEl.className = 'check-result check-dup';
+      resultEl.textContent = '⚠️ 이미 등록된 사업자번호입니다: ' + (dup.name || '');
+      resultEl.style.display = 'block';
+    } else {
+      resultEl.className = 'check-result check-ok';
+      resultEl.textContent = '✅ 사용 가능한 사업자번호입니다.';
+      resultEl.style.display = 'block';
+    }
+  } catch(e) {
+    console.warn('중복 확인 실패:', e.message);
+    if (_origCheckBizDup) _origCheckBizDup();
+  }
+}
+
+/* Firebase 준비 후 중복확인을 Firestore 버전으로 교체 */
+window.addEventListener('firebase-ready', function() {
+  // checkBizDup 함수를 Firestore 버전으로 교체
+  if (typeof checkBizDup === 'function') {
+    window.checkBizDup = checkBizDupFirestore;
+  }
+});
 
 /* ===== 페이지 초기화 ===== */
 /* 1번 담당자 부서 드롭다운 옵션 동적 생성 */
