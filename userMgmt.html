@@ -193,6 +193,14 @@ th .sort-arrow{font-size:10px;margin-left:4px;color:#9ca3af}
 </div>
 </div>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+
 <script>
 const USERS_DATA = [
   {
@@ -476,40 +484,81 @@ const USERS_DATA = [
     "직급": "사원"
   }
 ];
-// localStorage에서 수정된 사용자 데이터 로드
-function loadUsers() {
-  const base = USERS_DATA.map(u => ({ 팀명: '', 접수자: '', 입사일: '', 퇴사일: '', ...u }));
-  const saved = localStorage.getItem('bfl_users_data');
-  if (saved) {
-    try {
-      const savedUsers = JSON.parse(saved);
-      // 저장된 사용자 데이터 병합 (기존 + 신규 추가분)
-      const baseMap = {};
-      base.forEach(u => baseMap[u.아이디] = u);
-      savedUsers.forEach(su => {
-        if (baseMap[su.아이디]) {
-          // 기존 사용자 → 수정된 필드 덮어쓰기
-          Object.assign(baseMap[su.아이디], su);
-        } else {
-          // 신규 추가된 사용자
-          base.push(su);
-        }
+// Firestore에서 사용자 데이터 로드
+var _usersLoaded = false;
+function loadUsersFromDefault() {
+  return USERS_DATA.map(function(u) { return Object.assign({ 팀명: '', 접수자: '', 입사일: '', 퇴사일: '' }, u); });
+}
+
+async function loadUsersFromFirestore() {
+  try {
+    var fsUsers = await fsGetUsers();
+    if (fsUsers && fsUsers.length > 0) {
+      _usersLoaded = true;
+      return fsUsers.map(function(u) {
+        return {
+          _id: u.id || '',
+          부서명: u.department || u.부서명 || '',
+          아이디: u.name || u.아이디 || '',
+          직급: u.position || u.직급 || '',
+          팀명: u.team || u.팀명 || '',
+          접수자: u.receiver || u.접수자 || '',
+          입사일: u.joinDate || u.입사일 || '',
+          퇴사일: u.leaveDate || u.퇴사일 || ''
+        };
       });
-      return base;
-    } catch(e) { /* 파싱 오류 시 기본값 */ }
+    }
+  } catch(e) { console.warn('Firestore 사용자 로드 실패:', e.message); }
+  // Firestore에 데이터 없으면 기본값
+  return loadUsersFromDefault();
+}
+
+async function saveUsersToStorage() {
+  // Firestore에 전체 사용자 저장
+  try {
+    for (var i = 0; i < users.length; i++) {
+      var u = users[i];
+      var data = {
+        name: u.아이디,
+        department: u.부서명,
+        position: u.직급,
+        team: u.팀명 || '',
+        receiver: u.접수자 || '',
+        joinDate: u.입사일 || '',
+        leaveDate: u.퇴사일 || '',
+        isActive: !u.퇴사일
+      };
+      if (u._id) {
+        data.id = u._id;
+      }
+      var docId = await fsSaveUser(data);
+      if (!u._id) u._id = docId;
+    }
+  } catch(e) {
+    console.error('사용자 저장 실패:', e);
+    alert('저장 실패: ' + e.message);
   }
-  return base;
 }
-function saveUsersToStorage() {
-  // 기본값과 다른 사용자만 저장 (변경/추가분)
-  const changes = users.filter(u => {
-    const orig = USERS_DATA.find(o => o.아이디 === u.아이디);
-    if (!orig) return true; // 신규 추가
-    return u.팀명 || u.접수자 || u.입사일 || u.퇴사일 || u.부서명 !== orig.부서명 || u.직급 !== orig.직급;
-  });
-  localStorage.setItem('bfl_users_data', JSON.stringify(changes));
+
+async function saveOneUser(u) {
+  var data = {
+    name: u.아이디,
+    department: u.부서명,
+    position: u.직급,
+    team: u.팀명 || '',
+    receiver: u.접수자 || '',
+    joinDate: u.입사일 || '',
+    leaveDate: u.퇴사일 || '',
+    isActive: !u.퇴사일
+  };
+  if (u._id) data.id = u._id;
+  var docId = await fsSaveUser(data);
+  if (!u._id) u._id = docId;
+  return docId;
 }
-let users = loadUsers();
+
+// 초기화 시 기본값으로 시작 (Firebase 준비 후 Firestore 데이터로 교체)
+let users = loadUsersFromDefault();
 
 // 팀 목록 (부서별)
 const TEAM_OPTIONS = {
@@ -525,11 +574,41 @@ const TEAM_OPTIONS = {
   '임원': ['임원']
 };
 
-// 초기화
-document.addEventListener('DOMContentLoaded', () => {
+// 초기화 — 먼저 기본값으로 렌더, Firebase 준비되면 Firestore 데이터로 교체
+document.addEventListener('DOMContentLoaded', function() {
   populateFilters();
   renderUsers();
+  updateStats();
 });
+
+window.addEventListener('firebase-ready', async function() {
+  console.log('[userMgmt] Firebase 준비 완료, Firestore에서 사용자 로드');
+  var fsUsers = await loadUsersFromFirestore();
+  if (_usersLoaded && fsUsers.length > 0) {
+    users = fsUsers;
+    populateFilters();
+    renderUsers();
+    updateStats();
+    console.log('[userMgmt] Firestore 사용자 ' + users.length + '명 로드 완료');
+  } else if (!_usersLoaded) {
+    // Firestore에 데이터 없음 → 기본 USERS_DATA를 Firestore에 일괄 저장
+    console.log('[userMgmt] Firestore에 사용자 없음, 기본 데이터 업로드 중...');
+    await saveUsersToStorage();
+    console.log('[userMgmt] 기본 사용자 ' + users.length + '명 Firestore 업로드 완료');
+  }
+});
+
+function updateStats() {
+  var statCards = document.querySelectorAll('.stat-value');
+  if (statCards[0]) statCards[0].textContent = users.length;
+  var allDepts = {};
+  users.forEach(function(u) { allDepts[u.부서명] = true; });
+  if (statCards[1]) statCards[1].textContent = Object.keys(allDepts).length;
+  var labCount = users.filter(function(u) { return u.부서명 === '식품축산분석실'; }).length;
+  if (statCards[2]) statCards[2].textContent = labCount;
+  var csCount = users.filter(function(u) { return u.부서명 === '고객지원팀'; }).length;
+  if (statCards[3]) statCards[3].textContent = csCount;
+}
 
 function populateFilters() {
   const allDepts = [...new Set(users.map(u => u.부서명))];
@@ -640,7 +719,7 @@ function closeModal() {
   document.getElementById('userModal').classList.remove('active');
 }
 
-function saveUser() {
+async function saveUser() {
   const id = document.getElementById('userId').value.trim();
   const dept = document.getElementById('userDept').value;
   const team = document.getElementById('userTeam').value;
@@ -659,7 +738,7 @@ function saveUser() {
     return;
   }
 
-  users.push({
+  var newUser = {
     부서명: dept,
     아이디: id,
     직급: pos,
@@ -667,19 +746,23 @@ function saveUser() {
     접수자: receiver,
     입사일: joinDate,
     퇴사일: leaveDate
-  });
+  };
 
-  closeModal();
-  saveUsersToStorage();
-  populateFilters();
-  if (currentSort.key) {
-    applySortAndRender();
-  } else {
-    renderUsers();
+  try {
+    await saveOneUser(newUser);
+    users.push(newUser);
+    closeModal();
+    populateFilters();
+    if (currentSort.key) {
+      applySortAndRender();
+    } else {
+      renderUsers();
+    }
+    updateStats();
+    alert(`"${id}" 사용자가 추가되었습니다.`);
+  } catch(e) {
+    alert('저장 실패: ' + e.message);
   }
-  // 통계 업데이트
-  document.querySelector('.stat-value').textContent = users.length;
-  alert(`"${id}" 사용자가 추가되었습니다.`);
 }
 
 let editingUserId = null;
@@ -717,9 +800,9 @@ function updateSortArrows() {
   }
 }
 
-function resetSort() {
+async function resetSort() {
   currentSort = { key: null, asc: true };
-  users = loadUsers();
+  users = await loadUsersFromFirestore();
   updateSortArrows();
   renderUsers();
 }
@@ -729,7 +812,7 @@ function editUser(id) {
   renderUsers();
 }
 
-function saveEditUser(id) {
+async function saveEditUser(id) {
   const u = users.find(u => u.아이디 === id);
   if (!u) return;
   u.부서명 = document.getElementById('edit-dept').value;
@@ -739,7 +822,9 @@ function saveEditUser(id) {
   u.입사일 = document.getElementById('edit-join').value;
   u.퇴사일 = document.getElementById('edit-leave').value;
   editingUserId = null;
-  saveUsersToStorage();
+  try {
+    await saveOneUser(u);
+  } catch(e) { console.error('수정 저장 실패:', e); }
   populateFilters();
   if (currentSort.key) {
     applySortAndRender();
