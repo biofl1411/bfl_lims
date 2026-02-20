@@ -725,10 +725,11 @@ function runLicOCR(idx) {
         }
       }
 
-      // ===== 분야 자동 설정: 축산 키워드 → '축산', 나머지 → '식품' =====
+      // ===== 분야 자동 설정: 축산 키워드 → '축산', 나머지 → '식품' (OCR 시 항상 재판별) =====
       var allText = [bizForm || '', bizName || '', getText(res.documentType)].join(' ');
       var fieldSel = document.getElementById('licField_' + idx);
-      if (fieldSel && !fieldSel.value) {
+      if (fieldSel) {
+        var oldField = fieldSel.value || '';
         var isLivestock = /축산물?위생|축산물?가공|식육|도축|식용란|유가공|우유|낙농|집유|축산/.test(allText);
         for (var k = 0; k < fieldSel.options.length; k++) {
           if ((isLivestock && fieldSel.options[k].value === '축산') ||
@@ -737,7 +738,8 @@ function runLicOCR(idx) {
             break;
           }
         }
-        licChanges.push({ field: '분야', from: '(없음)', to: isLivestock ? '축산' : '식품' });
+        var newField = isLivestock ? '축산' : '식품';
+        if (oldField !== newField) licChanges.push({ field: '분야', from: oldField || '(없음)', to: newField });
         // 근거법 배지 업데이트
         if (typeof updateBizTypeOptions === 'function') updateBizTypeOptions(fieldSel);
       }
