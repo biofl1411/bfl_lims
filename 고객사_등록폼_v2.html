@@ -689,7 +689,60 @@ function runLicOCR(idx) {
       setLicField('licBizName_' + idx, '영업소명칭', bizName);
       setLicField('licNo_' + idx, '인허가번호', licNo);
 
-      // 주소 파싱: 쉼표(,) 기준으로 기본주소/상세주소 분리
+      // ===== 영업의 형태 자동 매핑 =====
+      var getUniqueText = function(arr) {
+        if (!arr || !arr.length) return '';
+        var seen = {}, result = [];
+        arr.forEach(function(item) {
+          var t = (item.text || '').trim();
+          if (t && !seen[t]) { seen[t] = true; result.push(t); }
+        });
+        return result.join(', ');
+      };
+      var bizForm = getUniqueText(res.bisType) || getUniqueText(res.bisItem);
+      if (bizForm) {
+        var sel = document.getElementById('licBizForm_' + idx);
+        if (sel) {
+          var matched = false;
+          var normalize = function(s) { return s.replace(/[·\s\-·‧・]/g, ''); };
+          var normBiz = normalize(bizForm);
+          for (var j = 0; j < sel.options.length; j++) {
+            var normOpt = normalize(sel.options[j].text);
+            if (normOpt && (normOpt.includes(normBiz) || normBiz.includes(normOpt))) {
+              sel.selectedIndex = j;
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) {
+            var opt = document.createElement('option');
+            opt.value = bizForm;
+            opt.textContent = bizForm + ' (OCR)';
+            opt.selected = true;
+            sel.appendChild(opt);
+          }
+          licChanges.push({ field: '영업의 형태', from: '(없음)', to: matched ? sel.options[sel.selectedIndex].text : bizForm });
+        }
+      }
+
+      // ===== 분야 자동 설정: 축산 키워드 → '축산', 나머지 → '식품' =====
+      var allText = [bizForm || '', bizName || '', getText(res.documentType)].join(' ');
+      var fieldSel = document.getElementById('licField_' + idx);
+      if (fieldSel && !fieldSel.value) {
+        var isLivestock = /축산물?위생|축산물?가공|식육|도축|식용란|유가공|우유|낙농|집유|축산/.test(allText);
+        for (var k = 0; k < fieldSel.options.length; k++) {
+          if ((isLivestock && fieldSel.options[k].value === '축산') ||
+              (!isLivestock && fieldSel.options[k].value === '식품')) {
+            fieldSel.selectedIndex = k;
+            break;
+          }
+        }
+        licChanges.push({ field: '분야', from: '(없음)', to: isLivestock ? '축산' : '식품' });
+        // 근거법 배지 업데이트
+        if (typeof updateBizTypeOptions === 'function') updateBizTypeOptions(fieldSel);
+      }
+
+      // 주소 파싱: 쉼표(,) 기준으로 기본주소/상세주소 분리 (bisAddress=소재지만, headAddress=법인주소 제외)
       if (addr) {
         var commaIdx = addr.indexOf(',');
         var baseAddr = addr, detailAddr = '';
@@ -877,17 +930,41 @@ function openLicPostcode(idx) {
   }).open();
 }
 
-/* ===== OCR 후 우편번호 자동검색 ===== */
+/* ===== OCR 후 우편번호 자동조회 (Kakao REST API) ===== */
 function searchPostcodeByAddress(baseAddr, zipcodeId, addrId) {
   if (!baseAddr || !baseAddr.trim()) return;
-  new daum.Postcode({
-    oncomplete: function(data) {
+  var cleanAddr = baseAddr.replace(/\([^)]*\)/g, '').trim();
+  var apiKey = '8e5dab09aacd882449bd3865699a9d69';
+  fetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(cleanAddr), {
+    headers: { 'Authorization': 'KakaoAK ' + apiKey }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.documents && data.documents.length > 0) {
+      var doc = data.documents[0];
+      var roadAddr = doc.road_address;
       var zipEl = document.getElementById(zipcodeId);
       var addrEl = document.getElementById(addrId);
-      if (zipEl) zipEl.value = data.zonecode;
-      if (addrEl) addrEl.value = data.roadAddress || data.jibunAddress;
+      if (roadAddr && roadAddr.zone_no) {
+        if (zipEl) zipEl.value = roadAddr.zone_no;
+        if (addrEl) { addrEl.removeAttribute('readonly'); addrEl.value = roadAddr.address_name; addrEl.setAttribute('readonly','readonly'); }
+        highlightField(zipcodeId);
+        highlightField(addrId);
+      } else if (doc.address && doc.address.address_name) {
+        if (addrEl) { addrEl.removeAttribute('readonly'); addrEl.value = doc.address.address_name; addrEl.setAttribute('readonly','readonly'); }
+        highlightField(addrId);
+      }
     }
-  }).open({ q: baseAddr.trim() });
+  })
+  .catch(function(e) { console.log('우편번호 자동조회 실패:', e); });
+}
+
+function highlightField(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.background = '#e8f5e9';
+  el.style.borderColor = '#66bb6a';
+  setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 5000);
 }
 
 /* ===== 영문 섹션 토글 ===== */
