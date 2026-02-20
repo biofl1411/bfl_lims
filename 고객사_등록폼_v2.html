@@ -361,9 +361,14 @@
                 <label>영업소명칭 <span class="req">*</span></label>
                 <input type="text" id="licBizName_1" placeholder="영업소 명칭" />
               </div>
-              <div class="form-group">
+              <div class="form-group form-full">
                 <label>소재지 <span class="req">*</span></label>
-                <input type="text" id="licAddr_1" placeholder="인허가 소재지" />
+                <div class="address-row" style="margin-bottom:6px">
+                  <input type="text" id="licZipcode_1" placeholder="우편번호" style="max-width:120px;" readonly />
+                  <button type="button" class="btn-address" onclick="openLicPostcode(1)">🔍 우편번호 찾기</button>
+                </div>
+                <input type="text" id="licAddr_1" placeholder="기본주소 (우편번호 검색 시 자동입력)" readonly style="margin-bottom:6px" />
+                <input type="text" id="licAddrDetail_1" placeholder="상세주소 입력" />
               </div>
               <div class="form-group form-full">
                 <div id="licOcrStatus_1" style="font-size:11px;color:#1565c0;display:none"></div>
@@ -654,7 +659,14 @@ function runLicOCR(idx) {
       setLicField('licRepName_' + idx, '인허가 대표자', repName);
       setLicField('licBizName_' + idx, '영업소명칭', bizName);
       setLicField('licNo_' + idx, '인허가번호', licNo);
-      setLicField('licAddr_' + idx, '소재지', addr);
+
+      // 주소 파싱: OCR 전체 주소를 기본주소에 넣고, 상세주소는 비워둠
+      if (addr) {
+        setLicField('licAddr_' + idx, '소재지(기본주소)', addr);
+        // 기본주소 readonly 해제하여 OCR 값 입력 후 다시 readonly (자동입력이므로)
+        var addrEl = document.getElementById('licAddr_' + idx);
+        if (addrEl) { addrEl.removeAttribute('readonly'); addrEl.value = addr; addrEl.setAttribute('readonly', 'readonly'); }
+      }
 
       // 변경 이력 기록
       if (licChanges.length > 0) {
@@ -718,7 +730,7 @@ function addLicense() {
         <div class="form-group"><label>대표자 <span class="req">*</span></label><input type="text" id="licRepName_${idx}" placeholder="인허가 대표자" /></div>
         <div class="form-group"><label>인허가번호 <span class="req">*</span></label><input type="text" id="licNo_${idx}" placeholder="인허가번호 입력" /></div>
         <div class="form-group"><label>영업소명칭 <span class="req">*</span></label><input type="text" id="licBizName_${idx}" placeholder="영업소 명칭" /></div>
-        <div class="form-group"><label>소재지 <span class="req">*</span></label><input type="text" id="licAddr_${idx}" placeholder="인허가 소재지" /></div>
+        <div class="form-group form-full"><label>소재지 <span class="req">*</span></label><div class="address-row" style="margin-bottom:6px"><input type="text" id="licZipcode_${idx}" placeholder="우편번호" style="max-width:120px;" readonly /><button type="button" class="btn-address" onclick="openLicPostcode(${idx})">🔍 우편번호 찾기</button></div><input type="text" id="licAddr_${idx}" placeholder="기본주소 (우편번호 검색 시 자동입력)" readonly style="margin-bottom:6px" /><input type="text" id="licAddrDetail_${idx}" placeholder="상세주소 입력" /></div>
         <div class="form-group form-full"><label>인허가 문서 첨부</label><div style="display:flex;gap:8px;align-items:center"><div class="file-area" id="licFileArea_${idx}" style="flex:1;padding:10px" onclick="document.getElementById('licFileInput_${idx}').click()" ondragover="event.preventDefault();this.style.borderColor='#1a73e8'" ondragleave="this.style.borderColor='#e2e6ed'" ondrop="event.preventDefault();this.style.borderColor='#e2e6ed';handleLicFile(${idx},event.dataTransfer.files[0])"><input type="file" id="licFileInput_${idx}" accept="image/*,.pdf" style="display:none" onchange="handleLicFile(${idx},this.files[0])"><span id="licFileName_${idx}">📁 클릭하여 파일 선택 또는 드래그</span></div><button class="btn-check" id="licOcrBtn_${idx}" onclick="runLicOCR(${idx})" disabled style="white-space:nowrap">🤖 OCR 인식</button></div><div id="licOcrStatus_${idx}" style="margin-top:4px;font-size:11px;color:#1565c0;display:none"></div></div>
       </div>
     </div>`;
@@ -792,12 +804,24 @@ function checkContactDup() {
 }
 function closeDup(id) { document.getElementById(id).classList.remove('show'); }
 
-/* ===== 우편번호 검색 ===== */
+/* ===== 우편번호 검색 (사업장 주소) ===== */
 function openPostcodeSearch() {
   new daum.Postcode({
     oncomplete: function(data) {
       document.getElementById('regZipcode').value = data.zonecode;
       document.getElementById('regAddr1').value = data.roadAddress || data.jibunAddress;
+    }
+  }).open();
+}
+
+/* ===== 우편번호 검색 (인허가 소재지) ===== */
+function openLicPostcode(idx) {
+  new daum.Postcode({
+    oncomplete: function(data) {
+      var zipEl = document.getElementById('licZipcode_' + idx);
+      var addrEl = document.getElementById('licAddr_' + idx);
+      if (zipEl) zipEl.value = data.zonecode;
+      if (addrEl) addrEl.value = data.roadAddress || data.jibunAddress;
     }
   }).open();
 }
