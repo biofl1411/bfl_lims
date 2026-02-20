@@ -460,7 +460,7 @@
       <div class="section">
         <div class="section-title"><span class="num">6</span> 메모 / 비고</div>
         <div class="form-group">
-          <textarea placeholder="특이사항, 계약 조건, 참고사항 등을 입력하세요..."></textarea>
+          <textarea id="regNote" placeholder="특이사항, 계약 조건, 참고사항 등을 입력하세요..."></textarea>
         </div>
       </div>
 
@@ -1408,7 +1408,7 @@ function showToastMsg(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-/* ===== Firestore 저장 — 고객사 등록 ===== */
+/* ===== Firestore 저장 — 고객사 등록 (표준 형식: companyMgmt.html 호환) ===== */
 async function submitCompanyForm() {
   // 필수 검증
   var companyName = (document.getElementById('companyName') || {}).value || '';
@@ -1418,46 +1418,66 @@ async function submitCompanyForm() {
   if (!bizNo.trim()) { alert('사업자번호를 입력하세요.'); return; }
   if (!repName.trim()) { alert('대표자명을 입력하세요.'); return; }
 
-  // 기본 정보 수집
+  // 기본 정보 수집 — 표준 필드명 사용 (companyMgmt.html 기준)
   var corpType = document.querySelector('input[name="corpType"]:checked');
   var data = {
-    name: companyName.trim(),
-    businessNo: bizNo.trim(),
-    ceo: repName.trim(),
+    company: companyName.trim(),
+    bizNo: bizNo.trim(),
+    repName: repName.trim(),
     corpType: corpType ? corpType.value : '법인',
     corpNo: (document.getElementById('regCorpNo') || {}).value || '',
     bizType: (document.getElementById('regBizType') || {}).value || '',
     bizItem: (document.getElementById('regBizItem') || {}).value || '',
     status: (document.getElementById('regStatus') || {}).value || '활동',
-    signalColor: 'blue',
     grade: 'C'
   };
 
-  // 주소 수집
-  data.addresses = [];
-  for (var a = 1; a <= addressCount; a++) {
-    if (!document.getElementById('address-' + a)) continue;
-    var zip = (document.getElementById('addrZip' + a) || {}).value || '';
-    var addr1 = (document.getElementById('addrMain' + a) || {}).value || '';
-    var addr2 = (document.getElementById('addrDetail' + a) || {}).value || '';
-    if (addr1.trim()) data.addresses.push({ zipcode: zip, addr1: addr1, addr2: addr2 });
-  }
+  // 주소 수집 — flat 필드 (표준 형식)
+  data.zipcode = (document.getElementById('regZipcode') || {}).value || '';
+  data.addr1 = (document.getElementById('regAddr1') || {}).value || '';
+  data.addr2 = (document.getElementById('regAddr2') || {}).value || '';
 
-  // 인허가 수집
+  // 영문 정보
+  data.companyEn = (document.getElementById('regCompanyNameEn') || {}).value || '';
+  data.repNameEn = (document.getElementById('regRepNameEn') || {}).value || '';
+  data.addrEn = (document.getElementById('regAddrEn') || {}).value || '';
+
+  // 인허가 수집 — 표준 필드명 (licField, licBizForm, licRepName, licNo, licBizName + 주소/영문)
   data.licenses = [];
   for (var l = 1; l <= licenseCount; l++) {
     if (!document.getElementById('license-' + l)) continue;
     var lic = {
-      field: (document.getElementById('licField_' + l) || {}).value || '',
-      bizForm: (document.getElementById('licBizForm_' + l) || {}).value || '',
-      repName: (document.getElementById('licRepName_' + l) || {}).value || '',
-      licenseNo: (document.getElementById('licNo_' + l) || {}).value || '',
-      bizName: (document.getElementById('licBizName_' + l) || {}).value || ''
+      licField: (document.getElementById('licField_' + l) || {}).value || '',
+      licBizForm: (document.getElementById('licBizForm_' + l) || {}).value || '',
+      licRepName: (document.getElementById('licRepName_' + l) || {}).value || '',
+      licNo: (document.getElementById('licNo_' + l) || {}).value || '',
+      licBizName: (document.getElementById('licBizName_' + l) || {}).value || '',
+      licZipcode: (document.getElementById('licZipcode_' + l) || {}).value || '',
+      licAddr: (document.getElementById('licAddr_' + l) || {}).value || '',
+      licAddr2: (document.getElementById('licAddrDetail_' + l) || {}).value || '',
+      licBizNameEn: (document.getElementById('licBizNameEn_' + l) || {}).value || '',
+      licRepNameEn: (document.getElementById('licRepNameEn_' + l) || {}).value || '',
+      licAddrEn: (document.getElementById('licAddrEn_' + l) || {}).value || ''
     };
-    if (lic.field || lic.licenseNo) data.licenses.push(lic);
+    if (lic.licField || lic.licNo) data.licenses.push(lic);
+  }
+  // 하위 호환성: 첫 번째 인허가 정보를 flat 필드에도 저장
+  if (data.licenses.length > 0) {
+    var firstLic = data.licenses[0];
+    data.licField = firstLic.licField || '';
+    data.licBizForm = firstLic.licBizForm || '';
+    data.licRepName = firstLic.licRepName || '';
+    data.licNo = firstLic.licNo || '';
+    data.licBizName = firstLic.licBizName || '';
+    data.licZipcode = firstLic.licZipcode || '';
+    data.licAddr = firstLic.licAddr || '';
+    data.licAddr2 = firstLic.licAddr2 || '';
+    data.licBizNameEn = firstLic.licBizNameEn || '';
+    data.licRepNameEn = firstLic.licRepNameEn || '';
+    data.licAddrEn = firstLic.licAddrEn || '';
   }
 
-  // 담당자 수집
+  // 담당자 수집 — 표준 형식 (role, licNums 포함)
   data.contacts = [];
   for (var c = 1; c <= contactCount; c++) {
     if (!document.getElementById('contact-' + c)) continue;
@@ -1465,23 +1485,36 @@ async function submitCompanyForm() {
       name: (document.getElementById('cName' + c) || {}).value || '',
       phone: (document.getElementById('cPhone' + c) || {}).value || '',
       email: (document.getElementById('cEmail' + c) || {}).value || '',
-      salesTeam: (document.getElementById('cTeam' + c) || {}).value || '',
-      salesRep: (document.getElementById('cRep' + c) || {}).value || ''
+      role: (document.getElementById('cTeam' + c) || {}).value || '',
+      salesRep: (document.getElementById('cRep' + c) || {}).value || '',
+      licNums: []
     };
     if (ct.name.trim()) data.contacts.push(ct);
   }
+  // flat 담당자 필드 (첫 번째 담당자 기준)
+  if (data.contacts.length > 0) {
+    data.contactName = data.contacts[0].name || '';
+    data.contactPhone = data.contacts[0].phone || '';
+    data.contactEmail = data.contacts[0].email || '';
+    data.salesRep = data.contacts[0].salesRep || '';
+  } else {
+    data.contactName = '';
+    data.contactPhone = '';
+    data.contactEmail = '';
+    data.salesRep = '';
+  }
 
-  // 세금계산서 정보
-  data.taxInfo = {
-    company: (document.getElementById('taxCompany') || {}).value || (document.getElementById('taxCompanyCustom') || {}).value || '',
-    dept: (document.getElementById('taxDept') || {}).value || '',
-    name: (document.getElementById('taxName') || {}).value || '',
-    phone: (document.getElementById('taxPhone') || {}).value || '',
-    email: (document.getElementById('taxEmail') || {}).value || ''
-  };
+  // 세금계산서 정보 — flat 필드 (표준 형식)
+  data.taxName = (document.getElementById('taxName') || {}).value || '';
+  data.taxPhone = (document.getElementById('taxPhone') || {}).value || '';
+  data.taxEmail = (document.getElementById('taxEmail') || {}).value || '';
 
-  // 비고
-  data.note = (document.getElementById('regNote') || {}).value || '';
+  // 비고 — 표준 필드명
+  data.memo = (document.getElementById('regNote') || {}).value || '';
+
+  // 등록일/변경이력 (표준 필드)
+  data.regDate = new Date().toISOString().slice(0, 10);
+  data.changeLog = [];
 
   try {
     // Firestore에 업체 저장
@@ -1509,7 +1542,7 @@ async function submitCompanyForm() {
     }
 
     showToastMsg('✅ 고객사가 등록되었습니다!');
-    // 3초 후 업체관리 페이지로 이동
+    // 2초 후 업체관리 페이지로 이동
     setTimeout(function() {
       location.href = 'companyMgmt.html';
     }, 2000);

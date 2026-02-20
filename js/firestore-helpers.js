@@ -6,6 +6,120 @@
  */
 
 // ============================================================
+// 0. 업체 데이터 정규화 (companyRegForm_v2 ↔ companyMgmt 호환)
+// ============================================================
+
+/**
+ * 업체 데이터를 표준 형식(companyMgmt.html 기준)으로 정규화한다.
+ * companyRegForm_v2.html에서 저장된 레거시 필드명을 표준 필드명으로 매핑.
+ *
+ * 표준 필드: company, bizNo, repName, zipcode/addr1/addr2(flat),
+ *           licenses[{licField,licBizForm,licRepName,licNo,licBizName,...}],
+ *           contacts[{name,phone,email,role,salesRep,licNums}],
+ *           taxName, taxPhone, taxEmail, memo, regDate, changeLog
+ *
+ * @param {Object} data - Firestore에서 읽은 원본 업체 데이터
+ * @returns {Object} 정규화된 업체 데이터
+ */
+function normalizeCompany(data) {
+  if (!data) return data;
+  var d = Object.assign({}, data);
+
+  // --- 기본 필드 매핑 ---
+  // name → company
+  if (d.name && !d.company) {
+    d.company = d.name;
+  }
+  // businessNo → bizNo
+  if (d.businessNo && !d.bizNo) {
+    d.bizNo = d.businessNo;
+  }
+  // ceo → repName
+  if (d.ceo && !d.repName) {
+    d.repName = d.ceo;
+  }
+  // note → memo
+  if (d.note !== undefined && d.memo === undefined) {
+    d.memo = d.note;
+  }
+
+  // --- 주소: addresses[] → flat zipcode/addr1/addr2 ---
+  if (Array.isArray(d.addresses) && d.addresses.length > 0 && !d.addr1) {
+    var firstAddr = d.addresses[0];
+    d.zipcode = firstAddr.zipcode || '';
+    d.addr1 = firstAddr.addr1 || '';
+    d.addr2 = firstAddr.addr2 || '';
+  }
+
+  // --- 인허가: 레거시 field names → 표준 lic-prefixed names ---
+  if (Array.isArray(d.licenses)) {
+    d.licenses = d.licenses.map(function(lic) {
+      var normalized = Object.assign({}, lic);
+      // field → licField
+      if (lic.field !== undefined && normalized.licField === undefined) {
+        normalized.licField = lic.field;
+        delete normalized.field;
+      }
+      // bizForm → licBizForm
+      if (lic.bizForm !== undefined && normalized.licBizForm === undefined) {
+        normalized.licBizForm = lic.bizForm;
+        delete normalized.bizForm;
+      }
+      // repName → licRepName (인허가 내의 repName)
+      if (lic.repName !== undefined && normalized.licRepName === undefined) {
+        normalized.licRepName = lic.repName;
+        delete normalized.repName;
+      }
+      // licenseNo → licNo
+      if (lic.licenseNo !== undefined && normalized.licNo === undefined) {
+        normalized.licNo = lic.licenseNo;
+        delete normalized.licenseNo;
+      }
+      // bizName → licBizName
+      if (lic.bizName !== undefined && normalized.licBizName === undefined) {
+        normalized.licBizName = lic.bizName;
+        delete normalized.bizName;
+      }
+      return normalized;
+    });
+  }
+
+  // --- 담당자: contacts[] 표준화 + flat contactName/contactPhone/contactEmail ---
+  if (Array.isArray(d.contacts) && d.contacts.length > 0) {
+    // contacts 배열의 각 항목에 role/licNums 기본값 보장
+    d.contacts = d.contacts.map(function(ct) {
+      return {
+        name: ct.name || '',
+        phone: ct.phone || '',
+        email: ct.email || '',
+        role: ct.role || '',
+        salesRep: ct.salesRep || ct.salesTeam || '',
+        licNums: ct.licNums || []
+      };
+    });
+    // flat 필드 설정 (첫 번째 담당자 기준)
+    if (!d.contactName) d.contactName = d.contacts[0].name || '';
+    if (!d.contactPhone) d.contactPhone = d.contacts[0].phone || '';
+    if (!d.contactEmail) d.contactEmail = d.contacts[0].email || '';
+    if (!d.salesRep) d.salesRep = d.contacts[0].salesRep || '';
+  }
+
+  // --- 세금계산서: taxInfo{} → flat taxName/taxPhone/taxEmail ---
+  if (d.taxInfo && typeof d.taxInfo === 'object') {
+    if (!d.taxName) d.taxName = d.taxInfo.name || '';
+    if (!d.taxPhone) d.taxPhone = d.taxInfo.phone || '';
+    if (!d.taxEmail) d.taxEmail = d.taxInfo.email || '';
+  }
+
+  // --- 기본값 보장 ---
+  if (!d.regDate) d.regDate = '';
+  if (!d.changeLog) d.changeLog = [];
+
+  return d;
+}
+
+
+// ============================================================
 // 1. 업체 (companies) CRUD
 // ============================================================
 
@@ -22,7 +136,7 @@ async function fsGetCompanies(opts) {
   ref = ref.orderBy(opts.orderBy || 'createdAt', 'desc');
   if (opts.limit) ref = ref.limit(opts.limit);
   var snap = await ref.get();
-  return snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+  return snap.docs.map(function(d) { return normalizeCompany(Object.assign({ id: d.id }, d.data())); });
 }
 
 /**
@@ -32,7 +146,7 @@ async function fsGetCompanies(opts) {
  */
 async function fsGetCompanyById(id) {
   var doc = await db.collection('companies').doc(id).get();
-  return doc.exists ? Object.assign({ id: doc.id }, doc.data()) : null;
+  return doc.exists ? normalizeCompany(Object.assign({ id: doc.id }, doc.data())) : null;
 }
 
 /**
@@ -77,20 +191,36 @@ async function fsSearchCompanies(query, limit) {
   if (!query || query.trim() === '') return fsGetCompanies({ limit: limit });
 
   var q = query.trim();
-  // Firestore는 LIKE 검색이 안되므로 prefix 검색 사용
-  var snap = await db.collection('companies')
-    .where('name', '>=', q)
-    .where('name', '<=', q + '\uf8ff')
+  var results = [];
+
+  // 회사명 검색: 표준 필드(company) + 레거시 필드(name) 모두 검색
+  var snap1 = await db.collection('companies')
+    .where('company', '>=', q)
+    .where('company', '<=', q + '\uf8ff')
     .limit(limit)
     .get();
+  snap1.docs.forEach(function(d) {
+    results.push(Object.assign({ id: d.id }, d.data()));
+  });
 
-  var results = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+  if (results.length < limit) {
+    var snap1b = await db.collection('companies')
+      .where('name', '>=', q)
+      .where('name', '<=', q + '\uf8ff')
+      .limit(limit - results.length)
+      .get();
+    snap1b.docs.forEach(function(d) {
+      if (!results.find(function(r) { return r.id === d.id; })) {
+        results.push(Object.assign({ id: d.id }, d.data()));
+      }
+    });
+  }
 
-  // 사업자번호로도 검색
+  // 사업자번호 검색: 표준 필드(bizNo) + 레거시 필드(businessNo) 모두 검색
   if (results.length < limit) {
     var snap2 = await db.collection('companies')
-      .where('businessNo', '>=', q)
-      .where('businessNo', '<=', q + '\uf8ff')
+      .where('bizNo', '>=', q)
+      .where('bizNo', '<=', q + '\uf8ff')
       .limit(limit - results.length)
       .get();
     snap2.docs.forEach(function(d) {
@@ -99,7 +229,21 @@ async function fsSearchCompanies(query, limit) {
       }
     });
   }
-  return results;
+
+  if (results.length < limit) {
+    var snap2b = await db.collection('companies')
+      .where('businessNo', '>=', q)
+      .where('businessNo', '<=', q + '\uf8ff')
+      .limit(limit - results.length)
+      .get();
+    snap2b.docs.forEach(function(d) {
+      if (!results.find(function(r) { return r.id === d.id; })) {
+        results.push(Object.assign({ id: d.id }, d.data()));
+      }
+    });
+  }
+
+  return results.map(function(r) { return normalizeCompany(r); });
 }
 
 /**
@@ -109,13 +253,30 @@ async function fsSearchCompanies(query, limit) {
  * @returns {Promise<boolean>} true = 중복 있음
  */
 async function fsCheckDuplicateBusinessNo(businessNo, excludeId) {
+  // 표준 필드(bizNo)로 검색
   var snap = await db.collection('companies')
+    .where('bizNo', '==', businessNo)
+    .limit(2)
+    .get();
+
+  // 레거시 필드(businessNo)로도 검색
+  var snap2 = await db.collection('companies')
     .where('businessNo', '==', businessNo)
     .limit(2)
     .get();
-  if (snap.empty) return false;
+
+  // 두 결과를 합치되 중복 제거
+  var allDocs = [];
+  snap.docs.forEach(function(d) { allDocs.push(d); });
+  snap2.docs.forEach(function(d) {
+    if (!allDocs.find(function(existing) { return existing.id === d.id; })) {
+      allDocs.push(d);
+    }
+  });
+
+  if (allDocs.length === 0) return false;
   if (excludeId) {
-    return snap.docs.some(function(d) { return d.id !== excludeId; });
+    return allDocs.some(function(d) { return d.id !== excludeId; });
   }
   return true;
 }
@@ -127,7 +288,7 @@ async function fsCheckDuplicateBusinessNo(businessNo, excludeId) {
  */
 function fsListenCompanies(callback) {
   return db.collection('companies').orderBy('createdAt', 'desc').onSnapshot(function(snap) {
-    var list = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+    var list = snap.docs.map(function(d) { return normalizeCompany(Object.assign({ id: d.id }, d.data())); });
     callback(list);
   });
 }
