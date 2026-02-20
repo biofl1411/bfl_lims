@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Firebase 수수료 매핑 데이터 업로드</title>
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+    .card { background: #fff; border: 1px solid #e2e6ed; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    h1 { color: #1a1d23; }
+    .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 600; }
+    .btn-primary { background: #1a73e8; color: #fff; }
+    .btn-primary:disabled { background: #ccc; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .progress { margin: 16px 0; height: 24px; background: #f1f3f5; border-radius: 12px; overflow: hidden; }
+    .progress-bar { height: 100%; background: #1a73e8; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 600; }
+    .log { background: #f8f9fa; border: 1px solid #e2e6ed; border-radius: 8px; padding: 12px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    .status { font-size: 14px; color: #666; margin-top: 8px; }
+    .count { font-size: 24px; font-weight: 700; color: #1a73e8; }
+  </style>
+</head>
+<body>
+  <h1>🔥 Firebase 수수료 매핑 데이터 업로드</h1>
+
+  <div class="card">
+    <h3>데이터 현황</h3>
+    <p>소스: <code>js/food_item_fee_mapping.js</code></p>
+    <p>총 항목: <span class="count" id="totalCount">로딩 중...</span></p>
+    <p class="status" id="firestoreStatus">Firestore 연결 확인 중...</p>
+  </div>
+
+  <div class="card">
+    <h3>1단계: 데이터 업로드</h3>
+    <p>food_item_fee_mapping 데이터를 Firestore <code>feeMapping</code> 컬렉션에 업로드합니다.</p>
+    <button class="btn btn-primary" id="uploadBtn" onclick="startUpload()" disabled>🚀 업로드 시작</button>
+    <div class="progress" id="progressArea" style="display:none">
+      <div class="progress-bar" id="progressBar" style="width:0%">0%</div>
+    </div>
+    <p class="status" id="uploadStatus"></p>
+  </div>
+
+  <div class="card">
+    <h3>2단계: localStorage 마이그레이션</h3>
+    <p>기존 localStorage 데이터(업체, 사용자, 설정)를 Firestore로 마이그레이션합니다.</p>
+    <button class="btn btn-success" id="migrateBtn" onclick="startMigration()" disabled>📦 마이그레이션 시작</button>
+    <p class="status" id="migrateStatus"></p>
+  </div>
+
+  <div class="card">
+    <h3>로그</h3>
+    <div class="log" id="logArea"></div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="js/firebase-init.js"></script>
+  <script src="js/firestore-helpers.js"></script>
+  <script src="js/food_item_fee_mapping.js"></script>
+
+  <script>
+    // 식품/축산 분류 매핑
+    var PURPOSE_FIELD_MAP = {
+      'Allergen(RT-PCR)': '식품',
+      '연구용역': '식품',
+      '잔류농약(참고용)': '식품',
+      '참고용(소비기한설정)': '식품',
+      'Vegan food(RT-PCR)': '식품',
+      'Halal food(RT_PCR)': '식품',
+      '물질검사': '식품',
+      '방사능(HPGe)': '식품',
+      '표시기준': '식품',
+      '참고용(외부의뢰)': '식품',
+      '접수취소': '식품',
+      'Allergen(ELISA)': '축산',
+      '항생물질(참고용)': '축산',
+      // 공통 (식품/축산 모두)
+      '자가품질위탁검사용': '공통',
+      '참고용(기준규격외)': '공통',
+      '참고용(영양성분)': '공통'
+    };
+
+    function log(msg) {
+      var el = document.getElementById('logArea');
+      el.textContent += '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // 초기화
+    window.onload = function() {
+      var data = typeof FOOD_ITEM_FEE_MAPPING !== 'undefined' ? FOOD_ITEM_FEE_MAPPING : [];
+      document.getElementById('totalCount').textContent = data.length + '건';
+      log('데이터 로드: ' + data.length + '건');
+
+      // Firestore 연결 확인
+      setTimeout(function() {
+        if (typeof db !== 'undefined') {
+          document.getElementById('firestoreStatus').textContent = '✅ Firestore 연결됨';
+          document.getElementById('uploadBtn').disabled = false;
+          document.getElementById('migrateBtn').disabled = false;
+          log('Firestore 연결 성공');
+        } else {
+          document.getElementById('firestoreStatus').textContent = '❌ Firestore 연결 실패';
+          log('ERROR: Firestore 연결 실패');
+        }
+      }, 2000);
+    };
+
+    // 업로드
+    async function startUpload() {
+      var data = FOOD_ITEM_FEE_MAPPING;
+      if (!data || data.length === 0) { log('ERROR: 데이터 없음'); return; }
+
+      document.getElementById('uploadBtn').disabled = true;
+      document.getElementById('progressArea').style.display = '';
+      var statusEl = document.getElementById('uploadStatus');
+      var barEl = document.getElementById('progressBar');
+
+      // Firestore batch 제한: 500건
+      var BATCH_SIZE = 400;
+      var total = data.length;
+      var uploaded = 0;
+      var errors = 0;
+
+      log('업로드 시작: ' + total + '건, 배치 크기: ' + BATCH_SIZE);
+
+      for (var i = 0; i < total; i += BATCH_SIZE) {
+        var batch = db.batch();
+        var chunk = data.slice(i, i + BATCH_SIZE);
+
+        chunk.forEach(function(item) {
+          var field = PURPOSE_FIELD_MAP[item.purpose] || '식품';
+          var docData = {
+            purpose: item.purpose || '',
+            foodType: item.foodType || '',
+            bracket: item.bracket || '',
+            item: item.item || '',
+            fee: item.fee || 0,
+            count: item.count || 0,
+            field: field
+          };
+          var ref = db.collection('feeMapping').doc();
+          batch.set(ref, docData);
+        });
+
+        try {
+          await batch.commit();
+          uploaded += chunk.length;
+        } catch (e) {
+          errors += chunk.length;
+          log('ERROR 배치 ' + Math.floor(i/BATCH_SIZE) + ': ' + e.message);
+        }
+
+        var pct = Math.round((uploaded / total) * 100);
+        barEl.style.width = pct + '%';
+        barEl.textContent = pct + '%';
+        statusEl.textContent = uploaded + ' / ' + total + ' 업로드 완료' + (errors > 0 ? ' (오류: ' + errors + ')' : '');
+        log('배치 완료: ' + uploaded + '/' + total);
+      }
+
+      log('업로드 완료! 성공: ' + uploaded + ', 오류: ' + errors);
+      statusEl.textContent = '✅ 업로드 완료! ' + uploaded + '건 성공' + (errors > 0 ? ', ' + errors + '건 오류' : '');
+    }
+
+    // localStorage 마이그레이션
+    async function startMigration() {
+      document.getElementById('migrateBtn').disabled = true;
+      var statusEl = document.getElementById('migrateStatus');
+      statusEl.textContent = '마이그레이션 진행 중...';
+      log('localStorage 마이그레이션 시작');
+
+      try {
+        var result = await fsMigrateFromLocalStorage();
+        var msg = '✅ 완료! 업체: ' + result.companies + '건, 사용자: ' + result.users + '건, 설정: ' + result.settings + '건';
+        statusEl.textContent = msg;
+        log(msg);
+      } catch (e) {
+        statusEl.textContent = '❌ 오류: ' + e.message;
+        log('ERROR: ' + e.message);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -285,28 +285,47 @@ Flask REST API 서버 (port 5060)
 | 내부 IP | 192.168.0.96 |
 | SSH | port 2222 |
 | DB | MariaDB 8.0, database: `fss_data` |
-| 웹서버 | nginx → HTTPS 8443 (LIMS 프론트엔드) |
-| API (식약처) | http://bioflsever:5060 (`api_server.py`) |
-| API (시료접수) | http://127.0.0.1:5001 (`receipt_api_final.py`) |
-| API (OCR프록시) | https://localhost:5002 (`ocr_proxy.py`) |
+| 웹서버 | nginx → HTTPS 8443 (LIMS 프론트엔드 + API 리버스 프록시) |
+| API (시료접수) | http://127.0.0.1:5001 → nginx `/api/*` (`receipt_api_final.py`) |
+| API (OCR프록시) | http://127.0.0.1:5002 → nginx `/ocr/*` (`ocr_proxy.py`) |
+| API (식약처) | http://127.0.0.1:5050 → nginx `/fss/*` (`api_server.py`) |
 | 환경변수 | `FSS_DB_HOST`, `FSS_DB_PORT`, `FSS_DB_USER`, `FSS_DB_PASS`, `FSS_DB_NAME`, `FSS_API_KEY`, `FSS_API_PORT` |
 
-### 서버 배포 구성
+### 서버 배포 구성 (nginx 8443 포트 통합)
+
+**외부 포트 하나(8443)로 모든 서비스를 통합** — 공유기 포트포워딩 1개만으로 운영 가능
 
 ```
 [외부 접속] https://14.7.14.31:8443/
     │
     ├─ 공유기 포트포워딩: 8443 → 192.168.0.96:8443
     │
-    └─ nginx (SSL, port 8443)
-        ├─ root: /home/biofl/bfl_lims
-        ├─ SSL 인증서: /etc/nginx/ssl/incen.crt / incen.key
-        └─ 정적 파일 서빙 (HTML/CSS/JS)
+    └─ nginx (SSL, port 8443) ─ 리버스 프록시
+        │
+        ├─ /          → 정적 파일 서빙 (/home/biofl/bfl_lims/*.html)
+        ├─ /api/*     → proxy_pass → 127.0.0.1:5001 (시료접수 API)
+        ├─ /ocr/*     → rewrite + proxy_pass → 127.0.0.1:5002 (OCR 프록시)
+        └─ /fss/*     → rewrite + proxy_pass → 127.0.0.1:5050 (식약처 API)
 
-[내부 Flask 서버]
+[내부 Flask 서버] (localhost만 바인딩)
     ├─ receipt_api_final.py  → port 5001 (시료접수 API)
-    ├─ ocr_proxy.py          → port 5002 (CLOVA OCR 프록시, HTTPS)
-    └─ api_server.py         → port 5060 (식약처 데이터 API + MariaDB)
+    ├─ ocr_proxy.py          → port 5002 (CLOVA OCR 프록시)
+    └─ api_server.py         → port 5050 (식약처 데이터 API + MariaDB)
+```
+
+**nginx 설정 파일**: `/etc/nginx/sites-available/bfl_lims`
+- SSL 인증서: `/etc/nginx/ssl/incen.crt` / `incen.key`
+- OCR 프록시: `client_max_body_size 20m` (이미지 업로드)
+- rewrite 규칙: `/ocr/(.*)` → `/$1`, `/fss/(.*)` → `/$1` (접두사 제거)
+
+**환경 감지 (로컬/서버 호환)**:
+HTML 파일의 API URL은 실행 환경을 자동 감지하여 분기합니다:
+```javascript
+// 로컬 개발: 직접 Flask 서버 접속
+// 서버 배포: nginx 프록시 경로 사용
+var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://127.0.0.1:5001'   // 로컬
+  : '';                         // 서버 (nginx 프록시)
 ```
 
 ### 서버 업데이트 방법
@@ -366,6 +385,8 @@ cd ~/bfl_lims && git pull
 | `3475fe7` | 고객사 등록폼 v2 완성: 사용자관리 연동, 이메일 필수, 세금계산서 업체명 모달 |
 | `361cfcf` | 고객사 등록폼 파일명 영문 변환 (고객사_등록폼_v2.html → companyRegForm_v2.html) |
 | `42056f8` | 고객사 신규등록 버튼을 companyRegForm_v2.html로 연결 |
+| `8497880` | README 업데이트: 서버 배포 정보, 고객사 등록폼 v2, OCR 프록시 문서화 |
+| `1d794eb` | nginx 8443 포트 통합: 6개 HTML API URL 환경 감지 + nginx 프록시 구성 |
 
 ---
 
@@ -389,6 +410,12 @@ cd ~/bfl_lims && git pull
 - nginx SSL 8443 포트 설정 (자체 서명 인증서)
 - 공유기 포트포워딩: 8443 → 192.168.0.96:8443
 - 접속 URL: `https://14.7.14.31:8443/`
+
+**nginx 8443 포트 통합** (API 리버스 프록시):
+- 3개 Flask 서버(5001/5002/5050)를 nginx 프록시로 8443 포트 하나에 통합
+- `/api/*` → 시료접수(5001), `/ocr/*` → OCR(5002), `/fss/*` → 식약처(5050)
+- 6개 HTML 파일 API URL 환경 감지 분기 적용 (로컬/서버 자동 전환)
+- 변경 파일: `sampleReceipt.html`, `companyRegForm_v2.html`, `salesMgmt.html`, `companyMgmt.html`, `admin_api_settings.html`, `admin_collect_status.html`
 
 ---
 
@@ -604,9 +631,9 @@ saveSignalRules();     // adminSettings.html
 
 ## 향후 계획
 
-1. nginx 포트 통합 (8443 하나로 API 프록시 구성)
+1. ~~nginx 포트 통합 (8443 하나로 API 프록시 구성)~~ ✅ 완료
 2. 고객사 등록 DB 저장 API 구현
-3. OCR 프록시 서버 URL 변경 (localhost → 서버 도메인)
+3. ~~OCR 프록시 서버 URL 변경 (localhost → 서버 도메인)~~ ✅ 완료 (nginx 프록시로 대체)
 4. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지)
 5. 로그인 페이지 구현 + 사용자 인증/권한 시스템
 6. 부서 관리 / 팀 관리 페이지 구현
