@@ -111,7 +111,7 @@ const SIDEBAR_MENU = [
     icon: '📋',
     label: '접수 관리',
     sub: [
-      { label: '업체등록·수정',     disabled: true },
+      { label: '업체등록·수정',     href: 'companyMgmt.html',  page: 'reception-company' },
       { label: '검사목적 관리',     href: 'inspectionMgmt.html',  page: 'reception-inspection' },
       { label: '접수 등록',         href: 'sampleReceipt.html',   page: 'reception-register' },
       { label: '접수 현황',         disabled: true },
