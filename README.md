@@ -2,7 +2,8 @@
 
 식품 시험 검사 기관을 위한 **통합 웹 기반 실험실 정보 관리 시스템** (Laboratory Information Management System)
 
-**배포**: https://biofl1411.github.io/bfl_lims/
+**배포 (서버)**: https://14.7.14.31:8443/
+**배포 (GitHub Pages)**: https://biofl1411.github.io/bfl_lims/
 
 ---
 
@@ -23,6 +24,8 @@
 ```
 bfl_lims/
 ├── index.html                      # 대시보드 (메인)
+├── companyRegForm_v2.html          # ★ 영업관리 > 고객사 신규등록 (OCR + 사용자관리 연동)
+├── companyMgmt.html                # 영업관리 > 고객사 관리 목록
 ├── inspectionMgmt.html             # 접수관리 > 검사목적관리
 ├── sampleReceipt.html              # 접수관리 > 접수 등록 (API 연동)
 ├── itemAssign.html                 # 시험결재 > 항목배정
@@ -32,6 +35,7 @@ bfl_lims/
 ├── admin_api_settings.html          # 관리자 > API 수집 설정
 ├── admin_collect_status.html        # 관리자 > 수집 현황
 ├── receipt_api_final.py             # 시료접수 API 서버 (Flask, port 5001)
+├── ocr_proxy.py                     # OCR 프록시 서버 (Flask, HTTPS port 5002)
 ├── SETUP_GUIDE.md                   # API 서버 실행 가이드
 ├── js/
 │   ├── sidebar.js                   # ★ 통합 사이드바 (Single Source of Truth) — 전체 메뉴 정의·렌더링·CSS
@@ -41,18 +45,12 @@ bfl_lims/
 │   ├── sido.json                    # 시도 경계 GeoJSON
 │   ├── sigungu.json                 # 시군구 경계 GeoJSON
 │   └── dong.json                    # 읍면동 경계 GeoJSON
-├── api_server.py                    # Flask REST API 서버
+├── img/
+│   └── bfl_logo.svg                 # BFL 로고
+├── api_server.py                    # Flask REST API 서버 (식약처 데이터, port 5060)
 ├── collector.py                     # 식약처 데이터 수집기 (cron)
 └── deploy.ps1                       # 배포 스크립트
 ```
-
-### 참고/설계 파일 (운영 불필요)
-- `영업관리_설계검토.html` — 영업관리 시스템 설계 문서
-- `영업관리_전체시연.html` — 영업관리 전체 기능 데모
-- `고객사_등록폼_v2.html`, `고객사_등록폼_시연.html` — 고객사 등록 폼 프로토타입
-- `고객사관리_목록vs카드_비교.html` — 목록형 vs 카드형 UI 비교
-- `미수금활동_타임라인vs목록_비교.html` — 타임라인 vs 목록 UI 비교
-- `A_상단메뉴바.html`, `B_좌측사이드바.html`, `C_상단좌측병행.html` — 레이아웃 테스트
 
 ---
 
@@ -102,6 +100,33 @@ bfl_lims/
 - **식약처 업소 검색**: 13만+ 업소 DB, 업종별 필터, 페이지네이션
 - **카카오맵 연동**: 주소검색, 길찾기
 - **12개 서브메뉴**: 고객사관리, 업무일지, 차량일지, 미수금, 거래명세표, 계산서발행, 업체조회, 긴급협조, 세금계산서미발행, 영업통계, 영업설정, API설정
+- **신규 등록 버튼**: `companyRegForm_v2.html`로 이동
+
+### 고객사 신규등록 (`companyRegForm_v2.html`)
+
+salesMgmt.html 고객사관리 > "+ 신규 등록" 버튼 클릭 시 이동하는 독립 페이지.
+
+- **7개 섹션**: 기본정보, 주소, 인허가정보, 고객사담당자, 세금계산서담당자, 메모/비고, 변경이력
+- **OCR 자동입력**: 사업자등록증 OCR + 인허가문서 OCR (`ocr_proxy.py` 연동, CLOVA OCR)
+- **업체명 모달 선택**: 등록된 업체 목록에서 선택 또는 직접 입력 (담당자 카드 + 세금계산서 담당자)
+- **자사 담당자 연동**: `userMgmt.html`의 USERS_DATA(56명) + localStorage 병합
+  - 부서 드롭다운: 영업 관련 4개만 표시 (고객지원팀, 마케팅사업부, 고객관리, 지사)
+  - 접수자 드롭다운: 사용자관리의 "접수자" 필드 고유값 표시 (15개)
+- **담당자 카드**: 동적 추가/삭제, 중복 확인, 이메일 필수값(*)
+- **세금계산서 담당자**: 1번 담당자 정보 복사 기능, 업체명 모달 선택
+- **거래처 등급**: 관리자 설정 등급규칙 기반 자동 산출
+- **우편번호 검색**: 카카오 주소 API 연동
+- **사업자등록증 영문 정보**: 아코디언 토글 (영문 회사명/주소/업태/종목)
+
+### OCR 프록시 (`ocr_proxy.py`)
+
+Flask HTTPS 서버 (port 5002) — CLOVA OCR API 프록시
+
+| 엔드포인트 | 메서드 | 설명 |
+|-----------|--------|------|
+| `/api/ocr/business-registration` | POST | 사업자등록증 OCR 인식 |
+| `/api/ocr/license` | POST | 인허가문서 OCR 인식 |
+| `/api/ocr/health` | GET | 서버 상태 확인 |
 
 ### 검사관리 (`inspectionMgmt.html`)
 - **6탭 구조**: 검사분야, 검사목적, 식품유형, 검사항목, 항목그룹, 수수료
@@ -256,11 +281,39 @@ Flask REST API 서버 (port 5060)
 | 항목 | 값 |
 |------|-----|
 | Host | bioflsever (Ubuntu 24.04) |
-| IP | 14.7.14.31 |
+| 공인 IP | 14.7.14.31 |
+| 내부 IP | 192.168.0.96 |
 | SSH | port 2222 |
 | DB | MariaDB 8.0, database: `fss_data` |
-| API | http://bioflsever:5060 |
+| 웹서버 | nginx → HTTPS 8443 (LIMS 프론트엔드) |
+| API (식약처) | http://bioflsever:5060 (`api_server.py`) |
+| API (시료접수) | http://127.0.0.1:5001 (`receipt_api_final.py`) |
+| API (OCR프록시) | https://localhost:5002 (`ocr_proxy.py`) |
 | 환경변수 | `FSS_DB_HOST`, `FSS_DB_PORT`, `FSS_DB_USER`, `FSS_DB_PASS`, `FSS_DB_NAME`, `FSS_API_KEY`, `FSS_API_PORT` |
+
+### 서버 배포 구성
+
+```
+[외부 접속] https://14.7.14.31:8443/
+    │
+    ├─ 공유기 포트포워딩: 8443 → 192.168.0.96:8443
+    │
+    └─ nginx (SSL, port 8443)
+        ├─ root: /home/biofl/bfl_lims
+        ├─ SSL 인증서: /etc/nginx/ssl/incen.crt / incen.key
+        └─ 정적 파일 서빙 (HTML/CSS/JS)
+
+[내부 Flask 서버]
+    ├─ receipt_api_final.py  → port 5001 (시료접수 API)
+    ├─ ocr_proxy.py          → port 5002 (CLOVA OCR 프록시, HTTPS)
+    └─ api_server.py         → port 5060 (식약처 데이터 API + MariaDB)
+```
+
+### 서버 업데이트 방법
+```bash
+# 로컬에서 push 후 서버에서 실행
+cd ~/bfl_lims && git pull
+```
 
 ---
 
@@ -277,10 +330,10 @@ Flask REST API 서버 (port 5060)
 | 탭 전환 | `showPage()` 감지 → salesMgmt.html 내부 탭 자동 전환 |
 | 아코디언 | `toggleMenu()` 등록 |
 
-**사용하는 HTML 파일** (7개):
-- `index.html`, `salesMgmt.html`, `sampleReceipt.html`, `itemAssign.html`, `userMgmt.html`, `inspectionMgmt.html`, `adminSettings.html`
+**사용하는 HTML 파일** (8개):
+- `index.html`, `salesMgmt.html`, `companyRegForm_v2.html`, `sampleReceipt.html`, `itemAssign.html`, `userMgmt.html`, `inspectionMgmt.html`, `adminSettings.html`
 
-**메뉴 변경 시**: `js/sidebar.js`의 `SIDEBAR_MENU` 배열만 수정 → 7개 HTML 전체 자동 반영.
+**메뉴 변경 시**: `js/sidebar.js`의 `SIDEBAR_MENU` 배열만 수정 → 8개 HTML 전체 자동 반영.
 
 ---
 
@@ -310,7 +363,32 @@ Flask REST API 서버 (port 5060)
 | `b4b8d84` | 부서 관리 → 부서/팀 관리로 명칭 변경 |
 | `e3237be` | 부서/팀 관리를 부서 관리 + 팀 관리로 분리 |
 | `e78ecc9` | 사용자 관리 테이블에 팀/입사일/퇴사일 컬럼 추가 + 엑셀 내보내기 + PW초기화 |
-| *(pending)* | 사용자 관리 인라인 편집 + 헤더 정렬 기능 |
+| `3475fe7` | 고객사 등록폼 v2 완성: 사용자관리 연동, 이메일 필수, 세금계산서 업체명 모달 |
+| `361cfcf` | 고객사 등록폼 파일명 영문 변환 (고객사_등록폼_v2.html → companyRegForm_v2.html) |
+| `42056f8` | 고객사 신규등록 버튼을 companyRegForm_v2.html로 연결 |
+
+---
+
+## 완료된 작업 (2026-02-20)
+
+### 고객사 등록폼 v2 완성 + 서버 배포
+
+**고객사 등록폼 (`companyRegForm_v2.html`)**:
+- 사용자관리(userMgmt.html) USERS_DATA 56명 + localStorage 병합 연동
+- 부서 드롭다운: SALES_TEAMS 화이트리스트 4개 (고객지원팀, 마케팅사업부, 고객관리, 지사)
+- 접수자 드롭다운: 사용자관리 "접수자" 필드 고유값 15개 (팀명 2개 + 개인명 13개)
+- 고객사 담당자 이메일 필수값(*) 표시 추가
+- 세금계산서 담당자 업체명: 자유입력 → 모달 선택 방식으로 개선
+- 한글 파일명 → 영문(`companyRegForm_v2.html`) 변환 (서버 인코딩 오류 방지)
+
+**salesMgmt.html 연결**:
+- 고객사관리 > "+ 신규 등록" 버튼: 내장 폼 → `companyRegForm_v2.html`로 이동
+
+**서버 배포**:
+- Git clone → `/home/biofl/bfl_lims`
+- nginx SSL 8443 포트 설정 (자체 서명 인증서)
+- 공유기 포트포워딩: 8443 → 192.168.0.96:8443
+- 접속 URL: `https://14.7.14.31:8443/`
 
 ---
 
@@ -526,25 +604,27 @@ saveSignalRules();     // adminSettings.html
 
 ## 향후 계획
 
-1. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지)
-2. 로그인 페이지 구현 + 사용자 인증/권한 시스템
-3. 부서 관리 / 팀 관리 페이지 구현
-4. 백엔드 API 연동
-5. 실제 데이터 연동
+1. nginx 포트 통합 (8443 하나로 API 프록시 구성)
+2. 고객사 등록 DB 저장 API 구현
+3. OCR 프록시 서버 URL 변경 (localhost → 서버 도메인)
+4. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지)
+5. 로그인 페이지 구현 + 사용자 인증/권한 시스템
+6. 부서 관리 / 팀 관리 페이지 구현
+7. 백엔드 API 연동 + 실제 데이터 연동
 
 ---
 
 ## 배포 방법
 
 ```powershell
-# PowerShell 스크립트
-.\deploy.ps1
-
-# 또는 수동
+# 1. 로컬에서 커밋 & push
 git add -A
 git commit -m "커밋 메시지"
 git push origin main
 # → GitHub Pages 자동 배포
+
+# 2. 서버 반영 (SSH 접속 후)
+cd ~/bfl_lims && git pull
 ```
 
 ---
