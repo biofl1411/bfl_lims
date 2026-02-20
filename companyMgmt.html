@@ -144,6 +144,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
               </select>
               <input id="searchInput" placeholder="검색어 입력..." style="padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px" oninput="loadList()">
             </div>
+            <button class="btn btn-danger btn-sm" id="btnBulkDelete" onclick="bulkDeleteCompanies()" style="display:none">🗑️ 선택 삭제</button>
             <button class="btn btn-primary" onclick="showPage('reg')">+ 신규 등록</button>
           </div>
         </div>
@@ -151,6 +152,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <table class="tbl">
             <thead>
               <tr>
+                <th class="center" style="width:36px"><input type="checkbox" id="checkAll" onchange="toggleCheckAll(this)"></th>
                 <th>No</th>
                 <th>회사명</th>
                 <th>대표자</th>
@@ -439,6 +441,14 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <!-- Toast -->
 <div class="toast" id="toastEl"></div>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+
 <script src="js/sidebar.js"></script>
 <script>
 // ============================================================
@@ -496,14 +506,30 @@ function showPage(id) {
 // ============================================================
 // 업체 목록 로드
 // ============================================================
-function getCustomers() {
-  return JSON.parse(localStorage.getItem('bfl_customers') || '[]');
+var _customersCache = [];
+
+async function getCustomers() {
+  try {
+    _customersCache = await fsGetCompanies();
+  } catch(e) {
+    console.warn('Firestore 업체 로드 실패:', e.message);
+  }
+  return _customersCache;
 }
 
-function loadList() {
-  var customers = getCustomers();
+function getCustomersSync() {
+  return _customersCache;
+}
+
+async function loadList() {
+  var customers = await getCustomers();
   var query = (document.getElementById('searchInput').value || '').trim().toLowerCase();
   var filter = document.getElementById('searchFilter').value;
+
+  // checkAll 초기화
+  var checkAll = document.getElementById('checkAll');
+  if (checkAll) checkAll.checked = false;
+  updateBulkDeleteBtn();
 
   // 필터링
   var filtered = customers;
@@ -542,26 +568,61 @@ function loadList() {
 
   tbody.innerHTML = filtered.map(function(c, i) {
     var statusTag = c.status === '활동' ? 'tag-active' : c.status === '휴면' ? 'tag-dormant' : 'tag-terminated';
-    return '<tr onclick="openDetail(\'' + c.id + '\')">' +
-      '<td class="center">' + (i + 1) + '</td>' +
-      '<td><strong>' + (c.company || '') + '</strong></td>' +
-      '<td>' + (c.repName || '') + '</td>' +
-      '<td>' + (c.bizNo || '') + '</td>' +
-      '<td>' + (c.contactName || '-') + '</td>' +
-      '<td>' + (c.department || '-') + '</td>' +
-      '<td>' + (c.receiptType || '-') + '</td>' +
-      '<td><span class="tag ' + statusTag + '">' + (c.status || '활동') + '</span></td>' +
-      '<td>' + (c.regDate || '-') + '</td>' +
+    return '<tr>' +
+      '<td class="center" onclick="event.stopPropagation()"><input type="checkbox" class="row-check" value="' + c.id + '" onchange="updateBulkDeleteBtn()"></td>' +
+      '<td class="center" onclick="openDetail(\'' + c.id + '\')">' + (i + 1) + '</td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')"><strong>' + (c.company || '') + '</strong></td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')">' + (c.repName || '') + '</td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')">' + (c.bizNo || '') + '</td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')">' + (c.contactName || '-') + '</td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')">' + (c.department || '-') + '</td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')">' + (c.receiptType || '-') + '</td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')"><span class="tag ' + statusTag + '">' + (c.status || '활동') + '</span></td>' +
+      '<td onclick="openDetail(\'' + c.id + '\')">' + (c.regDate || '-') + '</td>' +
       '</tr>';
   }).join('');
 }
 
 // ============================================================
+// 체크박스 전체 선택 / 선택 삭제
+// ============================================================
+function toggleCheckAll(el) {
+  var checks = document.querySelectorAll('.row-check');
+  checks.forEach(function(cb) { cb.checked = el.checked; });
+  updateBulkDeleteBtn();
+}
+
+function updateBulkDeleteBtn() {
+  var checked = document.querySelectorAll('.row-check:checked');
+  var btn = document.getElementById('btnBulkDelete');
+  if (btn) {
+    btn.style.display = checked.length > 0 ? '' : 'none';
+    btn.textContent = '🗑️ 선택 삭제 (' + checked.length + ')';
+  }
+}
+
+async function bulkDeleteCompanies() {
+  var checked = document.querySelectorAll('.row-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm(checked.length + '개 업체를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+  var ids = [];
+  checked.forEach(function(cb) { ids.push(cb.value); });
+  try {
+    for (var i = 0; i < ids.length; i++) {
+      await fsDeleteCompany(ids[i]);
+    }
+    toast('🗑️ ' + ids.length + '개 업체가 삭제되었습니다');
+    await loadList();
+  } catch(e) {
+    toast('❌ 삭제 실패: ' + e.message);
+  }
+}
+
+// ============================================================
 // 상세 보기 (salesMgmt.html openCustomerDetail과 동일)
 // ============================================================
-function openDetail(id) {
-  var customers = getCustomers();
-  var cust = customers.find(function(c) { return c.id === id; });
+async function openDetail(id) {
+  var cust = await fsGetCompanyById(id);
   if (!cust) { toast('업체를 찾을 수 없습니다'); return; }
 
   _currentId = id;
@@ -620,9 +681,7 @@ function openDetail(id) {
     lookupAddressFromKakao(cust.addr1, function(zipcode, roadAddr, detailAddr) {
       if (zipcode) { document.getElementById('detZipcode').value = zipcode; cust.zipcode = zipcode; }
       if (roadAddr && roadAddr !== cust.addr1) { document.getElementById('detAddr1').value = roadAddr; cust.addr1 = roadAddr; }
-      var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-      var ci = custs.findIndex(function(c) { return c.id === id; });
-      if (ci !== -1) { custs[ci].zipcode = cust.zipcode; custs[ci].addr1 = cust.addr1; localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+      db.collection('companies').doc(id).update({ zipcode: cust.zipcode, addr1: cust.addr1 });
     });
   }
   // 인허가 우편번호 미등록 시 카카오 API로 자동 조회
@@ -634,9 +693,9 @@ function openDetail(id) {
         if (zipcode) { lic.licZipcode = zipcode; var zEl = document.getElementById('detLicZipcode_' + num); if (zEl) zEl.value = zipcode; }
         if (roadAddr && roadAddr !== lic.licAddr) { lic.licAddr = roadAddr; var aEl = document.getElementById('detLicAddr_' + num); if (aEl) aEl.value = roadAddr; }
         if (detailAddr && !lic.licAddr2) { lic.licAddr2 = detailAddr; var a2El = document.getElementById('detLicAddr2_' + num); if (a2El) a2El.value = detailAddr; }
-        var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-        var ci = custs.findIndex(function(c) { return c.id === id; });
-        if (ci !== -1) { if (custs[ci].licenses && custs[ci].licenses[i]) { custs[ci].licenses[i] = lic; } localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+        var updLics = cust.licenses || [];
+        if (updLics[i]) { updLics[i] = lic; }
+        db.collection('companies').doc(id).update({ licenses: updLics });
       });
     }
   });
@@ -1149,7 +1208,7 @@ function toggleDetailEdit() {
   document.querySelectorAll('.detContactMatchBtn').forEach(function(b) { b.style.display = ''; });
 }
 
-function cancelDetailEdit() {
+async function cancelDetailEdit() {
   _detailEditMode = false;
   if (_detailSnapshot) {
     Object.keys(_detailSnapshot).forEach(function(id) {
@@ -1183,8 +1242,7 @@ function cancelDetailEdit() {
   document.querySelectorAll('.detContactDelBtn').forEach(function(b) { b.style.display = 'none'; });
   document.querySelectorAll('.detContactMatchBtn').forEach(function(b) { b.style.display = 'none'; });
   // 동적 추가된 카드 원복 (원래 데이터 재렌더)
-  var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-  var cust = customers.find(function(c) { return c.id === _detailCustId; });
+  var cust = await fsGetCompanyById(_detailCustId);
   if (cust) {
     renderDetailLicenses(cust);
     renderDetailContacts(cust);
@@ -1193,11 +1251,9 @@ function cancelDetailEdit() {
   _detailSnapshot = null;
 }
 
-function saveDetailEdit() {
-  var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-  var idx = customers.findIndex(function(c) { return c.id === _detailCustId; });
-  if (idx === -1) { toast('⚠️ 업체 정보를 찾을 수 없습니다'); return; }
-  var cust = customers[idx];
+async function saveDetailEdit() {
+  var cust = await fsGetCompanyById(_detailCustId);
+  if (!cust) { toast('⚠️ 업체 정보를 찾을 수 없습니다'); return; }
   var now = new Date().toISOString().slice(0, 16).replace('T', ' ');
   var changes = [];
 
@@ -1336,8 +1392,7 @@ function saveDetailEdit() {
     });
   }
 
-  customers[idx] = cust;
-  localStorage.setItem('bfl_customers', JSON.stringify(customers));
+  await fsSaveCompany(Object.assign({id: _detailCustId}, cust));
 
   // UI 복원 (readonly)
   _detailEditMode = false;
@@ -1378,10 +1433,9 @@ function saveDetailEdit() {
 // ============================================================
 // 수정 모드 (등록 폼 기반 수정 - 기존 호환)
 // ============================================================
-function toggleEdit() {
+async function toggleEdit() {
   if (!_currentId) return;
-  var customers = getCustomers();
-  var cust = customers.find(function(c) { return c.id === _currentId; });
+  var cust = await fsGetCompanyById(_currentId);
   if (!cust) return;
 
   if (!_editMode) {
@@ -1458,7 +1512,7 @@ function setSelectVal(id, val) {
 // ============================================================
 // 업체 저장 (신규 등록) — salesMgmt.html과 동일한 구조
 // ============================================================
-function saveCustomer() {
+async function saveCustomer() {
   // 필수값 검증
   var company = (document.getElementById('regCompany').value || '').trim();
   var repName = (document.getElementById('regRepName').value || '').trim();
@@ -1478,7 +1532,6 @@ function saveCustomer() {
   var contactName = (document.getElementById('regCName') || {}).value || '';
 
   var cust = {
-    id: 'C' + Date.now(),
     company: company,
     repName: repName,
     bizNo: bizNo,
@@ -1538,48 +1591,50 @@ function saveCustomer() {
     changeLog: []
   };
 
-  // localStorage에 저장
-  var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-  customers.push(cust);
-  localStorage.setItem('bfl_customers', JSON.stringify(customers));
-
-  toast('✅ 고객사가 등록되었습니다!');
-  setTimeout(function() { showPage('customerList'); }, 1200);
+  // Firestore에 저장
+  try {
+    await fsSaveCompany(cust);
+    toast('✅ 고객사가 등록되었습니다!');
+    setTimeout(function() { showPage('customerList'); }, 1200);
+  } catch(e) {
+    toast('❌ 저장 실패: ' + e.message);
+  }
 }
 
 // ============================================================
 // 업체 수정
 // ============================================================
-function updateCompany() {
+async function updateCompany() {
   if (!_currentId) return;
   var updated = collectFormData();
   if (!updated) return;
 
-  var customers = getCustomers();
-  var idx = customers.findIndex(function(c) { return c.id === _currentId; });
-  if (idx === -1) { toast('업체를 찾을 수 없습니다'); return; }
+  var existing = await fsGetCompanyById(_currentId);
+  if (!existing) { toast('업체를 찾을 수 없습니다'); return; }
 
   // 기존 데이터 유지하면서 업데이트
   updated.id = _currentId;
-  updated.regDate = customers[idx].regDate || new Date().toISOString().slice(0, 10);
-  updated.changeLog = customers[idx].changeLog || [];
+  updated.regDate = existing.regDate || new Date().toISOString().slice(0, 10);
+  updated.changeLog = existing.changeLog || [];
   updated.changeLog.push({
     date: new Date().toISOString().slice(0, 10),
     action: '수정',
     detail: '업체 정보 수정'
   });
   // 등급 계산 관련 기존값 유지
-  updated.annualRevenue = customers[idx].annualRevenue || 0;
-  updated.monthlyFrequency = customers[idx].monthlyFrequency || 0;
-  updated.tradeDuration = customers[idx].tradeDuration || 0;
-  updated.trafficLight = customers[idx].trafficLight || 'blue';
+  updated.annualRevenue = existing.annualRevenue || 0;
+  updated.monthlyFrequency = existing.monthlyFrequency || 0;
+  updated.tradeDuration = existing.tradeDuration || 0;
+  updated.trafficLight = existing.trafficLight || 'blue';
 
-  customers[idx] = updated;
-  localStorage.setItem('bfl_customers', JSON.stringify(customers));
-
-  toast('💾 업체 정보가 수정되었습니다!');
-  _editMode = false;
-  setTimeout(function() { openDetail(_currentId); }, 800);
+  try {
+    await fsSaveCompany(updated);
+    toast('💾 업체 정보가 수정되었습니다!');
+    _editMode = false;
+    setTimeout(function() { openDetail(_currentId); }, 800);
+  } catch(e) {
+    toast('❌ 수정 실패: ' + e.message);
+  }
 }
 
 // ============================================================
@@ -1674,15 +1729,17 @@ function collectLicenses() {
 // ============================================================
 // 삭제
 // ============================================================
-function deleteCompany() {
+async function deleteCompany() {
   if (!_currentId) return;
   if (!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
-  var customers = getCustomers();
-  customers = customers.filter(function(c) { return c.id !== _currentId; });
-  localStorage.setItem('bfl_customers', JSON.stringify(customers));
-  toast('🗑️ 업체가 삭제되었습니다');
-  _currentId = null;
-  setTimeout(function() { showPage('list'); }, 800);
+  try {
+    await fsDeleteCompany(_currentId);
+    toast('🗑️ 업체가 삭제되었습니다');
+    _currentId = null;
+    setTimeout(function() { showPage('list'); }, 800);
+  } catch(e) {
+    toast('❌ 삭제 실패: ' + e.message);
+  }
 }
 
 // ============================================================
@@ -2590,16 +2647,14 @@ function runDetailBizOCR() {
     var payload = { images: [{ format: result.format, name: 'biz', data: result.base64 }], requestId: 'det-biz-' + Date.now(), version: 'V2', timestamp: Date.now() };
     return fetch(OCR_BIZ_LICENSE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   }).then(function(r) { return r.json(); })
-  .then(function(data) {
+  .then(async function(data) {
     var res = data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result;
     if (!res) { statusEl.textContent = '❌ OCR 인식 실패'; return; }
 
     function gt(f) { return (f && f.length) ? f.map(function(x){return x.text||''}).join(' ') : ''; }
     var changes = [];
-    var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-    var idx = customers.findIndex(function(c) { return c.id === _detailCustId; });
-    if (idx === -1) { statusEl.textContent = '❌ 업체 정보를 찾을 수 없습니다'; return; }
-    var cust = customers[idx];
+    var cust = await fsGetCompanyById(_detailCustId);
+    if (!cust) { statusEl.textContent = '❌ 업체 정보를 찾을 수 없습니다'; return; }
     var now = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
     // 필드별 비교 및 변경 감지
@@ -2635,9 +2690,7 @@ function runDetailBizOCR() {
         if (zipcode) { cust.zipcode = zipcode; document.getElementById('detZipcode').value = zipcode; }
         if (roadAddr) { cust.addr1 = roadAddr; document.getElementById('detAddr1').value = roadAddr; }
         if (detailAddr2) { cust.addr2 = detailAddr2; document.getElementById('detAddr2').value = detailAddr2; }
-        var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-        var ci = custs.findIndex(function(c) { return c.id === _detailCustId; });
-        if (ci !== -1) { custs[ci] = cust; localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+        db.collection('companies').doc(_detailCustId).update({ zipcode: cust.zipcode, addr1: cust.addr1, addr2: cust.addr2 || '' });
       });
     }
 
@@ -2653,8 +2706,7 @@ function runDetailBizOCR() {
       };
       if (!cust.changeLog) cust.changeLog = [];
       cust.changeLog.push(logEntry);
-      customers[idx] = cust;
-      localStorage.setItem('bfl_customers', JSON.stringify(customers));
+      fsSaveCompany(Object.assign({id: _detailCustId}, cust));
       renderChangeLog(cust.changeLog);
       document.getElementById('detailCompanyTitle').textContent = cust.company;
       statusEl.textContent = '✅ OCR 완료 — ' + changes.length + '건 변경사항 반영';
@@ -2666,8 +2718,7 @@ function runDetailBizOCR() {
       convertToEnglishAddress(cust.addr1 + ' ' + (cust.addr2 || ''), function(eng) {
         cust.addrEn = eng;
         document.getElementById('detAddrEn').value = eng;
-        customers[idx] = cust;
-        localStorage.setItem('bfl_customers', JSON.stringify(customers));
+        db.collection('companies').doc(_detailCustId).update({ addrEn: eng });
       });
     }
   }).catch(function(e) {
@@ -2689,16 +2740,14 @@ function runDetailLicOCR() {
     var payload = { images: [{ format: result.format, name: 'lic', data: result.base64 }], requestId: 'det-lic-' + Date.now(), version: 'V2', timestamp: Date.now() };
     return fetch(OCR_BIZ_LICENSE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   }).then(function(r) { return r.json(); })
-  .then(function(data) {
+  .then(async function(data) {
     var res = data.images && data.images[0] && data.images[0].bizLicense && data.images[0].bizLicense.result;
     if (!res) { statusEl.textContent = '❌ OCR 인식 실패'; return; }
 
     function gt(f) { return (f && f.length) ? f.map(function(x){return x.text||''}).join(' ') : ''; }
     var changes = [];
-    var customers = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-    var idx = customers.findIndex(function(c) { return c.id === _detailCustId; });
-    if (idx === -1) { statusEl.textContent = '❌ 업체 정보를 찾을 수 없습니다'; return; }
-    var cust = customers[idx];
+    var cust = await fsGetCompanyById(_detailCustId);
+    if (!cust) { statusEl.textContent = '❌ 업체 정보를 찾을 수 없습니다'; return; }
     var now = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
     // 첫 번째 인허가 기준
@@ -2752,9 +2801,7 @@ function runDetailLicOCR() {
         if (roadAddr) { lic0.licAddr = roadAddr; cust.licAddr = roadAddr; var aEl = document.getElementById('detLicAddr_1'); if (aEl) aEl.value = roadAddr; }
         if (detailAddr2) { lic0.licAddr2 = detailAddr2; cust.licAddr2 = detailAddr2; var a2El = document.getElementById('detLicAddr2_1'); if (a2El) a2El.value = detailAddr2; }
         if (cust.licenses && cust.licenses.length > 0) cust.licenses[0] = lic0;
-        var custs = JSON.parse(localStorage.getItem('bfl_customers') || '[]');
-        var ci = custs.findIndex(function(c) { return c.id === _detailCustId; });
-        if (ci !== -1) { custs[ci] = cust; localStorage.setItem('bfl_customers', JSON.stringify(custs)); }
+        db.collection('companies').doc(_detailCustId).update({ licenses: cust.licenses || [], licAddr: cust.licAddr, licAddr2: cust.licAddr2 || '' });
       });
     }
 
@@ -2787,8 +2834,7 @@ function runDetailLicOCR() {
       };
       if (!cust.changeLog) cust.changeLog = [];
       cust.changeLog.push(logEntry);
-      customers[idx] = cust;
-      localStorage.setItem('bfl_customers', JSON.stringify(customers));
+      await fsSaveCompany(Object.assign({id: _detailCustId}, cust));
       renderChangeLog(cust.changeLog);
       statusEl.textContent = '✅ OCR 완료 — ' + changes.length + '건 변경사항 반영';
     } else {
@@ -2802,8 +2848,7 @@ function runDetailLicOCR() {
         if (cust.licenses && cust.licenses.length > 0) cust.licenses[0].licAddrEn = eng;
         var detEngEl = document.getElementById('detLicAddrEn_1');
         if (detEngEl) detEngEl.value = eng;
-        customers[idx] = cust;
-        localStorage.setItem('bfl_customers', JSON.stringify(customers));
+        db.collection('companies').doc(_detailCustId).update({ licAddrEn: eng, licenses: cust.licenses || [] });
       });
     }
   }).catch(function(e) {
@@ -2871,8 +2916,21 @@ function runDetLicCardOCR(num) {
 // ============================================================
 // 초기화
 // ============================================================
+var _firebaseInitDone = false;
+window.addEventListener('firebase-ready', async function() {
+  if (_firebaseInitDone) return;
+  _firebaseInitDone = true;
+  console.log('[companyMgmt] Firebase 준비 완료, 업체 목록 로드');
+  await loadList();
+});
+// fallback
 document.addEventListener('DOMContentLoaded', function() {
-  loadList();
+  setTimeout(async function() {
+    if (!_firebaseInitDone && typeof isFirebaseReady === 'function' && isFirebaseReady()) {
+      _firebaseInitDone = true;
+      await loadList();
+    }
+  }, 3000);
 });
 </script>
 </body>
