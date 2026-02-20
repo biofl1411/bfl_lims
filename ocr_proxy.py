@@ -53,6 +53,13 @@ CLOVA_GENERAL_URL = os.environ.get(
     '/general'
 )
 
+CLOVA_NAME_CARD_URL = os.environ.get(
+    'CLOVA_NAME_CARD_URL',
+    'https://ialgkho4vv.apigw.ntruss.com/custom/v1/50335/'
+    '4fd4f84e81ec1035e5c386fb4c1badc8eb704875c19495b491236d28fe232738'
+    '/document/name-card'
+)
+
 
 # ============================================================
 # 헬스체크
@@ -94,6 +101,41 @@ def ocr_biz_license():
         )
 
         # Clova OCR 응답을 그대로 전달
+        return jsonify(resp.json()), resp.status_code
+
+    except requests.Timeout:
+        return jsonify({'error': 'Clova OCR 타임아웃 (30초)'}), 504
+    except requests.RequestException as e:
+        return jsonify({'error': f'Clova OCR 요청 실패: {str(e)}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'서버 오류: {str(e)}'}), 500
+
+
+# ============================================================
+# 명함 OCR (Document OCR — 명함 특화 모델)
+# ============================================================
+@app.route('/api/ocr/name-card', methods=['POST'])
+def ocr_name_card():
+    """
+    명함 OCR: 이름, 회사, 부서, 전화번호, 이메일, 주소 등 추출
+    """
+    try:
+        payload = request.get_json()
+        if not payload:
+            return jsonify({'error': 'JSON body required'}), 400
+
+        headers = {
+            'Content-Type': 'application/json',
+            'X-OCR-SECRET': CLOVA_SECRET
+        }
+
+        resp = requests.post(
+            CLOVA_NAME_CARD_URL,
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+
         return jsonify(resp.json()), resp.status_code
 
     except requests.Timeout:
@@ -155,6 +197,7 @@ if __name__ == '__main__':
     if os.path.exists(cert_file) and os.path.exists(key_file):
         print(f'BFL OCR Proxy Server starting on port {port} (HTTPS)')
         print(f'  biz-license OCR: POST https://localhost:{port}/api/ocr/biz-license')
+        print(f'  name-card OCR:   POST https://localhost:{port}/api/ocr/name-card')
         print(f'  general OCR:     POST https://localhost:{port}/api/ocr/general')
         print(f'  health check:    GET  https://localhost:{port}/api/ocr/health')
         print(f'  SSL cert: {cert_file}')
@@ -165,6 +208,7 @@ if __name__ == '__main__':
         print(f'  인증서 생성: openssl req -x509 -newkey rsa:2048 -keyout ocr_proxy_key.pem -out ocr_proxy_cert.pem -days 365 -nodes')
         print(f'BFL OCR Proxy Server starting on port {port} (HTTP)')
         print(f'  biz-license OCR: POST http://localhost:{port}/api/ocr/biz-license')
+        print(f'  name-card OCR:   POST http://localhost:{port}/api/ocr/name-card')
         print(f'  general OCR:     POST http://localhost:{port}/api/ocr/general')
         print(f'  health check:    GET  http://localhost:{port}/api/ocr/health')
         app.run(host='0.0.0.0', port=port, debug=True)

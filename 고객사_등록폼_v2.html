@@ -414,13 +414,13 @@
               </div>
             </div>
             <div class="form-grid">
-              <div class="form-group"><label>업체명</label><input type="text" id="cCompany1" placeholder="업체명 (인허가별 상이 시 직접 입력)" /></div>
+              <div class="form-group"><label>업체명</label><input type="text" id="cCompany1" placeholder="클릭하여 선택 또는 직접 입력" onclick="openCompanySelectModal(1)" readonly style="cursor:pointer;background:#fafbfc" /><input type="text" id="cCompanyCustom1" placeholder="업체명 직접 입력" style="display:none;margin-top:4px" /></div>
               <div class="form-group"><label>부서</label><input type="text" id="cDept1" placeholder="부서명" /></div>
             </div>
             <div class="form-grid-3" style="margin-top:8px">
               <div class="form-group"><label>담당자(이름) <span class="req">*</span></label><input type="text" id="cName1" placeholder="담당자 이름" /></div>
               <div class="form-group"><label>전화번호 <span class="req">*</span></label><input type="text" id="cPhone1" placeholder="010-0000-0000" oninput="formatPhone(this)" /></div>
-              <div class="form-group"><label>이메일</label><input type="email" id="cEmail1" placeholder="email@example.com" /></div>
+              <div class="form-group"><label>이메일 <span class="req">*</span></label><input type="email" id="cEmail1" placeholder="email@example.com" /></div>
             </div>
             <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <button class="btn-check" onclick="checkContactDup()">🔍 중복 확인</button>
@@ -428,7 +428,7 @@
             </div>
             <div class="sales-rep-row">
               <span class="rep-label">자사 담당자 연결:</span>
-              <select id="cTeam1" onchange="filterRepByTeam(1)"><option value="">부서(팀) 선택</option><option value="마케팅사업부">마케팅사업부</option><option value="고객지원팀">고객지원팀</option><option value="고객관리">고객관리</option><option value="지사">지사</option></select>
+              <select id="cTeam1" onchange="filterRepByTeam(1)"><option value="">부서(팀) 선택</option></select>
               <select id="cRep1" onchange="updateRepBadge(1)"><option value="">접수자(담당자) 선택</option></select>
               <span id="cRepBadge1"></span>
             </div>
@@ -446,7 +446,7 @@
           <button class="tax-copy-btn" style="margin-left:auto;" onclick="copyFromContact1()">📋 1번 담당자 정보 복사</button>
         </div>
         <div class="form-grid">
-          <div class="form-group"><label>업체명</label><input type="text" id="taxCompany" placeholder="업체명" /></div>
+          <div class="form-group"><label>업체명</label><input type="text" id="taxCompany" placeholder="클릭하여 선택 또는 직접 입력" onclick="openCompanySelectModal('tax')" readonly style="cursor:pointer;background:#fafbfc" /><input type="text" id="taxCompanyCustom" placeholder="업체명 직접 입력" style="display:none;margin-top:4px" /></div>
           <div class="form-group"><label>부서</label><input type="text" id="taxDept" placeholder="부서명" /></div>
         </div>
         <div class="form-grid-3" style="margin-top:8px">
@@ -494,6 +494,25 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- 업체명 선택 모달 -->
+<div class="dup-overlay" id="companySelectModal">
+  <div class="dup-popup" style="max-width:460px">
+    <h3>🏢 업체명 선택</h3>
+    <div style="font-size:12px;color:#5f6b7a;margin-bottom:14px">사업자등록증 또는 인허가 정보에서 업체명을 선택하거나 직접 입력하세요.</div>
+    <div id="companySelectList" style="max-height:260px;overflow-y:auto;margin-bottom:12px"></div>
+    <div style="border-top:1px solid #eef0f4;padding-top:12px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e6ed;border-radius:8px;cursor:pointer">
+        <input type="radio" name="companySelectRadio" value="__custom__" style="width:18px;height:18px;accent-color:#1a73e8" />
+        <div style="flex:1"><div style="font-weight:600;font-size:13px">✏️ 직접 입력</div><div style="font-size:11px;color:#8892a4">위 목록에 없는 업체명을 직접 입력</div></div>
+      </label>
+    </div>
+    <div class="dup-actions">
+      <button class="dup-btn dup-btn-cancel" onclick="closeCompanySelectModal()">취소</button>
+      <button class="dup-btn dup-btn-link" onclick="applyCompanySelect()">선택</button>
+    </div>
+  </div>
+</div>
+
 <!-- 인허가 담당자 매칭 모달 -->
 <div class="dup-overlay" id="licContactMatchModal">
   <div class="dup-popup" style="max-width:420px">
@@ -513,7 +532,6 @@
 var OCR_PROXY_BASE = 'https://localhost:5002';
 var OCR_BIZ_LICENSE_URL = OCR_PROXY_BASE + '/api/ocr/biz-license';
 var OCR_GENERAL_URL = OCR_PROXY_BASE + '/api/ocr/general';
-
 /* ===== 변경 이력 ===== */
 var changeLog = [];
 
@@ -589,11 +607,26 @@ function runBizLicOCR() {
       var companyName = getText(res.companyName) || getText(res.corpName);
       var repName = getText(res.repName);
       var bizNo = getText(res.registerNumber) || getText(res.bisRegistrationNumber);
-      var corpNo = getText(res.corporationNumber);
+      // 법인번호: Clova OCR 실제 필드명 = corpRegisterNum
+      var corpNo = getText(res.corpRegisterNum) || getText(res.corporationNumber) || getText(res.corpRegisterNumber);
+      var taxType = getText(res.taxType); // "법인사업자", "일반과세자" 등
       var bizType = getText(res.bisType);
       var bizItem = getText(res.bisItem);
       var addr = '';
       if (res.bisAddress && res.bisAddress[0] && res.bisAddress[0].text) addr = res.bisAddress[0].text.trim();
+
+      // ===== 법인/개인 자동 판별 =====
+      var isCorp = !!corpNo || /법인/.test(taxType);
+      var corpTypeRadios = document.querySelectorAll('input[name="corpType"]');
+      if (isCorp) {
+        // 법인번호가 있거나 과세유형이 "법인사업자" → 법인
+        corpTypeRadios.forEach(function(r) { r.checked = (r.value === '법인'); });
+        document.getElementById('corpNoGroup').style.display = 'flex';
+      } else {
+        // 개인사업자
+        corpTypeRadios.forEach(function(r) { r.checked = (r.value === '개인'); });
+        document.getElementById('corpNoGroup').style.display = 'none';
+      }
 
       var changes = [];
       function setField(id, label, val) {
@@ -608,6 +641,7 @@ function runBizLicOCR() {
       setField('regRepName', '대표자명', repName);
       if (bizNo) { setField('bizNo', '사업자번호', bizNo); formatBizNo(document.getElementById('bizNo')); }
       if (corpNo) { setField('regCorpNo', '법인번호', corpNo); formatCorpNo(document.getElementById('regCorpNo')); }
+      changes.push({ field: '법인여부', from: '', to: isCorp ? '법인' : '개인' });
       setField('regBizType', '업태', bizType);
       setField('regBizItem', '종목', bizItem);
       // 주소: 쉼표(,) 기준으로 기본주소/상세주소 분리
@@ -868,13 +902,91 @@ function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-/* ===== 자사 담당자 데모 데이터 (추후 사용자관리 API 연동) ===== */
-var salesRepData = {
-  '마케팅사업부': [{ name:'박주임', role:'주임' }, { name:'정대리', role:'대리' }],
-  '고객지원팀':   [{ name:'이주임', role:'주임' }, { name:'최사원', role:'사원' }],
-  '고객관리':     [{ name:'김사원', role:'사원' }, { name:'한대리', role:'대리' }],
-  '지사':         [{ name:'윤과장', role:'과장' }, { name:'서주임', role:'주임' }]
-};
+/* ===== 자사 담당자 데이터 (관리자 > 사용자관리 USERS_DATA + localStorage 연동) ===== */
+var USERS_DATA = [
+  {"부서명":"임원","아이디":"이용표","직급":"대표이사"},
+  {"부서명":"관리팀","아이디":"김영기","직급":"부장"},
+  {"부서명":"고객지원팀","아이디":"허현미","직급":"부장"},
+  {"부서명":"식품축산분석실","아이디":"김지영","직급":"과장"},
+  {"부서명":"식품축산분석실","아이디":"문유진","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"윤정한","직급":"차장"},
+  {"부서명":"식품축산분석실","아이디":"손윤주","직급":"부장"},
+  {"부서명":"품질보증팀","아이디":"김주현","직급":"부장"},
+  {"부서명":"고객지원팀","아이디":"이은경","직급":"과장"},
+  {"부서명":"고객지원팀","아이디":"김수정","직급":"과장"},
+  {"부서명":"고객관리","아이디":"김희성","직급":"부장"},
+  {"부서명":"식품축산분석실","아이디":"최주리","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"김지은","직급":"과장"},
+  {"부서명":"식품축산분석실","아이디":"김사라","직급":"과장"},
+  {"부서명":"식품축산분석실","아이디":"문태성","직급":"과장"},
+  {"부서명":"식품축산분석실","아이디":"서세진","직급":"차장"},
+  {"부서명":"고객지원팀","아이디":"박신영","직급":"차장"},
+  {"부서명":"품질보증팀","아이디":"김민규","직급":"차장"},
+  {"부서명":"식품축산분석실","아이디":"장민경","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"김민영","직급":"과장"},
+  {"부서명":"식품축산분석실","아이디":"이종훈","직급":"주임"},
+  {"부서명":"경영지원실","아이디":"김성호","직급":"전무이사"},
+  {"부서명":"경영지원실","아이디":"김유빈","직급":"주임"},
+  {"부서명":"마케팅사업부","아이디":"조현정","직급":"주임"},
+  {"부서명":"고객관리","아이디":"조봉현","직급":"대리"},
+  {"부서명":"마케팅사업부","아이디":"이슬기","직급":"대리"},
+  {"부서명":"고객관리","아이디":"엄상흠","직급":"부장"},
+  {"부서명":"고객지원팀","아이디":"류하늘","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"이진아","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"진미정","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"김선화","직급":"사원"},
+  {"부서명":"고객관리","아이디":"오세중","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"염하림","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"백지연","직급":"주임"},
+  {"부서명":"식품축산분석실","아이디":"박지수","직급":"주임"},
+  {"부서명":"식품축산분석실","아이디":"송지은","직급":"주임"},
+  {"부서명":"고객관리","아이디":"장동주","직급":"주임"},
+  {"부서명":"식품축산분석실","아이디":"신경석","직급":"대리"},
+  {"부서명":"품질보증팀","아이디":"김정한","직급":"차장"},
+  {"부서명":"식품축산분석실","아이디":"김현정","직급":"주임"},
+  {"부서명":"식품축산분석실","아이디":"서진영","직급":"사원"},
+  {"부서명":"고객지원팀","아이디":"이진희","직급":"사원"},
+  {"부서명":"고객관리","아이디":"오석현","직급":"주임"},
+  {"부서명":"경영지원실","아이디":"이주하","직급":"차장"},
+  {"부서명":"식품축산분석실","아이디":"박시은","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"안준이","직급":"사원"},
+  {"부서명":"품질보증팀","아이디":"강은애","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"하주신","직급":"과장"},
+  {"부서명":"마케팅팀","아이디":"김도희","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"태혁진","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"김고은","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"김범준","직급":"대리"},
+  {"부서명":"식품축산분석실","아이디":"권혜원","직급":"사원"},
+  {"부서명":"마케팅팀","아이디":"송성현","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"김문기","직급":"사원"},
+  {"부서명":"식품축산분석실","아이디":"지현정","직급":"사원"}
+];
+/* localStorage에서 수정된 사용자 데이터 병합 (userMgmt.html과 동일 로직) */
+function loadSalesUsers() {
+  var base = USERS_DATA.map(function(u) { return Object.assign({ 팀명:'', 접수자:'', 입사일:'', 퇴사일:'' }, u); });
+  var saved = localStorage.getItem('bfl_users_data');
+  if (saved) {
+    try {
+      var savedUsers = JSON.parse(saved);
+      var baseMap = {};
+      base.forEach(function(u) { baseMap[u.아이디] = u; });
+      savedUsers.forEach(function(su) {
+        if (baseMap[su.아이디]) { Object.assign(baseMap[su.아이디], su); }
+        else { base.push(su); }
+      });
+      return base;
+    } catch(e) { /* 파싱 오류 시 기본값 */ }
+  }
+  return base;
+}
+var SALES_TEAMS = ['고객지원팀', '마케팅사업부', '고객관리', '지사'];
+var salesTeamList = SALES_TEAMS;
+var _allUsers = loadSalesUsers();
+var salesUsersList = _allUsers.filter(function(u) { return SALES_TEAMS.indexOf(u.부서명) !== -1; });
+/* 부서 <option> HTML 생성 유틸 */
+function buildTeamOptions() {
+  return salesTeamList.map(function(t) { return '<option value="' + escHtml(t) + '">' + escHtml(t) + '</option>'; }).join('');
+}
 
 function filterRepByTeam(n) {
   var teamSel = document.getElementById('cTeam' + n);
@@ -884,22 +996,31 @@ function filterRepByTeam(n) {
   var team = teamSel.value;
   repSel.innerHTML = '<option value="">접수자(담당자) 선택</option>';
   if (badgeEl) badgeEl.innerHTML = '';
-  if (team && salesRepData[team]) {
-    salesRepData[team].forEach(function(p) {
-      var opt = document.createElement('option');
-      opt.value = p.name;
-      opt.textContent = p.name + ' (' + p.role + ')';
-      repSel.appendChild(opt);
-    });
-  }
+  /* 접수자 필드가 있는 사용자만 → 접수자 고유값으로 드롭다운 생성 */
+  var list = team ? salesUsersList.filter(function(u) { return u.부서명 === team; }) : salesUsersList;
+  var hasReceiver = list.filter(function(u) { return u.접수자 && u.접수자.trim(); });
+  var seen = {};
+  hasReceiver.forEach(function(u) {
+    var rv = u.접수자.trim();
+    if (seen[rv]) return;
+    seen[rv] = true;
+    var opt = document.createElement('option');
+    opt.value = rv;
+    opt.textContent = rv + ' (' + u.부서명 + ')';
+    repSel.appendChild(opt);
+  });
 }
 function updateRepBadge(n) {
   var repSel  = document.getElementById('cRep' + n);
   var teamSel = document.getElementById('cTeam' + n);
   var badgeEl = document.getElementById('cRepBadge' + n);
   if (!repSel || !badgeEl) return;
-  if (repSel.value && teamSel.value) {
-    badgeEl.innerHTML = '<span class="rep-badge">🏢 ' + escHtml(teamSel.value) + ' · ' + escHtml(repSel.value) + '</span>';
+  if (repSel.value) {
+    var rv = repSel.value;
+    /* 접수자 값으로 해당 사용자 찾기 (부서 정보 표시용) */
+    var info = salesUsersList.find(function(u) { return u.접수자 && u.접수자.trim() === rv; });
+    var teamLabel = info ? info.부서명 : (teamSel ? teamSel.value : '');
+    badgeEl.innerHTML = '<span class="rep-badge">🏢 ' + escHtml(teamLabel) + ' · ' + escHtml(rv) + '</span>';
   } else { badgeEl.innerHTML = ''; }
 }
 
@@ -918,18 +1039,18 @@ function addContact() {
         '</div>' +
       '</div>' +
       '<div class="form-grid">' +
-        '<div class="form-group"><label>업체명</label><input type="text" id="cCompany' + n + '" placeholder="업체명 (인허가별 상이 시 직접 입력)" /></div>' +
+        '<div class="form-group"><label>업체명</label><input type="text" id="cCompany' + n + '" placeholder="클릭하여 선택 또는 직접 입력" onclick="openCompanySelectModal(' + n + ')" readonly style="cursor:pointer;background:#fafbfc" /><input type="text" id="cCompanyCustom' + n + '" placeholder="업체명 직접 입력" style="display:none;margin-top:4px" /></div>' +
         '<div class="form-group"><label>부서</label><input type="text" id="cDept' + n + '" placeholder="부서명" /></div>' +
       '</div>' +
       '<div class="form-grid-3" style="margin-top:8px">' +
         '<div class="form-group"><label>담당자(이름) <span class="req">*</span></label><input type="text" id="cName' + n + '" placeholder="담당자 이름" /></div>' +
         '<div class="form-group"><label>전화번호 <span class="req">*</span></label><input type="text" id="cPhone' + n + '" placeholder="010-0000-0000" oninput="formatPhone(this)" /></div>' +
-        '<div class="form-group"><label>이메일</label><input type="email" id="cEmail' + n + '" placeholder="email@example.com" /></div>' +
+        '<div class="form-group"><label>이메일 <span class="req">*</span></label><input type="email" id="cEmail' + n + '" placeholder="email@example.com" /></div>' +
       '</div>' +
-      '<div style="margin-top:8px"><button class="btn-check" onclick="showToastMsg(\'✅ 중복 없음 — 신규 등록 가능\')">🔍 중복 확인</button></div>' +
+      '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn-check" onclick="showToastMsg(\'✅ 중복 없음 — 신규 등록 가능\')">🔍 중복 확인</button><div class="check-result" id="contactCheckResult' + n + '" style="display:none"></div></div>' +
       '<div class="sales-rep-row">' +
         '<span class="rep-label">자사 담당자 연결:</span>' +
-        '<select id="cTeam' + n + '" onchange="filterRepByTeam(' + n + ')"><option value="">부서(팀) 선택</option><option value="마케팅사업부">마케팅사업부</option><option value="고객지원팀">고객지원팀</option><option value="고객관리">고객관리</option><option value="지사">지사</option></select>' +
+        '<select id="cTeam' + n + '" onchange="filterRepByTeam(' + n + ')"><option value="">부서(팀) 선택</option>' + buildTeamOptions() + '</select>' +
         '<select id="cRep' + n + '" onchange="updateRepBadge(' + n + ')"><option value="">접수자(담당자) 선택</option></select>' +
         '<span id="cRepBadge' + n + '"></span>' +
       '</div>' +
@@ -937,6 +1058,7 @@ function addContact() {
       '<input type="hidden" id="contactLicNums_' + n + '" value="" />' +
     '</div>';
   document.getElementById('contactList').insertAdjacentHTML('beforeend', html);
+  filterRepByTeam(n);  // 접수자 전체 목록 로드
 }
 function removeContact(id) { if(confirm('삭제하시겠습니까?')) document.getElementById('contact-'+id).remove(); }
 
@@ -1010,13 +1132,104 @@ function applyLicMatch() {
 
 /* ===== 세금계산서 담당자 복사 ===== */
 function copyFromContact1() {
-  var map = { Company:'Company', Dept:'Dept', Name:'Name', Phone:'Phone', Email:'Email' };
+  var map = { Dept:'Dept', Name:'Name', Phone:'Phone', Email:'Email' };
   Object.keys(map).forEach(function(f) {
     var src = document.getElementById('c' + f + '1');
     var dst = document.getElementById('tax' + map[f]);
     if (src && dst) dst.value = src.value;
   });
+  /* 업체명 복사 — 직접 입력 / 모달 선택 모드 둘 다 처리 */
+  var srcCompany = document.getElementById('cCompany1');
+  var srcCustom  = document.getElementById('cCompanyCustom1');
+  var taxCompany = document.getElementById('taxCompany');
+  var taxCustom  = document.getElementById('taxCompanyCustom');
+  if (srcCustom && srcCustom.style.display !== 'none' && srcCustom.value) {
+    // 1번 담당자가 직접 입력 모드 → 세금계산서도 직접 입력 모드
+    if (taxCompany) { taxCompany.style.display = 'none'; }
+    if (taxCustom) { taxCustom.style.display = 'block'; taxCustom.value = srcCustom.value; }
+  } else {
+    // 1번 담당자가 모달 선택 모드 → 세금계산서도 선택값 표시
+    if (taxCompany) { taxCompany.value = srcCompany ? srcCompany.value : ''; taxCompany.style.display = 'block'; }
+    if (taxCustom) { taxCustom.style.display = 'none'; taxCustom.value = ''; }
+  }
   showToastMsg('📋 1번 담당자 정보가 복사되었습니다.');
+}
+
+/* ===== 업체명 선택 모달 ===== */
+var _companySelectContactNum = null;
+function openCompanySelectModal(contactNum) {
+  _companySelectContactNum = contactNum;
+  var modal = document.getElementById('companySelectModal');
+  if (!modal) return;
+  var listEl = document.getElementById('companySelectList');
+  listEl.innerHTML = '';
+
+  var items = [];
+  // 1) 사업자등록증 회사명
+  var bizCompany = (document.getElementById('companyName') || {}).value || '';
+  if (bizCompany.trim()) {
+    items.push({ label: bizCompany.trim(), sub: '사업자등록증', type: 'biz' });
+  }
+  // 2) 인허가별 영업소명칭
+  for (var li = 1; li <= licenseCount; li++) {
+    if (!document.getElementById('license-' + li)) continue;
+    var licBizName = (document.getElementById('licBizName_' + li) || {}).value || '';
+    var licField = (document.getElementById('licField_' + li) || {}).value || '';
+    var licNo = (document.getElementById('licNo_' + li) || {}).value || '';
+    if (licBizName.trim()) {
+      var sub = '인허가 ' + li;
+      if (licField) sub += ' · ' + licField;
+      if (licNo) sub += ' · ' + licNo;
+      // 중복 제거 (사업자등록증과 같은 이름이면 건너뛰기)
+      var dup = items.some(function(it) { return it.label === licBizName.trim(); });
+      if (!dup) items.push({ label: licBizName.trim(), sub: sub, type: 'lic-' + li });
+    }
+  }
+
+  if (items.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center;color:#8892a4;padding:16px;font-size:12px">' +
+      '등록된 업체명이 없습니다.<br>사업자등록증 또는 인허가 정보를 먼저 입력해 주세요.</div>';
+  } else {
+    items.forEach(function(item, idx) {
+      var row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e6ed;border-radius:8px;margin-bottom:6px;cursor:pointer';
+      row.innerHTML =
+        '<input type="radio" name="companySelectRadio" value="' + escHtml(item.label) + '" style="width:18px;height:18px;accent-color:#1a73e8"' + (idx === 0 ? ' checked' : '') + ' />' +
+        '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(item.label) + '</div>' +
+        '<div style="font-size:11px;color:#8892a4">' + escHtml(item.sub) + '</div></div>';
+      listEl.appendChild(row);
+    });
+  }
+  modal.classList.add('show');
+}
+
+function closeCompanySelectModal() {
+  var modal = document.getElementById('companySelectModal');
+  if (modal) modal.classList.remove('show');
+  _companySelectContactNum = null;
+}
+
+function applyCompanySelect() {
+  var num = _companySelectContactNum;
+  if (!num) return;
+  var selected = document.querySelector('input[name="companySelectRadio"]:checked');
+  if (!selected) { alert('업체명을 선택해 주세요.'); return; }
+
+  var isTax = (num === 'tax');
+  var companyInput = document.getElementById(isTax ? 'taxCompany' : 'cCompany' + num);
+  var customInput  = document.getElementById(isTax ? 'taxCompanyCustom' : 'cCompanyCustom' + num);
+
+  if (selected.value === '__custom__') {
+    // 직접 입력 모드
+    if (companyInput) { companyInput.style.display = 'none'; }
+    if (customInput) { customInput.style.display = 'block'; customInput.focus(); }
+  } else {
+    // 선택한 업체명 적용
+    if (companyInput) { companyInput.value = selected.value; companyInput.style.display = 'block'; }
+    if (customInput) { customInput.style.display = 'none'; customInput.value = ''; }
+  }
+  closeCompanySelectModal();
+  showToastMsg('🏢 업체명이 설정되었습니다.');
 }
 
 /* ===== 중복 확인 데모 ===== */
@@ -1182,6 +1395,14 @@ function showToastMsg(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+/* ===== 페이지 초기화 ===== */
+/* 1번 담당자 부서 드롭다운 옵션 동적 생성 */
+(function() {
+  var ts = document.getElementById('cTeam1');
+  if (ts) ts.innerHTML = '<option value="">부서(팀) 선택</option>' + buildTeamOptions();
+})();
+filterRepByTeam(1);  // 1번 담당자 접수자 드롭다운 전체 목록 로드
 </script>
 </body>
 </html>
