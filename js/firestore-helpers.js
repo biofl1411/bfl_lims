@@ -181,6 +181,34 @@ async function fsDeleteCompany(id) {
 }
 
 /**
+ * 업체 관련 Storage 파일 삭제 (사업자등록증, 인허가문서)
+ * @param {string} companyId
+ */
+async function fsDeleteCompanyFiles(companyId) {
+  try {
+    var doc = await db.collection('companies').doc(companyId).get();
+    if (!doc.exists) return;
+    var data = doc.data();
+    var files = data.files || {};
+    // 사업자등록증 삭제
+    if (files.bizLicensePath) {
+      try { await storage.ref(files.bizLicensePath).delete(); } catch(e) { console.warn('[Storage] 사업자등록증 삭제 실패:', e.message); }
+    }
+    // 인허가문서 삭제
+    if (files.permitDocs && files.permitDocs.length > 0) {
+      for (var i = 0; i < files.permitDocs.length; i++) {
+        if (files.permitDocs[i].path) {
+          try { await storage.ref(files.permitDocs[i].path).delete(); } catch(e) { console.warn('[Storage] 인허가문서 삭제 실패:', e.message); }
+        }
+      }
+    }
+    console.log('[Storage] 업체 파일 삭제 완료:', companyId);
+  } catch(e) {
+    console.warn('[Storage] 업체 파일 삭제 중 오류:', companyId, e.message);
+  }
+}
+
+/**
  * 업체 검색 (회사명 or 사업자번호)
  * @param {string} query
  * @param {number} limit

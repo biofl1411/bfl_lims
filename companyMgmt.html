@@ -118,6 +118,24 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 [data-tooltip]{position:relative;cursor:help}
 [data-tooltip]:hover::after{content:attr(data-tooltip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 14px;border-radius:8px;font-size:11px;white-space:pre-line;min-width:240px;max-width:320px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);line-height:1.7;pointer-events:none;font-weight:400;letter-spacing:0}
 [data-tooltip]:hover::before{content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#1e293b;z-index:9999;pointer-events:none}
+/* 선택 삭제 확인 모달 */
+#bulkDeleteModal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:none;align-items:center;justify-content:center}
+#bulkDeleteModal.show{display:flex}
+.bulk-delete-dialog{background:#fff;border-radius:14px;padding:28px;max-width:480px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,0.25);animation:fadeIn .2s ease}
+.bulk-delete-header{font-weight:700;font-size:17px;margin-bottom:6px;color:#c62828;display:flex;align-items:center;gap:8px}
+.bulk-delete-desc{font-size:13px;color:#5f6b7a;margin-bottom:14px}
+.bulk-delete-list{max-height:200px;overflow-y:auto;border:1px solid #eef0f4;border-radius:8px;padding:4px 0;margin-bottom:14px;font-size:12px}
+.bulk-delete-list .del-item{padding:7px 12px;border-bottom:1px solid #f5f5f5;display:flex;align-items:center;gap:8px}
+.bulk-delete-list .del-item:last-child{border-bottom:none}
+.bulk-delete-list .del-idx{color:#8892a4;font-size:10px;min-width:20px}
+.bulk-delete-list .del-name{font-weight:600;color:#1a2332}
+.bulk-delete-list .del-biz{color:#8892a4;font-size:11px;margin-left:auto}
+.bulk-delete-warn{background:#fff3e0;color:#e65100;padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:18px;line-height:1.5}
+.bulk-delete-actions{display:flex;gap:8px;justify-content:flex-end}
+.del-progress-area{margin-bottom:14px}
+.del-progress-bar{height:6px;background:#eef0f4;border-radius:3px;overflow:hidden;margin-bottom:6px}
+.del-progress-fill{height:100%;background:#e53935;border-radius:3px;transition:width 0.3s;width:0%}
+.del-progress-text{font-size:11px;color:#5f6b7a;text-align:center}
 </style>
 <!-- Daum Postcode API -->
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
@@ -434,6 +452,41 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       </div></div>
     </div>
 
+  </div>
+</div>
+
+<!-- 선택 삭제 확인 모달 -->
+<div id="bulkDeleteModal">
+  <div class="bulk-delete-dialog">
+    <div class="bulk-delete-header">🗑️ 선택 삭제 확인</div>
+    <div class="bulk-delete-desc">다음 <strong id="delCount">0</strong>개 업체를 삭제합니다. 관련 첨부파일도 함께 삭제됩니다.</div>
+    <div class="bulk-delete-list" id="delList"></div>
+    <div class="bulk-delete-warn">⚠️ 이 작업은 되돌릴 수 없습니다. 삭제된 데이터는 복구할 수 없습니다.</div>
+    <div class="del-progress-area" id="delProgress" style="display:none">
+      <div class="del-progress-bar"><div class="del-progress-fill" id="delProgressFill"></div></div>
+      <div class="del-progress-text" id="delProgressText">삭제 중... 0/0</div>
+    </div>
+    <div class="bulk-delete-actions" id="delActions">
+      <button class="btn btn-secondary btn-sm" onclick="closeBulkDeleteModal()">취소</button>
+      <button class="btn btn-danger btn-sm" id="delConfirmBtn" onclick="confirmBulkDelete()">🗑️ 삭제 실행</button>
+    </div>
+  </div>
+</div>
+
+<!-- 단건 삭제 확인 모달 -->
+<div id="singleDeleteModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center">
+  <div class="bulk-delete-dialog">
+    <div class="bulk-delete-header">🗑️ 업체 삭제 확인</div>
+    <div class="bulk-delete-desc"><strong id="singleDelName"></strong> 업체를 삭제합니다.</div>
+    <div class="bulk-delete-warn">⚠️ 이 작업은 되돌릴 수 없습니다. 관련 첨부파일도 함께 삭제됩니다.</div>
+    <div class="del-progress-area" id="singleDelProgress" style="display:none">
+      <div class="del-progress-bar"><div class="del-progress-fill" id="singleDelProgressFill"></div></div>
+      <div class="del-progress-text" id="singleDelProgressText">삭제 중...</div>
+    </div>
+    <div class="bulk-delete-actions" id="singleDelActions">
+      <button class="btn btn-secondary btn-sm" onclick="closeSingleDeleteModal()">취소</button>
+      <button class="btn btn-danger btn-sm" id="singleDelConfirmBtn" onclick="confirmSingleDelete()">🗑️ 삭제 실행</button>
+    </div>
   </div>
 </div>
 
@@ -808,21 +861,91 @@ function updateBulkDeleteBtn() {
   }
 }
 
+/* ===== 삭제 권한 체크 — 추후 등급별 제어 구현 예정 ===== */
+function checkDeletePermission() {
+  // TODO: 사용자 등급 확인 로직 (추후 지정 업무)
+  // 예: var user = firebase.auth().currentUser;
+  //     var role = getUserRole(user.uid);
+  //     if (role !== 'admin' && role !== 'manager') return false;
+  return true;
+}
+
+/* ===== 선택(일괄) 삭제 — 모달 표시 ===== */
 async function bulkDeleteCompanies() {
   var checked = document.querySelectorAll('.row-check:checked');
   if (checked.length === 0) return;
-  if (!confirm(checked.length + '개 업체를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+
+  // 권한 체크 (추후 등급별 제어)
+  if (!checkDeletePermission()) {
+    toast('⛔ 삭제 권한이 없습니다. 관리자에게 문의하세요.');
+    return;
+  }
+
+  // 삭제 대상 업체명 + 사업자번호 조회
   var ids = [];
   checked.forEach(function(cb) { ids.push(cb.value); });
-  try {
-    for (var i = 0; i < ids.length; i++) {
+
+  var listHtml = '';
+  ids.forEach(function(id, i) {
+    var c = (_customersCache || []).find(function(x) { return x.id === id; });
+    var name = c ? (c.company || c.name || id) : id;
+    var bizNo = c ? (c.bizNo || '') : '';
+    listHtml += '<div class="del-item">' +
+      '<span class="del-idx">' + (i + 1) + '</span>' +
+      '<span class="del-name">' + escHtml(name) + '</span>' +
+      (bizNo ? '<span class="del-biz">' + escHtml(bizNo) + '</span>' : '') +
+      '</div>';
+  });
+
+  // 모달 초기화 및 표시
+  document.getElementById('delCount').textContent = ids.length;
+  document.getElementById('delList').innerHTML = listHtml;
+  document.getElementById('delProgress').style.display = 'none';
+  document.getElementById('delProgressFill').style.width = '0%';
+  document.getElementById('delActions').style.display = 'flex';
+  document.getElementById('delConfirmBtn').disabled = false;
+  document.getElementById('bulkDeleteModal').classList.add('show');
+  window._bulkDeleteIds = ids;
+}
+
+function closeBulkDeleteModal() {
+  document.getElementById('bulkDeleteModal').classList.remove('show');
+  window._bulkDeleteIds = null;
+}
+
+async function confirmBulkDelete() {
+  var ids = window._bulkDeleteIds;
+  if (!ids || ids.length === 0) return;
+
+  // 버튼 비활성화 + 진행률 표시
+  document.getElementById('delConfirmBtn').disabled = true;
+  document.getElementById('delActions').querySelector('.btn-secondary').disabled = true;
+  document.getElementById('delProgress').style.display = 'block';
+
+  var total = ids.length;
+  var done = 0;
+  var failed = 0;
+
+  for (var i = 0; i < ids.length; i++) {
+    try {
+      // Storage 파일도 함께 삭제
+      try { await fsDeleteCompanyFiles(ids[i]); } catch(e) { console.warn('파일 삭제 실패:', e.message); }
       await fsDeleteCompany(ids[i]);
+      done++;
+    } catch(e) {
+      failed++;
+      console.warn('업체 삭제 실패:', ids[i], e.message);
     }
-    toast('🗑️ ' + ids.length + '개 업체가 삭제되었습니다');
-    await loadList();
-  } catch(e) {
-    toast('❌ 삭제 실패: ' + e.message);
+    // 진행률 업데이트
+    var pct = Math.round(((done + failed) / total) * 100);
+    document.getElementById('delProgressFill').style.width = pct + '%';
+    document.getElementById('delProgressText').textContent = '삭제 중... ' + (done + failed) + '/' + total;
   }
+
+  closeBulkDeleteModal();
+  _customersCache = null;  // 캐시 무효화
+  toast('🗑️ ' + done + '개 업체 삭제 완료' + (failed > 0 ? ' (' + failed + '개 실패)' : ''));
+  await loadList();
 }
 
 // ============================================================
@@ -1938,13 +2061,45 @@ function collectLicenses() {
 // ============================================================
 async function deleteCompany() {
   if (!_currentId) return;
-  if (!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+  // 권한 체크
+  if (!checkDeletePermission()) {
+    toast('⛔ 삭제 권한이 없습니다. 관리자에게 문의하세요.');
+    return;
+  }
+  // 모달로 확인
+  var nameEl = document.getElementById('detailCompanyName') || document.getElementById('dCompany');
+  var companyName = nameEl ? nameEl.value || nameEl.textContent : '(알수없음)';
+  document.getElementById('singleDelName').textContent = companyName;
+  document.getElementById('singleDelProgress').style.display = 'none';
+  document.getElementById('singleDelActions').style.display = 'flex';
+  document.getElementById('singleDelConfirmBtn').disabled = false;
+  document.getElementById('singleDeleteModal').style.display = 'flex';
+}
+
+function closeSingleDeleteModal() {
+  document.getElementById('singleDeleteModal').style.display = 'none';
+}
+
+async function confirmSingleDelete() {
+  if (!_currentId) return;
+  document.getElementById('singleDelConfirmBtn').disabled = true;
+  document.getElementById('singleDelActions').querySelector('.btn-secondary').disabled = true;
+  document.getElementById('singleDelProgress').style.display = 'block';
+  document.getElementById('singleDelProgressText').textContent = '삭제 중...';
   try {
+    // Storage 파일 삭제
+    try { await fsDeleteCompanyFiles(_currentId); } catch(e) { console.warn('파일 삭제 실패:', e.message); }
+    document.getElementById('singleDelProgressFill').style.width = '60%';
+    // Firestore 문서 삭제
     await fsDeleteCompany(_currentId);
+    document.getElementById('singleDelProgressFill').style.width = '100%';
+    closeSingleDeleteModal();
     toast('🗑️ 업체가 삭제되었습니다');
     _currentId = null;
-    setTimeout(function() { showPage('list'); }, 800);
+    _customersCache = null;
+    setTimeout(function() { showPage('list'); loadList(); }, 500);
   } catch(e) {
+    closeSingleDeleteModal();
     toast('❌ 삭제 실패: ' + e.message);
   }
 }
