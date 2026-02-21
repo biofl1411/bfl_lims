@@ -13,6 +13,8 @@
 |------|------|
 | Frontend | Vanilla HTML/CSS/JS, Tailwind CSS (CDN), Chart.js, Leaflet.js |
 | Backend | Flask (Python), MariaDB 8.0 |
+| Database | **Firebase Firestore** (클라우드 NoSQL), localStorage (보조) |
+| Storage | **Firebase Storage** (파일 업로드) |
 | 외부 API | VWORLD (지도 타일), Kakao Maps (주소검색/길찾기), 식약처 공공 API (16개) |
 | 폰트 | Pretendard, Outfit (Google Fonts) |
 | 배포 | GitHub Pages (정적 프론트엔드), bioflsever (Flask API) |
@@ -37,14 +39,15 @@ bfl_lims/
 ├── receipt_api_final.py             # 시료접수 API 서버 (Flask, port 5001)
 ├── ocr_proxy.py                     # OCR 프록시 서버 (Flask, HTTPS port 5002)
 ├── SETUP_GUIDE.md                   # API 서버 실행 가이드
-├── js/
-│   ├── sidebar.js                   # ★ 통합 사이드바 (Single Source of Truth) — 전체 메뉴 정의·렌더링·CSS
-│   ├── food_item_fee_mapping.js     # 수수료 매핑 데이터 (9,237건, 16개 검사목적, purpose 태그)
-│   └── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
 ├── data/
 │   ├── sido.json                    # 시도 경계 GeoJSON
 │   ├── sigungu.json                 # 시군구 경계 GeoJSON
 │   └── dong.json                    # 읍면동 경계 GeoJSON
+├── js/
+│   ├── sidebar.js                   # ★ 통합 사이드바 (Single Source of Truth) — 전체 메뉴 정의·렌더링·CSS
+│   ├── firebase-init.js             # ★ Firebase 초기화 + Firestore/Storage 전역 변수 + firebase-ready 이벤트
+│   ├── food_item_fee_mapping.js     # 수수료 매핑 데이터 (9,237건, 16개 검사목적, purpose 태그)
+│   └── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
 ├── img/
 │   └── bfl_logo.svg                 # BFL 로고
 ├── api_server.py                    # Flask REST API 서버 (식약처 데이터, port 5060)
@@ -130,6 +133,14 @@ Flask HTTPS 서버 (port 5002) — CLOVA OCR API 프록시
 
 ### 검사관리 (`inspectionMgmt.html`)
 - **6탭 구조**: 검사분야, 검사목적, 식품유형, 검사항목, 항목그룹, 수수료
+- **데이터 저장**: Firebase Firestore 영구 저장 (6탭 모두)
+- **검사목적 탭**: 카드 목록 + 상세 패널, 접수번호 세그먼트 구성, 선택 삭제 기능
+- **접수번호 세그먼트 시스템**: 구분 수(1~8), 구분자(하이픈/없음), 7가지 타입 지원
+  - 타입: 고정문자(`fixed`), 분야코드(`field`), 년도(`year`), 월(`month`), 일(`day`), 일련번호(`serial`), 목적번호(`purpose`)
+  - 세그먼트 설정 Firestore 영구 저장/복원 (`P[].segments`, `P[].segSep`, `P[].segCnt`)
+  - 각 구분별 ℹ️ 설명 텍스트 표시
+  - 월/일: 1~12월/1~31일 셀렉트 드롭다운 (기본값: 현재 월/일)
+  - 일련번호 초기화 설명: 세그먼트 구성에 맞게 동적 표시
 - **식품유형 탭**: 카드뷰 + 아코디언뷰, 검체유형별 카드 분리
 - **인라인 데이터**: FULL_FOOD_TYPES (894카드, 3,062항목)
 - **외부 JS**: `food_item_fee_mapping.js` (9,237건, 16개 검사목적, purpose 태그 포함), `ref_nonstandard_data.js` (참고용(기준규격외) 3,374건)
@@ -246,15 +257,40 @@ Flask REST API 서버 (port 5060)
 
 ---
 
-## 데이터 저장소 (localStorage)
+## 데이터 저장소
+
+### Firebase Firestore (주 저장소)
+
+Firebase 프로젝트: `bfl-lims` / SDK: Firebase compat v10.14.1
+
+| Firestore 경로 | 용도 | 사용 페이지 | 저장 방식 |
+|---------------|------|------------|----------|
+| `settings/inspectionPurposes` | 검사목적 배열 (P) — 접수번호 세그먼트 포함 | `inspectionMgmt.html` | 단일 문서 |
+| `settings/inspectionFields` | 검사분야 배열 (FIELDS) | `inspectionMgmt.html` | 단일 문서 |
+| `settings/adminSettings` | 신호등/등급/공휴일 규칙 | `adminSettings.html` | 단일 문서 |
+| `users/{docId}` | 사용자 관리 데이터 (56명) | `userMgmt.html` | 컬렉션 |
+| `companies/{docId}` | 고객사 등록 데이터 | `companyRegForm_v2.html`, `companyMgmt.html` | 컬렉션 |
+| `foodTypes/{docId}` | 식품유형 데이터 (894카드) | `inspectionMgmt.html` | 컬렉션 (배치) |
+| `itemGroups/{docId}` | 항목그룹 데이터 (5,695건) | `inspectionMgmt.html` | 컬렉션 (배치) |
+| `inspectionFees/{docId}` | 수수료 데이터 (7,481건) | `inspectionMgmt.html` | 컬렉션 (배치) |
+
+> **대용량 데이터**: Firestore 단일 문서 1MB 제한으로 인해 식품유형·항목그룹·수수료는 **컬렉션 배치 방식**으로 저장 (500건씩 batch.set())
+
+### Firebase Storage (파일 저장소)
+
+| 경로 | 용도 | 사용 페이지 |
+|------|------|------------|
+| `companies/{companyId}/` | 고객사 첨부 파일 (사업자등록증, 인허가문서 등) | `companyRegForm_v2.html` |
+
+### localStorage (보조 저장소 — 레거시)
 
 | 키 | 용도 | 사용 페이지 |
 |----|------|------------|
-| `bfl_signal_rules` | 신호등 규칙 (미수금 경과일 5단계) | `adminSettings.html`, `salesMgmt.html` |
-| `bfl_grade_rules` | 등급 규칙 (복합 점수 5개 항목) | `adminSettings.html`, `salesMgmt.html` |
-| `bfl_holiday_data` | 공휴일 상세 (날짜 + 명칭) | `adminSettings.html` |
+| `bfl_signal_rules` | 신호등 규칙 (미수금 경과일 5단계) — Firestore 전환 완료 | `adminSettings.html` |
+| `bfl_grade_rules` | 등급 규칙 (복합 점수 5개 항목) — Firestore 전환 완료 | `adminSettings.html` |
+| `bfl_holiday_data` | 공휴일 상세 — Firestore 전환 완료 | `adminSettings.html` |
 | `bfl_holidays` | 공휴일 날짜 배열 | `sampleReceipt.html` |
-| `bfl_users_data` | 사용자 관리 수정/추가 데이터 | `userMgmt.html` |
+| `bfl_users_data` | 사용자 관리 — Firestore 전환 완료 | `userMgmt.html` |
 
 ---
 
@@ -387,6 +423,235 @@ cd ~/bfl_lims && git pull
 | `42056f8` | 고객사 신규등록 버튼을 companyRegForm_v2.html로 연결 |
 | `8497880` | README 업데이트: 서버 배포 정보, 고객사 등록폼 v2, OCR 프록시 문서화 |
 | `1d794eb` | nginx 8443 포트 통합: 6개 HTML API URL 환경 감지 + nginx 프록시 구성 |
+| `22a9d53` | Firebase Firestore 전환 기반 구축: 초기화, 공통 헬퍼, 업로드 도구 |
+| `cbd1d02` | adminSettings.html: localStorage → Firestore 전환 |
+| `0a27b71` | userMgmt.html: localStorage → Firestore 전환 |
+| `c32e291` | userMgmt.html: firebase-ready 이벤트 중복 실행 방지 |
+| `3312625` | companyRegForm_v2.html: Firestore 저장 + Firebase Storage 파일 업로드 |
+| `47ed408` | companyMgmt.html: localStorage → Firestore 전환 + 선택 삭제 |
+| `d2da910` | 업체 데이터 호환성 통일: companyRegForm_v2 ↔ companyMgmt 필드명 표준화 |
+| `e0d7604` | companyMgmt·salesMgmt 고객사 목록 통일: Firestore + DEMO 데이터 제거 |
+| `fb5c384` | inspectionMgmt.html: 검사관리 6탭 전체 Firestore 영구 저장 |
+| `d46928e` | firebase-init.js: Storage SDK 없는 페이지에서 초기화 에러 수정 |
+| `f4333f2` | inspectionMgmt.html: firebase-ready 이벤트 리스너를 window로 수정 |
+| `7ccddad` | inspectionMgmt.html: 식품유형·항목그룹 컬렉션 배치 저장 방식 전환 |
+| `d6fee94` | inspectionMgmt.html: 검사목적 정렬순서 저장 및 정렬 렌더링 수정 |
+| `3a6f752` | inspectionMgmt.html: 검사목적 정렬순서 변경 시 기존 항목 자동 밀기 |
+| `ceec34b` | inspectionMgmt.html: 접수번호 일련번호 자릿수 1자리부터 선택 가능 |
+| `825d99d` | inspectionMgmt.html: 접수번호 세그먼트 저장/복원 + 6자리 옵션 추가 |
+| `a90de96` | inspectionMgmt.html: 접수번호 구성 '지부'를 '목적번호'로 변경 |
+| `0dd60ef` | inspectionMgmt.html: 일련번호 초기화 설명 동적 표시 |
+| `4fbf47e` | inspectionMgmt.html: 접수번호 구분별 설명 추가 + 월/일 표기 개선 |
+| `479d081` | inspectionMgmt.html: 월/일 구분 1~12월/1~31일 선택 가능 변경 |
+| `7ce2e84` | inspectionMgmt.html: 검사 목적 선택 삭제 + 월/일 선택 기능 추가 |
+
+---
+
+## 완료된 작업 (2026-02-21)
+
+### 검사 목적 선택 삭제 기능 추가
+
+**수정 파일**: `inspectionMgmt.html`
+**Firestore 경로**: `settings/inspectionPurposes`
+**커밋**: `7ce2e84`
+
+검사 목적 카드 목록에서 여러 항목을 선택하여 일괄 삭제하는 기능 추가.
+
+**HTML 추가** (라인 462~470):
+- `☑️ 선택` 버튼 — 선택 모드 진입
+- 선택 바: `N개 선택` 카운트 + `전체선택` + `🗑️ 선택 삭제` + `취소` 버튼
+
+**JavaScript 함수** (라인 34420~34457):
+| 함수 | 기능 |
+|------|------|
+| `togglePurposeSelectMode()` | 선택 모드 ON/OFF 토글 (체크박스 표시/숨김) |
+| `togglePurposeCheck(e, pidx)` | 개별 카드 선택/해제 (Set으로 관리) |
+| `togglePurposeSelectAll()` | 전체 선택/해제 토글 |
+| `updatePurposeSelUI()` | 선택 개수 표시 + 체크박스·아웃라인 동기화 |
+| `deletePurposeSelected()` | confirm 후 선택 항목 splice → Firestore 저장 |
+
+**동작 방식**:
+- `purposeSelectMode` (boolean) — 선택 모드 상태
+- `purposeSelected` (Set) — 선택된 인덱스 관리
+- 선택 모드에서 카드 클릭 = 체크박스 토글 (openDetail 대신)
+- 삭제 시 역순 splice로 인덱스 꼬임 방지
+- 삭제 후 번호 자동 재정렬: `rp()`의 forEach idx+1 기반
+
+---
+
+### 접수번호 월/일 구분 선택 가능하도록 변경
+
+**수정 파일**: `inspectionMgmt.html`
+**커밋**: `479d081`, `4fbf47e`
+
+**변경 내용**:
+- **월 구분**: 고정 "자동(현재 월)" → **1~12월 셀렉트 드롭다운** (기본값: 현재 월)
+- **일 구분**: 고정 "자동(현재 일)" → **1~31일 셀렉트 드롭다운** (기본값: 현재 일)
+- 접수 시 실제 월/일은 자동 적용되지만, 미리보기에서 선택한 값 표시
+- `bp()` 함수에서 `s.v` (선택값) 사용하여 프리뷰 생성
+
+**구분별 설명 텍스트 추가** (라인 34554):
+| 세그먼트 타입 | 설명 (ℹ️) |
+|-------------|----------|
+| `fixed` | 사용자가 지정한 고정 문자 |
+| `field` | 소속 분야코드 자동 적용 |
+| `year` | 접수 시점의 년도 자동 적용 |
+| `month` | 기본: 현재 월 / 접수 시 자동 적용 |
+| `day` | 기본: 현재 일 / 접수 시 자동 적용 |
+| `serial` | 접수 순서대로 자동 증가 |
+| `purpose` | 사용자가 지정한 고정 번호 |
+
+---
+
+### 일련번호 초기화 설명 동적 표시
+
+**수정 파일**: `inspectionMgmt.html`
+**커밋**: `0dd60ef`
+
+`updateResetDesc()` 함수 개선 — 현재 세그먼트 구성의 serial 구분 자릿수를 읽어 동적 표시.
+
+**변경 전**: 고정 "0001부터 다시 시작"
+**변경 후**: "구분2: 01, 구분3: 00001부터 다시 시작" (실제 세그먼트 구성 반영)
+
+- `dSg.forEach()`로 serial 타입 구분을 순회
+- 각 serial의 자릿수(`s.v`)에 맞춰 초기값 계산 (`'1'.padStart(digits,'0')`)
+- `renderSegUI()` 끝에 `updateResetDesc()` 호출 추가
+
+---
+
+### 접수번호 구성 '지부'를 '목적번호'로 변경
+
+**수정 파일**: `inspectionMgmt.html`
+**커밋**: `a90de96`
+
+기존 `branch`(지부) 타입은 자동증가하는 일련번호와 성격이 다름 — **목적번호는 고정번호(사용자 지정)**, 일련번호는 자동증가. 따라서 `purpose`(목적번호) 타입으로 전면 변경.
+
+**변경 위치**:
+| 위치 | 변경 내용 |
+|------|----------|
+| `renderSegUI()` 프리뷰 블록 | `branch` → `purpose`, 자릿수(`digits`) 기반 padStart |
+| `renderSegUI()` 입력 폼 | value 입력 + 1~6자리 select 드롭다운 |
+| 타입 select 옵션 라벨 | "지부코드" → "목적번호" |
+| `changeSegType()` 기본값 | `purpose: {l:'목적번호', v:'01', digits:'2'}` |
+| `bp()` 프리뷰 함수 | purpose 타입 처리 추가 |
+
+**P 객체 세그먼트 구조 예시**:
+```javascript
+// 02번 축산 - 접수번호: 260700001
+segments: [
+  {t:'year', v:'2', l:'년도'},
+  {t:'purpose', v:'07', digits:'2', l:'목적번호'},
+  {t:'serial', v:'5', l:'일련번호'}
+]
+```
+
+---
+
+### 접수번호 세그먼트 저장/복원 + 6자리 옵션
+
+**수정 파일**: `inspectionMgmt.html`
+**Firestore 경로**: `settings/inspectionPurposes` (P 배열 내 각 항목의 `segments`, `segSep`, `segCnt` 필드)
+**커밋**: `825d99d`
+
+기존 문제: 검사목적의 접수번호 세그먼트(구분 수, 구분자, 각 구분 타입/값)가 P 객체에 저장되지 않음. `openDetail()` 시 항상 `dInitSeg()`로 기본값(4구분, 하이픈)을 재생성 → 커스텀 설정 유실.
+
+**구현 내용**:
+
+| 단계 | 함수/위치 | 변경 내용 |
+|------|----------|----------|
+| 1 | 일련번호 select | `['1','2','3','4','5']` → `['1','2','3','4','5','6']` (6자리 옵션 추가) |
+| 2 | `saveDetail()` | `p.segments = JSON.parse(JSON.stringify(dSg))`, `p.segSep`, `p.segCnt` 저장 |
+| 3 | `openDetail()` | `p.segments` 존재 시 deep copy로 `dSg` 복원 + 구분수/구분자 select 동기화 + `renderSegUI()` |
+| 4 | `copyPurpose()` | copy 객체에 `segments`, `segSep`, `segCnt` 포함 (deep copy) |
+
+**동작 흐름**:
+1. 사용자가 접수번호 구성 커스텀 → `saveDetail()` → P[idx]에 segments/segSep/segCnt 저장
+2. `savePurposesToFirestore()` → Firestore `settings/inspectionPurposes` 에 P 배열 영구 저장
+3. 재진입(`openDetail()`) → `p.segments` 확인 → 있으면 복원, 없으면 `dInitSeg()` (하위 호환)
+4. 페이지 새로고침 → Firestore에서 P 배열 로드 → segments 포함 복원
+
+---
+
+### 검사목적 일련번호 자릿수 1자리부터 선택 + 정렬순서 기능
+
+**수정 파일**: `inspectionMgmt.html`
+**커밋**: `ceec34b`, `3a6f752`, `d6fee94`
+
+- 일련번호 자릿수 선택 범위: 기존 4~5자리 → **1~6자리**
+- 검사목적 정렬순서(`p.c`) 변경 시 기존 항목 자동 밀기 로직 추가
+- 정렬순서 기반 렌더링 수정 (`P.sort()` → `p.c` 순서)
+
+---
+
+## 완료된 작업 (2026-02-20 ~ 2026-02-21)
+
+### Firebase Firestore 전환 (localStorage → Firestore)
+
+**수정 파일**: 7개 파일 전면 수정
+**Firebase SDK**: Firebase compat v10.14.1 (CDN)
+**커밋**: `22a9d53` ~ `fb5c384`, `7ccddad`, `f4333f2`, `d46928e`
+
+전체 프로젝트의 데이터 저장소를 **localStorage에서 Firebase Firestore**로 마이그레이션. 브라우저 종속적인 localStorage의 한계(용량 5MB, 브라우저별 독립, 삭제 위험)를 해결하고 클라우드 영구 저장 실현.
+
+#### 1단계: Firebase 기반 구축 (`22a9d53`)
+
+**신규 파일**: `js/firebase-init.js`
+```
+역할: Firebase 앱 초기화 + Firestore/Storage 전역 변수 생성 + firebase-ready 이벤트 dispatch
+```
+
+| 전역 변수 | 용도 |
+|----------|------|
+| `firebase` | Firebase 앱 인스턴스 |
+| `db` | Firestore 인스턴스 (`firebase.firestore()`) |
+| `storage` | Firebase Storage 인스턴스 (조건부: Storage SDK 있는 페이지만) |
+
+**커스텀 이벤트**: `firebase-ready`
+- `window`에 dispatch (초기에는 `document`였으나 `f4333f2`에서 수정)
+- 모든 HTML 페이지에서 `window.addEventListener('firebase-ready', ...)` 로 Firestore 초기화 완료 감지
+
+**Storage 조건부 초기화** (`d46928e`):
+```javascript
+var storage = (typeof firebase.storage === 'function') ? firebase.storage() : null;
+```
+- Storage SDK를 포함하지 않는 페이지(`inspectionMgmt.html` 등)에서 초기화 에러 방지
+
+#### 2단계: 각 페이지별 Firestore 전환
+
+| 페이지 | 커밋 | Firestore 경로 | 변경 내용 |
+|--------|------|---------------|----------|
+| `adminSettings.html` | `cbd1d02` | `settings/adminSettings` | 신호등/등급/공휴일 규칙 Firestore 저장 |
+| `userMgmt.html` | `0a27b71` | `users/{docId}` | 사용자 56명 데이터 컬렉션 저장 |
+| `companyRegForm_v2.html` | `3312625` | `companies/{docId}` + Storage | 고객사 등록 + 첨부파일 Storage 업로드 |
+| `companyMgmt.html` | `47ed408` | `companies/{docId}` | 고객사 목록 Firestore 전환 + 선택 삭제 |
+| `companyMgmt + salesMgmt` | `e0d7604` | `companies/{docId}` | 고객사 목록 통일, DEMO 데이터 제거 |
+| `inspectionMgmt.html` | `fb5c384` | 다중 경로 (아래 참조) | 검사관리 6탭 전체 Firestore 영구 저장 |
+
+#### 3단계: inspectionMgmt.html 대용량 데이터 처리 (`7ccddad`)
+
+Firestore 단일 문서 1MB 제한으로 식품유형(894카드)·항목그룹(5,695건)·수수료(7,481건)는 컬렉션 배치 방식으로 전환.
+
+**배치 저장 패턴**:
+```javascript
+// 500건씩 배치 저장 (Firestore batch 제한 500)
+const batch = db.batch();
+items.forEach((item, i) => {
+  batch.set(db.collection('foodTypes').doc('item_' + i), item);
+  if ((i + 1) % 500 === 0) { await batch.commit(); batch = db.batch(); }
+});
+```
+
+| Firestore 컬렉션 | 데이터 | 건수 |
+|------------------|--------|------|
+| `foodTypes` | 식품유형 카드 데이터 | 894건 |
+| `itemGroups` | 항목그룹 데이터 | 5,695건 |
+| `inspectionFees` | 수수료 데이터 | 7,481건 |
+| `settings/inspectionPurposes` | 검사목적 (P 배열) | 22건 |
+| `settings/inspectionFields` | 검사분야 (FIELDS 배열) | 2건 |
+
+#### 업체 데이터 호환성 통일 (`d2da910`)
+
+`companyRegForm_v2.html`과 `companyMgmt.html` 간 필드명 표준화 — 등록폼에서 저장한 데이터를 관리 목록에서 올바르게 표시.
 
 ---
 
@@ -604,21 +869,35 @@ Claude Code로 작업하기 전에 **반드시 프로젝트 폴더의 읽기/쓰
 
 권한이 설정되지 않으면 매번 파일 읽기/쓰기 시 수동 승인이 필요하여 작업 효율이 크게 떨어집니다.
 
-### 2. 데이터 영속성 — localStorage 저장 필수
+### 2. 데이터 영속성 — Firebase Firestore 저장 필수
 
-브라우저에서 입력한 데이터(사용자 정보 수정, 신규 추가 등)는 **반드시 `localStorage`에 저장**해야 합니다.
+브라우저에서 입력한 데이터는 **반드시 Firebase Firestore에 저장**해야 합니다.
 
 - JavaScript 변수(메모리)에만 저장된 데이터는 **페이지 새로고침 시 모두 초기화**됩니다
-- 사용자가 인라인 편집 또는 모달로 입력한 데이터가 저장 없이 사라지는 문제 방지
-- 모든 사용자 입력 데이터는 `saveUsersToStorage()` 등 localStorage 저장 함수를 반드시 호출해야 함
-- 현재 사용 중인 localStorage 키는 **데이터 저장소 (localStorage)** 섹션 참조
+- **2026-02-20~21**: 전체 프로젝트 localStorage → Firebase Firestore 마이그레이션 완료
+- 모든 데이터 변경 후 Firestore 저장 함수를 반드시 호출
+- `js/firebase-init.js`에서 `firebase-ready` 이벤트 발생 후 Firestore 사용 가능
 
 **관련 저장 함수 패턴**:
 ```javascript
 // 데이터 변경 후 반드시 호출
-saveUsersToStorage();  // userMgmt.html
-saveGradeRules();      // adminSettings.html
-saveSignalRules();     // adminSettings.html
+savePurposesToFirestore();   // inspectionMgmt.html — 검사목적
+saveFieldsToFirestore();     // inspectionMgmt.html — 검사분야
+saveToFirestore();           // adminSettings.html — 신호등/등급/공휴일
+saveUsersToFirestore();      // userMgmt.html — 사용자
+```
+
+**Firebase 초기화 패턴** (모든 HTML 페이지 공통):
+```html
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script>
+window.addEventListener('firebase-ready', function() {
+  // Firestore에서 데이터 로드
+  db.collection('settings').doc('inspectionPurposes').get().then(doc => { ... });
+});
+</script>
 ```
 
 ### 3. 새로운 페이지/기능 개발 시
@@ -632,12 +911,14 @@ saveSignalRules();     // adminSettings.html
 ## 향후 계획
 
 1. ~~nginx 포트 통합 (8443 하나로 API 프록시 구성)~~ ✅ 완료
-2. 고객사 등록 DB 저장 API 구현
+2. ~~고객사 등록 DB 저장 API 구현~~ ✅ 완료 (Firebase Firestore로 대체)
 3. ~~OCR 프록시 서버 URL 변경 (localhost → 서버 도메인)~~ ✅ 완료 (nginx 프록시로 대체)
-4. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지)
-5. 로그인 페이지 구현 + 사용자 인증/권한 시스템
-6. 부서 관리 / 팀 관리 페이지 구현
-7. 백엔드 API 연동 + 실제 데이터 연동
+4. ~~localStorage → Firebase Firestore 마이그레이션~~ ✅ 완료 (2026-02-20~21)
+5. 나머지 메뉴 구현 (성적관리, 재무관리, 통계분석, 문서관리, 재고/시약관리, 공지)
+6. 로그인 페이지 구현 + Firebase Authentication 연동
+7. 부서 관리 / 팀 관리 페이지 구현
+8. 접수번호 실제 발번 로직 구현 (세그먼트 기반 자동 채번)
+9. 백엔드 API 연동 + 실제 데이터 연동
 
 ---
 
