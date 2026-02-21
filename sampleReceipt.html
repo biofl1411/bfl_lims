@@ -767,11 +767,13 @@ async function updateTestPurposeOptions(testField) {
     let purposes = [];
 
     // 1순위: Firestore P 배열 (검사목적관리에서 설정한 정렬순서대로)
-    // o:0 (미정) 항목은 제외
+    // o:0 (미정) 항목은 제외, 이름 + 접수번호 라벨 포함
+    let useFirestore = false;
     if (firestorePurposes.length > 0) {
         purposes = firestorePurposes
             .filter(p => p.o !== 0 && p.fields && p.fields.includes(fieldId))
-            .map(p => p.n);
+            .map(p => ({ name: p.n, rcpt: p.rcpt || '' }));
+        useFirestore = true;
         console.log(`[Firestore] 검사목적 필터: ${testField}(${fieldId}) - ${purposes.length}개 (미정 제외)`);
     }
 
@@ -781,7 +783,7 @@ async function updateTestPurposeOptions(testField) {
             const res = await fetch(`${API_BASE}/api/test-purposes?field=${encodeURIComponent(testField)}`);
             if (res.ok) {
                 const data = await res.json();
-                purposes = data.purposes || [];
+                purposes = (data.purposes || []).map(n => ({ name: n, rcpt: '' }));
                 console.log(`[API] 검사목적 로드: ${testField} - ${purposes.length}개`);
             }
         } catch (e) {
@@ -791,15 +793,16 @@ async function updateTestPurposeOptions(testField) {
 
     // 3순위: 폴백 (Firestore, API 모두 실패 시)
     if (purposes.length === 0) {
-        purposes = FALLBACK_TEST_PURPOSE_MAPPING[testField] || [];
+        purposes = (FALLBACK_TEST_PURPOSE_MAPPING[testField] || []).map(n => ({ name: n, rcpt: '' }));
         console.log(`[폴백] 검사목적 로드: ${testField} - ${purposes.length}개`);
     }
 
     select.innerHTML = '<option value="">선택하세요</option>';
-    purposes.forEach(name => {
+    purposes.forEach(item => {
         const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
+        option.value = item.name;
+        // Firestore 라벨이 있으면 이름 옆에 접수번호 형식 표시
+        option.textContent = item.rcpt ? `${item.name}  [${item.rcpt}]` : item.name;
         select.appendChild(option);
     });
 }
