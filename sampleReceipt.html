@@ -812,6 +812,7 @@ function onTestPurposeChange() {
     document.getElementById('food-type-value').value = '';
 
     const testPurpose = document.getElementById('test-purpose').value;
+    const testField = document.querySelector('input[name="test-field"]:checked')?.value;
     const helpEl = document.getElementById('test-purpose-help');
 
     if (testPurpose) {
@@ -824,8 +825,45 @@ function onTestPurposeChange() {
             helpEl.textContent = '검체유형을 선택하세요';
         }
         showToast(`검사목적 선택: ${testPurpose}. 검체유형을 선택하세요.`, 'info');
+
+        // 이전 접수번호 자동 조회 (Firestore receipts에서 최근 내역)
+        if (firestoreReady && testField) {
+            fetchLatestReceiptNo(testField, testPurpose);
+        }
     } else {
         helpEl.textContent = '시험분야 선택 시 자동으로 표시됩니다';
+        document.getElementById('prev-receipt-no').value = '';
+    }
+}
+
+// ============================================================================
+// 이전 접수번호 자동 조회 (Firestore receipts 컬렉션)
+// ============================================================================
+async function fetchLatestReceiptNo(testField, testPurpose) {
+    try {
+        const snap = await db.collection('receipts')
+            .where('testPurpose', '==', testPurpose)
+            .where('testField', '==', testField)
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
+
+        const prevInput = document.getElementById('prev-receipt-no');
+        if (!snap.empty) {
+            const latest = snap.docs[0].data();
+            const prevNo = latest.receiptNo || '';
+            if (prevNo) {
+                prevInput.value = prevNo;
+                console.log(`[Firestore] 이전 접수번호 조회: ${prevNo} (${testPurpose})`);
+                showToast(`이전 접수번호: ${prevNo}`, 'info');
+            }
+        } else {
+            prevInput.value = '';
+            console.log(`[Firestore] 이전 접수 내역 없음 (${testPurpose})`);
+        }
+    } catch (e) {
+        // 인덱스 미생성 등 오류 시 무시
+        console.warn('[Firestore] 이전 접수번호 조회 실패:', e.message);
     }
 }
 
