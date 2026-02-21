@@ -115,6 +115,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 .warning-box-icon{font-size:24px}
 .warning-box-text{flex:1}
 @media(max-width:768px){.sidebar{display:none}.main-container{margin-left:0}.form-row{grid-template-columns:1fr}.buttons{flex-direction:column}.btn-receipt{width:100%}}
+/* 커스텀 검사목적 드롭다운 */
+.custom-select-wrap{position:relative;width:100%}
+.custom-select-display{padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;background:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all 0.3s}
+.custom-select-display:hover{border-color:var(--accent)}
+.custom-select-display.open{border-color:var(--accent);box-shadow:0 0 0 3px rgba(102,126,234,0.1);border-radius:8px 8px 0 0}
+.custom-select-arrow{color:#888;font-size:12px;transition:transform 0.2s}
+.custom-select-display.open .custom-select-arrow{transform:rotate(180deg)}
+.custom-select-options{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--accent);border-top:none;border-radius:0 0 8px 8px;max-height:300px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+.custom-select-options.open{display:block}
+.custom-select-option{padding:10px 14px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;transition:background 0.15s}
+.custom-select-option:hover{background:#f0f4ff}
+.custom-select-option.selected{background:#e8edff;font-weight:600}
+.custom-select-option .field-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.custom-select-option .field-label{font-size:12px;padding:1px 6px;border-radius:4px;color:#fff;margin-left:auto;white-space:nowrap}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -176,9 +190,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                                 <input type="checkbox" id="pin-test-purpose" onchange="togglePin('test-purpose')"> 📌 고정
                             </label>
                         </label>
-                        <select id="test-purpose" required onchange="onTestPurposeChange()">
+                        <select id="test-purpose" required onchange="onTestPurposeChange()" style="display:none;">
                             <option value="">먼저 시험분야를 선택하세요</option>
                         </select>
+                        <div class="custom-select-wrap" id="test-purpose-custom">
+                            <div class="custom-select-display" id="test-purpose-display" onclick="toggleCustomSelect()">
+                                <span class="custom-select-text">선택하세요</span>
+                                <span class="custom-select-arrow">▾</span>
+                            </div>
+                            <div class="custom-select-options" id="test-purpose-options"></div>
+                        </div>
                         <small class="field-help" id="test-purpose-help">시험분야 선택 시 자동으로 표시됩니다</small>
                     </div>
                 </div>
@@ -788,6 +809,7 @@ async function updateTestPurposeOptions(testField) {
             .filter(p => p.o !== 0 && p.fields && p.fields.includes(fieldId))
             .map(p => ({
                 name: p.n,
+                fieldCodes: p.fields || [],
                 fieldLabels: (p.fields || []).map(fc => getFieldLabel(fc)),
                 rcpt: p.rcpt || ''
             }));
@@ -800,7 +822,7 @@ async function updateTestPurposeOptions(testField) {
             const res = await fetch(`${API_BASE}/api/test-purposes?field=${encodeURIComponent(testField)}`);
             if (res.ok) {
                 const data = await res.json();
-                purposes = (data.purposes || []).map(n => ({ name: n, fieldLabels: [], rcpt: '' }));
+                purposes = (data.purposes || []).map(n => ({ name: n, fieldCodes: [], fieldLabels: [], rcpt: '' }));
                 console.log(`[API] 검사목적 로드: ${testField} - ${purposes.length}개`);
             }
         } catch (e) {
@@ -810,20 +832,112 @@ async function updateTestPurposeOptions(testField) {
 
     // 3순위: 폴백 (Firestore, API 모두 실패 시)
     if (purposes.length === 0) {
-        purposes = (FALLBACK_TEST_PURPOSE_MAPPING[testField] || []).map(n => ({ name: n, fieldLabels: [], rcpt: '' }));
+        purposes = (FALLBACK_TEST_PURPOSE_MAPPING[testField] || []).map(n => ({ name: n, fieldCodes: [], fieldLabels: [], rcpt: '' }));
         console.log(`[폴백] 검사목적 로드: ${testField} - ${purposes.length}개`);
     }
 
+    // 네이티브 select 동기화
     select.innerHTML = '<option value="">선택하세요</option>';
     purposes.forEach(item => {
         const option = document.createElement('option');
         option.value = item.name;
-        // 분야 라벨 표시 (Firestore에서 로드한 분야명)
-        const label = item.fieldLabels.length > 0 ? `  ● ${item.fieldLabels.join(' ● ')}` : '';
-        option.textContent = `${item.name}${label}`;
+        option.textContent = item.name;
         select.appendChild(option);
     });
+
+    // 커스텀 드롭다운 렌더링 (분야 색상 라벨 포함)
+    renderCustomSelect(purposes);
 }
+
+// ============================================================================
+// 커스텀 검사목적 드롭다운 (분야 색상 라벨)
+// ============================================================================
+function renderCustomSelect(purposes) {
+    const optionsDiv = document.getElementById('test-purpose-options');
+    const displayEl = document.getElementById('test-purpose-display');
+    optionsDiv.innerHTML = '';
+
+    // "선택하세요" 옵션
+    const placeholder = document.createElement('div');
+    placeholder.className = 'custom-select-option';
+    placeholder.textContent = '선택하세요';
+    placeholder.dataset.value = '';
+    placeholder.onclick = () => selectCustomOption('', '선택하세요', placeholder);
+    optionsDiv.appendChild(placeholder);
+
+    purposes.forEach(item => {
+        const opt = document.createElement('div');
+        opt.className = 'custom-select-option';
+        opt.dataset.value = item.name;
+
+        // 목적 이름
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = item.name;
+        opt.appendChild(nameSpan);
+
+        // 분야 라벨 (Firestore 색상 적용)
+        if (item.fieldCodes && item.fieldCodes.length > 0) {
+            item.fieldCodes.forEach(fc => {
+                const fInfo = firestoreFields.find(f => f.code === fc || f.id === fc);
+                if (fInfo) {
+                    const badge = document.createElement('span');
+                    badge.className = 'field-label';
+                    badge.style.backgroundColor = fInfo.color || '#888';
+                    badge.textContent = fInfo.name;
+                    opt.appendChild(badge);
+                }
+            });
+        }
+
+        opt.onclick = () => selectCustomOption(item.name, item.name, opt);
+        optionsDiv.appendChild(opt);
+    });
+
+    // 현재 선택값 초기화
+    displayEl.querySelector('.custom-select-text').textContent = '선택하세요';
+}
+
+function toggleCustomSelect() {
+    const display = document.getElementById('test-purpose-display');
+    const options = document.getElementById('test-purpose-options');
+    display.classList.toggle('open');
+    options.classList.toggle('open');
+}
+
+function selectCustomOption(value, text, optEl) {
+    // 네이티브 select 동기화
+    const select = document.getElementById('test-purpose');
+    select.value = value;
+    select.dispatchEvent(new Event('change'));
+
+    // 커스텀 UI 업데이트
+    const display = document.getElementById('test-purpose-display');
+    const textSpan = display.querySelector('.custom-select-text');
+
+    if (value && optEl) {
+        // 선택된 항목의 HTML을 display에 복사 (색상 라벨 포함)
+        textSpan.innerHTML = optEl.innerHTML;
+    } else {
+        textSpan.textContent = '선택하세요';
+    }
+
+    // 선택 표시
+    document.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+    if (optEl) optEl.classList.add('selected');
+
+    // 드롭다운 닫기
+    display.classList.remove('open');
+    document.getElementById('test-purpose-options').classList.remove('open');
+}
+
+// 드롭다운 외부 클릭 시 닫기
+document.addEventListener('click', function(e) {
+    const wrap = document.getElementById('test-purpose-custom');
+    if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('test-purpose-display')?.classList.remove('open');
+        document.getElementById('test-purpose-options')?.classList.remove('open');
+    }
+});
 
 // ============================================================================
 // 검사목적 변경
