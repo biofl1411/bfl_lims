@@ -269,7 +269,8 @@ Firebase 프로젝트: `bfl-lims` / SDK: Firebase compat v10.14.1
 | `settings/inspectionFields` | 검사분야 배열 (FIELDS) | `inspectionMgmt.html` | 단일 문서 |
 | `settings/adminSettings` | 신호등/등급/공휴일 규칙 | `adminSettings.html` | 단일 문서 |
 | `users/{docId}` | 사용자 관리 데이터 (56명) | `userMgmt.html` | 컬렉션 |
-| `companies/{docId}` | 고객사 등록 데이터 | `companyRegForm_v2.html`, `companyMgmt.html` | 컬렉션 |
+| `companies/{docId}` | 고객사 등록 데이터 + OCR 결과(`files.ocrResults[]`) | `companyRegForm_v2.html`, `companyMgmt.html` | 컬렉션 |
+| `receipts/{docId}` | 접수 데이터 (이전 접수번호 조회용) | `sampleReceipt.html` | 컬렉션 |
 | `foodTypes/{docId}` | 식품유형 데이터 (894카드) | `inspectionMgmt.html` | 컬렉션 (배치) |
 | `itemGroups/{docId}` | 항목그룹 데이터 (5,695건) | `inspectionMgmt.html` | 컬렉션 (배치) |
 | `inspectionFees/{docId}` | 수수료 데이터 (7,481건) | `inspectionMgmt.html` | 컬렉션 (배치) |
@@ -444,10 +445,210 @@ cd ~/bfl_lims && git pull
 | `4fbf47e` | inspectionMgmt.html: 접수번호 구분별 설명 추가 + 월/일 표기 개선 |
 | `479d081` | inspectionMgmt.html: 월/일 구분 1~12월/1~31일 선택 가능 변경 |
 | `7ce2e84` | inspectionMgmt.html: 검사 목적 선택 삭제 + 월/일 선택 기능 추가 |
+| `4fdbba2` | 식약처 API 포트 5050→5003 변경 + 포트 사용금지 목록 추가 |
+| `a069308` | README.md 대폭 업데이트: Firebase Firestore 마이그레이션 + 접수번호 세그먼트 기능 문서화 |
+| `ccdc2db` | sampleReceipt.html: 검사목적 Firestore 연동 + 접수번호 세그먼트 형식 생성 |
+| `9bb3e10` | sampleReceipt.html: firebase-auth-compat.js SDK 추가 |
+| `92813bf` | sampleReceipt.html: 미정(o:0) 제외 + 접수번호 세그먼트 우선순위 변경 |
+| `1ab366a` | sampleReceipt.html: segSep 빈문자열 처리 수정 + 접수번호 형식 라벨 표시 |
+| `566628e` | sampleReceipt.html: 이전 접수번호 자동 조회 기능 추가 |
+| `68f1faa` | sampleReceipt.html: 이전 접수번호 쿼리 단순화 (복합 인덱스 불필요) |
+| `f51c25d` | sampleReceipt.html: 검사목적 드롭다운에 접수번호 형식 라벨 표시 |
+| `c712c2d` | sampleReceipt.html: 드롭다운 분야 라벨을 Firestore에서 로드 |
+| `1e4b195` | sampleReceipt.html: 커스텀 드롭다운으로 분야 색상 라벨 표시 |
+| `cd31f94` | companyRegForm_v2: 매칭 버튼 삭제 + 세금계산서 복사 수정 + OCR 결과 Firebase 저장 |
+| `635c3bb` | companyMgmt: 선택 삭제 기능 개선 + 권한 체크 구조 + Storage 파일 정리 |
 
 ---
 
 ## 완료된 작업 (2026-02-22)
+
+### sampleReceipt.html — 검사목적 Firestore 연동 + 커스텀 드롭다운
+
+**수정 파일**: `sampleReceipt.html`
+**커밋**: `ccdc2db` ~ `1e4b195` (9개 커밋)
+**Firestore 경로**: `settings/inspectionPurposes`, `settings/inspectionFields`, `receipts`
+
+`inspectionMgmt.html`에서 설정한 검사목적 목록과 접수번호 세그먼트 형식이 접수 등록 화면에 실시간 반영되도록 Firestore 직접 연동.
+
+#### 1. 검사목적 드롭다운 Firestore 연동
+
+| 항목 | 내용 |
+|------|------|
+| **데이터 소스** | Firestore `settings/inspectionPurposes` P 배열 직접 로드 |
+| **우선순위** | Firestore(1순위) → API(2순위) → 하드코딩 폴백(3순위) |
+| **미정 제외** | `o: 0` (미정) 항목 자동 제외 |
+| **분야 필터** | `fields` 배열에서 'F'(식품)/'L'(축산) 포함 여부로 필터 |
+| **정렬** | `c`(정렬순서) 기준 오름차순 |
+
+**전역 변수 추가**:
+```javascript
+let firestorePurposes = [];  // P 배열 (검사목적)
+let firestoreFields = [];    // 검사분야 [{code:'F', name:'식품', color:'#4361ee'}, ...]
+let firestoreReady = false;  // Firebase 준비 상태
+```
+
+**`firebase-ready` 이벤트 리스너**: Firestore에서 검사분야(`settings/inspectionFields`) + 검사목적(`settings/inspectionPurposes`) 로드
+
+#### 2. 커스텀 드롭다운 (분야 색상 라벨)
+
+네이티브 `<select>`는 부분 색상 적용이 불가하여 **div 기반 커스텀 드롭다운** 구현.
+
+| 기능 | 구현 |
+|------|------|
+| **필드 배지** | Firestore 색상 그대로 적용 (식품 🔵`#4361ee`, 축산 🔴`#ff6b6b`) |
+| **배지 소스** | `settings/inspectionFields`에서 `{code, name, color}` 로드 (하드코딩 아님) |
+| **드롭다운 UI** | `.custom-select-wrap` → 클릭 시 옵션 목록 표시, 외부 클릭 시 닫힘 |
+| **네이티브 동기화** | 숨겨진 `<select>` 값과 동기화 (폼 제출 호환) |
+
+**CSS 클래스**: `.custom-select-wrap`, `.custom-select-display`, `.custom-select-options`, `.custom-select-option`, `.field-label`
+
+**JavaScript 함수**:
+| 함수 | 기능 |
+|------|------|
+| `renderCustomSelect(purposes)` | 커스텀 드롭다운 옵션 렌더링 (분야 배지 포함) |
+| `toggleCustomSelect()` | 드롭다운 열기/닫기 토글 |
+| `selectCustomOption(value, text, optEl)` | 옵션 선택 → 네이티브 select 동기화 + display 업데이트 |
+
+#### 3. 접수번호 세그먼트 기반 생성
+
+| 항목 | 내용 |
+|------|------|
+| **우선순위** | 세그먼트(1순위) → API(2순위) → 폴백(3순위) |
+| **segSep 수정** | 빈문자열 `""` falsy 문제 해결 (`||` → 명시적 체크) |
+| **rcptDesc 표시** | 검사목적 선택 시 접수번호 형식 설명 표시 (`📋 접수번호 형식: ...`) |
+
+**`buildReceiptNoFromSegments(purposeObj, testField)`** — inspectionMgmt.html의 `bp()` 함수와 동일 로직:
+- 7가지 세그먼트 타입 처리: `fixed`, `field`, `year`, `month`, `day`, `serial`, `purpose`
+- `fieldCodes` 지원: 분야별 고정문자 코드 자동 적용
+
+#### 4. 이전 접수번호 자동 조회
+
+| 항목 | 내용 |
+|------|------|
+| **함수** | `fetchLatestReceiptNo(testField, testPurpose)` |
+| **Firestore 쿼리** | `receipts` 컬렉션에서 `testPurpose` 일치 → 최신 50건 로드 → 클라이언트 필터/정렬 |
+| **표시** | `#prev-receipt-no` 입력란에 이전 접수번호 자동 표시 |
+| **인덱스** | 단일 필드 쿼리로 복합 인덱스 불필요 |
+
+---
+
+### companyRegForm_v2.html — 매칭 버튼 삭제 + 세금계산서 복사 수정 + OCR Firebase 저장
+
+**수정 파일**: `companyRegForm_v2.html`
+**커밋**: `cd31f94`
+
+#### 1. 매칭 버튼 삭제
+
+| 위치 | 변경 |
+|------|------|
+| Line 413 (정적 HTML) | `<button class="btn-match" onclick="openLicMatchModal(1)">🔗 매칭</button>` 제거 |
+| Line 1049 (동적 생성 `addContact()`) | 매칭 버튼 HTML 생성 코드 제거 |
+| CSS `.btn-match` | 스타일 제거 |
+
+#### 2. 세금계산서 담당자 복사 수정
+
+`copyFromContact1()` 함수 수정:
+- **복사 대상**: 이름, 전화, 이메일, 부서, 업체명 (기본 연락처)
+- **제외 대상**: 자사 담당자 연결 정보 (`cTeam1` 부서(팀), `cRep1` 접수자(담당자))
+- 토스트 메시지에 "(자사 담당자 연결 정보 제외)" 안내 추가
+
+#### 3. OCR 결과 Firebase 저장
+
+OCR 인식 결과를 전역 변수에 보관 후, 업체 저장 시 Firestore `companies/{id}/files.ocrResults[]`에 함께 저장.
+
+**전역 변수**:
+```javascript
+var _bizLicOcrResult = null;   // 사업자등록증 OCR 결과
+var _licOcrResults = {};        // 인허가 OCR 결과 {idx: {...}}
+```
+
+**ocrResult 객체 구조**:
+```javascript
+{
+  type: 'bizLicense' | 'permit',
+  fileName: '원본파일명.jpg',
+  ocrAt: '2026-02-22T10:30:00Z',
+  data: {
+    // bizLicense: companyName, repName, bizNo, corpNo, taxType, bizType, bizItem, address, isCorp
+    // permit: repName, bizName, licNo, bizForm, field, address
+  }
+}
+```
+
+**저장 흐름**: `runBizLicOCR()` / `runLicOCR()` → 전역 변수에 보관 → `submitCompanyForm()` 시 Firestore update
+
+---
+
+### companyMgmt.html — 선택 삭제 기능 개선
+
+**수정 파일**: `companyMgmt.html`, `js/firestore-helpers.js`
+**커밋**: `635c3bb`
+
+기존 브라우저 `confirm()` 대화상자를 **커스텀 확인 모달**로 교체 + 권한 체크 구조 + Storage 파일 정리.
+
+#### 1. 커스텀 삭제 확인 모달
+
+| 모달 | ID | 용도 |
+|------|-----|------|
+| 일괄 삭제 | `#bulkDeleteModal` | 선택한 N개 업체 삭제 확인 (업체명 + 사업자번호 목록 표시) |
+| 단건 삭제 | `#singleDeleteModal` | 상세 페이지에서 1개 업체 삭제 확인 |
+
+**모달 기능**:
+- 삭제 대상 업체명 + 사업자번호 스크롤 목록 표시
+- 진행률 바 (`del-progress-fill`) 실시간 표시
+- 취소 버튼으로 안전하게 중단
+- 삭제 중 버튼 비활성화 (중복 실행 방지)
+
+**CSS 클래스**: `.bulk-delete-dialog`, `.bulk-delete-header`, `.bulk-delete-list`, `.del-item`, `.bulk-delete-warn`, `.del-progress-bar`, `.del-progress-fill`
+
+#### 2. 권한 체크 구조 (Placeholder)
+
+```javascript
+function checkDeletePermission() {
+  // TODO: 사용자 등급 확인 로직 (추후 지정 업무)
+  return true;  // 현재는 모든 사용자 허용
+}
+```
+
+- 일괄 삭제 + 단건 삭제 모두 `checkDeletePermission()` 호출
+- 권한 없으면 `toast('⛔ 삭제 권한이 없습니다.')` 표시 + 중단
+- **추후 구현 예정**: 사용자 등급별 삭제 권한 제어
+
+#### 3. Storage 파일 정리
+
+`js/firestore-helpers.js`에 `fsDeleteCompanyFiles()` 함수 추가:
+
+```javascript
+async function fsDeleteCompanyFiles(companyId) {
+  // companies/{id}의 files 필드에서 경로 조회
+  // → files.bizLicensePath (사업자등록증) 삭제
+  // → files.permitDocs[].path (인허가문서) 각각 삭제
+}
+```
+
+업체 삭제 시 Firestore 문서뿐 아니라 Firebase Storage 첨부파일도 함께 삭제.
+
+#### 4. 영업관리와 접수관리 역할 분리
+
+| 페이지 | 삭제 기능 | 이유 |
+|--------|----------|------|
+| `salesMgmt.html` (영업관리) | ❌ 없음 | 업체 정보 삭제는 신중해야 하므로 |
+| `companyMgmt.html` (접수관리) | ⭕ 있음 | 권한 있는 담당자만 접근 |
+
+**JavaScript 함수 변경**:
+| 함수 | 변경 내용 |
+|------|----------|
+| `bulkDeleteCompanies()` | `confirm()` → 모달 표시 + 권한 체크 |
+| `confirmBulkDelete()` | 신규 — 모달에서 삭제 실행 + 진행률 + Storage 정리 |
+| `closeBulkDeleteModal()` | 신규 — 모달 닫기 |
+| `deleteCompany()` | `confirm()` → 모달 표시 + 권한 체크 |
+| `confirmSingleDelete()` | 신규 — 단건 삭제 실행 + Storage 정리 |
+| `closeSingleDeleteModal()` | 신규 — 단건 모달 닫기 |
+| `checkDeletePermission()` | 신규 — 권한 체크 placeholder |
+| `fsDeleteCompanyFiles()` | 신규 (`firestore-helpers.js`) — Storage 파일 삭제 |
+
+---
 
 ### 식약처 API 포트 5050 → 5003 변경 (인센티브 계산기 충돌 해결)
 
@@ -995,6 +1196,8 @@ window.addEventListener('firebase-ready', function() {
 7. 부서 관리 / 팀 관리 페이지 구현
 8. 접수번호 실제 발번 로직 구현 (세그먼트 기반 자동 채번)
 9. 백엔드 API 연동 + 실제 데이터 연동
+10. **삭제 권한 등급별 제어** — `checkDeletePermission()` 구현 (사용자 역할 기반)
+11. **OCR 결과 조회 UI** — 업체 상세 페이지에서 OCR 원본 결과 확인 기능
 
 ---
 
