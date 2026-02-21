@@ -491,6 +491,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://127.0.0.1:5001' : '';
 let apiOnline = false;
 let firestorePurposes = [];  // Firestore에서 로드한 검사목적 P 배열
+let firestoreFields = [];    // Firestore에서 로드한 검사 분야 정보 [{code,name,color}]
 let firestoreReady = false;  // Firebase 준비 상태
 
 // ============================================================================
@@ -583,6 +584,14 @@ function updateServerStatusUI(online) {
 window.addEventListener('firebase-ready', async function() {
     firestoreReady = true;
     try {
+        // 검사 분야 정보 로드 (식품/축산 라벨, 색상)
+        const fieldsDoc = await db.collection('settings').doc('inspectionFields').get();
+        if (fieldsDoc.exists && fieldsDoc.data().fields) {
+            firestoreFields = fieldsDoc.data().fields;
+            console.log('[Firestore] 검사 분야 로드:', firestoreFields.map(f => f.name).join(', '));
+        }
+
+        // 검사목적 P 배열 로드
         const doc = await db.collection('settings').doc('inspectionPurposes').get();
         if (doc.exists && doc.data().purposes) {
             firestorePurposes = doc.data().purposes;
@@ -594,7 +603,7 @@ window.addEventListener('firebase-ready', async function() {
             if (currentField) updateTestPurposeOptions(currentField);
         }
     } catch(e) {
-        console.warn('[Firestore] 검사목적 로드 실패, 기존 방식 사용:', e.message);
+        console.warn('[Firestore] 로드 실패, 기존 방식 사용:', e.message);
     }
 });
 
@@ -766,14 +775,22 @@ async function updateTestPurposeOptions(testField) {
     const fieldId = testField === '식품' ? 'F' : 'L';
     let purposes = [];
 
+    // 분야 라벨 헬퍼: firestoreFields에서 분야코드 → 이름 매핑
+    function getFieldLabel(fieldCode) {
+        const f = firestoreFields.find(f => f.code === fieldCode || f.id === fieldCode);
+        return f ? f.name : fieldCode;
+    }
+
     // 1순위: Firestore P 배열 (검사목적관리에서 설정한 정렬순서대로)
-    // o:0 (미정) 항목은 제외, 이름 + 접수번호 라벨 포함
-    let useFirestore = false;
+    // o:0 (미정) 항목은 제외, 이름 + 분야 라벨 포함
     if (firestorePurposes.length > 0) {
         purposes = firestorePurposes
             .filter(p => p.o !== 0 && p.fields && p.fields.includes(fieldId))
-            .map(p => ({ name: p.n, rcpt: p.rcpt || '' }));
-        useFirestore = true;
+            .map(p => ({
+                name: p.n,
+                fieldLabels: (p.fields || []).map(fc => getFieldLabel(fc)),
+                rcpt: p.rcpt || ''
+            }));
         console.log(`[Firestore] 검사목적 필터: ${testField}(${fieldId}) - ${purposes.length}개 (미정 제외)`);
     }
 
@@ -783,7 +800,7 @@ async function updateTestPurposeOptions(testField) {
             const res = await fetch(`${API_BASE}/api/test-purposes?field=${encodeURIComponent(testField)}`);
             if (res.ok) {
                 const data = await res.json();
-                purposes = (data.purposes || []).map(n => ({ name: n, rcpt: '' }));
+                purposes = (data.purposes || []).map(n => ({ name: n, fieldLabels: [], rcpt: '' }));
                 console.log(`[API] 검사목적 로드: ${testField} - ${purposes.length}개`);
             }
         } catch (e) {
@@ -793,7 +810,7 @@ async function updateTestPurposeOptions(testField) {
 
     // 3순위: 폴백 (Firestore, API 모두 실패 시)
     if (purposes.length === 0) {
-        purposes = (FALLBACK_TEST_PURPOSE_MAPPING[testField] || []).map(n => ({ name: n, rcpt: '' }));
+        purposes = (FALLBACK_TEST_PURPOSE_MAPPING[testField] || []).map(n => ({ name: n, fieldLabels: [], rcpt: '' }));
         console.log(`[폴백] 검사목적 로드: ${testField} - ${purposes.length}개`);
     }
 
@@ -801,8 +818,9 @@ async function updateTestPurposeOptions(testField) {
     purposes.forEach(item => {
         const option = document.createElement('option');
         option.value = item.name;
-        // Firestore 라벨이 있으면 이름 옆에 접수번호 형식 표시
-        option.textContent = item.rcpt ? `${item.name}  [${item.rcpt}]` : item.name;
+        // 분야 라벨 표시 (Firestore에서 로드한 분야명)
+        const label = item.fieldLabels.length > 0 ? `  ● ${item.fieldLabels.join(' ● ')}` : '';
+        option.textContent = `${item.name}${label}`;
         select.appendChild(option);
     });
 }
