@@ -1389,11 +1389,21 @@ async function checkContactDup(contactIdx) {
         resultEl.textContent = '✅ 중복 없음 — 신규 등록 가능';
       }
     } else {
-      var dupCompany = snap.docs[0].data().company || '(알수없음)';
+      var dupData = snap.docs[0].data();
+      var dupCompany = dupData.company || '(알수없음)';
+      var dupRole = ''; var dupSalesRep = dupData.salesRep || '';
+      if (dupData.contacts && dupData.contacts.length > 0) {
+        for (var ci = 0; ci < dupData.contacts.length; ci++) {
+          if (dupData.contacts[ci].name === name) { dupRole = dupData.contacts[ci].role || ''; dupSalesRep = dupSalesRep || dupData.contacts[ci].salesRep || ''; break; }
+        }
+      }
+      var detail = dupCompany + ' 소속';
+      if (dupRole) detail += ' / 부서: ' + dupRole;
+      if (dupSalesRep) detail += ' / 접수자: ' + dupSalesRep;
       showToastMsg('⚠️ 동일 담당자 발견: ' + name + ' (' + dupCompany + ')');
       if (resultEl) {
         resultEl.className = 'check-result check-dup';
-        resultEl.textContent = '⚠️ 기존 등록: ' + dupCompany + ' 소속';
+        resultEl.textContent = '⚠️ 기존 등록: ' + detail;
       }
     }
   } catch(e) {
@@ -1676,8 +1686,18 @@ async function submitCompanyForm() {
           .where('contactPhone', '==', ct.phone)
           .limit(1).get();
         if (!ctSnap.empty) {
-          var existCompany = ctSnap.docs[0].data().company || '';
-          showToastMsg('ℹ️ 담당자 ' + ct.name + '은(는) ' + existCompany + '에 이미 등록되어 있습니다.');
+          var existData = ctSnap.docs[0].data();
+          var existCompany = existData.company || '';
+          var existRole = ''; var existRep = existData.salesRep || '';
+          if (existData.contacts && existData.contacts.length > 0) {
+            for (var si = 0; si < existData.contacts.length; si++) {
+              if (existData.contacts[si].name === ct.name) { existRole = existData.contacts[si].role || ''; existRep = existRep || existData.contacts[si].salesRep || ''; break; }
+            }
+          }
+          var info = existCompany;
+          if (existRole) info += ' / ' + existRole;
+          if (existRep) info += ' / 접수자: ' + existRep;
+          showToastMsg('ℹ️ 담당자 ' + ct.name + '은(는) ' + info + '에 이미 등록되어 있습니다.');
         }
       }
     }
