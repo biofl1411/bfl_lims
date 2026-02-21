@@ -179,7 +179,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <select id="test-purpose" required onchange="onTestPurposeChange()">
                             <option value="">먼저 시험분야를 선택하세요</option>
                         </select>
-                        <small class="field-help">시험분야 선택 시 자동으로 표시됩니다</small>
+                        <small class="field-help" id="test-purpose-help">시험분야 선택 시 자동으로 표시됩니다</small>
                     </div>
                 </div>
 
@@ -812,8 +812,20 @@ function onTestPurposeChange() {
     document.getElementById('food-type-value').value = '';
 
     const testPurpose = document.getElementById('test-purpose').value;
+    const helpEl = document.getElementById('test-purpose-help');
+
     if (testPurpose) {
+        // Firestore P 배열에서 선택된 검사목적의 접수번호 형식 라벨 표시
+        const purposeObj = firestorePurposes.find(p => p.n === testPurpose);
+        if (purposeObj && purposeObj.rcpt) {
+            helpEl.innerHTML = `📋 접수번호 형식: <strong>${purposeObj.rcpt}</strong>` +
+                (purposeObj.rcptDesc ? ` <span style="color:#888">(${purposeObj.rcptDesc})</span>` : '');
+        } else {
+            helpEl.textContent = '검체유형을 선택하세요';
+        }
         showToast(`검사목적 선택: ${testPurpose}. 검체유형을 선택하세요.`, 'info');
+    } else {
+        helpEl.textContent = '시험분야 선택 시 자동으로 표시됩니다';
     }
 }
 
@@ -896,7 +908,7 @@ function setPrevReceiptNo() {
 // ============================================================================
 function buildReceiptNoFromSegments(purposeObj, testField) {
     const segments = purposeObj.segments;
-    const sep = purposeObj.segSep === 'none' ? '' : (purposeObj.segSep || '-');
+    const sep = (purposeObj.segSep === 'none' || purposeObj.segSep === '') ? '' : (purposeObj.segSep !== undefined && purposeObj.segSep !== null ? purposeObj.segSep : '-');
     const fieldId = testField === '식품' ? 'F' : 'L';
     const today = new Date();
     const y4 = today.getFullYear().toString();
