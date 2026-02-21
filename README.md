@@ -50,7 +50,7 @@ bfl_lims/
 │   └── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
 ├── img/
 │   └── bfl_logo.svg                 # BFL 로고
-├── api_server.py                    # Flask REST API 서버 (식약처 데이터, port 5060)
+├── api_server.py                    # Flask REST API 서버 (식약처 데이터, port 5003)
 ├── collector.py                     # 식약처 데이터 수집기 (cron)
 └── deploy.ps1                       # 배포 스크립트
 ```
@@ -324,7 +324,7 @@ Firebase 프로젝트: `bfl-lims` / SDK: Firebase compat v10.14.1
 | 웹서버 | nginx → HTTPS 8443 (LIMS 프론트엔드 + API 리버스 프록시) |
 | API (시료접수) | http://127.0.0.1:5001 → nginx `/api/*` (`receipt_api_final.py`) |
 | API (OCR프록시) | http://127.0.0.1:5002 → nginx `/ocr/*` (`ocr_proxy.py`) |
-| API (식약처) | http://127.0.0.1:5050 → nginx `/fss/*` (`api_server.py`) |
+| API (식약처) | http://127.0.0.1:5003 → nginx `/fss/*` (`api_server.py`) |
 | 환경변수 | `FSS_DB_HOST`, `FSS_DB_PORT`, `FSS_DB_USER`, `FSS_DB_PASS`, `FSS_DB_NAME`, `FSS_API_KEY`, `FSS_API_PORT` |
 
 ### 서버 배포 구성 (nginx 8443 포트 통합)
@@ -341,12 +341,12 @@ Firebase 프로젝트: `bfl-lims` / SDK: Firebase compat v10.14.1
         ├─ /          → 정적 파일 서빙 (/home/biofl/bfl_lims/*.html)
         ├─ /api/*     → proxy_pass → 127.0.0.1:5001 (시료접수 API)
         ├─ /ocr/*     → rewrite + proxy_pass → 127.0.0.1:5002 (OCR 프록시)
-        └─ /fss/*     → rewrite + proxy_pass → 127.0.0.1:5050 (식약처 API)
+        └─ /fss/*     → rewrite + proxy_pass → 127.0.0.1:5003 (식약처 API)
 
 [내부 Flask 서버] (localhost만 바인딩)
     ├─ receipt_api_final.py  → port 5001 (시료접수 API)
     ├─ ocr_proxy.py          → port 5002 (CLOVA OCR 프록시)
-    └─ api_server.py         → port 5050 (식약처 데이터 API + MariaDB)
+    └─ api_server.py         → port 5003 (식약처 데이터 API + MariaDB)
 ```
 
 **nginx 설정 파일**: `/etc/nginx/sites-available/bfl_lims`
@@ -444,6 +444,51 @@ cd ~/bfl_lims && git pull
 | `4fbf47e` | inspectionMgmt.html: 접수번호 구분별 설명 추가 + 월/일 표기 개선 |
 | `479d081` | inspectionMgmt.html: 월/일 구분 1~12월/1~31일 선택 가능 변경 |
 | `7ce2e84` | inspectionMgmt.html: 검사 목적 선택 삭제 + 월/일 선택 기능 추가 |
+
+---
+
+## 완료된 작업 (2026-02-22)
+
+### 식약처 API 포트 5050 → 5003 변경 (인센티브 계산기 충돌 해결)
+
+**원인**: nginx `incentive` 설정에서 `listen 5050 ssl`로 인센티브 계산기 전용 포트를 점유하고 있었으나, `bfl-fss-api.service`(식약처 API)도 5050 포트를 사용 → nginx 시작 실패 → **전체 서비스 중단**
+
+**수정 파일 (로컬)**:
+| 파일 | 변경 내용 |
+|------|----------|
+| `api_server.py` | `FSS_API_PORT` 기본값 5050→5003, `serverUrl` localhost:5050→5003 |
+| `admin_api_settings.html` | localhost:5050 → localhost:5003 |
+| `admin_collect_status.html` | localhost:5050 → localhost:5003 |
+| `salesMgmt.html` | localhost:5050 → localhost:5003 (2곳) |
+| `README.md` | 포트 정보 업데이트 + 포트 사용 금지 목록 추가 |
+
+**수정 (서버)**:
+| 대상 | 변경 내용 |
+|------|----------|
+| `/etc/nginx/sites-available/bfl_lims` | `/fss/` proxy_pass 5050→5003, `/incentive/` 경로 제거 |
+| `/etc/nginx/sites-available/incentive` | `listen 5050 ssl` 인센티브 설정 복원 |
+| `/etc/systemd/system/bfl-fss-api.service` | Description port 5050→5003 |
+| `/home/biofl/bfl_lims/api_server.py` (서버) | sed로 5050→5003 변경 |
+
+**최종 포트 배치**:
+```
+[외부 8443] → nginx → /api/  → 5001 (시료접수)
+                    → /ocr/  → 5002 (OCR)
+                    → /fss/  → 5003 (식약처) ← 변경
+[외부 5050] → nginx → listen 5050 ssl → 5051 (인센티브 계산기, 별도 프로그램)
+```
+
+### systemd 서비스 등록 (서버 재시작 후 자동 실행)
+
+**신규 서비스 파일 3개** (`/etc/systemd/system/`):
+| 서비스 | 포트 | 실행 파일 |
+|--------|------|----------|
+| `bfl-receipt-api.service` | 5001 | `receipt_api_final.py` |
+| `bfl-ocr-proxy.service` | 5002 | `ocr_proxy.py` |
+| `bfl-fss-api.service` | 5003 | `api_server.py` |
+
+- `Restart=always`, `RestartSec=5` — 비정상 종료 시 5초 후 자동 재시작
+- `enabled` 상태 — 서버 부팅 시 자동 시작
 
 ---
 
@@ -677,8 +722,8 @@ items.forEach((item, i) => {
 - 접속 URL: `https://14.7.14.31:8443/`
 
 **nginx 8443 포트 통합** (API 리버스 프록시):
-- 3개 Flask 서버(5001/5002/5050)를 nginx 프록시로 8443 포트 하나에 통합
-- `/api/*` → 시료접수(5001), `/ocr/*` → OCR(5002), `/fss/*` → 식약처(5050)
+- 3개 Flask 서버(5001/5002/5003)를 nginx 프록시로 8443 포트 하나에 통합
+- `/api/*` → 시료접수(5001), `/ocr/*` → OCR(5002), `/fss/*` → 식약처(5003)
 - 6개 HTML 파일 API URL 환경 감지 분기 적용 (로컬/서버 자동 전환)
 - 변경 파일: `sampleReceipt.html`, `companyRegForm_v2.html`, `salesMgmt.html`, `companyMgmt.html`, `admin_api_settings.html`, `admin_collect_status.html`
 
@@ -848,6 +893,37 @@ items.forEach((item, i) => {
 ---
 
 ## ⚠️ 주의 사항
+
+### 0. 포트 사용 금지 목록 (공유기 포트포워딩 점유)
+
+아래 포트는 **공유기에서 이미 포트포워딩으로 사용 중**이므로 BFL LIMS 개발 시 절대 사용하지 마세요.
+새로운 서비스 추가 시 반드시 이 목록을 확인하고, 충돌하지 않는 포트를 선택해야 합니다.
+
+| # | 규칙명 | 프로토콜 | 외부 포트 | 내부 IP | 내부 포트 | 용도 |
+|---|--------|---------|----------|---------|----------|------|
+| 001 | api | TCP | 8000 | 192.168.0.96 | 8000 | API 서버 |
+| 002 | wireguard | UDP | 63964 | 192.168.0.96 | 63964 | VPN |
+| 003 | kakaochatbot | TCP | 5000 | 192.168.0.96 | 5000 | 카카오챗봇 |
+| 004 | business | TCP | 6001 | 192.168.0.96 | 6001 | 비즈니스 |
+| 005 | out | TCP | 2222 | 192.168.0.96 | 22 | SSH (외부 2222→내부 22) |
+| 006 | business_demo | TCP | 6005 | 192.168.0.96 | 6005 | 비즈니스 데모 |
+| 007 | expiry_date_web | TCP | 7000 | 192.168.0.96 | 7000 | 유통기한 웹 |
+| 008 | data_api | TCP | 6800 | 192.168.0.96 | 6800 | 데이터 API |
+| 009 | Streamlit | TCP | 8501 | 192.168.0.96 | 8501 | Streamlit |
+| 010 | 인센티브 | TCP | 443 | 192.168.0.96 | 443 | 인센티브 (HTTPS) |
+| 011 | 인센 | TCP | 5050 | 192.168.0.96 | 5050 | 인센티브 계산기 |
+| 012 | 통합림스 | TCP | 8443 | 192.168.0.96 | 8443 | **BFL LIMS** |
+
+**⛔ 사용 금지 포트 요약**: `443`, `2222`, `5000`, `5050`, `6001`, `6005`, `6800`, `7000`, `8000`, `8443`, `8501`, `63964`
+
+**BFL LIMS 내부 Flask 서버 할당 포트** (충돌 없음 확인 완료):
+- `5001` — 시료접수 API (`receipt_api_final.py`)
+- `5002` — OCR 프록시 (`ocr_proxy.py`)
+- `5003` — 식약처 API (`api_server.py`) ← 기존 5050에서 변경 (인센티브 계산기와 충돌 방지)
+
+> **2026-02-22 변경**: 식약처 API 포트를 `5050` → `5003`으로 변경.
+> 원인: nginx `incentive` 설정에서 `listen 5050 ssl`로 인센티브 계산기가 5050 포트를 점유 → nginx 시작 실패 → 전체 서비스 중단.
+> 인센티브 계산기(`/home/biofl/incen/`)는 BFL LIMS와 별개 프로그램이므로 5050 포트를 양보.
 
 ### 1. 작업 시작 전 읽기/쓰기 권한 허용
 

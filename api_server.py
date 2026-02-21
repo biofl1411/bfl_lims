@@ -6,7 +6,7 @@ BioFoodLab 식약처 데이터 API 서버
 - 지역 드릴다운, 업체명 검색, 제품/원재료 검색 지원
 
 실행: python3 api_server.py
-포트: 5050 (기본)
+포트: 5003 (기본)
 """
 
 import os
@@ -750,7 +750,7 @@ def load_settings():
     defaults = {
         'collectTime': '03:00',
         'collectMode': 'incremental',
-        'serverUrl': 'http://localhost:5050',
+        'serverUrl': 'http://localhost:5003',
         'activeApis': [
             'I1220','I2829','I-0020','I1300','I1320','I2835','I2831','C001','I1260',
             'I1250','I1310','C002','C003','C006','I2859','I2860'
@@ -836,5 +836,5 @@ def post_settings():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('FSS_API_PORT', 5050))
+    port = int(os.environ.get('FSS_API_PORT', 5003))
     app.run(host='0.0.0.0', port=port, debug=False)
