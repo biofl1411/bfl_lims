@@ -135,6 +135,13 @@
   .sales-rep-row .rep-label { font-size:11px; color:#8892a4; font-weight:600; flex-shrink:0; }
   .rep-badge { display:inline-flex; align-items:center; gap:4px; background:#e3f2fd; color:#1565c0; font-size:11px; padding:4px 12px; border-radius:10px; font-weight:600; }
   .lic-tags-area { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
+
+  .biz-verify-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+  .biz-verify-table th { text-align:left; padding:6px 10px; background:#f5f7fa; border:1px solid #e0e0e0; width:120px; font-size:12px; color:#555; }
+  .biz-verify-table td { padding:6px 10px; border:1px solid #e0e0e0; font-size:13px; }
+  .biz-verify-section { margin-top:10px; padding:8px 10px; background:#f9f9f9; border-radius:6px; }
+  .biz-valid-ok { font-size:15px; font-weight:700; color:#2e7d32; }
+  .biz-valid-fail { font-size:15px; font-weight:700; color:#d32f2f; }
   .lic-match-tag { display:inline-flex; align-items:center; gap:3px; background:#e8f5e9; color:#2e7d32; font-size:11px; padding:3px 8px; border-radius:10px; }
   /* .btn-match 제거됨 */
 
@@ -212,6 +219,17 @@
   </div>
 </div>
 
+<!-- 사업자등록정보 진위확인 결과 모달 -->
+<div class="dup-overlay" id="bizVerifyModal">
+  <div class="dup-popup" style="max-width:540px">
+    <h3>사업자등록정보 확인</h3>
+    <div id="bizVerifyContent" style="font-size:13px;color:#333"></div>
+    <div style="text-align:right;margin-top:14px">
+      <button class="dup-btn dup-btn-cancel" onclick="closeBizVerifyModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MAIN ===== -->
 <div class="main">
   <div class="topbar">
@@ -280,10 +298,15 @@
             <input type="text" id="regRepName" placeholder="대표자 이름" />
           </div>
           <div class="form-group">
+            <label>개업일자</label>
+            <input type="text" id="regOpenDate" placeholder="YYYY-MM-DD" maxlength="10" />
+          </div>
+          <div class="form-group">
             <label>사업자번호 <span class="req">*</span></label>
             <div style="display:flex; gap:6px;">
               <input type="text" id="bizNo" placeholder="000-00-00000" maxlength="12" oninput="formatBizNo(this)" style="flex:1;" />
               <button class="btn-check" onclick="checkBizDup()">중복 확인</button>
+              <button class="btn-check" onclick="verifyBizRegistration()" style="background:#1565c0;color:#fff">진위확인</button>
             </div>
             <div class="check-result" id="bizCheckResult" style="display:none;"></div>
           </div>
@@ -632,6 +655,7 @@ function runBizLicOCR() {
       var taxType = getText(res.taxType); // "법인사업자", "일반과세자" 등
       var bizType = getText(res.bisType);
       var bizItem = getText(res.bisItem);
+      var openDate = getText(res.openDate); // 개업일자
       var addr = '';
       if (res.bisAddress && res.bisAddress[0] && res.bisAddress[0].text) addr = res.bisAddress[0].text.trim();
 
@@ -664,6 +688,7 @@ function runBizLicOCR() {
       changes.push({ field: '법인여부', from: '', to: isCorp ? '법인' : '개인' });
       setField('regBizType', '업태', bizType);
       setField('regBizItem', '종목', bizItem);
+      setField('regOpenDate', '개업일자', openDate);
       // 주소: 쉼표(,) 기준으로 기본주소/상세주소 분리
       if (addr) {
         var addrEl = document.getElementById('regAddr1');
@@ -712,6 +737,7 @@ function runBizLicOCR() {
           bizType: bizType || '',
           bizItem: bizItem || '',
           address: addr || '',
+          openDate: openDate || '',
           isCorp: isCorp
         }
       };
@@ -1773,6 +1799,89 @@ function showDupConfirmModal(dupBiz, dupCompany, company, bizNo) {
 function resolveSaveDup(result) {
   document.getElementById('saveDupModal').classList.remove('show');
   if (_saveDupResolve) { _saveDupResolve(result); _saveDupResolve = null; }
+}
+
+/* ===== 사업자등록정보 진위확인 (공공데이터포털 국세청 API) ===== */
+var BIZ_VERIFY_SERVICE_KEY = '4553b84e3c3d3816cdfacb285eadeb54f252e8bc48652c3e0eebdaca255fd91c';
+
+async function verifyBizRegistration() {
+  var bizNoRaw = (document.getElementById('bizNo') || {}).value.trim();
+  var bizNo = bizNoRaw.replace(/[^0-9]/g, '');
+  if (bizNo.length !== 10) { alert('올바른 사업자번호 10자리를 입력해 주세요.'); return; }
+
+  var contentEl = document.getElementById('bizVerifyContent');
+  contentEl.innerHTML = '<div style="text-align:center;padding:20px">조회 중...</div>';
+  document.getElementById('bizVerifyModal').classList.add('show');
+
+  var now = new Date();
+  var queryTime = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+
+  var html = '';
+
+  // ── 1) 상태조회 ──
+  try {
+    var statusRes = await fetch('https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=' + encodeURIComponent(BIZ_VERIFY_SERVICE_KEY), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'accept': 'application/json' },
+      body: JSON.stringify({ b_no: [bizNo] })
+    });
+    var statusData = await statusRes.json();
+    if (statusData.data && statusData.data[0]) {
+      var s = statusData.data[0];
+      var sttLabel = { '01':'계속사업자', '02':'휴업자', '03':'폐업자' };
+      var sttClass = s.b_stt_cd === '01' ? 'biz-valid-ok' : 'biz-valid-fail';
+      html += '<table class="biz-verify-table">';
+      html += '<tr><th>사업자번호</th><td>' + bizNoRaw + '</td></tr>';
+      html += '<tr><th>사업자상태</th><td class="' + sttClass + '">' + (s.b_stt || sttLabel[s.b_stt_cd] || '-') + '</td></tr>';
+      html += '<tr><th>과세유형</th><td>' + (s.tax_type || '-') + '</td></tr>';
+      if (s.end_dt) html += '<tr><th>폐업일자</th><td>' + s.end_dt + '</td></tr>';
+      if (s.tax_type_change_dt) html += '<tr><th>과세유형전환일</th><td>' + s.tax_type_change_dt + '</td></tr>';
+      html += '</table>';
+    } else {
+      html += '<div style="color:#d32f2f">상태조회 결과 없음</div>';
+    }
+  } catch(e) {
+    html += '<div style="color:#d32f2f">상태조회 실패: ' + e.message + '</div>';
+  }
+
+  // ── 2) 진위확인 (대표자명 + 개업일자 있을 때만) ──
+  var repName = (document.getElementById('regRepName') || {}).value.trim();
+  var openDateRaw = (document.getElementById('regOpenDate') || {}).value.trim();
+  var openDate = openDateRaw.replace(/[^0-9]/g, '');
+  if (repName && openDate.length === 8) {
+    try {
+      var valRes = await fetch('https://api.odcloud.kr/api/nts-businessman/v1/validate?serviceKey=' + encodeURIComponent(BIZ_VERIFY_SERVICE_KEY), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({ businesses: [{ b_no: bizNo, start_dt: openDate, p_nm: repName }] })
+      });
+      var valData = await valRes.json();
+      if (valData.data && valData.data[0]) {
+        var v = valData.data[0];
+        var validIcon = v.valid === '01' ? '&#10003; 일치' : '&#10007; 불일치';
+        var validClass = v.valid === '01' ? 'biz-valid-ok' : 'biz-valid-fail';
+        html += '<div class="biz-verify-section">';
+        html += '<div style="font-weight:700;margin-bottom:6px">진위확인</div>';
+        html += '<div class="' + validClass + '">' + validIcon + '</div>';
+        if (v.valid_msg) html += '<div style="font-size:11px;color:#888;margin-top:4px">' + v.valid_msg + '</div>';
+        html += '</div>';
+      }
+    } catch(e) {
+      html += '<div style="color:#d32f2f;margin-top:8px">진위확인 실패: ' + e.message + '</div>';
+    }
+  } else {
+    html += '<div class="biz-verify-section" style="color:#888;font-size:12px">';
+    html += '* 진위확인을 위해 대표자명과 개업일자(8자리)를 입력해 주세요.';
+    html += '</div>';
+  }
+
+  // ── 조회일시 ──
+  html += '<div style="text-align:right;font-size:11px;color:#999;margin-top:10px">조회일시: ' + queryTime + '</div>';
+  contentEl.innerHTML = html;
+}
+
+function closeBizVerifyModal() {
+  document.getElementById('bizVerifyModal').classList.remove('show');
 }
 
 /* ===== 페이지 초기화 ===== */
