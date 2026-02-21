@@ -28,7 +28,7 @@ if (!firebase.apps.length) {
 // 전역 참조
 const db = firebase.firestore();
 const auth = firebase.auth();
-const storage = firebase.storage();
+var storage = (typeof firebase.storage === 'function') ? firebase.storage() : null;
 
 // Firebase 연결 상태
 var _firebaseReady = false;
