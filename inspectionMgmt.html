@@ -460,6 +460,13 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
             <span class="pill" onclick="tp(this,'on')">🟢 사용</span>
             <span class="pill" onclick="tp(this,'off')">🔘 미정</span>
           </div>
+          <div id="purpose-sel-bar" style="display:none;align-items:center;gap:10px;margin-left:auto">
+            <span id="purpose-sel-cnt" style="font-size:12px;font-weight:700;color:var(--pri)">0개 선택</span>
+            <button onclick="togglePurposeSelectAll()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--bdr);border-radius:8px;background:var(--card);cursor:pointer">전체선택</button>
+            <button onclick="deletePurposeSelected()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--danger);border-radius:8px;background:#fff0f0;color:var(--danger);cursor:pointer;font-weight:700">🗑️ 선택 삭제</button>
+            <button onclick="togglePurposeSelectMode()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--bdr);border-radius:8px;background:var(--card);cursor:pointer">취소</button>
+          </div>
+          <button id="purpose-sel-btn" onclick="togglePurposeSelectMode()" style="margin-left:auto;font-size:11px;padding:5px 12px;border:1.5px solid var(--bdr);border-radius:8px;background:var(--card);cursor:pointer;font-weight:600">☑️ 선택</button>
         </div>
         <div id="purpose-container"></div>
       </div>
@@ -34378,8 +34385,10 @@ function rp(f='all',s=''){
     html+='<div class="card-grid">';
     onFiltered.forEach((p,idx)=>{
       const ftags=(p.fields||[]).map(id=>{const f=FIELDS.find(x=>x.id===id);return f?`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:50px;font-size:10px;font-weight:600;background:${f.color}18;color:${f.color}"><span style="width:6px;height:6px;border-radius:50%;background:${f.color}"></span>${f.name}</span>`:''}).join(' ');
-      html+=`<div class="p-card" onclick="openDetail(${P.indexOf(p)})">
-        <div class="p-card-top on"></div><div class="p-card-body">
+      const pidx=P.indexOf(p);
+      const selCb=purposeSelectMode?`<input type="checkbox" class="p-sel-cb" onclick="togglePurposeCheck(event,${pidx})" ${purposeSelected.has(pidx)?'checked':''} style="position:absolute;top:10px;right:10px;width:18px;height:18px;cursor:pointer;z-index:2">`:'';
+      html+=`<div class="p-card" data-pidx="${pidx}" onclick="${purposeSelectMode?`togglePurposeCheck(event,${pidx})`:`openDetail(${pidx})`}" style="${purposeSelected.has(pidx)?'outline:2.5px solid var(--danger)':''}">
+        ${selCb}<div class="p-card-top on"></div><div class="p-card-body">
           <div class="p-card-head"><div class="p-card-code">${String(idx+1).padStart(2,'0')}</div><div class="p-card-status"><span class="dot dot-on"></span> 사용</div></div>
           <div class="p-card-name">${p.n}</div><div style="margin-bottom:8px">${ftags}</div>
           <div class="p-card-receipt"><div style="flex:1"><div class="rcpt-label">접수번호</div><div class="rcpt-num">${p.rcpt||'미설정'}</div></div></div>
@@ -34394,8 +34403,10 @@ function rp(f='all',s=''){
     html+=`<div class="section-label">🔘 미정 (${offFiltered.length})</div>`;
     html+='<div class="card-grid">';
     offFiltered.forEach(p=>{
-      html+=`<div class="p-card" onclick="openDetail(${P.indexOf(p)})">
-        <div class="p-card-top off"></div><div class="p-card-body">
+      const pidx2=P.indexOf(p);
+      const selCb2=purposeSelectMode?`<input type="checkbox" class="p-sel-cb" onclick="togglePurposeCheck(event,${pidx2})" ${purposeSelected.has(pidx2)?'checked':''} style="position:absolute;top:10px;right:10px;width:18px;height:18px;cursor:pointer;z-index:2">`:'';
+      html+=`<div class="p-card" data-pidx="${pidx2}" onclick="${purposeSelectMode?`togglePurposeCheck(event,${pidx2})`:`openDetail(${pidx2})`}" style="${purposeSelected.has(pidx2)?'outline:2.5px solid var(--danger)':''}">
+        ${selCb2}<div class="p-card-top off"></div><div class="p-card-body">
           <div class="p-card-head"><div class="p-card-code" style="background:#ccc">${String(p.c).padStart(2,'0')}</div><div class="p-card-status" style="color:#aaa"><span class="dot dot-off"></span> 미정</div></div>
           <div class="p-card-name" style="color:#999">${p.n}</div>
           <div class="p-card-receipt"><div style="flex:1"><div class="rcpt-label">접수번호</div><div class="rcpt-none">미설정</div></div></div>
@@ -34410,6 +34421,53 @@ function rp(f='all',s=''){
 let cf='all';
 function tp(e,f){e.parentElement.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));e.classList.add('on');cf=f;fp()}
 function fp(){rp(cf,document.getElementById('sp')?document.getElementById('sp').value:'')}
+
+// ══ 검사 목적 선택 삭제 ══
+var purposeSelectMode=false;
+var purposeSelected=new Set();
+
+function togglePurposeSelectMode(){
+  purposeSelectMode=!purposeSelectMode;
+  purposeSelected.clear();
+  document.getElementById('purpose-sel-bar').style.display=purposeSelectMode?'flex':'none';
+  document.getElementById('purpose-sel-btn').style.display=purposeSelectMode?'none':'block';
+  fp();
+}
+
+function togglePurposeCheck(e,pidx){
+  e.stopPropagation();
+  if(purposeSelected.has(pidx))purposeSelected.delete(pidx);else purposeSelected.add(pidx);
+  updatePurposeSelUI();
+}
+
+function togglePurposeSelectAll(){
+  var cards=document.querySelectorAll('.p-card[data-pidx]');
+  if(purposeSelected.size===cards.length){purposeSelected.clear()}else{cards.forEach(function(c){purposeSelected.add(parseInt(c.getAttribute('data-pidx')))})}
+  updatePurposeSelUI();
+}
+
+function updatePurposeSelUI(){
+  document.getElementById('purpose-sel-cnt').textContent=purposeSelected.size+'개 선택';
+  document.querySelectorAll('.p-card[data-pidx]').forEach(function(c){
+    var idx=parseInt(c.getAttribute('data-pidx'));
+    var cb=c.querySelector('.p-sel-cb');
+    if(cb)cb.checked=purposeSelected.has(idx);
+    c.style.outline=purposeSelected.has(idx)?'2.5px solid var(--danger)':'none';
+  });
+}
+
+function deletePurposeSelected(){
+  if(purposeSelected.size===0){showToast('삭제할 항목을 선택하세요','warning');return}
+  var names=[];purposeSelected.forEach(function(idx){if(P[idx])names.push(P[idx].n)});
+  if(!confirm(names.length+'개 검사 목적을 삭제하시겠습니까?\n\n'+names.join(', ')))return;
+  var idxArr=Array.from(purposeSelected).sort(function(a,b){return b-a});
+  idxArr.forEach(function(idx){P.splice(idx,1)});
+  purposeSelected.clear();
+  togglePurposeSelectMode();
+  updateStats();
+  showToast(idxArr.length+'개 검사 목적이 삭제되었습니다','success');
+  savePurposesToFirestore();
+}
 
 // ══ beautiful-mclean: 검사 목적 상세 뷰 ══
 function openDetail(idx){
