@@ -97,7 +97,7 @@
   .traffic-preview { display: flex; gap: 6px; align-items: center; padding: 8px 0; }
   .traffic-dot { width: 14px; height: 14px; border-radius: 50%; }
 
-  .btn-check { padding: 7px 14px; border: 1px solid #1a73e8; border-radius: 8px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-check { padding: 7px 14px; border: 1px solid #1a73e8; border-radius: 8px; background: #e3f2fd; color: #1565c0; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; min-width: 70px; text-align: center; }
   .btn-check:hover { background: #bbdefb; }
 
   .btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; }
@@ -196,6 +196,18 @@
       <button class="dup-btn dup-btn-cancel" onclick="closeDup('contactDupPopup')">취소</button>
       <button class="dup-btn dup-btn-new" onclick="closeDup('contactDupPopup'); showToastMsg('✅ 신규 담당자로 등록합니다.')">아니오, 신규 등록</button>
       <button class="dup-btn dup-btn-link" onclick="closeDup('contactDupPopup'); showToastMsg('📩 기존 담당 박주임에게 알림을 발송했습니다.')">예, 동일 인물 (기존 연결)</button>
+    </div>
+  </div>
+</div>
+
+<!-- 저장 전 중복 확인 모달 -->
+<div class="dup-overlay" id="saveDupModal">
+  <div class="dup-popup">
+    <h3>⚠️ 중복 업체 확인</h3>
+    <div id="saveDupContent" style="font-size:13px;color:#5f6b7a;margin-bottom:14px"></div>
+    <div class="dup-actions">
+      <button class="dup-btn dup-btn-cancel" onclick="resolveSaveDup(false)">취소</button>
+      <button class="dup-btn dup-btn-link" onclick="resolveSaveDup(true)">그래도 저장</button>
     </div>
   </div>
 </div>
@@ -1309,42 +1321,84 @@ function applyCompanySelect() {
   showToastMsg('🏢 업체명이 설정되었습니다.');
 }
 
-/* ===== 중복 확인 데모 ===== */
-function checkCompanyDup() {
-  const name = document.getElementById('companyName').value.trim();
+/* ===== 회사명 중복 확인 — Firestore 연동 ===== */
+async function checkCompanyDup() {
+  var name = (document.getElementById('companyName') || {}).value.trim();
   if (!name) { alert('회사명을 입력해 주세요.'); return; }
-  if (name.includes('풀무원')) {
-    document.getElementById('companyDupPopup').classList.add('show');
-  } else {
-    const el = document.getElementById('companyCheckResult');
-    el.style.display = 'block';
-    el.className = 'check-result check-ok';
-    el.textContent = '✅ 중복 없음 — 등록 가능합니다.';
+  var resultEl = document.getElementById('companyCheckResult');
+  resultEl.style.display = 'block';
+  resultEl.className = 'check-result';
+  resultEl.textContent = '🔍 확인 중...';
+  try {
+    var snap = await db.collection('companies')
+      .where('company', '==', name).limit(5).get();
+    if (snap.empty) {
+      resultEl.className = 'check-result check-ok';
+      resultEl.textContent = '✅ 중복 없음 — 등록 가능합니다.';
+    } else {
+      var dupInfo = snap.docs.map(function(d) {
+        var c = d.data();
+        return (c.company || '') + ' (' + (c.bizNo || '') + ')';
+      }).join(', ');
+      resultEl.className = 'check-result check-dup';
+      resultEl.textContent = '⚠️ 동일 회사명 ' + snap.size + '건: ' + dupInfo;
+    }
+  } catch(e) {
+    resultEl.className = 'check-result check-dup';
+    resultEl.textContent = '❌ 확인 실패: ' + e.message;
   }
 }
-function checkBizDup() {
-  const biz = document.getElementById('bizNo').value.trim();
+/* ===== 사업자번호 중복 확인 — Firestore 연동 ===== */
+async function checkBizDup() {
+  var biz = (document.getElementById('bizNo') || {}).value.trim();
   if (!biz) { alert('사업자번호를 입력해 주세요.'); return; }
-  if (biz === '234-56-78901') {
-    const el = document.getElementById('bizCheckResult');
-    el.style.display = 'block'; el.className = 'check-result check-dup';
-    el.textContent = '⚠️ 이미 등록된 사업자번호입니다. (풀무원식품(주) / 담당: 박주임)';
-  } else {
-    const el = document.getElementById('bizCheckResult');
-    el.style.display = 'block'; el.className = 'check-result check-ok';
-    el.textContent = '✅ 중복 없음.';
+  var resultEl = document.getElementById('bizCheckResult');
+  resultEl.style.display = 'block';
+  resultEl.className = 'check-result';
+  resultEl.textContent = '🔍 확인 중...';
+  try {
+    var dup = await fsCheckDuplicateBusinessNo(biz);
+    if (dup) {
+      resultEl.className = 'check-result check-dup';
+      resultEl.textContent = '⚠️ 이미 등록된 사업자번호입니다.';
+    } else {
+      resultEl.className = 'check-result check-ok';
+      resultEl.textContent = '✅ 중복 없음 — 사용 가능합니다.';
+    }
+  } catch(e) {
+    resultEl.className = 'check-result check-dup';
+    resultEl.textContent = '❌ 확인 실패: ' + e.message;
   }
 }
-function checkContactDup() {
-  const name = document.getElementById('cName1').value.trim();
-  const phone = document.getElementById('cPhone1').value.trim();
+/* ===== 담당자 중복 확인 — Firestore 연동 ===== */
+async function checkContactDup(contactIdx) {
+  var idx = contactIdx || 1;
+  var name = (document.getElementById('cName' + idx) || {}).value.trim();
+  var phone = (document.getElementById('cPhone' + idx) || {}).value.trim();
   if (!name || !phone) { alert('이름과 전화번호를 모두 입력해 주세요.'); return; }
-  if (name === '이규성') {
-    document.getElementById('contactDupPopup').classList.add('show');
-  } else {
-    const el = document.getElementById('contactCheckResult1');
-    el.style.display = 'inline-block'; el.className = 'check-result check-ok';
-    el.textContent = '✅ 중복 없음 — 신규 등록 가능';
+  var resultEl = document.getElementById('contactCheckResult' + idx);
+  if (resultEl) { resultEl.style.display = 'inline-block'; resultEl.className = 'check-result'; resultEl.textContent = '🔍 확인 중...'; }
+  try {
+    var snap = await db.collection('companies')
+      .where('contactName', '==', name)
+      .where('contactPhone', '==', phone)
+      .limit(5).get();
+    if (snap.empty) {
+      if (resultEl) {
+        resultEl.className = 'check-result check-ok';
+        resultEl.textContent = '✅ 중복 없음 — 신규 등록 가능';
+      }
+    } else {
+      var dupCompany = snap.docs[0].data().company || '(알수없음)';
+      showToastMsg('⚠️ 동일 담당자 발견: ' + name + ' (' + dupCompany + ')');
+      if (resultEl) {
+        resultEl.className = 'check-result check-dup';
+        resultEl.textContent = '⚠️ 기존 등록: ' + dupCompany + ' 소속';
+      }
+    }
+  } catch(e) {
+    console.warn('담당자 중복 확인 실패:', e.message);
+    if (resultEl) { resultEl.className = 'check-result check-ok'; resultEl.textContent = '✅ 확인 완료'; }
   }
 }
 function closeDup(id) { document.getElementById(id).classList.remove('show'); }
@@ -1503,6 +1557,21 @@ async function submitCompanyForm() {
   if (!bizNo.trim()) { alert('사업자번호를 입력하세요.'); return; }
   if (!repName.trim()) { alert('대표자명을 입력하세요.'); return; }
 
+  // --- 저장 전 자동 중복 체크 ---
+  try {
+    var dupBiz = await fsCheckDuplicateBusinessNo(bizNo.trim());
+    var dupSnap = await db.collection('companies')
+      .where('company', '==', companyName.trim()).limit(1).get();
+    var dupCompany = !dupSnap.empty;
+
+    if (dupBiz || dupCompany) {
+      var confirmed = await showDupConfirmModal(dupBiz, dupCompany, companyName.trim(), bizNo.trim());
+      if (!confirmed) return; // 사용자가 '취소' 선택
+    }
+  } catch(e) {
+    console.warn('저장 전 중복 체크 실패 (무시하고 진행):', e.message);
+  }
+
   // 기본 정보 수집 — 표준 필드명 사용 (companyMgmt.html 기준)
   var corpType = document.querySelector('input[name="corpType"]:checked');
   var data = {
@@ -1601,6 +1670,25 @@ async function submitCompanyForm() {
   data.regDate = new Date().toISOString().slice(0, 10);
   data.changeLog = [];
 
+  // --- 담당자 중복 체크 (토스트 안내, 저장 차단하지 않음) ---
+  try {
+    for (var ci = 0; ci < data.contacts.length; ci++) {
+      var ct = data.contacts[ci];
+      if (ct.name && ct.phone) {
+        var ctSnap = await db.collection('companies')
+          .where('contactName', '==', ct.name)
+          .where('contactPhone', '==', ct.phone)
+          .limit(1).get();
+        if (!ctSnap.empty) {
+          var existCompany = ctSnap.docs[0].data().company || '';
+          showToastMsg('ℹ️ 담당자 ' + ct.name + '은(는) ' + existCompany + '에 이미 등록되어 있습니다.');
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('담당자 중복 체크 실패 (무시하고 진행):', e.message);
+  }
+
   try {
     // Firestore에 업체 저장
     var docId = await fsSaveCompany(data);
@@ -1654,36 +1742,22 @@ async function submitCompanyForm() {
   }
 }
 
-/* ===== 중복 확인 — Firestore 연동 ===== */
-var _origCheckBizDup = typeof checkBizDup === 'function' ? checkBizDup : null;
-async function checkBizDupFirestore() {
-  var bizNo = (document.getElementById('bizNo') || {}).value || '';
-  if (!bizNo.trim()) { alert('사업자번호를 입력하세요.'); return; }
-  try {
-    var dup = await fsCheckDuplicateBusinessNo(bizNo.trim());
-    var resultEl = document.getElementById('bizCheckResult');
-    if (dup) {
-      resultEl.className = 'check-result check-dup';
-      resultEl.textContent = '⚠️ 이미 등록된 사업자번호입니다: ' + (dup.name || '');
-      resultEl.style.display = 'block';
-    } else {
-      resultEl.className = 'check-result check-ok';
-      resultEl.textContent = '✅ 사용 가능한 사업자번호입니다.';
-      resultEl.style.display = 'block';
-    }
-  } catch(e) {
-    console.warn('중복 확인 실패:', e.message);
-    if (_origCheckBizDup) _origCheckBizDup();
-  }
+/* ===== 저장 전 중복 확인 모달 ===== */
+var _saveDupResolve = null;
+function showDupConfirmModal(dupBiz, dupCompany, company, bizNo) {
+  return new Promise(function(resolve) {
+    _saveDupResolve = resolve;
+    var html = '';
+    if (dupBiz) html += '<div style="margin-bottom:8px">📋 <strong>사업자번호</strong> ' + bizNo + ' 가 이미 등록되어 있습니다.</div>';
+    if (dupCompany) html += '<div>📋 <strong>회사명</strong> ' + company + ' 가 이미 등록되어 있습니다.</div>';
+    document.getElementById('saveDupContent').innerHTML = html;
+    document.getElementById('saveDupModal').classList.add('show');
+  });
 }
-
-/* Firebase 준비 후 중복확인을 Firestore 버전으로 교체 */
-window.addEventListener('firebase-ready', function() {
-  // checkBizDup 함수를 Firestore 버전으로 교체
-  if (typeof checkBizDup === 'function') {
-    window.checkBizDup = checkBizDupFirestore;
-  }
-});
+function resolveSaveDup(result) {
+  document.getElementById('saveDupModal').classList.remove('show');
+  if (_saveDupResolve) { _saveDupResolve(result); _saveDupResolve = null; }
+}
 
 /* ===== 페이지 초기화 ===== */
 /* 1번 담당자 부서 드롭다운 옵션 동적 생성 */

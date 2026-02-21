@@ -310,6 +310,17 @@ async function fsCheckDuplicateBusinessNo(businessNo, excludeId) {
 }
 
 /**
+ * 회사명 중복 조회
+ * @param {string} companyName - 회사명
+ * @returns {Promise<boolean>} true = 중복 있음
+ */
+async function fsCheckDuplicateCompanyName(companyName) {
+  var snap = await db.collection('companies')
+    .where('company', '==', companyName).limit(1).get();
+  return !snap.empty;
+}
+
+/**
  * 업체 실시간 리스너 등록
  * @param {Function} callback - (companies[]) => void
  * @returns {Function} unsubscribe 함수
