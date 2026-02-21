@@ -34553,7 +34553,7 @@ function renderSegUI(){
     else if(s.t==='field'){const p=P[curIdx];const fN=(p&&p.fields||[]).map(id=>{const f=FIELDS.find(x=>x.id===id);return f?f.code:'?'}).join('/');vh=`<div style="font-size:12px;text-align:center;padding:8px;background:var(--bg);border-radius:8px;color:var(--sub)">자동(${fN||'미설정'})</div>`;}
     form+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${i%2===0?'var(--bg)':'var(--card)'};border-radius:10px;margin-bottom:4px;border-left:3px solid var(--pri)"><div style="flex:0 0 60px;text-align:center"><div style="font-size:10px;font-weight:700;color:var(--sub)">구분 ${i+1}</div></div><div style="flex:1"><select style="font-size:12px;width:100%;padding:6px 8px;border:1.5px solid var(--bdr);border-radius:8px" onchange="changeSegType(${i},this.value)"><option value="fixed" ${s.t==='fixed'?'selected':''}>고정 문자</option><option value="field" ${s.t==='field'?'selected':''}>분야코드</option><option value="year" ${s.t==='year'?'selected':''}>년도</option><option value="month" ${s.t==='month'?'selected':''}>월</option><option value="day" ${s.t==='day'?'selected':''}>일</option><option value="serial" ${s.t==='serial'?'selected':''}>일련번호</option><option value="purpose" ${s.t==='purpose'?'selected':''}>목적번호</option></select></div><div style="flex:0 0 110px">${vh}</div></div>`;
   });
-  form+='</div>';a.innerHTML=blocks+form;dUpdatePrev();
+  form+='</div>';a.innerHTML=blocks+form;dUpdatePrev();updateResetDesc();
 }
 
 function changeSegType(idx,nt){const d={fixed:{l:'고정문자',v:''},year:{l:'년도',v:'2'},month:{l:'월',v:''},day:{l:'일',v:''},serial:{l:'일련번호',v:'4'},purpose:{l:'목적번호',v:'01',digits:'2'},field:{l:'분야코드',v:''}};dSg[idx].t=nt;dSg[idx].v=d[nt].v;if(d[nt].digits)dSg[idx].digits=d[nt].digits;else delete dSg[idx].digits;if(!dSg[idx].l||['고정문자','년도','월','일','일련번호','목적번호','목적코드','분야코드'].includes(dSg[idx].l))dSg[idx].l=d[nt].l;renderSegUI();}
@@ -34582,7 +34582,12 @@ function dUpdatePrev(){
   if(p){p.rcpt=base.parts.join(sep);p.rcptDesc=base.descs.join('-');}
 }
 
-function updateResetDesc(){const v=document.getElementById('d-reset').value;const el=document.getElementById('reset-desc');if(v==='year'){el.innerHTML='📅 매년 1월 1일에 일련번호가 <b>0001</b>부터 다시 시작됩니다';el.style.background='var(--pri-l)';el.style.color='var(--pri)'}else if(v==='month'){el.innerHTML='📅 매월 1일에 일련번호가 <b>0001</b>부터 다시 시작됩니다';el.style.background='var(--mint-l)';el.style.color='var(--mint)'}else{el.innerHTML='📅 일련번호가 계속 증가합니다 (초기화 없음)';el.style.background='var(--amber-l)';el.style.color='#b8860b'}}
+function updateResetDesc(){const v=document.getElementById('d-reset').value;const el=document.getElementById('reset-desc');
+  // 현재 세그먼트에서 일련번호 구분들의 초기값 생성
+  var serials=[];dSg.forEach(function(s,i){if(s.t==='serial'){var dd=parseInt(s.v)||4;serials.push({idx:i+1,digits:dd,init:'1'.padStart(dd,'0')})}});
+  var serialDesc=serials.map(function(s){return '구분'+s.idx+': <b>'+s.init+'</b>'}).join(', ');
+  if(!serialDesc)serialDesc='<b>0001</b>';
+  if(v==='year'){el.innerHTML='📅 매년 1월 1일에 일련번호가 '+serialDesc+'부터 다시 시작됩니다';el.style.background='var(--pri-l)';el.style.color='var(--pri)'}else if(v==='month'){el.innerHTML='📅 매월 1일에 일련번호가 '+serialDesc+'부터 다시 시작됩니다';el.style.background='var(--mint-l)';el.style.color='var(--mint)'}else{el.innerHTML='📅 일련번호가 계속 증가합니다 (초기화 없음)';el.style.background='var(--amber-l)';el.style.color='#b8860b'}}
 
 // ══ beautiful-mclean: 분야(FIELD) 관리 ══
 function renderFieldCardList(){
