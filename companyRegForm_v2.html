@@ -136,8 +136,7 @@
   .rep-badge { display:inline-flex; align-items:center; gap:4px; background:#e3f2fd; color:#1565c0; font-size:11px; padding:4px 12px; border-radius:10px; font-weight:600; }
   .lic-tags-area { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
   .lic-match-tag { display:inline-flex; align-items:center; gap:3px; background:#e8f5e9; color:#2e7d32; font-size:11px; padding:3px 8px; border-radius:10px; }
-  .btn-match { font-size:11px; padding:4px 10px; color:#1565c0; border:1px solid #90caf9; border-radius:6px; background:#fff; cursor:pointer; font-weight:600; }
-  .btn-match:hover { background:#e3f2fd; }
+  /* .btn-match 제거됨 */
 
   @media(max-width:768px) { .main { margin-left: 0; } }
   body.sidebar-collapsed .main { margin-left: 64px; }
@@ -410,7 +409,6 @@
             <div class="sub-card-header">
               <div class="sub-card-title"><span class="sub-card-num">1</span> 담당자</div>
               <div style="display:flex;gap:4px;align-items:center">
-                <button class="btn-match" onclick="openLicMatchModal(1)">🔗 매칭</button>
               </div>
             </div>
             <div class="form-grid">
@@ -563,6 +561,8 @@ function renderChangeLog(logs) {
 }
 var _bizLicFile = null;
 var _licFiles = {};
+var _bizLicOcrResult = null;   // 사업자등록증 OCR 인식 결과 (Firebase 저장용)
+var _licOcrResults = {};        // 인허가 OCR 인식 결과 {idx: {...}} (Firebase 저장용)
 
 /* ===== 사업자등록증 OCR ===== */
 function handleBizLicFile(file) {
@@ -685,6 +685,25 @@ function runBizLicOCR() {
         changeLog.push({ date: now, who: '시스템 (사업자등록증 OCR)', detail: '사업자등록증 인식에 의해 입력됨 — ' + detail });
         renderChangeLog(changeLog);
       }
+
+      // ===== OCR 결과 Firebase 저장용 데이터 보관 =====
+      _bizLicOcrResult = {
+        type: 'bizLicense',
+        fileName: _bizLicFile.name,
+        ocrAt: new Date().toISOString(),
+        data: {
+          companyName: companyName || '',
+          repName: repName || '',
+          bizNo: bizNo || '',
+          corpNo: corpNo || '',
+          taxType: taxType || '',
+          bizType: bizType || '',
+          bizItem: bizItem || '',
+          address: addr || '',
+          isCorp: isCorp
+        }
+      };
+      console.log('[OCR] 사업자등록증 결과 보관 완료:', _bizLicOcrResult);
 
       statusEl.textContent = '✅ OCR 인식 완료! 필드를 확인해주세요.';
       statusEl.style.color = '#2e7d32';
@@ -832,6 +851,24 @@ function runLicOCR(idx) {
           searchPostcodeByAddress(ocrLicAddr, 'licZipcode_' + idx, 'licAddr_' + idx);
         }, 500);
       }
+
+      // ===== OCR 결과 Firebase 저장용 데이터 보관 =====
+      var fieldVal = document.getElementById('licField_' + idx) ? document.getElementById('licField_' + idx).value : '';
+      _licOcrResults[idx] = {
+        type: 'permit',
+        licenseIndex: idx,
+        fileName: file.name,
+        ocrAt: new Date().toISOString(),
+        data: {
+          repName: repName || '',
+          bizName: bizName || '',
+          licNo: licNo || '',
+          bizForm: bizForm || '',
+          field: fieldVal || '',
+          address: addr || ''
+        }
+      };
+      console.log('[OCR] 인허가 ' + idx + ' 결과 보관 완료:', _licOcrResults[idx]);
 
       // 변경 이력 기록
       if (licChanges.length > 0) {
@@ -1046,7 +1083,6 @@ function addContact() {
       '<div class="sub-card-header">' +
         '<div class="sub-card-title"><span class="sub-card-num">' + n + '</span> 담당자</div>' +
         '<div style="display:flex;gap:4px;align-items:center">' +
-          '<button class="btn-match" onclick="openLicMatchModal(' + n + ')">🔗 매칭</button>' +
           '<button class="btn-remove" onclick="removeContact(' + n + ')">×</button>' +
         '</div>' +
       '</div>' +
@@ -1144,7 +1180,9 @@ function applyLicMatch() {
 
 /* ===== 세금계산서 담당자 복사 ===== */
 function copyFromContact1() {
-  var map = { Dept:'Dept', Name:'Name', Phone:'Phone', Email:'Email' };
+  /* 기본 연락처만 복사 (이름, 전화, 이메일, 부서)
+     — 자사 담당자 연결 정보(부서(팀), 접수자(담당자))는 제외 */
+  var map = { Name:'Name', Phone:'Phone', Email:'Email', Dept:'Dept' };
   Object.keys(map).forEach(function(f) {
     var src = document.getElementById('c' + f + '1');
     var dst = document.getElementById('tax' + map[f]);
@@ -1164,7 +1202,8 @@ function copyFromContact1() {
     if (taxCompany) { taxCompany.value = srcCompany ? srcCompany.value : ''; taxCompany.style.display = 'block'; }
     if (taxCustom) { taxCustom.style.display = 'none'; taxCustom.value = ''; }
   }
-  showToastMsg('📋 1번 담당자 정보가 복사되었습니다.');
+  /* 자사 담당자 연결 정보(cTeam1, cRep1)는 복사하지 않음 */
+  showToastMsg('📋 1번 담당자 정보가 복사되었습니다. (자사 담당자 연결 정보 제외)');
 }
 
 /* ===== 업체명 선택 모달 ===== */
@@ -1539,6 +1578,22 @@ async function submitCompanyForm() {
           console.log('[companyRegForm] 인허가문서 ' + f + ' 업로드 완료');
         } catch(e) { console.warn('인허가문서 ' + f + ' 업로드 실패:', e.message); }
       }
+    }
+
+    // ===== OCR 인식 결과 Firestore 저장 =====
+    var ocrResults = [];
+    if (_bizLicOcrResult) ocrResults.push(_bizLicOcrResult);
+    Object.keys(_licOcrResults).forEach(function(k) {
+      if (_licOcrResults[k]) ocrResults.push(_licOcrResults[k]);
+    });
+    if (ocrResults.length > 0) {
+      try {
+        await db.collection('companies').doc(docId).update({
+          'files.ocrResults': ocrResults,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log('[companyRegForm] OCR 결과 ' + ocrResults.length + '건 저장 완료');
+      } catch(e) { console.warn('OCR 결과 저장 실패:', e.message); }
     }
 
     showToastMsg('✅ 고객사가 등록되었습니다!');
