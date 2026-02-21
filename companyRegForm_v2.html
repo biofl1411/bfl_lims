@@ -705,6 +705,22 @@ function runBizLicOCR() {
       };
       console.log('[OCR] 사업자등록증 결과 보관 완료:', _bizLicOcrResult);
 
+      // 영문 주소 자동 변환
+      var ocrAddr1 = (document.getElementById('regAddr1') || {}).value || '';
+      if (ocrAddr1) {
+        var ocrFullAddr = ocrAddr1;
+        var ocrAddr2Val = (document.getElementById('regAddr2') || {}).value || '';
+        if (ocrAddr2Val) ocrFullAddr += ' ' + ocrAddr2Val;
+        convertToEnglishAddress(ocrFullAddr, function(eng) {
+          var enField = document.getElementById('regAddrEn');
+          if (enField) {
+            enField.value = eng;
+            enField.style.background = '#e3f2fd';
+            setTimeout(function() { enField.style.background = ''; }, 3000);
+          }
+        });
+      }
+
       statusEl.textContent = '✅ OCR 인식 완료! 필드를 확인해주세요.';
       statusEl.style.color = '#2e7d32';
     } else {
@@ -869,6 +885,19 @@ function runLicOCR(idx) {
         }
       };
       console.log('[OCR] 인허가 ' + idx + ' 결과 보관 완료:', _licOcrResults[idx]);
+
+      // 영문 주소 자동 변환
+      var ocrLicAddrVal = (document.getElementById('licAddr_' + idx) || {}).value || '';
+      if (ocrLicAddrVal) {
+        convertToEnglishAddress(ocrLicAddrVal, function(eng) {
+          var enField = document.getElementById('licAddrEn_' + idx);
+          if (enField) {
+            enField.value = eng;
+            enField.style.background = '#e3f2fd';
+            setTimeout(function() { enField.style.background = ''; }, 3000);
+          }
+        });
+      }
 
       // 변경 이력 기록
       if (licChanges.length > 0) {
@@ -1329,6 +1358,16 @@ function openPostcodeSearch() {
     oncomplete: function(data) {
       document.getElementById('regZipcode').value = data.zonecode;
       document.getElementById('regAddr1').value = data.roadAddress || data.jibunAddress;
+      // 영문 주소 자동 변환
+      var fullAddr = (data.roadAddress || data.jibunAddress || '').trim();
+      convertToEnglishAddress(fullAddr, function(eng) {
+        var enField = document.getElementById('regAddrEn');
+        if (enField) {
+          enField.value = eng;
+          enField.style.background = '#e3f2fd';
+          setTimeout(function() { enField.style.background = ''; }, 3000);
+        }
+      });
     }
   }).open();
 }
@@ -1341,6 +1380,16 @@ function openLicPostcode(idx) {
       var addrEl = document.getElementById('licAddr_' + idx);
       if (zipEl) zipEl.value = data.zonecode;
       if (addrEl) addrEl.value = data.roadAddress || data.jibunAddress;
+      // 영문 주소 자동 변환
+      var fullAddr = (data.roadAddress || data.jibunAddress || '').trim();
+      convertToEnglishAddress(fullAddr, function(eng) {
+        var enField = document.getElementById('licAddrEn_' + idx);
+        if (enField) {
+          enField.value = eng;
+          enField.style.background = '#e3f2fd';
+          setTimeout(function() { enField.style.background = ''; }, 3000);
+        }
+      });
     }
   }).open();
 }
@@ -1646,6 +1695,67 @@ window.addEventListener('firebase-ready', function() {
   if (ts) ts.innerHTML = '<option value="">부서(팀) 선택</option>' + buildTeamOptions();
 })();
 filterRepByTeam(1);  // 1번 담당자 접수자 드롭다운 전체 목록 로드
+
+// ============================================================
+// 한글 주소 → 영문 주소 변환 (Juso.go.kr 공식 API)
+// ============================================================
+var KR_EN_REGION = {
+  '서울특별시':'Seoul','서울':'Seoul','부산광역시':'Busan','부산':'Busan',
+  '대구광역시':'Daegu','대구':'Daegu','인천광역시':'Incheon','인천':'Incheon',
+  '광주광역시':'Gwangju','광주':'Gwangju','대전광역시':'Daejeon','대전':'Daejeon',
+  '울산광역시':'Ulsan','울산':'Ulsan','세종특별자치시':'Sejong','세종':'Sejong',
+  '경기도':'Gyeonggi-do','경기':'Gyeonggi-do','강원특별자치도':'Gangwon-do','강원도':'Gangwon-do','강원':'Gangwon-do',
+  '충청북도':'Chungcheongbuk-do','충북':'Chungcheongbuk-do',
+  '충청남도':'Chungcheongnam-do','충남':'Chungcheongnam-do',
+  '전북특별자치도':'Jeollabuk-do','전라북도':'Jeollabuk-do','전북':'Jeollabuk-do',
+  '전라남도':'Jeollanam-do','전남':'Jeollanam-do',
+  '경상북도':'Gyeongsangbuk-do','경북':'Gyeongsangbuk-do',
+  '경상남도':'Gyeongsangnam-do','경남':'Gyeongsangnam-do',
+  '제주특별자치도':'Jeju-do','제주도':'Jeju-do','제주':'Jeju-do'
+};
+
+function romanize(str) {
+  if (!str) return '';
+  var suffixes = { '특별시':'', '광역시':'', '특별자치시':'', '특별자치도':'', '도':'', '시':'', '군':'', '구':'', '읍':'', '면':'', '동':'', '리':'', '로':'', '길':'', '가':'', '대로':'' };
+  for (var s in suffixes) {
+    if (str.endsWith(s)) { str = str.slice(0, -s.length) + ' ' + s; break; }
+  }
+  return str.trim();
+}
+
+function convertToEnglishAddress(korAddr, callback) {
+  if (!korAddr) { callback(''); return; }
+  var cleanAddr = korAddr.replace(/\([^)]*\)/g, '').trim();
+  var jusoKey = 'U01TX0FVVEgyMDI2MDIxOTE2MDczMDExNzYyNDM=';
+  var jusoUrl = 'https://business.juso.go.kr/addrlink/addrEngApi.do?confmKey=' + encodeURIComponent(jusoKey)
+    + '&currentPage=1&countPerPage=1&keyword=' + encodeURIComponent(cleanAddr) + '&resultType=json';
+
+  fetch(jusoUrl)
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var res = data.results;
+    if (res && res.juso && res.juso.length > 0) {
+      callback(res.juso[0].roadAddr);
+    } else {
+      var fallbackParts = cleanAddr.split(/\s+/);
+      var engParts = [];
+      for (var fp = 0; fp < fallbackParts.length; fp++) {
+        var w = fallbackParts[fp];
+        engParts.push(KR_EN_REGION[w] || romanize(w));
+      }
+      callback(engParts.reverse().join(', '));
+    }
+  })
+  .catch(function() {
+    var fallbackParts = cleanAddr.split(/\s+/);
+    var engParts = [];
+    for (var fp = 0; fp < fallbackParts.length; fp++) {
+      var w = fallbackParts[fp];
+      engParts.push(KR_EN_REGION[w] || romanize(w));
+    }
+    callback(engParts.reverse().join(', '));
+  });
+}
 </script>
 </body>
 </html>
