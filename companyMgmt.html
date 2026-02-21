@@ -136,6 +136,28 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .del-progress-bar{height:6px;background:#eef0f4;border-radius:3px;overflow:hidden;margin-bottom:6px}
 .del-progress-fill{height:100%;background:#e53935;border-radius:3px;transition:width 0.3s;width:0%}
 .del-progress-text{font-size:11px;color:#5f6b7a;text-align:center}
+/* 첨부파일/OCR 보기 섹션 */
+.file-view-section{background:#f8fafe;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.file-view-title{font-size:13px;font-weight:700;color:#1a2332;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.file-view-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.file-view-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #d0d7e2;background:#fff;color:#1a2332;transition:all .15s}
+.file-view-btn:hover{background:#e3f2fd;border-color:#90caf9;color:#1565c0}
+.file-view-btn .fv-icon{font-size:14px}
+.file-view-empty{font-size:12px;color:#8892a4;padding:4px 0}
+/* OCR 결과 보기 모달 */
+#ocrResultModal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:none;align-items:center;justify-content:center}
+#ocrResultModal.show{display:flex}
+.ocr-modal-dialog{background:#fff;border-radius:14px;padding:24px;max-width:600px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,0.25);max-height:80vh;display:flex;flex-direction:column}
+.ocr-modal-header{font-weight:700;font-size:16px;margin-bottom:4px;display:flex;align-items:center;gap:8px;color:#1565c0}
+.ocr-modal-sub{font-size:12px;color:#8892a4;margin-bottom:14px}
+.ocr-modal-body{overflow-y:auto;flex:1}
+.ocr-card{border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px}
+.ocr-card-title{font-size:13px;font-weight:600;color:#1a2332;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.ocr-card-meta{font-size:11px;color:#8892a4;margin-bottom:8px}
+.ocr-field-row{display:flex;gap:8px;margin-bottom:4px;font-size:12px}
+.ocr-field-label{min-width:80px;color:#5f6b7a;font-weight:500;flex-shrink:0}
+.ocr-field-value{color:#1a2332;word-break:break-all}
+.ocr-modal-footer{display:flex;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:1px solid #eef0f4}
 </style>
 <!-- Daum Postcode API -->
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
@@ -371,6 +393,14 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <div id="detailOcrStatus" style="margin-top:6px;font-size:11px;color:#1565c0;display:none"></div>
         </div>
 
+        <!-- 첨부파일 / OCR 결과 보기 -->
+        <div class="file-view-section" id="fileViewSection" style="display:none">
+          <div class="file-view-title">📂 등록된 첨부파일</div>
+          <div class="file-view-row" id="fileViewRow">
+            <!-- 동적으로 버튼 생성됨 -->
+          </div>
+        </div>
+
         <!-- 기본 정보 -->
         <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
         <div class="fg-row">
@@ -486,6 +516,20 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
     <div class="bulk-delete-actions" id="singleDelActions">
       <button class="btn btn-secondary btn-sm" onclick="closeSingleDeleteModal()">취소</button>
       <button class="btn btn-danger btn-sm" id="singleDelConfirmBtn" onclick="confirmSingleDelete()">🗑️ 삭제 실행</button>
+    </div>
+  </div>
+</div>
+
+<!-- OCR 결과 보기 모달 -->
+<div id="ocrResultModal">
+  <div class="ocr-modal-dialog">
+    <div class="ocr-modal-header">🔍 OCR 인식 결과</div>
+    <div class="ocr-modal-sub" id="ocrModalSub">저장된 OCR 인식 데이터입니다.</div>
+    <div class="ocr-modal-body" id="ocrModalBody">
+      <!-- 동적으로 OCR 결과 카드 생성됨 -->
+    </div>
+    <div class="ocr-modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeOcrResultModal()">닫기</button>
     </div>
   </div>
 </div>
@@ -998,6 +1042,9 @@ async function openDetail(id) {
   // 인허가 카드에 연결된 담당자 표시
   updateLicContactDisplay();
 
+  // 첨부파일/OCR 보기 렌더링
+  renderFileViewSection(cust);
+
   // 파일 업로드 초기화
   document.getElementById('detailBizFileName').textContent = '📎 사업자등록증 파일';
   document.getElementById('detailLicFileName').textContent = '📎 인허가문서 파일';
@@ -1049,6 +1096,103 @@ async function openDetail(id) {
   document.querySelectorAll('.detContactMatchBtn').forEach(function(b) { b.style.display = 'none'; });
 
   showPage('detail');
+}
+
+// ============================================================
+// 첨부파일 / OCR 결과 보기
+// ============================================================
+function renderFileViewSection(cust) {
+  var section = document.getElementById('fileViewSection');
+  var row = document.getElementById('fileViewRow');
+  if (!section || !row) return;
+
+  var files = cust.files || {};
+  var hasFiles = false;
+  var html = '';
+
+  // 사업자등록증 원본 보기
+  if (files.bizLicenseUrl) {
+    hasFiles = true;
+    html += '<button class="file-view-btn" onclick="window.open(\'' + files.bizLicenseUrl + '\',\'_blank\')">' +
+      '<span class="fv-icon">📄</span> 사업자등록증</button>';
+  }
+
+  // 인허가문서 원본 보기
+  if (files.permitDocs && files.permitDocs.length > 0) {
+    hasFiles = true;
+    files.permitDocs.forEach(function(doc, i) {
+      var label = doc.name || ('인허가문서 ' + (i + 1));
+      html += '<button class="file-view-btn" onclick="window.open(\'' + doc.url + '\',\'_blank\')">' +
+        '<span class="fv-icon">📋</span> ' + escHtml(label) + '</button>';
+    });
+  }
+
+  // OCR 결과 보기
+  if (files.ocrResults && files.ocrResults.length > 0) {
+    hasFiles = true;
+    html += '<button class="file-view-btn" onclick="openOcrResultModal()" style="border-color:#90caf9;color:#1565c0">' +
+      '<span class="fv-icon">🔍</span> OCR 결과 (' + files.ocrResults.length + '건)</button>';
+    // 전역 변수에 OCR 결과 저장 (모달에서 사용)
+    window._currentOcrResults = files.ocrResults;
+  } else {
+    window._currentOcrResults = null;
+  }
+
+  if (hasFiles) {
+    row.innerHTML = html;
+    section.style.display = '';
+  } else {
+    section.style.display = 'none';
+  }
+}
+
+function openOcrResultModal() {
+  var results = window._currentOcrResults;
+  if (!results || results.length === 0) { toast('저장된 OCR 결과가 없습니다'); return; }
+
+  var body = document.getElementById('ocrModalBody');
+  var sub = document.getElementById('ocrModalSub');
+  sub.textContent = '총 ' + results.length + '건의 OCR 인식 결과';
+
+  var html = '';
+  results.forEach(function(r, i) {
+    var typeLabel = r.type === 'bizLicense' ? '📄 사업자등록증' : '📋 인허가문서';
+    var dateStr = r.ocrAt ? new Date(r.ocrAt).toLocaleString('ko-KR') : '';
+
+    html += '<div class="ocr-card">';
+    html += '<div class="ocr-card-title">' + typeLabel + (r.fileName ? ' — ' + escHtml(r.fileName) : '') + '</div>';
+    if (dateStr) html += '<div class="ocr-card-meta">인식일: ' + dateStr + '</div>';
+
+    if (r.data) {
+      var fieldMap;
+      if (r.type === 'bizLicense') {
+        fieldMap = [
+          ['companyName', '회사명'], ['repName', '대표자'], ['bizNo', '사업자번호'],
+          ['corpNo', '법인번호'], ['taxType', '과세유형'], ['bizType', '업태'],
+          ['bizItem', '종목'], ['address', '소재지']
+        ];
+      } else {
+        fieldMap = [
+          ['bizName', '업소명'], ['repName', '대표자'], ['licNo', '인허가번호'],
+          ['bizForm', '영업형태'], ['field', '분야'], ['address', '소재지']
+        ];
+      }
+      fieldMap.forEach(function(pair) {
+        var val = r.data[pair[0]] || '';
+        if (val) {
+          html += '<div class="ocr-field-row"><span class="ocr-field-label">' + pair[1] + '</span><span class="ocr-field-value">' + escHtml(val) + '</span></div>';
+        }
+      });
+    }
+    html += '</div>';
+  });
+
+  body.innerHTML = html;
+  document.getElementById('ocrResultModal').classList.add('show');
+}
+
+function closeOcrResultModal() {
+  document.getElementById('ocrResultModal').classList.remove('show');
 }
 
 // ============================================================
