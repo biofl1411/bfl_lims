@@ -116,6 +116,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 .warning-box-text{flex:1}
 @media(max-width:768px){.sidebar{display:none}.main-container{margin-left:0}.form-row{grid-template-columns:1fr}.buttons{flex-direction:column}.btn-receipt{width:100%}}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/firebase-init.js"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -486,6 +489,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 // ============================================================================
 const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://127.0.0.1:5001' : '';
 let apiOnline = false;
+let firestorePurposes = [];  // Firestore에서 로드한 검사목적 P 배열
+let firestoreReady = false;  // Firebase 준비 상태
 
 // ============================================================================
 // 폴백 데이터 (API 서버 미실행 시 사용)
@@ -570,6 +575,27 @@ function updateServerStatusUI(online) {
         textEl.textContent = 'API 오프라인 (폴백 모드)';
     }
 }
+
+// ============================================================================
+// Firebase 초기화 — Firestore에서 검사목적(P 배열) 로드
+// ============================================================================
+window.addEventListener('firebase-ready', async function() {
+    firestoreReady = true;
+    try {
+        const doc = await db.collection('settings').doc('inspectionPurposes').get();
+        if (doc.exists && doc.data().purposes) {
+            firestorePurposes = doc.data().purposes;
+            // 정렬순서(c) 기준 정렬
+            firestorePurposes.sort((a, b) => (a.c || 999) - (b.c || 999));
+            console.log('[Firestore] 검사목적 로드 완료:', firestorePurposes.length + '개');
+            // 현재 선택된 시험분야가 있으면 드롭다운 갱신
+            const currentField = document.querySelector('input[name="test-field"]:checked')?.value;
+            if (currentField) updateTestPurposeOptions(currentField);
+        }
+    } catch(e) {
+        console.warn('[Firestore] 검사목적 로드 실패, 기존 방식 사용:', e.message);
+    }
+});
 
 // ============================================================================
 // 초기화
@@ -727,7 +753,7 @@ function onTestFieldChange() {
 }
 
 // ============================================================================
-// 검사목적 옵션 업데이트 (API 연동 + 폴백)
+// 검사목적 옵션 업데이트 (Firestore 우선 → API → 폴백)
 // ============================================================================
 async function updateTestPurposeOptions(testField) {
     const select = document.getElementById('test-purpose');
@@ -736,10 +762,19 @@ async function updateTestPurposeOptions(testField) {
         return;
     }
 
+    const fieldId = testField === '식품' ? 'F' : 'L';
     let purposes = [];
 
-    // API 호출 시도
-    if (apiOnline) {
+    // 1순위: Firestore P 배열 (검사목적관리에서 설정한 정렬순서대로)
+    if (firestorePurposes.length > 0) {
+        purposes = firestorePurposes
+            .filter(p => p.fields && p.fields.includes(fieldId))
+            .map(p => p.n);
+        console.log(`[Firestore] 검사목적 필터: ${testField}(${fieldId}) - ${purposes.length}개`);
+    }
+
+    // 2순위: API (Firestore 미로드 시)
+    if (purposes.length === 0 && apiOnline) {
         try {
             const res = await fetch(`${API_BASE}/api/test-purposes?field=${encodeURIComponent(testField)}`);
             if (res.ok) {
@@ -748,21 +783,21 @@ async function updateTestPurposeOptions(testField) {
                 console.log(`[API] 검사목적 로드: ${testField} - ${purposes.length}개`);
             }
         } catch (e) {
-            console.warn('[API] 검사목적 로드 실패, 폴백 사용:', e.message);
+            console.warn('[API] 검사목적 로드 실패:', e.message);
         }
     }
 
-    // 폴백
+    // 3순위: 폴백 (Firestore, API 모두 실패 시)
     if (purposes.length === 0) {
         purposes = FALLBACK_TEST_PURPOSE_MAPPING[testField] || [];
         console.log(`[폴백] 검사목적 로드: ${testField} - ${purposes.length}개`);
     }
 
     select.innerHTML = '<option value="">선택하세요</option>';
-    purposes.forEach(purpose => {
+    purposes.forEach(name => {
         const option = document.createElement('option');
-        option.value = purpose;
-        option.textContent = purpose;
+        option.value = name;
+        option.textContent = name;
         select.appendChild(option);
     });
 }
@@ -855,7 +890,56 @@ function setPrevReceiptNo() {
 }
 
 // ============================================================================
-// 접수번호 할당 (API 연동 + 폴백)
+// 접수번호 세그먼트 기반 생성 (검사목적관리 설정 연동)
+// ============================================================================
+function buildReceiptNoFromSegments(purposeObj, testField) {
+    const segments = purposeObj.segments;
+    const sep = purposeObj.segSep === 'none' ? '' : (purposeObj.segSep || '-');
+    const fieldId = testField === '식품' ? 'F' : 'L';
+    const today = new Date();
+    const y4 = today.getFullYear().toString();
+    const y2 = y4.slice(2);
+    const m = (today.getMonth() + 1).toString().padStart(2, '0');
+    const d = today.getDate().toString().padStart(2, '0');
+
+    const parts = [];
+    segments.forEach(s => {
+        switch(s.t) {
+            case 'fixed':
+                // fieldCodes가 있으면 분야별 코드 사용
+                if (purposeObj.fieldCodes && purposeObj.fieldCodes[fieldId]) {
+                    parts.push(purposeObj.fieldCodes[fieldId]);
+                } else {
+                    parts.push(s.v || '??');
+                }
+                break;
+            case 'field':
+                parts.push(fieldId);
+                break;
+            case 'year':
+                parts.push(s.v === '4' ? y4 : y2);
+                break;
+            case 'month':
+                parts.push(m);
+                break;
+            case 'day':
+                parts.push(d);
+                break;
+            case 'serial':
+                const digits = parseInt(s.v) || 4;
+                parts.push('1'.padStart(digits, '0'));
+                break;
+            case 'purpose':
+                const pDigits = parseInt(s.digits) || 2;
+                parts.push((s.v || '01').padStart(pDigits, '0'));
+                break;
+        }
+    });
+    return parts.join(sep);
+}
+
+// ============================================================================
+// 접수번호 할당 (세그먼트 기반 + API + 폴백)
 // ============================================================================
 async function allocateReceiptNo() {
     const testField = document.querySelector('input[name="test-field"]:checked')?.value;
@@ -868,6 +952,9 @@ async function allocateReceiptNo() {
 
     const prevReceiptNo = document.getElementById('prev-receipt-no').value.trim();
     let receiptNo = '';
+
+    // 선택된 검사목적의 P 객체 찾기
+    const purposeObj = firestorePurposes.find(p => p.n === testPurpose);
 
     // API 호출 시도
     if (apiOnline) {
@@ -887,24 +974,30 @@ async function allocateReceiptNo() {
         }
     }
 
-    // 폴백: 클라이언트에서 생성
+    // 폴백: 세그먼트 기반 생성 (Firestore 검사목적에 세그먼트가 설정된 경우)
     if (!receiptNo) {
-        const today = new Date();
-        const yy = today.getFullYear().toString().slice(2);
-        const mm = (today.getMonth() + 1).toString().padStart(2, '0');
-        const dd = today.getDate().toString().padStart(2, '0');
+        if (purposeObj && purposeObj.segments && purposeObj.segments.length > 0) {
+            receiptNo = buildReceiptNoFromSegments(purposeObj, testField);
+            console.log(`[세그먼트] 접수번호 생성: ${receiptNo} (${testPurpose})`);
+        } else {
+            // 기존 폴백: 세그먼트 미설정 시
+            const today = new Date();
+            const yy = today.getFullYear().toString().slice(2);
+            const mm = (today.getMonth() + 1).toString().padStart(2, '0');
+            const dd = today.getDate().toString().padStart(2, '0');
 
-        const purposeCode = FALLBACK_TEST_PURPOSE_CODES[testPurpose] || 'XX';
-        const fieldCode = testField === '식품' ? 'F' : 'L';
+            const purposeCode = FALLBACK_TEST_PURPOSE_CODES[testPurpose] || 'XX';
+            const fieldCode = testField === '식품' ? 'F' : 'L';
 
-        let seq = '001';
-        if (prevReceiptNo) {
-            const match = prevReceiptNo.match(/(\d+)-\d+$/);
-            if (match) seq = (parseInt(match[1]) + 1).toString().padStart(3, '0');
+            let seq = '001';
+            if (prevReceiptNo) {
+                const match = prevReceiptNo.match(/(\d+)-\d+$/);
+                if (match) seq = (parseInt(match[1]) + 1).toString().padStart(3, '0');
+            }
+
+            receiptNo = `${yy}${mm}${dd}${fieldCode}${purposeCode}${seq}-001`;
+            console.log(`[폴백] 접수번호 생성: ${receiptNo}`);
         }
-
-        receiptNo = `${yy}${mm}${dd}${fieldCode}${purposeCode}${seq}-001`;
-        console.log(`[폴백] 접수번호 생성: ${receiptNo}`);
     }
 
     document.getElementById('receipt-no').value = receiptNo;
