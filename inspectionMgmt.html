@@ -32459,12 +32459,40 @@ async function savePurposesToFirestore() {
   catch(e) { console.warn('검사목적 저장 실패:', e); }
 }
 async function saveFoodTypesToFirestore() {
-  try { await fsSaveSettings('foodTypeData', { items: foodTypeData }); }
-  catch(e) { console.warn('식품유형 저장 실패:', e); }
+  try {
+    var BATCH_SIZE = 450;
+    var existing = await db.collection('foodTypes').get();
+    for (var bi = 0; bi < existing.docs.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      existing.docs.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
+      await batch.commit();
+    }
+    for (var bi = 0; bi < foodTypeData.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      foodTypeData.slice(bi, bi + BATCH_SIZE).forEach(function(item, j) {
+        batch.set(db.collection('foodTypes').doc('ft_' + (bi + j)), item);
+      });
+      await batch.commit();
+    }
+  } catch(e) { console.warn('식품유형 저장 실패:', e); }
 }
 async function saveItemGroupsToFirestore() {
-  try { await fsSaveSettings('itemGroupData', { items: itemGroupData }); }
-  catch(e) { console.warn('항목그룹 저장 실패:', e); }
+  try {
+    var BATCH_SIZE = 450;
+    var existing = await db.collection('itemGroups').get();
+    for (var bi = 0; bi < existing.docs.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      existing.docs.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
+      await batch.commit();
+    }
+    for (var bi = 0; bi < itemGroupData.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      itemGroupData.slice(bi, bi + BATCH_SIZE).forEach(function(item, j) {
+        batch.set(db.collection('itemGroups').doc('ig_' + (bi + j)), item);
+      });
+      await batch.commit();
+    }
+  } catch(e) { console.warn('항목그룹 저장 실패:', e); }
 }
 async function saveFeesToFirestore() {
   try {
@@ -32497,15 +32525,17 @@ async function loadInspectionConfig() {
     if (pd && pd.purposes && pd.purposes.length > 0) P = pd.purposes;
     else await savePurposesToFirestore();
 
-    var ftd = await fsGetSettings('foodTypeData');
-    if (ftd && ftd.items && ftd.items.length > 0) {
-      foodTypeData = ftd.items;
+    var ftSnap = await db.collection('foodTypes').get();
+    if (ftSnap.size > 0) {
+      foodTypeData = [];
+      ftSnap.docs.forEach(function(d) { foodTypeData.push(d.data()); });
       _inspectionDataLoaded.foodType = true;
     }
 
-    var igd = await fsGetSettings('itemGroupData');
-    if (igd && igd.items && igd.items.length > 0) {
-      itemGroupData = igd.items;
+    var igSnap = await db.collection('itemGroups').get();
+    if (igSnap.size > 0) {
+      itemGroupData = [];
+      igSnap.docs.forEach(function(d) { itemGroupData.push(d.data()); });
       _inspectionDataLoaded.itemGroup = true;
     }
 
