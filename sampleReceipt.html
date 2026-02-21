@@ -767,11 +767,12 @@ async function updateTestPurposeOptions(testField) {
     let purposes = [];
 
     // 1순위: Firestore P 배열 (검사목적관리에서 설정한 정렬순서대로)
+    // o:0 (미정) 항목은 제외
     if (firestorePurposes.length > 0) {
         purposes = firestorePurposes
-            .filter(p => p.fields && p.fields.includes(fieldId))
+            .filter(p => p.o !== 0 && p.fields && p.fields.includes(fieldId))
             .map(p => p.n);
-        console.log(`[Firestore] 검사목적 필터: ${testField}(${fieldId}) - ${purposes.length}개`);
+        console.log(`[Firestore] 검사목적 필터: ${testField}(${fieldId}) - ${purposes.length}개 (미정 제외)`);
     }
 
     // 2순위: API (Firestore 미로드 시)
@@ -957,8 +958,14 @@ async function allocateReceiptNo() {
     // 선택된 검사목적의 P 객체 찾기
     const purposeObj = firestorePurposes.find(p => p.n === testPurpose);
 
-    // API 호출 시도
-    if (apiOnline) {
+    // 1순위: 세그먼트 기반 생성 (검사목적관리에서 설정한 접수번호 형식)
+    if (purposeObj && purposeObj.segments && purposeObj.segments.length > 0) {
+        receiptNo = buildReceiptNoFromSegments(purposeObj, testField);
+        console.log(`[세그먼트] 접수번호 생성: ${receiptNo} (${testPurpose})`);
+    }
+
+    // 2순위: API 호출 (세그먼트 미설정 시)
+    if (!receiptNo && apiOnline) {
         try {
             const res = await fetch(`${API_BASE}/api/receipt-no/allocate`, {
                 method: 'POST',
@@ -975,30 +982,24 @@ async function allocateReceiptNo() {
         }
     }
 
-    // 폴백: 세그먼트 기반 생성 (Firestore 검사목적에 세그먼트가 설정된 경우)
+    // 3순위: 기존 폴백 (세그먼트 없고 API도 실패 시)
     if (!receiptNo) {
-        if (purposeObj && purposeObj.segments && purposeObj.segments.length > 0) {
-            receiptNo = buildReceiptNoFromSegments(purposeObj, testField);
-            console.log(`[세그먼트] 접수번호 생성: ${receiptNo} (${testPurpose})`);
-        } else {
-            // 기존 폴백: 세그먼트 미설정 시
-            const today = new Date();
-            const yy = today.getFullYear().toString().slice(2);
-            const mm = (today.getMonth() + 1).toString().padStart(2, '0');
-            const dd = today.getDate().toString().padStart(2, '0');
+        const today = new Date();
+        const yy = today.getFullYear().toString().slice(2);
+        const mm = (today.getMonth() + 1).toString().padStart(2, '0');
+        const dd = today.getDate().toString().padStart(2, '0');
 
-            const purposeCode = FALLBACK_TEST_PURPOSE_CODES[testPurpose] || 'XX';
-            const fieldCode = testField === '식품' ? 'F' : 'L';
+        const purposeCode = FALLBACK_TEST_PURPOSE_CODES[testPurpose] || 'XX';
+        const fieldCode = testField === '식품' ? 'F' : 'L';
 
-            let seq = '001';
-            if (prevReceiptNo) {
-                const match = prevReceiptNo.match(/(\d+)-\d+$/);
-                if (match) seq = (parseInt(match[1]) + 1).toString().padStart(3, '0');
-            }
-
-            receiptNo = `${yy}${mm}${dd}${fieldCode}${purposeCode}${seq}-001`;
-            console.log(`[폴백] 접수번호 생성: ${receiptNo}`);
+        let seq = '001';
+        if (prevReceiptNo) {
+            const match = prevReceiptNo.match(/(\d+)-\d+$/);
+            if (match) seq = (parseInt(match[1]) + 1).toString().padStart(3, '0');
         }
+
+        receiptNo = `${yy}${mm}${dd}${fieldCode}${purposeCode}${seq}-001`;
+        console.log(`[폴백] 접수번호 생성: ${receiptNo}`);
     }
 
     document.getElementById('receipt-no').value = receiptNo;
