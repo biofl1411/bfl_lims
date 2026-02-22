@@ -7,6 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* ====== UNIFIED SIDEBAR STYLES ====== */
 .sidebar{width:250px;background:#1a2332;color:white;position:fixed;left:0;top:0;bottom:0;z-index:1000;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
@@ -4732,7 +4733,7 @@ function showFssResults(rows) {
     html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
     html += '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
     html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
-    html += '<td><button style="font-size:10px;padding:3px 10px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
+    html += '<td><button style="font-size:10px;padding:3px 10px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizDetail(\'' + lic.replace(/'/g,"\\'") + '\',\'' + nm.replace(/'/g,"\\'") + '\')">🔍 조회</button></td>';
     html += '</tr>';
   });
   document.getElementById('fssTableBody').innerHTML = html;
@@ -4957,7 +4958,7 @@ async function searchFss(region) {
     html += '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
     html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
     html += '<td><span id="fD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 6px;border-radius:4px;cursor:pointer" onclick="calcAddrDist(\'' + addr.replace(/'/g,"\\'") + '\',\'fD' + i + '\')">📐</span></td>';
-    html += '<td><button style="font-size:10px;padding:2px 8px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizReg(\'' + nm.replace(/'/g,"\\'") + '\',\'' + addr.replace(/'/g,"\\'") + '\')">+ 등록</button></td>';
+    html += '<td><button style="font-size:10px;padding:2px 8px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizDetail(\'' + lic.replace(/'/g,"\\'") + '\',\'' + nm.replace(/'/g,"\\'") + '\')">🔍 조회</button></td>';
     html += '</tr>';
   });
   document.getElementById('fssTableBody').innerHTML = html;
@@ -5008,6 +5009,100 @@ function bizReg(name, addr) {
   var c = document.getElementById('regCompany');
   if(c) c.value = name;
   toast('📋 "'+name+'" → 고객사 등록');
+}
+
+// ── 업체 상세 조회 (품목 + 변경이력) ──
+async function bizDetail(licNo, bizName) {
+  // 모달 열기
+  var modal = document.getElementById('bizDetailModal');
+  modal.style.display = 'flex';
+  document.getElementById('bdmBizName').textContent = bizName || '-';
+  document.getElementById('bdmLicNo').textContent = licNo || '-';
+  // 탭 초기화 (품목 탭 활성)
+  bizDetailTab('products');
+  // 로딩 표시
+  document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#8892a4"><div class="spinner" style="display:inline-block;width:20px;height:20px;border:2px solid #e2e6ed;border-top:2px solid #1565c0;border-radius:50%;animation:spin .8s linear infinite"></div><br>품목 조회 중...</td></tr>';
+  document.getElementById('bdmChangesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">변경이력 조회 대기 중...</td></tr>';
+  document.getElementById('bdmProductCount').textContent = '-';
+  document.getElementById('bdmChangeCount').textContent = '-';
+
+  // 1) fss_products 조회
+  try {
+    var prodSnap = await db.collection('fss_products').where('lcns_no','==',licNo).get();
+    var products = [];
+    prodSnap.forEach(function(doc){ products.push(doc.data()); });
+    document.getElementById('bdmProductCount').textContent = products.length;
+
+    if(products.length === 0) {
+      document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">등록된 품목이 없습니다.</td></tr>';
+    } else {
+      // 보고일자 내림차순 정렬
+      products.sort(function(a,b){ return (b.prms_dt||'').localeCompare(a.prms_dt||''); });
+      var html = '';
+      products.forEach(function(p, i){
+        var prodEnd = (p.production === 'Y' || p.production === '종료') ? '<span style="color:#e53935;font-size:10px">종료</span>' : '<span style="color:#2e7d32;font-size:10px">생산중</span>';
+        html += '<tr>';
+        html += '<td style="font-size:12px"><b>' + (p.prdlst_nm||'-') + '</b></td>';
+        html += '<td style="font-size:11px">' + (p.prdlst_dcnm||'-') + '</td>';
+        html += '<td style="font-size:11px;font-family:monospace">' + formatDate8(p.prms_dt) + '</td>';
+        html += '<td style="text-align:center">' + prodEnd + '</td>';
+        html += '<td style="font-size:10px;color:#5f6b7a;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (p.pog_daycnt||'') + ' / ' + (p.cstdy_mthd||'') + '">' + (p.pog_daycnt||'-') + '</td>';
+        html += '</tr>';
+      });
+      document.getElementById('bdmProductsBody').innerHTML = html;
+    }
+    console.log('[bizDetail] fss_products:', products.length, '건 조회 (lcns_no=' + licNo + ')');
+  } catch(e) {
+    console.error('[bizDetail] fss_products 조회 실패:', e);
+    document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:#e53935">❌ 품목 조회 실패: ' + e.message + '</td></tr>';
+    document.getElementById('bdmProductCount').textContent = '0';
+  }
+
+  // 2) fss_changes 조회
+  try {
+    var chgSnap = await db.collection('fss_changes').where('lcns_no','==',licNo).get();
+    var changes = [];
+    chgSnap.forEach(function(doc){ changes.push(doc.data()); });
+    document.getElementById('bdmChangeCount').textContent = changes.length;
+
+    if(changes.length === 0) {
+      document.getElementById('bdmChangesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">수집된 변경이력이 없습니다.</td></tr>';
+    } else {
+      changes.sort(function(a,b){ return (b.chng_dt||'').localeCompare(a.chng_dt||''); });
+      var html = '';
+      changes.forEach(function(c){
+        html += '<tr>';
+        html += '<td style="font-size:11px;font-family:monospace">' + formatDate8(c.chng_dt) + '</td>';
+        html += '<td style="font-size:11px">' + (c.chng_bf_cn||'-') + '</td>';
+        html += '<td style="font-size:11px">' + (c.chng_af_cn||'-') + '</td>';
+        html += '<td style="font-size:11px;color:#5f6b7a">' + (c.chng_prvns||'-') + '</td>';
+        html += '</tr>';
+      });
+      document.getElementById('bdmChangesBody').innerHTML = html;
+    }
+    console.log('[bizDetail] fss_changes:', changes.length, '건 조회 (lcns_no=' + licNo + ')');
+  } catch(e) {
+    console.error('[bizDetail] fss_changes 조회 실패:', e);
+    document.getElementById('bdmChangesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">변경이력 컬렉션 미수집</td></tr>';
+    document.getElementById('bdmChangeCount').textContent = '-';
+  }
+}
+
+function bizDetailTab(tab) {
+  var isProducts = (tab === 'products');
+  document.getElementById('bdmTabProducts').className = isProducts ? 'bdm-tab active' : 'bdm-tab';
+  document.getElementById('bdmTabChanges').className = isProducts ? 'bdm-tab' : 'bdm-tab active';
+  document.getElementById('bdmProductsPanel').style.display = isProducts ? 'block' : 'none';
+  document.getElementById('bdmChangesPanel').style.display = isProducts ? 'none' : 'block';
+}
+
+function bizDetailClose() {
+  document.getElementById('bizDetailModal').style.display = 'none';
+}
+
+function formatDate8(d) {
+  if(!d || d.length < 8) return d || '-';
+  return d.substring(0,4) + '-' + d.substring(4,6) + '-' + d.substring(6,8);
 }
 
 // ── hash 기반 페이지 라우팅 ──
@@ -5241,5 +5336,65 @@ function renderCollectStatus(data) {
 })();
 // ====== END SALES HASH HANDLER ======
 </script>
+
+<!-- ====== 업체 상세 조회 모달 ====== -->
+<div id="bizDetailModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;width:90%;max-width:800px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <!-- 헤더 -->
+    <div style="padding:20px 24px 16px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <div style="width:40px;height:40px;background:linear-gradient(135deg,#1565c0,#42a5f5);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;flex-shrink:0">🏭</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:16px;font-weight:700;color:#1a2332" id="bdmBizName">-</div>
+        <div style="font-size:12px;color:#8892a4;font-family:monospace">인허가번호: <span id="bdmLicNo">-</span></div>
+      </div>
+      <button onclick="var ln=document.getElementById('bdmLicNo').textContent;var nm=document.getElementById('bdmBizName').textContent;bizReg(nm,'')" style="padding:6px 14px;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">📋 고객 등록</button>
+      <button onclick="bizDetailClose()" style="width:32px;height:32px;background:#f1f3f5;border:none;border-radius:8px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#5f6b7a">✕</button>
+    </div>
+    <!-- 탭 -->
+    <div style="padding:0 24px;border-bottom:1px solid #e2e6ed;display:flex;gap:0;flex-shrink:0">
+      <style>
+        .bdm-tab{padding:12px 20px;font-size:13px;font-weight:500;color:#8892a4;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s}
+        .bdm-tab:hover{color:#1a2332}
+        .bdm-tab.active{color:#1565c0;font-weight:700;border-bottom-color:#1565c0}
+        #bdmProductsBody tr, #bdmChangesBody tr{border-bottom:1px solid #f1f3f5}
+        #bdmProductsBody tr:hover, #bdmChangesBody tr:hover{background:#f8f9fb}
+        #bdmProductsBody td, #bdmChangesBody td{padding:8px 12px}
+      </style>
+      <button id="bdmTabProducts" class="bdm-tab active" onclick="bizDetailTab('products')">📦 품목 <span id="bdmProductCount" style="font-size:11px;background:#e3f2fd;padding:1px 6px;border-radius:8px;margin-left:4px">-</span></button>
+      <button id="bdmTabChanges" class="bdm-tab" onclick="bizDetailTab('changes')">📝 변경이력 <span id="bdmChangeCount" style="font-size:11px;background:#e3f2fd;padding:1px 6px;border-radius:8px;margin-left:4px">-</span></button>
+    </div>
+    <!-- 품목 패널 -->
+    <div id="bdmProductsPanel" style="flex:1;overflow-y:auto;padding:0">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f8f9fb;position:sticky;top:0">
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">제품명</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">품목유형</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">보고일자</th>
+          <th style="padding:10px 8px;text-align:center;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">상태</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">소비기한</th>
+        </tr></thead>
+        <tbody id="bdmProductsBody">
+          <tr><td colspan="5" style="text-align:center;padding:40px;color:#8892a4">조회 버튼을 눌러주세요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- 변경이력 패널 -->
+    <div id="bdmChangesPanel" style="flex:1;overflow-y:auto;padding:0;display:none">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f8f9fb;position:sticky;top:0">
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed;width:100px">변경일자</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">변경 전</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">변경 후</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed;width:120px">사유</th>
+        </tr></thead>
+        <tbody id="bdmChangesBody">
+          <tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">조회 버튼을 눌러주세요</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<!-- ====== END 업체 상세 조회 모달 ====== -->
+
 </body>
 </html>
