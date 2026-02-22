@@ -302,6 +302,10 @@ body {
 <div class="app-layout">
 <aside class="sidebar" id="sidebar"></aside>
 <script src="js/sidebar.js?v=2"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
 <div class="main-wrapper">
 
 <div class="header">
@@ -361,7 +365,7 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
-// API 서버 주소: 실제 서버가 있으면 그쪽으로, 없으면 origin 사용
+// API 서버 주소 (수동 수집 트리거용만 사용)
 var API_BASE = (function() {
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     return 'http://localhost:5003';
@@ -372,7 +376,26 @@ var API_BASE = (function() {
   return '/fss';
 })();
 var refreshTimer = null;
-var serverConnected = false;
+
+// 16개 API 정의
+var ALL_APIS = {
+  'I1220':  { name: '식품제조가공업',               collection: 'fss_businesses' },
+  'I2829':  { name: '즉석판매제조가공업',           collection: 'fss_businesses' },
+  'I-0020': { name: '건강기능식품 전문/벤처제조업',  collection: 'fss_businesses' },
+  'I1300':  { name: '축산물 가공업',                collection: 'fss_businesses' },
+  'I1320':  { name: '축산물 식육포장처리업',        collection: 'fss_businesses' },
+  'I2835':  { name: '식육즉석판매가공업',           collection: 'fss_businesses' },
+  'I2831':  { name: '식품소분업',                   collection: 'fss_businesses' },
+  'C001':   { name: '수입식품등영업신고',           collection: 'fss_businesses' },
+  'I1260':  { name: '식품등수입판매업',             collection: 'fss_businesses' },
+  'I1250':  { name: '식품(첨가물)품목제조보고',     collection: 'fss_products' },
+  'I1310':  { name: '축산물 품목제조정보',          collection: 'fss_products' },
+  'C002':   { name: '식품(첨가물)품목제조보고(원재료)', collection: 'fss_materials' },
+  'C003':   { name: '건강기능식품 품목제조신고(원재료)', collection: 'fss_materials' },
+  'C006':   { name: '축산물품목제조보고(원재료)',    collection: 'fss_materials' },
+  'I2859':  { name: '식품업소 인허가 변경 정보',    collection: 'fss_changes' },
+  'I2860':  { name: '건강기능식품업소 인허가 변경 정보', collection: 'fss_changes' },
+};
 
 var CAT_MAP = {
   'fss_businesses': { label: '업소인허가', cls: 'cat-biz' },
@@ -403,47 +426,106 @@ function showToast(msg) {
   setTimeout(function() { t.classList.remove('show'); }, 3000);
 }
 
-function loadData() {
-  fetch(API_BASE + '/api/collect/detail', { signal: AbortSignal.timeout(5000) })
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      if (!data.success) {
-        showOfflineUI();
-        return;
-      }
-      serverConnected = true;
-      renderSummary(data.apis);
-      renderTable(data.apis);
-      document.getElementById('refreshInfo').textContent =
-        '마지막 갱신: ' + new Date().toLocaleTimeString('ko-KR') + ' (30초마다)';
-    })
-    .catch(function(e) {
-      if (!serverConnected) {
-        showOfflineUI();
-      }
-    });
+// Firestore에서 컬렉션별 문서 수 조회
+async function getCollectionCount(collectionName) {
+  try {
+    var snap = await db.collection(collectionName).get();
+    return snap.size;
+  } catch(e) {
+    console.warn('컬렉션 카운트 실패:', collectionName, e.message);
+    return 0;
+  }
 }
 
-function showOfflineUI() {
-  document.getElementById('totalApis').textContent = '16';
-  document.getElementById('completedApis').textContent = '-';
-  document.getElementById('progressApis').textContent = '-';
-  document.getElementById('waitingApis').textContent = '-';
-  document.getElementById('totalRecords').textContent = '-';
-  document.getElementById('refreshInfo').textContent = '⚠️ API 서버 미연결 (오프라인 모드)';
-  document.getElementById('tableWrap').innerHTML =
-    '<div style="text-align:center;padding:60px 20px;color:var(--text3);">' +
-    '<div style="font-size:48px;margin-bottom:16px;">🔌</div>' +
-    '<div style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:8px;">API 서버에 연결할 수 없습니다</div>' +
-    '<div style="font-size:13px;line-height:1.8;">' +
-    'Flask API 서버(bioflsever:5003)가 실행 중이어야 수집 현황을 확인할 수 있습니다.<br>' +
-    '<code style="background:#f0f2f5;padding:4px 10px;border-radius:4px;font-size:12px;">python api_server.py</code> 로 서버를 시작하세요.' +
-    '</div></div>';
-  // 오프라인이면 자동 갱신 중지
-  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+// API별 Firestore 문서 수 조회
+async function getApiCount(collectionName, apiSource) {
+  try {
+    var snap = await db.collection(collectionName)
+      .where('api_source', '==', apiSource).get();
+    return snap.size;
+  } catch(e) {
+    return 0;
+  }
+}
+
+// API별 최근 수집 로그 조회
+async function getLastLog(apiSource) {
+  try {
+    var snap = await db.collection('fss_collect_log')
+      .where('api_source', '==', apiSource)
+      .orderBy('started_at', 'desc')
+      .limit(1).get();
+    if (snap.empty) return null;
+    return snap.docs[0].data();
+  } catch(e) {
+    return null;
+  }
+}
+
+async function loadData() {
+  if (!isFirebaseReady()) {
+    document.getElementById('refreshInfo').textContent = 'Firebase 연결 대기 중...';
+    return;
+  }
+
+  document.getElementById('refreshInfo').textContent = '데이터 로딩 중...';
+
+  try {
+    var apis = [];
+    var apiIds = Object.keys(ALL_APIS);
+
+    // 모든 API에 대해 Firestore에서 데이터 조회
+    var promises = apiIds.map(async function(sid) {
+      var info = ALL_APIS[sid];
+      var dbCount = await getApiCount(info.collection, sid);
+      var lastLog = await getLastLog(sid);
+
+      var apiData = {
+        api_source: sid,
+        name: info.name,
+        table: info.collection,
+        db_count: dbCount,
+        last_api_total: lastLog ? (lastLog.total_count || 0) : 0,
+        last_collect: null,
+      };
+
+      if (lastLog) {
+        apiData.last_collect = {
+          type: lastLog.collect_type || '',
+          fetched: lastLog.fetched_count || 0,
+          inserted: lastLog.inserted_count || 0,
+          updated: lastLog.updated_count || 0,
+          errors: lastLog.error_count || 0,
+          error_msg: lastLog.error_msg || '',
+          started_at: lastLog.started_at || '',
+          finished_at: lastLog.finished_at || '',
+          duration_sec: lastLog.duration_sec || 0,
+        };
+      }
+
+      // 상태 판단
+      if (dbCount === 0 && (!lastLog || !lastLog.total_count)) {
+        apiData.status = 'not_started';
+      } else if (lastLog && lastLog.total_count && dbCount < lastLog.total_count) {
+        apiData.status = 'in_progress';
+      } else {
+        apiData.status = 'completed';
+      }
+
+      return apiData;
+    });
+
+    apis = await Promise.all(promises);
+
+    renderSummary(apis);
+    renderTable(apis);
+    document.getElementById('refreshInfo').textContent =
+      '마지막 갱신: ' + new Date().toLocaleTimeString('ko-KR') + ' (30초마다) [Firestore]';
+
+  } catch(e) {
+    console.error('loadData 오류:', e);
+    document.getElementById('refreshInfo').textContent = '⚠️ Firestore 조회 오류: ' + e.message;
+  }
 }
 
 function renderSummary(apis) {
@@ -467,7 +549,7 @@ function renderTable(apis) {
     + '<th>API</th>'
     + '<th>이름</th>'
     + '<th>분류</th>'
-    + '<th style="text-align:right">DB 건수</th>'
+    + '<th style="text-align:right">Firestore 건수</th>'
     + '<th style="text-align:right">API 총건수</th>'
     + '<th>진행률</th>'
     + '<th>상태</th>'
@@ -555,9 +637,11 @@ function triggerCollect(mode) {
   });
 }
 
-// 초기 로드 및 자동 갱신
-loadData();
-refreshTimer = setInterval(loadData, 30000);
+// Firebase 준비 후 초기 로드
+waitForFirebase().then(function() {
+  loadData();
+  refreshTimer = setInterval(loadData, 30000);
+});
 </script>
 </div><!-- /main-wrapper -->
 </div><!-- /app-layout -->

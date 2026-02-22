@@ -512,6 +512,10 @@ body {
 <div class="app-layout">
 <aside class="sidebar" id="sidebar"></aside>
 <script src="js/sidebar.js?v=2"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
 <div class="main-wrapper">
 
 <!-- ─── Header ─── -->
@@ -1103,8 +1107,9 @@ function updateStats() {
 }
 
 // ============================================================
-// 서버 통신
+// Firestore 직접 통신
 // ============================================================
+// API 서버 주소 (수동 수집 트리거 전용)
 var _fssDefaultUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://localhost:5003' : '/fss';
 (function(){ var el = document.getElementById('serverUrl'); if(el && !el.value) el.value = _fssDefaultUrl; })();
 
@@ -1112,162 +1117,165 @@ function getServerUrl() {
   return document.getElementById('serverUrl').value.trim() || _fssDefaultUrl;
 }
 
-function loadFromServer() {
-  var url = getServerUrl();
-  // 설정 불러오기
-  fetch(url + '/api/admin/settings', { signal: AbortSignal.timeout(5000) })
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      if (!data.success) return;
+async function loadFromServer() {
+  if (!isFirebaseReady()) {
+    showToast('Firebase 연결 대기 중...', 'info');
+    return;
+  }
 
-      // 스케줄 설정 반영
-      if (data.schedule) {
-        document.getElementById('collectHour').value = data.schedule.collect_hour || 3;
-        document.getElementById('collectMinute').value = data.schedule.collect_minute || 0;
-        document.getElementById('collectMode').value = data.schedule.collect_mode || 'incremental';
-        document.getElementById('apiKey').value = data.schedule.api_key || '';
-        document.getElementById('batchSize').value = data.schedule.batch_size || 100;
-        document.getElementById('requestDelay').value = data.schedule.request_delay || 0.3;
-        document.getElementById('scheduleActive').checked = data.schedule.is_active ? true : false;
-      }
+  try {
+    // Firestore에서 스케줄 설정 읽기
+    var scheduleDoc = await db.collection('fss_config').document('schedule').get();
+    if (scheduleDoc.exists) {
+      var s = scheduleDoc.data();
+      document.getElementById('collectHour').value = s.collect_hour || 3;
+      document.getElementById('collectMinute').value = s.collect_minute || 0;
+      document.getElementById('collectMode').value = s.collect_mode || 'incremental';
+      document.getElementById('apiKey').value = s.api_key || '';
+      document.getElementById('batchSize').value = s.batch_size || 100;
+      document.getElementById('requestDelay').value = s.request_delay || 0.3;
+      document.getElementById('scheduleActive').checked = s.is_active ? true : false;
+    }
 
-      // API 설정 반영
-      if (data.apis && data.apis.length > 0) {
-        data.apis.forEach(function(a) {
-          if (settings.apis[a.api_source]) {
-            settings.apis[a.api_source].enabled = a.is_enabled ? true : false;
-            if (a.enabled_fields) {
-              try { settings.apis[a.api_source].fields = JSON.parse(a.enabled_fields); }
-              catch(e) {}
-            }
+    // Firestore에서 API 설정 읽기
+    var apiSnap = await db.collection('fss_config').doc('apis').collection('list').get();
+    if (!apiSnap.empty) {
+      apiSnap.forEach(function(doc) {
+        var a = doc.data();
+        if (settings.apis[a.api_source]) {
+          settings.apis[a.api_source].enabled = a.is_enabled ? true : false;
+          if (a.enabled_fields) {
+            try { settings.apis[a.api_source].fields = JSON.parse(a.enabled_fields); }
+            catch(e) {}
           }
-        });
-        renderApiList();
-      }
+        }
+      });
+      renderApiList();
+    }
 
-      updateStats();
-      showToast('서버 설정을 불러왔습니다.', 'info');
-    })
-    .catch(function(e) {
-      console.log('서버 연결 실패 (오프라인 모드):', e.message);
-      updateStats();
-      showToast('⚠️ API 서버 미연결 — 오프라인 모드로 동작합니다', 'info');
-    });
+    updateStats();
+    showToast('Firestore에서 설정을 불러왔습니다.', 'info');
+  } catch(e) {
+    console.log('Firestore 설정 로드 실패:', e.message);
+    updateStats();
+    showToast('⚠️ Firestore 연결 실패: ' + e.message, 'error');
+  }
 
   loadStatus();
   loadLogs();
 }
 
-function loadStatus() {
-  var url = getServerUrl();
-  fetch(url + '/api/status', { signal: AbortSignal.timeout(5000) })
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      if (!data.success) return;
-      var t = data.tables || {};
-      document.getElementById('statBizCount').textContent =
-        t.fss_businesses ? numberFormat(t.fss_businesses.count) : '0';
-      document.getElementById('statPrdCount').textContent =
-        t.fss_products ? numberFormat(t.fss_products.count) : '0';
+async function loadStatus() {
+  if (!isFirebaseReady()) return;
 
-      // 최근 수집일
-      var last = null;
-      Object.values(t).forEach(function(v) {
-        if (v.last_collected && (!last || v.last_collected > last)) last = v.last_collected;
-      });
-      document.getElementById('statLastCollect').textContent = last ? last.substring(5, 16) : '-';
-    })
-    .catch(function() {});
+  try {
+    // Firestore에서 컬렉션 건수 조회
+    var bizSnap = await db.collection('fss_businesses').get();
+    var prdSnap = await db.collection('fss_products').get();
+
+    document.getElementById('statBizCount').textContent = numberFormat(bizSnap.size);
+    document.getElementById('statPrdCount').textContent = numberFormat(prdSnap.size);
+
+    // 최근 수집 로그에서 최근 수집일 조회
+    var logSnap = await db.collection('fss_collect_log')
+      .orderBy('started_at', 'desc').limit(1).get();
+    if (!logSnap.empty) {
+      var lastLog = logSnap.docs[0].data();
+      var lastDt = lastLog.started_at || '';
+      document.getElementById('statLastCollect').textContent = lastDt ? lastDt.substring(5, 16) : '-';
+    } else {
+      document.getElementById('statLastCollect').textContent = '-';
+    }
+  } catch(e) {
+    console.warn('loadStatus 오류:', e.message);
+  }
 }
 
-function loadLogs() {
-  var url = getServerUrl();
-  fetch(url + '/api/status', { signal: AbortSignal.timeout(5000) })
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      if (!data.success || !data.recent_logs || data.recent_logs.length === 0) {
-        document.getElementById('logBody').innerHTML =
-          '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">수집 이력 없음</td></tr>';
-        return;
-      }
-      var html = '';
-      data.recent_logs.forEach(function(l) {
-        var statusClass = l.error_count > 0 ? 'warn' : 'ok';
-        html += '<tr>';
-        html += '<td>' + (l.started_at || '').substring(0, 16) + '</td>';
-        html += '<td><span class="status-dot ' + statusClass + '"></span>' + l.api_source + ' ' + (l.api_name || '') + '</td>';
-        html += '<td>' + l.collect_type + '</td>';
-        html += '<td>' + numberFormat(l.total_count) + '</td>';
-        html += '<td>' + numberFormat(l.fetched_count) + '</td>';
-        html += '<td style="color:var(--success)">' + numberFormat(l.inserted_count) + '</td>';
-        html += '<td style="color:var(--primary)">' + numberFormat(l.updated_count) + '</td>';
-        html += '<td style="color:' + (l.error_count > 0 ? 'var(--danger)' : 'var(--text3)') + '">' + l.error_count + '</td>';
-        html += '<td>' + (l.duration_sec || 0) + '초</td>';
-        html += '</tr>';
-      });
-      document.getElementById('logBody').innerHTML = html;
-    })
-    .catch(function() {});
+async function loadLogs() {
+  if (!isFirebaseReady()) return;
+
+  try {
+    var logSnap = await db.collection('fss_collect_log')
+      .orderBy('started_at', 'desc').limit(20).get();
+
+    if (logSnap.empty) {
+      document.getElementById('logBody').innerHTML =
+        '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text3)">수집 이력 없음</td></tr>';
+      return;
+    }
+
+    var html = '';
+    logSnap.forEach(function(doc) {
+      var l = doc.data();
+      var statusClass = (l.error_count || 0) > 0 ? 'warn' : 'ok';
+      html += '<tr>';
+      html += '<td>' + (l.started_at || '').substring(0, 16) + '</td>';
+      html += '<td><span class="status-dot ' + statusClass + '"></span>' + (l.api_source || '') + ' ' + (l.api_name || '') + '</td>';
+      html += '<td>' + (l.collect_type || '') + '</td>';
+      html += '<td>' + numberFormat(l.total_count) + '</td>';
+      html += '<td>' + numberFormat(l.fetched_count) + '</td>';
+      html += '<td style="color:var(--success)">' + numberFormat(l.inserted_count) + '</td>';
+      html += '<td style="color:var(--primary)">' + numberFormat(l.updated_count) + '</td>';
+      html += '<td style="color:' + ((l.error_count || 0) > 0 ? 'var(--danger)' : 'var(--text3)') + '">' + (l.error_count || 0) + '</td>';
+      html += '<td>' + (l.duration_sec || 0) + '초</td>';
+      html += '</tr>';
+    });
+    document.getElementById('logBody').innerHTML = html;
+  } catch(e) {
+    console.warn('loadLogs 오류:', e.message);
+  }
 }
 
-function saveAllSettings() {
-  var url = getServerUrl();
-  var payload = {
-    schedule: {
+async function saveAllSettings() {
+  if (!isFirebaseReady()) {
+    showToast('Firebase 연결이 필요합니다.', 'error');
+    return;
+  }
+
+  try {
+    // Firestore에 스케줄 설정 저장
+    await db.collection('fss_config').doc('schedule').set({
       collect_hour: parseInt(document.getElementById('collectHour').value),
       collect_minute: parseInt(document.getElementById('collectMinute').value),
       collect_mode: document.getElementById('collectMode').value,
       api_key: document.getElementById('apiKey').value.trim(),
       batch_size: parseInt(document.getElementById('batchSize').value),
       request_delay: parseFloat(document.getElementById('requestDelay').value),
-      is_active: document.getElementById('scheduleActive').checked ? 1 : 0
-    },
-    apis: {}
-  };
+      is_active: document.getElementById('scheduleActive').checked ? true : false,
+    });
 
-  Object.keys(settings.apis).forEach(function(id) {
-    payload.apis[id] = {
-      enabled: settings.apis[id].enabled,
-      fields: settings.apis[id].fields,
-      name: API_DEFS[id].name,
-      category: API_DEFS[id].category,
-      all_fields: API_DEFS[id].fields
-    };
-  });
+    // Firestore에 API 설정 저장
+    var batch = db.batch();
+    Object.keys(settings.apis).forEach(function(id) {
+      var docRef = db.collection('fss_config').doc('apis').collection('list').doc(id);
+      batch.set(docRef, {
+        api_source: id,
+        api_name: API_DEFS[id].name,
+        category: API_DEFS[id].category,
+        is_enabled: settings.apis[id].enabled,
+        enabled_fields: JSON.stringify(settings.apis[id].fields || []),
+        all_fields: JSON.stringify(API_DEFS[id].fields || []),
+      });
+    });
+    await batch.commit();
 
-  fetch(url + '/api/admin/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.success) {
-      showToast('설정이 저장되었습니다. cron 스케줄이 업데이트됩니다.', 'success');
-    } else {
-      showToast('저장 실패: ' + (data.error || ''), 'error');
-    }
-  })
-  .catch(function(e) {
-    showToast('서버 연결 실패. 로컬에 저장합니다.', 'error');
+    showToast('설정이 Firestore에 저장되었습니다.', 'success');
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
     // localStorage 폴백
     try {
-      localStorage.setItem('fss_settings', JSON.stringify(payload));
+      localStorage.setItem('fss_settings', JSON.stringify({
+        schedule: {
+          collect_hour: parseInt(document.getElementById('collectHour').value),
+          collect_minute: parseInt(document.getElementById('collectMinute').value),
+        }
+      }));
     } catch(e2) {}
-  });
+  }
 }
 
 // ============================================================
-// 수동 수집
+// 수동 수집 (API 서버 트리거 유지)
 // ============================================================
 function confirmManualCollect() {
   var activeApis = Object.keys(settings.apis).filter(function(id) {
@@ -1331,6 +1339,10 @@ function showToast(msg, type) {
 
 // ─── Init ───
 init();
+// Firebase 준비 후 서버 설정 불러오기
+waitForFirebase().then(function() {
+  loadFromServer();
+});
 </script>
 </div><!-- /main-wrapper -->
 </div><!-- /app-layout -->
