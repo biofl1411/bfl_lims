@@ -306,7 +306,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <input type="text" id="ceo" readonly>
                     </div>
                 </div>
-                <div class="form-row">
+                <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
                     <div class="form-group">
                         <label>담당자</label>
                         <input type="text" id="contact-person">
@@ -318,6 +318,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group">
                         <label>휴대폰</label>
                         <input type="tel" id="mobile">
+                    </div>
+                    <div class="form-group">
+                        <label>이메일</label>
+                        <input type="email" id="contact-email">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>우리측 담당자</label>
+                        <input type="text" id="sales-rep" readonly style="background:#f0f4c3;font-weight:600">
                     </div>
                 </div>
             </div>
@@ -436,21 +446,96 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
             </div>
         </div>
 
-        <!-- 5. 의뢰인 정보 -->
+        <!-- 5. 계산서 정보 -->
         <div class="section">
             <div class="section-header" onclick="toggleSection(this)">
-                <span>👤 의뢰인 정보</span>
+                <span>🧾 계산서 정보</span>
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
-                <div class="form-row">
+                <!-- 계산서 담당 정보 (업체 선택 시 자동 채움) -->
+                <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
                     <div class="form-group">
-                        <label>의뢰인명</label>
-                        <input type="text" id="requester-name">
+                        <label>계산서 담당자</label>
+                        <input type="text" id="bill-name" readonly style="background:#e8f5e9">
                     </div>
                     <div class="form-group">
-                        <label>의뢰업체명</label>
-                        <input type="text" id="request-company">
+                        <label>연락처</label>
+                        <input type="tel" id="bill-phone" readonly style="background:#e8f5e9">
+                    </div>
+                    <div class="form-group">
+                        <label>휴대폰</label>
+                        <input type="tel" id="bill-mobile" readonly style="background:#e8f5e9">
+                    </div>
+                    <div class="form-group">
+                        <label>이메일</label>
+                        <input type="email" id="bill-email" readonly style="background:#e8f5e9">
+                    </div>
+                </div>
+
+                <!-- 수정 체크박스 -->
+                <div style="margin-bottom:15px">
+                    <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+                        <input type="checkbox" id="bill-edit-check" onchange="toggleBillEdit()">
+                        <span>계산서 입력 정보 수정하기</span>
+                    </label>
+                </div>
+
+                <!-- 수정 입력 영역 (기본 숨김) -->
+                <div id="bill-edit-area" style="display:none;border:1px dashed #bdbdbd;border-radius:8px;padding:16px;background:#fff8e1;margin-bottom:16px">
+                    <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
+                        <div class="form-group">
+                            <label>계산서업체명</label>
+                            <input type="text" id="bill-edit-company">
+                        </div>
+                        <div class="form-group">
+                            <label>사업자번호</label>
+                            <input type="text" id="bill-edit-bizno">
+                        </div>
+                        <div class="form-group">
+                            <label>담당자</label>
+                            <input type="text" id="bill-edit-name">
+                        </div>
+                        <div class="form-group">
+                            <label>전화번호</label>
+                            <input type="tel" id="bill-edit-phone">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>이메일</label>
+                            <input type="email" id="bill-edit-email">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 발행 옵션 -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>계산서 발행일</label>
+                        <select id="billing-date-type" onchange="onBillingDateTypeChange()">
+                            <option value="receipt">접수일</option>
+                            <option value="specific">특정일</option>
+                            <option value="monthEnd">월말 발행</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>특정일</label>
+                        <input type="date" id="billing-date" style="display:none">
+                    </div>
+                    <div class="form-group">
+                        <label>발행 유형</label>
+                        <select id="billing-type" onchange="onBillingTypeChange()">
+                            <option value="byPurpose">목적별 구분 발행</option>
+                            <option value="combined">합산 발행</option>
+                            <option value="other">기타</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row" id="billing-type-note-row" style="display:none">
+                    <div class="form-group">
+                        <label>기타 내용</label>
+                        <textarea id="billing-type-note" rows="2" placeholder="기타 발행 방식을 입력하세요..."></textarea>
                     </div>
                 </div>
             </div>
@@ -680,6 +765,22 @@ function toggleSection(header) {
 }
 
 // ============================================================================
+// 계산서 정보 토글/조건부 표시
+// ============================================================================
+function toggleBillEdit() {
+    var chk = document.getElementById('bill-edit-check').checked;
+    document.getElementById('bill-edit-area').style.display = chk ? 'block' : 'none';
+}
+function onBillingDateTypeChange() {
+    var v = document.getElementById('billing-date-type').value;
+    document.getElementById('billing-date').style.display = v === 'specific' ? '' : 'none';
+}
+function onBillingTypeChange() {
+    var v = document.getElementById('billing-type').value;
+    document.getElementById('billing-type-note-row').style.display = v === 'other' ? '' : 'none';
+}
+
+// ============================================================================
 // 오늘 날짜 설정
 // ============================================================================
 function setTodayDate() {
@@ -806,7 +907,17 @@ function onTestFieldChange() {
     document.getElementById('phone').value = '';
     document.getElementById('contact-person').value = '';
     document.getElementById('mobile').value = '';
+    document.getElementById('contact-email').value = '';
+    document.getElementById('sales-rep').value = '';
     document.getElementById('company-suggestions').classList.remove('active');
+
+    // 계산서 정보 초기화
+    document.getElementById('bill-name').value = '';
+    document.getElementById('bill-phone').value = '';
+    document.getElementById('bill-mobile').value = '';
+    document.getElementById('bill-email').value = '';
+    document.getElementById('bill-edit-check').checked = false;
+    document.getElementById('bill-edit-area').style.display = 'none';
 
     showToast(`시험분야 선택: ${testField}. 검사목적을 선택하세요.`, 'info');
 }
@@ -1356,6 +1467,22 @@ function selectCompany(elOrObj) {
     var mob = c.contactMobile || '';
     if (!mob && c.contacts && c.contacts[0]) mob = c.contacts[0].mobile || '';
     document.getElementById('mobile').value = mob;
+
+    // 이메일
+    var email = c.contactEmail || '';
+    if (!email && c.contacts && c.contacts[0]) email = c.contacts[0].email || '';
+    document.getElementById('contact-email').value = email;
+
+    // 우리측 담당자
+    var rep = c.salesRep || '';
+    if (!rep && c.contacts && c.contacts[0]) rep = c.contacts[0].salesRep || '';
+    document.getElementById('sales-rep').value = rep;
+
+    // 계산서 정보 자동 채움
+    document.getElementById('bill-name').value = c.taxName || '';
+    document.getElementById('bill-phone').value = c.taxPhone || '';
+    document.getElementById('bill-mobile').value = c.taxMobile || '';
+    document.getElementById('bill-email').value = c.taxEmail || '';
 
     document.getElementById('company-suggestions').classList.remove('active');
     showToast('업체 선택: ' + nm + (lic.licNo ? ' (인허가: ' + lic.licNo + ')' : ''), 'info');
