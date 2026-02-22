@@ -15,8 +15,8 @@
  *
  * 표준 필드: company, bizNo, repName, zipcode/addr1/addr2(flat),
  *           licenses[{licField,licBizForm,licRepName,licNo,licBizName,...}],
- *           contacts[{name,phone,email,role,salesRep,licNums}],
- *           taxName, taxPhone, taxEmail, memo, regDate, changeLog
+ *           contacts[{name,phone,mobile,email,role,salesRep,licNums}],
+ *           taxName, taxPhone, taxMobile, taxEmail, memo, regDate, changeLog
  *
  * @param {Object} data - Firestore에서 읽은 원본 업체 데이터
  * @returns {Object} 정규화된 업체 데이터
@@ -91,6 +91,7 @@ function normalizeCompany(data) {
       return {
         name: ct.name || '',
         phone: ct.phone || '',
+        mobile: ct.mobile || '',
         email: ct.email || '',
         role: ct.role || '',
         salesRep: ct.salesRep || ct.salesTeam || '',
@@ -100,14 +101,16 @@ function normalizeCompany(data) {
     // flat 필드 설정 (첫 번째 담당자 기준)
     if (!d.contactName) d.contactName = d.contacts[0].name || '';
     if (!d.contactPhone) d.contactPhone = d.contacts[0].phone || '';
+    if (!d.contactMobile) d.contactMobile = d.contacts[0].mobile || '';
     if (!d.contactEmail) d.contactEmail = d.contacts[0].email || '';
     if (!d.salesRep) d.salesRep = d.contacts[0].salesRep || '';
   }
 
-  // --- 세금계산서: taxInfo{} → flat taxName/taxPhone/taxEmail ---
+  // --- 세금계산서: taxInfo{} → flat taxName/taxPhone/taxMobile/taxEmail ---
   if (d.taxInfo && typeof d.taxInfo === 'object') {
     if (!d.taxName) d.taxName = d.taxInfo.name || '';
     if (!d.taxPhone) d.taxPhone = d.taxInfo.phone || '';
+    if (!d.taxMobile) d.taxMobile = d.taxInfo.mobile || '';
     if (!d.taxEmail) d.taxEmail = d.taxInfo.email || '';
   }
 
