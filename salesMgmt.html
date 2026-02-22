@@ -4384,9 +4384,18 @@ function fssFilterSg(sido, sg) {
 }
 function fssFilterDong(sido, sg, dong) {
   var list = fssFilterSg(sido, sg);
+  // 행정동(역삼1동) → 법정동(역삼동) 변환
+  var dongBase = dong.replace(/\d+동$/, '동');
+  // 숫자 없는 기본명 (역삼1동 → 역삼)
+  var dongCore = dong.replace(/\d*동$/, '');
   return list.filter(function(r) {
-    if (r.dong) return r.dong.indexOf(dong) >= 0 || dong.indexOf(r.dong) >= 0;
-    return r.addr.indexOf(dong) >= 0;
+    if (r.dong) {
+      return r.dong.indexOf(dong) >= 0 || dong.indexOf(r.dong) >= 0 ||
+             r.dong.indexOf(dongBase) >= 0 || dongBase.indexOf(r.dong) >= 0;
+    }
+    // 주소 문자열에서 매칭: 역삼1동, 역삼동, 역삼 순으로 시도
+    return r.addr.indexOf(dong) >= 0 || r.addr.indexOf(dongBase) >= 0 ||
+           (dongCore.length >= 2 && r.addr.indexOf(dongCore + '동') >= 0);
   });
 }
 
