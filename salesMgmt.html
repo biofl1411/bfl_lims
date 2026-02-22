@@ -4555,19 +4555,23 @@ function selectSigungu(sg) {
 function findSgCode(sido, sgName) {
   if(!sgGeoData) return '';
   var sidoCode = SIDO_CODE_MAP[sido] || '';
-  // 매칭되는 모든 시군구 코드 수집
-  var matched = [];
+  // 1) 정확 매칭 우선
+  var exact = [];
+  // 2) 복합도시 매칭 (수원시 → 수원시장안구, 수원시권선구)
+  var composite = [];
   for(var i = 0; i < sgGeoData.features.length; i++) {
     var f = sgGeoData.features[i];
     var code = f.properties.code;
     if(code.substring(0,2) !== sidoCode) continue;
     var name = f.properties.name;
-    // "수원시" → "수원시장안구", "수원시권선구" 등 모두 매칭
-    if(name === sgName || name.indexOf(sgName) >= 0 || sgName.indexOf(name) >= 0
-       || name.substring(0,2) === sgName.substring(0,2)) {
-      matched.push(code);
+    if(name === sgName) {
+      exact.push(code);
+    } else if(name.indexOf(sgName) === 0) {
+      // "수원시장안구".indexOf("수원시") === 0 → 복합도시
+      composite.push(code);
     }
   }
+  var matched = exact.length > 0 ? exact : composite;
   if(matched.length === 0) return sidoCode;
   if(matched.length === 1) return matched[0];
   // 복합도시: 공통 prefix 계산 (수원시 31011,31012,31013,31014 → "3101")
