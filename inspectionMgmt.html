@@ -643,16 +643,23 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
               <span>📊</span>
               <span>항목수 적은순</span>
             </div>
+            <div class="sort-option" onclick="sortData('food-group')">
+              <span>🏷️</span>
+              <span>식품군순</span>
+            </div>
           </div>
         </div>
 
       </div>
     </div>
 
-    <div class="filter-chips">
+    <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
       <button class="filter-chip active" onclick="filterByDivision('전체')">전체</button>
       <button class="filter-chip" onclick="filterByDivision('식품')">🍱 식품</button>
       <button class="filter-chip" onclick="filterByDivision('축산')">🥩 축산</button>
+      <select id="food-group-filter" onchange="filterByFoodGroup(this.value)" style="margin-left:8px;padding:6px 10px;border-radius:8px;border:1px solid var(--bdr);font-size:12px;background:var(--card);cursor:pointer;">
+        <option value="전체">식품군: 전체</option>
+      </select>
     </div>
 
     <!-- 카드 선택 도구바 -->
@@ -1114,6 +1121,35 @@ const API_SERVICES = {
 let currentApiTab = 'I0930'; // 현재 선택된 API 서브탭
 let apiDataCache = {}; // { I0930: [...], I2580: [...], ... } 메모리 캐시
 let apiCollecting = false; // 수집 중 여부
+let currentFoodGroup = '전체'; // 식품군 필터
+
+// ══ 식품군 마스터 (식약처 홈페이지 분류표 기반) ══
+const FOOD_GROUP_MASTER = [
+  {no:1, name:'과자류, 떡류 / 빵류', keywords:['과자','캔디류','추잉껌','떡류','빵류'], period:'3월~2월'},
+  {no:2, name:'빙과류', keywords:['빙과','식용얼음','어업용 얼음'], period:'1월 1회'},
+  {no:3, name:'코코아가공품류/초콜릿류', keywords:['코코아','초콜릿'], period:'3월 1회'},
+  {no:4, name:'당류', keywords:['설탕','포도당','물엿','올리고당','당시럽류','기타당류'], period:'3월 1회'},
+  {no:5, name:'잼류', keywords:['잼','기타잼'], period:'3월 1회'},
+  {no:6, name:'두부류/묵류', keywords:['두부','유바','가공두부','묵류'], period:'3월 1회'},
+  {no:7, name:'식용유지류', keywords:['들기름','콩기름','식물성크림','식용유지','유지'], period:'3월~1월'},
+  {no:8, name:'면류', keywords:['생면','숙면','건면','유탕면','국수','면류'], period:'3월 1회'},
+  {no:9, name:'음료류', keywords:['침출차','커피','농축과채즙','과채주스','탄산음료','혼합음료','음료'], period:'3월~2월'},
+  {no:10, name:'특수영양식품', keywords:['영아용','조제식','영유아'], period:'1월 1회'},
+  {no:11, name:'특수의료용도식품', keywords:['환자용','의료용도'], period:'1월 1회'},
+  {no:12, name:'장류', keywords:['메주','간장','된장','고추장','춘장','청국장','혼합장','장류'], period:'3월 1회'},
+  {no:13, name:'조미식품', keywords:['식초','소스','마요네즈','드레싱','카레','고춧가루','향신료','조미'], period:'3월 1회'},
+  {no:14, name:'절임류/조림류', keywords:['김치','절임','조림류'], period:'3월 1회'},
+  {no:15, name:'주류', keywords:['탁주','맥주','소주','위스키','브랜디','과실주','약주','청주','주류'], period:'6월 1회'},
+  {no:16, name:'농산가공식품류', keywords:['전분','시리얼','곡류','견과류','농산'], period:'3월~1월'},
+  {no:17, name:'식육가공품', keywords:['식육','햄','소시지','베이컨','양념육','분쇄가공육'], period:'2월 1회'},
+  {no:18, name:'알가공품류', keywords:['알가공','난황','난백'], period:'2월 1회'},
+  {no:19, name:'유가공품', keywords:['우유','가공유','발효유','버터','치즈','분유','유크림','유당','유가공'], period:'1월 1회'},
+  {no:20, name:'수산가공식품류', keywords:['젓갈','어묵','어육','수산가공','건포류','해조류'], period:'3월 1회'},
+  {no:21, name:'동물성가공식품류', keywords:['추출가공','곤충가공','동물성가공'], period:'3월~1월'},
+  {no:22, name:'벌꿀/화분가공식품류', keywords:['벌꿀','화분가공','로열젤리','프로폴리스'], period:'3월 1회'},
+  {no:23, name:'즉석식품류', keywords:['즉석섭취','즉석조리','만두','즉석'], period:'3월~1월'},
+  {no:24, name:'기타식품류', keywords:['기타가공품','효모식품','기타식품'], period:'3월~1월'}
+];
 
 // 수수료 탭 전용 변수
 let currentFeePurpose = '전체';
@@ -29732,7 +29768,8 @@ function sortData(sortType) {
     'fee-desc': '수수료↓',
     'fee-asc': '수수료↑',
     'count-desc': '항목수↓',
-    'count-asc': '항목수↑'
+    'count-asc': '항목수↑',
+    'food-group': '식품군순'
   };
   document.getElementById('current-sort').textContent = `정렬: ${sortLabels[sortType]}`;
   
@@ -31828,20 +31865,37 @@ async function loadAndRenderApiData(serviceId) {
 
   var entries = Object.entries(grouped);
 
+  // 식품군 드롭다운 옵션 빌드
+  buildFoodGroupOptions(entries);
+
+  // 식품군 필터 적용
+  if (currentFoodGroup && currentFoodGroup !== '전체') {
+    entries = entries.filter(function(entry) {
+      var g = getFoodGroup(entry[0]);
+      return g && g.name === currentFoodGroup;
+    });
+  }
+
   // 정렬 적용
   if (currentSort === 'count-desc') {
     entries.sort(function(a, b) { return b[1].length - a[1].length; });
   } else if (currentSort === 'count-asc') {
     entries.sort(function(a, b) { return a[1].length - b[1].length; });
+  } else if (currentSort === 'food-group') {
+    entries.sort(function(a, b) {
+      var gA = getFoodGroup(a[0]); var gB = getFoodGroup(b[0]);
+      var nA = gA ? gA.no : 999; var nB = gB ? gB.no : 999;
+      if (nA !== nB) return nA - nB;
+      return a[0].localeCompare(b[0], 'ko');
+    });
   } else if (currentSort === 'type' || currentSort === 'name') {
     entries.sort(function(a, b) { return a[0].localeCompare(b[0], 'ko'); });
   } else {
-    // 기본: 가나다순
     entries.sort(function(a, b) { return a[0].localeCompare(b[0], 'ko'); });
   }
 
   var totalGroups = entries.length;
-  var totalItems = filtered.length;
+  var totalItems = entries.reduce(function(s, e) { return s + e[1].length; }, 0);
   var PAGE_SIZE = 200;
   var displayEntries = entries.slice(0, PAGE_SIZE);
 
@@ -31867,6 +31921,8 @@ async function loadAndRenderApiData(serviceId) {
       var items = entry[1];
       var division = 축산_검체유형.includes(prdName) ? '축산' : '식품';
       var divBadge = division === '축산' ? '🥩' : '🍱';
+      var fg = getFoodGroup(prdName);
+      var fgBadge = fg ? '<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:10px;margin-left:4px">' + fg.no + '. ' + fg.name + '</span>' : '';
       var itemsHtml = items.slice(0, 10).map(function(it) {
         return '<div class="item-list-item">' +
           '<div class="item-list-name">' + (it[testItemField] || it.FNPRT_ITM_NM || '-') + '</div>' +
@@ -31880,7 +31936,7 @@ async function loadAndRenderApiData(serviceId) {
         '<div class="card-header">' +
           '<div>' +
             '<div class="card-title">' + prdName + '</div>' +
-            '<div style="margin-top:4px"><span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span></div>' +
+            '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px"><span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' + fgBadge + '</div>' +
           '</div>' +
           '<div><div class="card-badge">' + items.length + '건</div></div>' +
         '</div>' +
@@ -31901,12 +31957,14 @@ async function loadAndRenderApiData(serviceId) {
       var items = entry[1];
       var division = 축산_검체유형.includes(prdName) ? '축산' : '식품';
       var divBadge = division === '축산' ? '🥩' : '🍱';
+      var fg = getFoodGroup(prdName);
+      var fgBadge = fg ? '<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:10px;margin-left:4px">' + fg.no + '. ' + fg.name + '</span>' : '';
       accHtml += '<div class="accordion-group">' +
         '<div class="accordion-header" onclick="toggleAccordion(this)">' +
           '<div class="accordion-title">' +
             '<span class="accordion-icon">▶</span>' +
             '<span class="accordion-name">' + prdName + '</span>' +
-            '<span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' +
+            '<span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' + fgBadge +
           '</div>' +
           '<div class="accordion-info" style="display:flex;gap:12px;align-items:center;">' +
             '<span class="accordion-count">' + items.length + '건</span>' +
@@ -31927,6 +31985,41 @@ async function loadAndRenderApiData(serviceId) {
 }
 
 // --- API 탭 건수 업데이트는 firebase-ready 이벤트에서 호출 ---
+
+// ══ 식품군 분류 함수 ══
+function getFoodGroup(prdName) {
+  if (!prdName) return null;
+  var name = prdName.toLowerCase();
+  for (var i = 0; i < FOOD_GROUP_MASTER.length; i++) {
+    var g = FOOD_GROUP_MASTER[i];
+    for (var j = 0; j < g.keywords.length; j++) {
+      if (name.includes(g.keywords[j].toLowerCase())) return g;
+    }
+  }
+  return null;
+}
+
+function filterByFoodGroup(groupName) {
+  currentFoodGroup = groupName;
+  renderData();
+}
+
+function buildFoodGroupOptions(entries, prdField) {
+  var sel = document.getElementById('food-group-filter');
+  if (!sel) return;
+  var groups = {};
+  entries.forEach(function(entry) {
+    var g = getFoodGroup(entry[0]);
+    if (g) groups[g.no] = g.name;
+  });
+  var html = '<option value="전체">식품군: 전체</option>';
+  var sorted = Object.entries(groups).sort(function(a,b){ return parseInt(a[0]) - parseInt(b[0]); });
+  sorted.forEach(function(item) {
+    var selected = currentFoodGroup === item[1] ? ' selected' : '';
+    html += '<option value="' + item[1] + '"' + selected + '>' + item[0] + '. ' + item[1] + '</option>';
+  });
+  sel.innerHTML = html;
+}
 
 </script>
 </body>
