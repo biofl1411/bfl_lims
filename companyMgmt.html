@@ -1114,28 +1114,32 @@ function renderFileViewSection(cust) {
   if (files.bizLicenseUrl) {
     hasFiles = true;
     html += '<button class="file-view-btn" onclick="window.open(\'' + files.bizLicenseUrl + '\',\'_blank\')">' +
-      '<span class="fv-icon">📄</span> 사업자등록증</button>';
+      '<span class="fv-icon">📄</span> 사업자등록증 원본</button>';
   }
 
-  // 인허가문서 원본 보기
-  if (files.permitDocs && files.permitDocs.length > 0) {
-    hasFiles = true;
-    files.permitDocs.forEach(function(doc, i) {
-      var label = doc.name || ('인허가문서 ' + (i + 1));
-      html += '<button class="file-view-btn" onclick="window.open(\'' + doc.url + '\',\'_blank\')">' +
-        '<span class="fv-icon">📋</span> ' + escHtml(label) + '</button>';
-    });
-  }
+  // 인허가문서 원본 보기 — 인허가 카드에 개별 표시되므로 여기서는 생략
+  // (licenseIndex 없는 기존 데이터도 인허가 카드에서 순서대로 매핑됨)
 
   // OCR 결과 보기
   if (files.ocrResults && files.ocrResults.length > 0) {
     hasFiles = true;
     html += '<button class="file-view-btn" onclick="openOcrResultModal()" style="border-color:#90caf9;color:#1565c0">' +
       '<span class="fv-icon">🔍</span> OCR 결과 (' + files.ocrResults.length + '건)</button>';
-    // 전역 변수에 OCR 결과 저장 (모달에서 사용)
     window._currentOcrResults = files.ocrResults;
   } else {
     window._currentOcrResults = null;
+  }
+
+  // 인허가문서가 있지만 인허가 카드에 표시 안 될 수 있는 경우 (인허가가 없는데 문서만 있을 때)
+  var permitDocs = files.permitDocs || [];
+  var licenses = (cust.licenses && cust.licenses.length > 0) ? cust.licenses : [];
+  if (permitDocs.length > 0 && licenses.length === 0) {
+    hasFiles = true;
+    permitDocs.forEach(function(doc, i) {
+      var label = doc.name || ('인허가문서 ' + (i + 1));
+      html += '<button class="file-view-btn" onclick="window.open(\'' + doc.url + '\',\'_blank\')">' +
+        '<span class="fv-icon">📋</span> ' + escHtml(label) + '</button>';
+    });
   }
 
   if (hasFiles) {
@@ -1228,6 +1232,26 @@ function renderDetailLicenses(cust) {
     licSalesRep: cust.licSalesRep || ''
   }];
 
+  // 인허가 원본 문서 매핑 (licenseIndex 기반, 없으면 순서대로)
+  var permitDocs = (cust.files && cust.files.permitDocs) || [];
+  var permitDocsByIdx = {};
+  var unmappedDocs = [];
+  permitDocs.forEach(function(doc) {
+    if (typeof doc.licenseIndex === 'number') {
+      if (!permitDocsByIdx[doc.licenseIndex]) permitDocsByIdx[doc.licenseIndex] = [];
+      permitDocsByIdx[doc.licenseIndex].push(doc);
+    } else {
+      unmappedDocs.push(doc);
+    }
+  });
+  // licenseIndex가 없는 기존 문서는 순서대로 매핑
+  var unmappedIdx = 0;
+  for (var mi = 0; mi < licenses.length && unmappedIdx < unmappedDocs.length; mi++) {
+    if (!permitDocsByIdx[mi]) {
+      permitDocsByIdx[mi] = [unmappedDocs[unmappedIdx++]];
+    }
+  }
+
   for (var i = 0; i < licenses.length; i++) {
     var lic = licenses[i];
     var num = i + 1;
@@ -1235,6 +1259,20 @@ function renderDetailLicenses(cust) {
     card.className = 'sub-card';
     card.id = 'detLicCard_' + num;
     card.style.marginBottom = '12px';
+
+    // 이 인허가에 연결된 원본 문서 버튼 HTML
+    var permitBtnHtml = '';
+    var licDocs = permitDocsByIdx[i] || [];
+    if (licDocs.length > 0) {
+      permitBtnHtml = '<div style="margin-top:8px;padding:6px 10px;background:#fff3e0;border-radius:6px;border:1px solid #ffe0b2;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+        '<span style="font-size:11px;font-weight:600;color:#e65100">📋 원본 문서</span>';
+      licDocs.forEach(function(doc) {
+        var label = doc.name || '인허가문서';
+        permitBtnHtml += '<button class="file-view-btn" onclick="window.open(\'' + doc.url + '\',\'_blank\')" style="font-size:11px;padding:3px 10px">' +
+          '<span class="fv-icon" style="font-size:12px">📄</span> ' + escHtml(label) + '</button>';
+      });
+      permitBtnHtml += '</div>';
+    }
 
     card.innerHTML =
       '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num">' + num + '</span> 인허가</div>' +
@@ -1262,6 +1300,7 @@ function renderDetailLicenses(cust) {
         '<div class="fg"><label>Representative (EN)</label><input id="detLicRepNameEn_' + num + '" value="' + escHtml(lic.licRepNameEn) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
         '<div class="fg"><label>Address (EN)</label><input id="detLicAddrEn_' + num + '" value="' + escHtml(lic.licAddrEn) + '" readonly style="background:#f8f9fb" class="det-editable"></div>' +
       '</div>' +
+      permitBtnHtml +
       // 인허가 담당자 필드
       '<div style="margin-top:8px;padding:8px 10px;background:#f1f8e9;border-radius:6px;border:1px solid #c5e1a5">' +
         '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:#33691e;margin-bottom:6px">👤 인허가 담당자' +

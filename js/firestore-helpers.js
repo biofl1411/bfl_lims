@@ -619,9 +619,10 @@ async function fsUploadBizLicense(companyId, file, onProgress) {
  * @param {string} companyId
  * @param {File} file
  * @param {Function} onProgress
- * @returns {Promise<Object>} { name, url, path, uploadedAt }
+ * @param {number} [licenseIndex] - 연결된 인허가 인덱스 (0-based)
+ * @returns {Promise<Object>} { name, url, path, uploadedAt, licenseIndex }
  */
-async function fsUploadPermitDoc(companyId, file, onProgress) {
+async function fsUploadPermitDoc(companyId, file, onProgress, licenseIndex) {
   var ts = Date.now();
   var ext = file.name.split('.').pop().toLowerCase();
   var safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
@@ -634,6 +635,7 @@ async function fsUploadPermitDoc(companyId, file, onProgress) {
     path: path,
     uploadedAt: new Date().toISOString()
   };
+  if (typeof licenseIndex === 'number') docInfo.licenseIndex = licenseIndex;
 
   // Firestore에 배열에 추가
   await db.collection('companies').doc(companyId).update({
