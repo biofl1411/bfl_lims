@@ -1732,6 +1732,12 @@ window.addEventListener('firebase-ready', function() {
 
 ### 예정 작업 (2026-02-23)
 
+#### 작업 0 (우선): 식품유형 탭 전면 개편
+- **플랜 파일**: `.claude/plans/sorted-dreaming-bee.md`
+- FULL_FOOD_TYPES 하드코딩 삭제 → 식약처 공공 API 4개(I2580, I2600, I0960, I0930)에서 수집한 데이터로 교체
+- API별 서브탭 + 수집 버튼 + 품목명별/검체유형별 토글 + 식품군 분류
+- 총 ~135,538건 Firestore 저장
+
 #### 작업 1: 고객사 담당자 + 세금계산서 담당자 휴대폰번호 추가
 
 **대상 파일**: `companyMgmt.html`, `companyRegForm_v2.html`, `js/firestore-helpers.js`
