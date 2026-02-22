@@ -310,6 +310,25 @@ async function fsCheckDuplicateBusinessNo(businessNo, excludeId) {
 }
 
 /**
+ * 사업자번호로 기존 업체 데이터 조회 (신호등/미수금 승계용)
+ * @param {string} businessNo - 사업자번호
+ * @returns {Promise<Object|null>} 기존 업체 데이터 또는 null
+ */
+async function fsGetExistingCompanyByBizNo(businessNo) {
+  var snap = await db.collection('companies')
+    .where('bizNo', '==', businessNo).limit(1).get();
+  if (snap.empty) {
+    snap = await db.collection('companies')
+      .where('businessNo', '==', businessNo).limit(1).get();
+  }
+  if (snap.empty) return null;
+  var doc = snap.docs[0];
+  var data = doc.data();
+  data.id = doc.id;
+  return data;
+}
+
+/**
  * 회사명 중복 조회
  * @param {string} companyName - 회사명
  * @returns {Promise<boolean>} true = 중복 있음

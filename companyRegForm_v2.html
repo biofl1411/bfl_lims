@@ -329,8 +329,8 @@
           <div class="form-group">
             <label>신호등</label>
             <div class="traffic-preview">
-              <span class="traffic-dot" style="background:#2196f3;"></span>
-              <span style="font-size:11px; color:#5f6b7a;">파랑 (신규 등록 시 기본값 — 자동 산출)</span>
+              <span class="traffic-dot" id="trafficDot" style="background:#2196f3;"></span>
+              <span id="trafficLabel" style="font-size:11px; color:#5f6b7a;">파랑 (신규 등록 시 기본값 — 자동 산출)</span>
             </div>
           </div>
         </div>
@@ -507,10 +507,11 @@
                 <th style="width:140px;text-align:left;padding:8px;color:#5f6b7a">일시</th>
                 <th style="width:80px;text-align:left;padding:8px;color:#5f6b7a">변경자</th>
                 <th style="text-align:left;padding:8px;color:#5f6b7a">변경 내용</th>
+                <th style="width:100px;text-align:right;padding:8px;color:#5f6b7a">미수금</th>
               </tr>
             </thead>
             <tbody id="changeLogTbody">
-              <tr><td colspan="3" style="text-align:center;color:#8892a4;padding:20px">변경 이력이 없습니다</td></tr>
+              <tr><td colspan="4" style="text-align:center;color:#8892a4;padding:20px">변경 이력이 없습니다</td></tr>
             </tbody>
           </table>
         </div>
@@ -580,7 +581,7 @@ function renderChangeLog(logs) {
   var tbody = document.getElementById('changeLogTbody');
   if (!tbody) return;
   if (!logs || logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#8892a4;padding:20px">변경 이력이 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#8892a4;padding:20px">변경 이력이 없습니다</td></tr>';
     return;
   }
   tbody.innerHTML = '';
@@ -590,7 +591,8 @@ function renderChangeLog(logs) {
     tr.style.borderBottom = '1px solid #f0f2f5';
     tr.innerHTML = '<td style="white-space:nowrap;color:#5f6b7a;padding:8px">' + log.date + '</td>' +
       '<td style="padding:8px">' + (log.who || '시스템') + '</td>' +
-      '<td style="font-size:11px;padding:8px">' + (log.detail || '') + '</td>';
+      '<td style="font-size:11px;padding:8px">' + (log.detail || '') + '</td>' +
+      '<td style="text-align:right;padding:8px;font-size:11px;color:#d32f2f;font-weight:600">' + (log.receivable || '') + '</td>';
     tbody.appendChild(tr);
   });
 }
@@ -1604,6 +1606,18 @@ async function submitCompanyForm() {
     console.warn('저장 전 중복 체크 실패 (무시하고 진행):', e.message);
   }
 
+  // --- 동일 사업자번호 기존 업체 신호등/미수금 승계 ---
+  var _existingCompany = null;
+  var _inheritedTrafficLight = 'blue';
+  var _inheritedReceivable = 0;
+  try {
+    _existingCompany = await fsGetExistingCompanyByBizNo(bizNo.trim());
+    if (_existingCompany) {
+      _inheritedTrafficLight = _existingCompany.trafficLight || 'blue';
+      _inheritedReceivable = _existingCompany.receivableAmount || 0;
+    }
+  } catch(e) { console.warn('기존 업체 조회 실패:', e.message); }
+
   // 기본 정보 수집 — 표준 필드명 사용 (companyMgmt.html 기준)
   var corpType = document.querySelector('input[name="corpType"]:checked');
   var data = {
@@ -1701,6 +1715,27 @@ async function submitCompanyForm() {
   // 등록일/변경이력 (표준 필드)
   data.regDate = new Date().toISOString().slice(0, 10);
   data.changeLog = [];
+
+  // --- 신호등/미수금 승계 ---
+  data.trafficLight = _inheritedTrafficLight;
+  data.receivableAmount = _inheritedReceivable;
+  if (_existingCompany && (_inheritedTrafficLight !== 'blue' || _inheritedReceivable > 0)) {
+    var _tlLabel = { green:'초록(정상)', blue:'파랑(양호)', yellow:'노랑(주의)', orange:'주황(경고)', red:'빨강(위험)' };
+    var _now = new Date().toISOString().slice(0,16).replace('T',' ');
+    data.changeLog.push({
+      date: _now,
+      who: '시스템',
+      detail: '동일 사업자번호 기존 업체 [' + (_existingCompany.company || _existingCompany.name || '') + '] 신호등: ' + (_tlLabel[_inheritedTrafficLight] || _inheritedTrafficLight) + ' 승계',
+      receivable: _inheritedReceivable > 0 ? _inheritedReceivable.toLocaleString() + '원' : '-'
+    });
+    // 신호등 UI 업데이트
+    var _colorMap = { green:'#4caf50', blue:'#2196f3', yellow:'#ffeb3b', orange:'#ff9800', red:'#f44336' };
+    var _dotEl = document.getElementById('trafficDot');
+    var _labelEl = document.getElementById('trafficLabel');
+    if (_dotEl) _dotEl.style.background = _colorMap[_inheritedTrafficLight] || '#2196f3';
+    if (_labelEl) _labelEl.textContent = (_tlLabel[_inheritedTrafficLight] || _inheritedTrafficLight) + ' (기존 업체에서 승계)';
+    renderChangeLog(data.changeLog);
+  }
 
   // --- 담당자 중복 체크 (토스트 안내, 저장 차단하지 않음) ---
   try {
