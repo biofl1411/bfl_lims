@@ -554,7 +554,7 @@ companies/{companyId}/
 
 ## Backend API (`api_server.py`)
 
-Flask REST API 서버 (port 5060)
+Flask REST API 서버 (port 5003)
 
 | 엔드포인트 | 메서드 | 설명 |
 |-----------|--------|------|
