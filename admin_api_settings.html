@@ -1125,7 +1125,7 @@ async function loadFromServer() {
 
   try {
     // Firestore에서 스케줄 설정 읽기
-    var scheduleDoc = await db.collection('fss_config').document('schedule').get();
+    var scheduleDoc = await db.collection('fss_config').doc('schedule').get();
     if (scheduleDoc.exists) {
       var s = scheduleDoc.data();
       document.getElementById('collectHour').value = s.collect_hour || 3;
@@ -1169,16 +1169,37 @@ async function loadStatus() {
   if (!isFirebaseReady()) return;
 
   try {
-    // Firestore에서 컬렉션 건수 조회
-    var bizSnap = await db.collection('fss_businesses').get();
-    var prdSnap = await db.collection('fss_products').get();
-
-    document.getElementById('statBizCount').textContent = numberFormat(bizSnap.size);
-    document.getElementById('statPrdCount').textContent = numberFormat(prdSnap.size);
+    // fss_config/data_counts 메타데이터에서 카운트 조회 (경량)
+    var countsDoc = await db.collection('fss_config').doc('data_counts').get();
+    if (countsDoc.exists) {
+      var data = countsDoc.data();
+      var totals = data.total || {};
+      document.getElementById('statBizCount').textContent = numberFormat(totals.fss_businesses || 0);
+      document.getElementById('statPrdCount').textContent = numberFormat(totals.fss_products || 0);
+    } else {
+      document.getElementById('statBizCount').textContent = '-';
+      document.getElementById('statPrdCount').textContent = '-';
+    }
 
     // 최근 수집 로그에서 최근 수집일 조회
-    var logSnap = await db.collection('fss_collect_log')
-      .orderBy('started_at', 'desc').limit(1).get();
+    var logSnap;
+    try {
+      logSnap = await db.collection('fss_collect_log')
+        .orderBy('started_at', 'desc').limit(1).get();
+    } catch(e2) {
+      // orderBy 인덱스 없을 시 전체 조회 후 최신 찾기
+      var allLogs = await db.collection('fss_collect_log').get();
+      var latest = null;
+      allLogs.docs.forEach(function(doc) {
+        var d = doc.data();
+        if (!latest || (d.started_at && d.started_at > (latest.started_at || ''))) latest = d;
+      });
+      if (latest) {
+        var lastDt = latest.started_at || '';
+        document.getElementById('statLastCollect').textContent = lastDt ? lastDt.substring(5, 16) : '-';
+      }
+      return;
+    }
     if (!logSnap.empty) {
       var lastLog = logSnap.docs[0].data();
       var lastDt = lastLog.started_at || '';
@@ -1195,8 +1216,19 @@ async function loadLogs() {
   if (!isFirebaseReady()) return;
 
   try {
-    var logSnap = await db.collection('fss_collect_log')
-      .orderBy('started_at', 'desc').limit(20).get();
+    var logSnap;
+    try {
+      logSnap = await db.collection('fss_collect_log')
+        .orderBy('started_at', 'desc').limit(20).get();
+    } catch(e2) {
+      // orderBy 인덱스 없을 시 전체 조회 후 정렬
+      var allSnap = await db.collection('fss_collect_log').get();
+      var allDocs = allSnap.docs.map(function(d) { return d; });
+      allDocs.sort(function(a, b) {
+        return (b.data().started_at || '').localeCompare(a.data().started_at || '');
+      });
+      logSnap = { empty: allDocs.length === 0, docs: allDocs.slice(0, 20), forEach: function(fn) { this.docs.forEach(fn); } };
+    }
 
     if (logSnap.empty) {
       document.getElementById('logBody').innerHTML =

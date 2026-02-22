@@ -398,6 +398,34 @@ def log_collection(api_source, api_name, collect_type,
     except Exception as e:
         logger.error(f'로그 기록 실패: {e}')
 
+
+def update_data_counts():
+    """Firestore fss_config/data_counts 메타데이터 업데이트 (프론트엔드용)"""
+    try:
+        counts = {}
+        totals = {}
+        for col_name in ['fss_businesses', 'fss_products', 'fss_materials', 'fss_changes']:
+            docs = fdb.collection(col_name).stream()
+            api_counts = {}
+            total = 0
+            for doc in docs:
+                total += 1
+                data = doc.to_dict()
+                src = data.get('api_source', 'unknown')
+                api_counts[src] = api_counts.get(src, 0) + 1
+            totals[col_name] = total
+            counts.update(api_counts)
+
+        fdb.collection('fss_config').document('data_counts').set({
+            'counts': counts,
+            'total': totals,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        })
+        logger.info(f'  📊 카운트 메타데이터 업데이트: {totals}')
+    except Exception as e:
+        logger.error(f'카운트 업데이트 실패: {e}')
+
+
 # ============================================================
 # 수집 메인 로직
 # ============================================================
@@ -788,6 +816,10 @@ def main():
             logger.info(f'  ⏭️ 건너뜀: {len(skipped)}개 API {skipped}')
             logger.info(f'  → 내일 자동 수집 시 이어서 진행됩니다 (--auto)')
         logger.info(f'{"="*60}')
+
+        # 프론트엔드용 카운트 메타데이터 업데이트
+        if completed:
+            update_data_counts()
 
         show_status()
 

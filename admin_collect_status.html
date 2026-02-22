@@ -426,39 +426,50 @@ function showToast(msg) {
   setTimeout(function() { t.classList.remove('show'); }, 3000);
 }
 
-// Firestore에서 컬렉션별 문서 수 조회
-async function getCollectionCount(collectionName) {
+// fss_config/data_counts 문서에서 카운트 조회 (경량)
+async function loadDataCounts() {
   try {
-    var snap = await db.collection(collectionName).get();
-    return snap.size;
+    var doc = await db.collection('fss_config').doc('data_counts').get();
+    if (doc.exists) return doc.data();
+    return { counts: {}, total: {} };
   } catch(e) {
-    console.warn('컬렉션 카운트 실패:', collectionName, e.message);
-    return 0;
+    console.warn('카운트 문서 로드 실패:', e.message);
+    return { counts: {}, total: {} };
   }
 }
 
-// API별 Firestore 문서 수 조회
-async function getApiCount(collectionName, apiSource) {
-  try {
-    var snap = await db.collection(collectionName)
-      .where('api_source', '==', apiSource).get();
-    return snap.size;
-  } catch(e) {
-    return 0;
-  }
-}
-
-// API별 최근 수집 로그 조회
-async function getLastLog(apiSource) {
+// 수집 로그 전체 조회 (소량 데이터) → API별 최신 로그 맵 생성
+async function loadAllLogs() {
   try {
     var snap = await db.collection('fss_collect_log')
-      .where('api_source', '==', apiSource)
-      .orderBy('started_at', 'desc')
-      .limit(1).get();
-    if (snap.empty) return null;
-    return snap.docs[0].data();
+      .orderBy('started_at', 'desc').get();
+    var latestLogs = {};
+    snap.docs.forEach(function(doc) {
+      var data = doc.data();
+      var src = data.api_source;
+      if (src && !latestLogs[src]) latestLogs[src] = data;
+    });
+    return latestLogs;
   } catch(e) {
-    return null;
+    console.warn('수집 로그 조회 실패:', e.message);
+    // orderBy 인덱스 없을 경우 → 인덱스 없이 재시도
+    try {
+      var snap2 = await db.collection('fss_collect_log').get();
+      var latestLogs2 = {};
+      snap2.docs.forEach(function(doc) {
+        var data = doc.data();
+        var src = data.api_source;
+        if (!src) return;
+        var existing = latestLogs2[src];
+        if (!existing || (data.started_at && (!existing.started_at || data.started_at > existing.started_at))) {
+          latestLogs2[src] = data;
+        }
+      });
+      return latestLogs2;
+    } catch(e2) {
+      console.error('수집 로그 재시도 실패:', e2.message);
+      return {};
+    }
   }
 }
 
@@ -471,14 +482,19 @@ async function loadData() {
   document.getElementById('refreshInfo').textContent = '데이터 로딩 중...';
 
   try {
+    // 1. 카운트 메타데이터 + 수집 로그를 동시에 조회 (2개 쿼리만)
+    var results = await Promise.all([loadDataCounts(), loadAllLogs()]);
+    var dataCounts = results[0];
+    var latestLogs = results[1];
+    var apiCounts = dataCounts.counts || {};
+
     var apis = [];
     var apiIds = Object.keys(ALL_APIS);
 
-    // 모든 API에 대해 Firestore에서 데이터 조회
-    var promises = apiIds.map(async function(sid) {
+    apiIds.forEach(function(sid) {
       var info = ALL_APIS[sid];
-      var dbCount = await getApiCount(info.collection, sid);
-      var lastLog = await getLastLog(sid);
+      var dbCount = apiCounts[sid] || 0;
+      var lastLog = latestLogs[sid] || null;
 
       var apiData = {
         api_source: sid,
@@ -512,10 +528,8 @@ async function loadData() {
         apiData.status = 'completed';
       }
 
-      return apiData;
+      apis.push(apiData);
     });
-
-    apis = await Promise.all(promises);
 
     renderSummary(apis);
     renderTable(apis);
