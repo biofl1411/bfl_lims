@@ -320,7 +320,7 @@ Flask HTTPS 서버 (port 5002) — CLOVA OCR API 프록시
 - **API 연동**: `receipt_api_final.py` (Flask, port 5001)와 연동
 - **폴백 모드**: API 서버 미실행 시에도 내장 폴백 데이터로 동작
 - **서버 상태 표시**: 헤더에 연결 상태 인디케이터 (🟢 연결됨 / 🔴 오프라인)
-- **6개 아코디언 섹션**: 접수 기본정보, 업체정보, 시료정보, 검사정보, 의뢰인 정보, 팀별 메모
+- **6개 아코디언 섹션**: 접수 기본정보, 업체정보, 시료정보, 검사정보, 계산서 정보, 팀별 메모
 - **API 연동 기능**: 검사목적 로드, 검체유형 검색, 접수번호 할당(스레드 안전), 업체 검색
 - **팀별 메모 권한**: 현재 로그인 팀만 편집, 나머지 읽기 전용
 - **임시저장/불러오기**: localStorage 기반
@@ -856,6 +856,13 @@ cd ~/bfl_lims && git pull
 | `2c16648` | companyMgmt: 인허가 원본 문서를 해당 인허가 카드에 표시 |
 | `ca5250e` | companyRegForm: 파일 업로드 버그 수정 — _bizLicFile/_licFiles 변수 사용 |
 | `a337939` | companyMgmt: 상세보기에 사업자등록정보 진위확인 기능 추가 |
+| `6009964` | 접수등록: 인허가 기반 업체 검색 + Firestore 연동 |
+| `a9f1602` | 접수등록: firestore-helpers.js 스크립트 태그 추가 |
+| `b1d8e51` | README.md: 식약처 마이그레이션/인증키/업체찾기/접수등록 기록 + 2/23 작업 계획 |
+| `9587ba2` | 식품유형 탭 전면 개편: FULL_FOOD_TYPES 삭제 + API 기반 렌더링 |
+| `f782256` | 식품군 분류 + 정렬번호 구현 (식품유형 탭 6단계) |
+| `996fa77` | 고객사 담당자 + 세금계산서 담당자 휴대폰번호 필드 추가 |
+| `41bc542` | 접수등록: 업체정보 이메일/담당자 추가 + 의뢰인 정보→계산서 정보 개편 |
 
 ---
 
@@ -1203,7 +1210,8 @@ MariaDB에 저장되던 식약처 공공 API 데이터를 Firestore로 전체 �
 [거래처 *] [검색 입력 ─────────────────── 🔍]
 [인허가번호       ] [영업형태          ] [영업소명칭        ]   ← 신규
 [계산서업체       ] [사업자번호        ] [대표자            ]
-[담당자           ] [전화번호          ] [휴대폰            ]
+[담당자           ] [전화번호          ] [휴대폰            ] [이메일            ]
+[우리측 담당자 ────────────────────────────────────────────────────────────────]
 ```
 
 | 필드 ID | 라벨 | 소스 |
@@ -1211,9 +1219,13 @@ MariaDB에 저장되던 식약처 공공 API 데이터를 Firestore로 전체 �
 | `lic-no` | 인허가번호 | `licenses[].licNo` |
 | `lic-biz-form` | 영업형태 | `licenses[].licBizForm` |
 | `lic-biz-name` | 영업소명칭 | `licenses[].licBizName` |
+| `contact-email` | 이메일 | `contactEmail` / `contacts[0].email` |
+| `sales-rep` | 우리측 담당자 | `salesRep` / `contacts[0].salesRep` (readonly) |
 
 #### 3. selectCompany() 확장
 - 인허가 정보 (인허가번호, 영업형태, 영업소명칭) + 사업자 정보 (계산서업체, 사업자번호, 대표자) **동시 자동 채움**
+- 이메일, 우리측 담당자 자동 채움
+- 계산서 정보(taxName/taxPhone/taxMobile/taxEmail) 자동 채움
 - 분야에 맞는 인허가를 `licenses[]` 배열에서 찾아 매칭
 
 #### 4. 분야 변경 시 초기화
@@ -1730,70 +1742,37 @@ window.addEventListener('firebase-ready', function() {
 10. **삭제 권한 등급별 제어** — `checkDeletePermission()` 구현 (사용자 역할 기반)
 11. **OCR 결과 조회 UI** — 업체 상세 페이지에서 OCR 원본 결과 확인 기능
 
-### 예정 작업 (2026-02-23)
+### 완료 작업 (2026-02-23)
 
-#### 작업 0 (우선): 식품유형 탭 전면 개편
-- **플랜 파일**: `.claude/plans/sorted-dreaming-bee.md`
-- FULL_FOOD_TYPES 하드코딩 삭제 → 식약처 공공 API 4개(I2580, I2600, I0960, I0930)에서 수집한 데이터로 교체
-- API별 서브탭 + 수집 버튼 + 품목명별/검체유형별 토글 + 식품군 분류
-- 총 ~135,538건 Firestore 저장
+#### 작업 0: 식품유형 탭 전면 개편 ✅
+- **커밋**: `9587ba2`, `f782256`
+- FULL_FOOD_TYPES 하드코딩 3,061줄 삭제 → 식약처 공공 API 4개 기반 렌더링으로 교체
+- API별 서브탭(식품공전/개별기준규격/공통기준규격/건강기능식품공전) + 수집 버튼
+- 식품군 24개 분류 + 식품군순 정렬 + 식품군 드롭다운 필터
+- 카드/리스트 양쪽 뷰 지원, 식품/축산 분야 필터, 검색, 페이지네이션
 
-#### 작업 1: 고객사 담당자 + 세금계산서 담당자 휴대폰번호 추가
+#### 작업 1: 고객사 담당자 + 세금계산서 담당자 휴대폰번호 추가 ✅
+- **커밋**: `996fa77`
+- **수정 파일**: `companyMgmt.html`, `companyRegForm_v2.html`, `js/firestore-helpers.js`
+- 담당자/세금계산서 섹션: 3열→4열 그리드 (이름/전화/휴대폰/이메일)
+- normalizeCompany(): contacts에 `mobile`, flat에 `contactMobile`, 세금계산서에 `taxMobile` 추가
+- 변경이력 추적에 mobile 포함
 
-**대상 파일**: `companyMgmt.html`, `companyRegForm_v2.html`, `js/firestore-helpers.js`
+#### 작업 2: 접수등록 업체정보 확장 + 우리측 담당자 ✅
+- **커밋**: `41bc542`
+- **수정 파일**: `sampleReceipt.html`
+- 업체정보에 이메일(`contact-email`) + 우리측 담당자(`sales-rep`, readonly) 필드 추가
+- selectCompany(): 이메일, 우리측 담당자 자동 채움
 
-| 위치 | 현재 | 변경 |
-|------|------|------|
-| companyRegForm_v2.html 담당자 (섹션4) | 이름(`cName1`), 전화(`cPhone1`), 이메일(`cEmail1`) | + 휴대폰(`cMobile1`) 추가 |
-| companyRegForm_v2.html 세금계산서 (섹션5) | 이름(`taxName`), 전화(`taxPhone`), 이메일(`taxEmail`) | + 휴대폰(`taxMobile`) 추가 |
-| companyMgmt.html 등록폼 | `regCName`, `regCPhone`, `regCEmail` | + `regCMobile` 추가 |
-| companyMgmt.html 상세 | `detContactPhone_N`, `detTaxPhone` | + `detContactMobile_N`, `detTaxMobile` |
-| firestore-helpers.js | contacts: `{name, phone, email, role, salesRep}` | + `mobile` 필드 추가 |
-| firestore-helpers.js | taxInfo: `{name, phone, email}` | + `mobile` 필드 (taxMobile) 추가 |
-
-- 레이아웃: 3칸(이름/전화/이메일) → 4칸(이름/전화/휴대폰/이메일) 또는 2행
-- `copyFromContact1()` 함수도 mobile 포함하도록 수정
-- `saveDetailEdit()` changeLog에 mobile 변경 추적 추가
-
-#### 작업 2: 접수등록 업체정보 확장 + 우리측 담당자
-
-**대상 파일**: `sampleReceipt.html`
-
-| 항목 | 현재 | 변경 |
-|------|------|------|
-| 업체정보 필드 | 담당자, 전화번호, 휴대폰 | + **이메일주소**(`contact-email`) 추가 |
-| 우리측 담당자 | 없음 | companies `contacts[].salesRep` 기반 자동 표시 |
-| selectCompany() | 인허가+사업자 채움 | + 이메일, 우리측 담당자 자동 채움 |
-
-- 위치는 작업3 계산서 정보 레이아웃에 맞춰 조정
-
-#### 작업 3: 의뢰인 정보 → 계산서 정보로 변경
-
-**대상 파일**: `sampleReceipt.html`
-
-**현재**: "👤 의뢰인 정보" 섹션 — 의뢰인명(`requester-name`), 의뢰업체명(`request-company`) 2필드만 존재
-
-**변경 후**: "🧾 계산서 정보" 섹션으로 전면 개편
-
-1. **계산서 담당 정보 자동 표시**
-   - 업체 선택 시 companies의 `taxName`, `taxPhone`, `taxMobile`, `taxEmail` 자동 채움
-   - readonly 필드로 표시
-
-2. **"계산서 입력 정보 수정하기" 체크박스**
-   - 체크 시: 새로운 입력폼 표시 (다른 업체로 계산서 발행 가능)
-   - 계산서업체명, 사업자번호, 담당자, 전화번호, 이메일 직접 입력
-
-3. **계산서 발행일** (라디오 또는 select)
-   - 접수일 / 특정일(날짜 picker) / 월말 발행
-
-4. **발행 유형** (라디오 또는 select)
-   - 목적별 구분 발행 / 합산 발행 / 기타(직접 작성 textarea)
-
-**Firestore 추가 필드 (companies 또는 receipts 컬렉션)**:
-- `billingDateType`: `'receipt'` | `'specific'` | `'monthEnd'`
-- `billingDate`: 특정일 경우 날짜
-- `billingType`: `'byPurpose'` | `'combined'` | `'other'`
-- `billingTypeNote`: 기타 시 직접 작성 내용
+#### 작업 3: 의뢰인 정보 → 계산서 정보로 변경 ✅
+- **커밋**: `41bc542`
+- **수정 파일**: `sampleReceipt.html`
+- "👤 의뢰인 정보" → "🧾 계산서 정보" 섹션 전면 교체
+- 계산서 담당 정보 자동 표시: `bill-name`, `bill-phone`, `bill-mobile`, `bill-email` (readonly)
+- "계산서 입력 정보 수정하기" 체크박스 → 수정 폼 토글
+- 계산서 발행일: 접수일/특정일(date picker)/월말 발행
+- 발행 유형: 목적별 구분/합산/기타(textarea)
+- Firestore 필드: `billingDateType`, `billingDate`, `billingType`, `billingTypeNote`
 
 ---
 
