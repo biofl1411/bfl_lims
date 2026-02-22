@@ -279,6 +279,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                 </div>
                 <div class="form-row">
                     <div class="form-group">
+                        <label>인허가번호</label>
+                        <input type="text" id="lic-no" readonly style="font-family:monospace;color:#1565c0">
+                    </div>
+                    <div class="form-group">
+                        <label>영업형태</label>
+                        <input type="text" id="lic-biz-form" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>영업소명칭</label>
+                        <input type="text" id="lic-biz-name" readonly>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
                         <label>계산서업체</label>
                         <input type="text" id="company-name" readonly>
                     </div>
@@ -780,6 +794,19 @@ function onTestFieldChange() {
     document.getElementById('food-type-input').value = '';
     document.getElementById('food-type-value').value = '';
 
+    // 업체정보 초기화 (분야 변경 시 인허가 정보가 달라짐)
+    document.getElementById('company-search').value = '';
+    document.getElementById('lic-no').value = '';
+    document.getElementById('lic-biz-form').value = '';
+    document.getElementById('lic-biz-name').value = '';
+    document.getElementById('company-name').value = '';
+    document.getElementById('business-no').value = '';
+    document.getElementById('ceo').value = '';
+    document.getElementById('phone').value = '';
+    document.getElementById('contact-person').value = '';
+    document.getElementById('mobile').value = '';
+    document.getElementById('company-suggestions').classList.remove('active');
+
     showToast(`시험분야 선택: ${testField}. 검사목적을 선택하세요.`, 'info');
 }
 
@@ -1221,59 +1248,116 @@ function searchCompany(query) {
 
 async function _searchCompany(query) {
     const suggestions = document.getElementById('company-suggestions');
-    if (!query) {
+    if (!query || query.length < 1) {
         suggestions.classList.remove('active');
         return;
     }
 
+    const field = document.querySelector('input[name="test-field"]:checked')?.value || '식품';
     let companies = [];
 
-    // API 호출 시도
-    if (apiOnline) {
+    // Firestore companies 컬렉션에서 검색 (firestore-helpers.js)
+    try {
+        if (typeof fsSearchCompanies === 'function') {
+            const allResults = await fsSearchCompanies(query, 50);
+            // 분야 필터: licenses[].licField 매칭
+            companies = allResults.filter(function(c) {
+                if (!c.licenses || c.licenses.length === 0) return true;
+                return c.licenses.some(function(lic) {
+                    return (lic.licField || lic.field) === field;
+                });
+            }).slice(0, 20);
+            console.log(`[Firestore] 업체 검색: "${query}" (${field}) - ${companies.length}건`);
+        }
+    } catch (e) {
+        console.warn('[Firestore] 업체 검색 실패:', e.message);
+    }
+
+    // 폴백: API 또는 하드코딩 데이터
+    if (companies.length === 0 && apiOnline) {
         try {
             const res = await fetch(`${API_BASE}/api/companies/search?q=${encodeURIComponent(query)}`);
             if (res.ok) {
                 const data = await res.json();
-                companies = data.companies || [];
-                console.log(`[API] 업체 검색: "${query}" - ${companies.length}건`);
+                companies = (data.companies || []).map(function(c) {
+                    return { company: c.name, name: c.name, bizNo: c.businessNo, businessNo: c.businessNo, repName: c.ceo, ceo: c.ceo, contactPhone: c.phone, licenses: [] };
+                });
             }
-        } catch (e) {
-            console.warn('[API] 업체 검색 실패, 폴백 사용:', e.message);
-        }
+        } catch (e) { /* ignore */ }
     }
-
-    // 폴백
     if (companies.length === 0) {
-        companies = FALLBACK_COMPANIES.filter(c => c.name.toLowerCase().includes(query.toLowerCase()));
-        console.log(`[폴백] 업체 검색: "${query}" - ${companies.length}건`);
+        companies = FALLBACK_COMPANIES.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).map(function(c) {
+            return { company: c.name, name: c.name, bizNo: c.businessNo, businessNo: c.businessNo, repName: c.ceo, ceo: c.ceo, contactPhone: c.phone, licenses: [] };
+        });
     }
 
     if (companies.length === 0) {
-        suggestions.classList.remove('active');
+        suggestions.innerHTML = '<div style="padding:12px;color:#8892a4;font-size:12px;text-align:center">검색 결과 없음</div>';
+        suggestions.classList.add('active');
         return;
     }
 
-    suggestions.innerHTML = companies.map(c => `
-        <div class="suggestion-item" onclick="selectCompany(${JSON.stringify(c).replace(/"/g, '&quot;')})">
-            <strong>${c.name}</strong><br>
-            <small>${c.businessNo} | ${c.ceo}</small>
-        </div>
-    `).join('');
+    suggestions.innerHTML = companies.map(function(c) {
+        var nm = c.company || c.name || '-';
+        var bizNo = c.bizNo || c.businessNo || '';
+        var ceoNm = c.repName || c.ceo || '';
+        // 해당 분야 인허가 찾기
+        var lic = (c.licenses || []).find(function(l) { return (l.licField || l.field) === field; }) || (c.licenses || [])[0] || {};
+        var licNo = lic.licNo || lic.licenseNo || '';
+        var licBiz = lic.licBizForm || lic.bizForm || '';
+        var cData = JSON.stringify(c).replace(/"/g, '&quot;');
+        return '<div class="suggestion-item" onclick="selectCompany(this)" data-company="' + cData + '">' +
+            '<strong>' + nm + '</strong>' +
+            (licBiz ? ' <span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:3px">' + licBiz + '</span>' : '') +
+            '<br><small style="color:#8892a4">' +
+            (licNo ? '인허가: ' + licNo + ' | ' : '') +
+            (bizNo ? '사업자: ' + bizNo + ' | ' : '') +
+            ceoNm + '</small></div>';
+    }).join('');
     suggestions.classList.add('active');
 }
 
 // ============================================================================
 // 업체 선택
 // ============================================================================
-function selectCompany(c) {
-    if (typeof c === 'string') c = JSON.parse(c);
-    document.getElementById('company-search').value = c.name;
-    document.getElementById('company-name').value = c.name;
-    document.getElementById('business-no').value = c.businessNo;
-    document.getElementById('ceo').value = c.ceo;
-    document.getElementById('phone').value = c.phone || '';
+function selectCompany(elOrObj) {
+    var c;
+    if (elOrObj && elOrObj.getAttribute) {
+        // DOM element 클릭 → data-company 속성에서 파싱
+        c = JSON.parse(elOrObj.getAttribute('data-company'));
+    } else if (typeof elOrObj === 'string') {
+        c = JSON.parse(elOrObj);
+    } else {
+        c = elOrObj;
+    }
+
+    var field = document.querySelector('input[name="test-field"]:checked')?.value || '식품';
+    // 해당 분야의 인허가 찾기
+    var lic = (c.licenses || []).find(function(l) { return (l.licField || l.field) === field; }) || (c.licenses || [])[0] || {};
+
+    // 거래처명
+    var nm = c.company || c.name || '';
+    document.getElementById('company-search').value = nm;
+
+    // 인허가 정보
+    document.getElementById('lic-no').value = lic.licNo || lic.licenseNo || '';
+    document.getElementById('lic-biz-form').value = lic.licBizForm || lic.bizForm || '';
+    document.getElementById('lic-biz-name').value = lic.licBizName || lic.bizName || nm;
+
+    // 사업자 정보
+    document.getElementById('company-name').value = nm;
+    document.getElementById('business-no').value = c.bizNo || c.businessNo || '';
+    document.getElementById('ceo').value = c.repName || c.ceo || '';
+
+    // 연락처
+    document.getElementById('phone').value = c.contactPhone || c.phone || '';
+    document.getElementById('contact-person').value = c.contactName || '';
+    var mob = c.contactMobile || '';
+    if (!mob && c.contacts && c.contacts[0]) mob = c.contacts[0].mobile || '';
+    document.getElementById('mobile').value = mob;
+
     document.getElementById('company-suggestions').classList.remove('active');
-    showToast(`업체 선택: ${c.name}`, 'info');
+    showToast('업체 선택: ' + nm + (lic.licNo ? ' (인허가: ' + lic.licNo + ')' : ''), 'info');
 }
 
 // ============================================================================
