@@ -492,6 +492,34 @@ Flask REST API 서버 (port 5001) — `food_item_fee_mapping.js` 데이터 기�
 | **사용 페이지** | `salesMgmt.html` |
 | **기능** | Leaflet.js 배경 지도 타일 서비스 |
 
+### 8. 식약처 공공 API (식품안전나라 OpenAPI)
+
+| 항목 | 내용 |
+|------|------|
+| **API 키** | `e5a1d9f07d6c4424a757` |
+| **Base URL** | `https://openapi.foodsafetykorea.go.kr/api` |
+| **호출 형식** | `{BASE_URL}/{API_KEY}/{서비스ID}/json/{시작}/{끝}` |
+| **수집기** | `collector.py` (Firestore 직접 저장) |
+| **서비스 수** | 16개 (업소 9 + 품목 2 + 원재료 3 + 변경이력 2) |
+| **사용 페이지** | `salesMgmt.html` (업체찾기), `admin_collect_status.html` |
+
+### 인증 정보 요약
+
+| 서비스 | 키/시크릿 | 비고 |
+|--------|----------|------|
+| **Firebase** apiKey | `AIzaSyDbG7L2gR9UovOYQXE0vv8nbH0_DqqXyyo` | 프로젝트: `bfl-lims` |
+| **Firebase** projectId | `bfl-lims` | storageBucket: `bfl-lims.firebasestorage.app` |
+| **Firebase** appId | `1:694014042557:web:9162e1e324b7af024072d4` | measurementId: `G-XKTWZLYY93` |
+| **Firebase** 서비스 계정 | `serviceAccountKey.json` | 서버 `~/bfl_lims/` (Python 백엔드용) |
+| **Firebase** 인증방식 | 익명 인증 (Anonymous Auth) | `firebase-init.js` 에서 자동 처리 |
+| **식약처 OpenAPI** | `e5a1d9f07d6c4424a757` | 환경변수: `FSS_API_KEY` |
+| **국세청 진위확인** | `4553b84e3c3d3816cdfa...` | 공공데이터포털 serviceKey |
+| **Kakao 주소검색** | `8e5dab09aacd882449bd3865699a9d69` | KakaoAK |
+| **Juso.go.kr 영문주소** | `U01TX0FVVEgyMDI2MDIxOTE2MDczMDExNzYyNDM=` | confmKey |
+| **Naver Clova OCR** Secret | `QWpOSmx5d1NNb01abHhEQ1R3a01ZWUtMYXhxYVNXWnI=` | 환경변수: `CLOVA_OCR_SECRET` |
+| **Naver Clova OCR** APIGW | `https://ialgkho4vv.apigw.ntruss.com/custom/v1/50335/4fd4f84e...` | 사업자등록증/인허가/명함 |
+| **MariaDB** (레거시) | user: `fss_user` / db: `fss_data` / host: `localhost:3306` | Firestore 이전 완료, 환경변수: `FSS_DB_*` |
+
 ---
 
 ## OCR 원본 문서 열람 기능
@@ -593,8 +621,46 @@ Firebase 프로젝트: `bfl-lims` / SDK: Firebase compat v10.14.1
 | `foodTypes/{docId}` | 식품유형 데이터 (894카드) | `inspectionMgmt.html` | 컬렉션 (배치) |
 | `itemGroups/{docId}` | 항목그룹 데이터 (5,695건) | `inspectionMgmt.html` | 컬렉션 (배치) |
 | `inspectionFees/{docId}` | 수수료 데이터 (7,481건) | `inspectionMgmt.html` | 컬렉션 (배치) |
+| `fss_businesses/{lcns_no}` | 식약처 업소 데이터 (~11,200건) | `salesMgmt.html` | 컬렉션 (인허가번호 키) |
+| `fss_products/{auto_id}` | 식약처 품목 데이터 (~661,000건) | `salesMgmt.html` | 컬렉션 |
+| `fss_changes/{auto_id}` | 식약처 인허가 변경이력 | `salesMgmt.html` | 컬렉션 |
+| `fss_materials/{auto_id}` | 식약처 원재료 | — | 컬렉션 |
+| `fss_collection_log/{auto_id}` | API 수집 로그 (날짜/건수/오류) | `admin_collect_status.html` | 컬렉션 |
+| `_health/ping` | Firebase 연결 상태 확인 | 전체 | 단일 문서 |
 
 > **대용량 데이터**: Firestore 단일 문서 1MB 제한으로 인해 식품유형·항목그룹·수수료는 **컬렉션 배치 방식**으로 저장 (500건씩 batch.set())
+
+### 식약처 API → Firestore 마이그레이션
+
+MariaDB에서 Firestore로 식약처 공공 API 데이터 전체 이관 완료 (2026-02-22).
+
+| 항목 | 내용 |
+|------|------|
+| **마이그레이션 스크립트** | `migrate_to_firestore.py` (1회성, MariaDB → Firestore) |
+| **자동 수집기** | `collector.py` (Firestore 직접 저장, systemd timer) |
+| **서비스 계정 키** | `serviceAccountKey.json` (서버 `~/bfl_lims/`) |
+| **Firestore 무료 쓰기 한도** | 일 18,000건 (20,000 중 여유 2,000) |
+
+**수집 API 목록 (16개)**:
+
+| 구분 | API 코드 | 이름 | Firestore 컬렉션 |
+|------|----------|------|------------------|
+| 업소 | I1220 | 식품제조가공업 | `fss_businesses` |
+| 업소 | I2829 | 즉석판매제조가공업 | `fss_businesses` |
+| 업소 | I-0020 | 건강기능식품 전문/벤처제조업 | `fss_businesses` |
+| 업소 | I1300 | 축산물 가공업 | `fss_businesses` |
+| 업소 | I1320 | 축산물 식육포장처리업 | `fss_businesses` |
+| 업소 | I2835 | 식육즉석판매가공업 | `fss_businesses` |
+| 업소 | I2831 | 식품소분업 | `fss_businesses` |
+| 업소 | C001 | 수입식품등영업신고 | `fss_businesses` |
+| 업소 | I1260 | 식품등수입판매업 | `fss_businesses` |
+| 품목 | I1250 | 식품(첨가물)품목제조보고 | `fss_products` |
+| 품목 | I1310 | 축산물 품목제조정보 | `fss_products` |
+| 원재료 | C002 | 식품(첨가물) 원재료 | `fss_materials` |
+| 원재료 | C003 | 건강기능식품 원재료 | `fss_materials` |
+| 원재료 | C006 | 축산물 원재료 | `fss_materials` |
+| 변경 | I2859 | 식품업소 인허가 변경 정보 | `fss_changes` |
+| 변경 | I2860 | 건강기능식품업소 인허가 변경 정보 | `fss_changes` |
 
 ### Firebase Storage (파일 저장소)
 
@@ -1073,6 +1139,88 @@ async function fsDeleteCompanyFiles(companyId) {
 
 - `Restart=always`, `RestartSec=5` — 비정상 종료 시 5초 후 자동 재시작
 - `enabled` 상태 — 서버 부팅 시 자동 시작
+
+### 식약처 데이터 MariaDB → Firestore 전체 이전
+
+**수정 파일**: `migrate_to_firestore.py` (신규), `collector.py`, `salesMgmt.html`, `js/firestore-helpers.js`
+**커밋**: `13ca0f0`, `bb5668b`, `ea91c13`
+
+MariaDB에 저장되던 식약처 공공 API 데이터를 Firestore로 전체 이전하여 **프론트엔드에서 직접 쿼리 가능**하도록 변경.
+
+| 항목 | 내용 |
+|------|------|
+| **마이그레이션** | `migrate_to_firestore.py` — MariaDB 전체 테이블 → Firestore 1회성 이전 |
+| **fss_businesses** | ~11,200건 완료 (인허가번호 `lcns_no` 기준 문서 ID) |
+| **fss_products** | ~661,000건 완료 (자동 ID) |
+| **fss_changes** | 인허가 변경이력 |
+| **fss_materials** | 원재료 정보 |
+| **수집기 변경** | `collector.py` — MariaDB 대신 Firestore 직접 저장으로 전환 |
+| **프론트엔드 쿼리** | `salesMgmt.html`에서 `db.collection('fss_businesses')` 직접 조회 |
+| **count 최적화** | Firestore `count()` 집계 쿼리로 메타데이터 방식 전환 |
+
+### 영업관리 > 업체찾기 (salesMgmt.html) — 지도 UI 개선 + 조회 모달
+
+**수정 파일**: `salesMgmt.html`
+**커밋**: `f93ff39`, `df399d5`, `1d07f78`, `8eba765`, `7509da4`, `a210e27`, `1259285`
+
+#### 1. 지도 UI 높이 확대
+- 지도 높이: `300px` → `calc(100vh - 200px)` 반응형 적용
+- 결과 패널도 동일 높이로 조정
+
+#### 2. 시도/읍면동 필터 수정
+- **시도 필터**: `addr_sido` 풀네임 매칭 (서울특별시, 경기도 등 — 기존 "서울", "경기" 약칭 불일치 해결)
+- **읍면동 필터**: 행정동↔법정동 매칭 지원 (행정동 이름으로 검색 시 법정동 업소도 표시)
+- **findSgCode 수정**: 양주시 클릭 시 남양주시로 잘못 이동하는 버그 해결 (정확한 이름 매칭)
+- **matchSigungu 수정**: 지도 클릭 좌표 → 시군구 매칭 시 동일 문제 해결
+
+#### 3. "등록" → "🔍 조회" 버튼 + 품목/변경이력 모달
+- FSS 검색 결과의 "+ 등록" 버튼(녹색) → "🔍 조회" 버튼(파란색 `#1565c0`)으로 변경
+- `bizDetail(licNo, bizName)` 함수 추가 — Firestore `fss_products` / `fss_changes` 조회
+
+**모달 UI (`#bizDetailModal`)**:
+| 탭 | 내용 | Firestore 쿼리 |
+|----|------|----------------|
+| 품목 | 제품명, 품목유형, 보고일자, 상태, 소비기한 | `fss_products.where('lcns_no','==',licNo)` |
+| 변경이력 | 변경일자, 변경전, 변경후, 사유 | `fss_changes.where('lcns_no','==',licNo)` |
+
+- 미수집 업체: "📋 품목 데이터 수집예정" / "📋 변경이력 데이터 수집예정" 안내 메시지 표시
+- "📋 고객 등록" 버튼 → `bizReg()` 연결
+
+### 접수등록 > 업체정보 (sampleReceipt.html) — 인허가 기반 업체 검색
+
+**수정 파일**: `sampleReceipt.html`
+**커밋**: `6009964`, `a9f1602`
+
+거래처 검색을 목업 API에서 **Firestore companies 컬렉션 실제 검색**으로 변경. 시험분야(식품/축산)에 따라 인허가 정보를 기반으로 업체 필터링.
+
+#### 1. 거래처 검색 변경
+- 기존: `/api/companies/search` (하드코딩 3건)
+- 변경: `fsSearchCompanies()` (`firestore-helpers.js`) → Firestore `companies` 컬렉션 prefix 검색
+- 분야 필터: `licenses[].licField` === 선택된 분야 (식품/축산)
+
+#### 2. 인허가 정보 필드 추가
+```
+[거래처 *] [검색 입력 ─────────────────── 🔍]
+[인허가번호       ] [영업형태          ] [영업소명칭        ]   ← 신규
+[계산서업체       ] [사업자번호        ] [대표자            ]
+[담당자           ] [전화번호          ] [휴대폰            ]
+```
+
+| 필드 ID | 라벨 | 소스 |
+|---------|------|------|
+| `lic-no` | 인허가번호 | `licenses[].licNo` |
+| `lic-biz-form` | 영업형태 | `licenses[].licBizForm` |
+| `lic-biz-name` | 영업소명칭 | `licenses[].licBizName` |
+
+#### 3. selectCompany() 확장
+- 인허가 정보 (인허가번호, 영업형태, 영업소명칭) + 사업자 정보 (계산서업체, 사업자번호, 대표자) **동시 자동 채움**
+- 분야에 맞는 인허가를 `licenses[]` 배열에서 찾아 매칭
+
+#### 4. 분야 변경 시 초기화
+- `onTestFieldChange()` — 분야(식품↔축산) 변경 시 모든 업체정보 필드 초기화
+
+#### 5. 버그 수정
+- `firestore-helpers.js` 스크립트 태그가 `sampleReceipt.html`에 누락 → `<head>`에 추가
 
 ---
 
@@ -1581,6 +1729,65 @@ window.addEventListener('firebase-ready', function() {
 9. 백엔드 API 연동 + 실제 데이터 연동
 10. **삭제 권한 등급별 제어** — `checkDeletePermission()` 구현 (사용자 역할 기반)
 11. **OCR 결과 조회 UI** — 업체 상세 페이지에서 OCR 원본 결과 확인 기능
+
+### 예정 작업 (2026-02-23)
+
+#### 작업 1: 고객사 담당자 + 세금계산서 담당자 휴대폰번호 추가
+
+**대상 파일**: `companyMgmt.html`, `companyRegForm_v2.html`, `js/firestore-helpers.js`
+
+| 위치 | 현재 | 변경 |
+|------|------|------|
+| companyRegForm_v2.html 담당자 (섹션4) | 이름(`cName1`), 전화(`cPhone1`), 이메일(`cEmail1`) | + 휴대폰(`cMobile1`) 추가 |
+| companyRegForm_v2.html 세금계산서 (섹션5) | 이름(`taxName`), 전화(`taxPhone`), 이메일(`taxEmail`) | + 휴대폰(`taxMobile`) 추가 |
+| companyMgmt.html 등록폼 | `regCName`, `regCPhone`, `regCEmail` | + `regCMobile` 추가 |
+| companyMgmt.html 상세 | `detContactPhone_N`, `detTaxPhone` | + `detContactMobile_N`, `detTaxMobile` |
+| firestore-helpers.js | contacts: `{name, phone, email, role, salesRep}` | + `mobile` 필드 추가 |
+| firestore-helpers.js | taxInfo: `{name, phone, email}` | + `mobile` 필드 (taxMobile) 추가 |
+
+- 레이아웃: 3칸(이름/전화/이메일) → 4칸(이름/전화/휴대폰/이메일) 또는 2행
+- `copyFromContact1()` 함수도 mobile 포함하도록 수정
+- `saveDetailEdit()` changeLog에 mobile 변경 추적 추가
+
+#### 작업 2: 접수등록 업체정보 확장 + 우리측 담당자
+
+**대상 파일**: `sampleReceipt.html`
+
+| 항목 | 현재 | 변경 |
+|------|------|------|
+| 업체정보 필드 | 담당자, 전화번호, 휴대폰 | + **이메일주소**(`contact-email`) 추가 |
+| 우리측 담당자 | 없음 | companies `contacts[].salesRep` 기반 자동 표시 |
+| selectCompany() | 인허가+사업자 채움 | + 이메일, 우리측 담당자 자동 채움 |
+
+- 위치는 작업3 계산서 정보 레이아웃에 맞춰 조정
+
+#### 작업 3: 의뢰인 정보 → 계산서 정보로 변경
+
+**대상 파일**: `sampleReceipt.html`
+
+**현재**: "👤 의뢰인 정보" 섹션 — 의뢰인명(`requester-name`), 의뢰업체명(`request-company`) 2필드만 존재
+
+**변경 후**: "🧾 계산서 정보" 섹션으로 전면 개편
+
+1. **계산서 담당 정보 자동 표시**
+   - 업체 선택 시 companies의 `taxName`, `taxPhone`, `taxMobile`, `taxEmail` 자동 채움
+   - readonly 필드로 표시
+
+2. **"계산서 입력 정보 수정하기" 체크박스**
+   - 체크 시: 새로운 입력폼 표시 (다른 업체로 계산서 발행 가능)
+   - 계산서업체명, 사업자번호, 담당자, 전화번호, 이메일 직접 입력
+
+3. **계산서 발행일** (라디오 또는 select)
+   - 접수일 / 특정일(날짜 picker) / 월말 발행
+
+4. **발행 유형** (라디오 또는 select)
+   - 목적별 구분 발행 / 합산 발행 / 기타(직접 작성 textarea)
+
+**Firestore 추가 필드 (companies 또는 receipts 컬렉션)**:
+- `billingDateType`: `'receipt'` | `'specific'` | `'monthEnd'`
+- `billingDate`: 특정일 경우 날짜
+- `billingType`: `'byPurpose'` | `'combined'` | `'other'`
+- `billingTypeNote`: 기타 시 직접 작성 내용
 
 ---
 
