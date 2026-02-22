@@ -4325,35 +4325,65 @@ var SIDO_ADDR = {'서울':'서울','부산':'부산','대구':'대구','인천':
 function loadFssData() {
   if(fssAllData || fssLoading) return;
   fssLoading = true;
-  fetch('data/fss_all.json').then(function(r){
-    if(!r.ok) throw new Error('파일 없음');
-    return r.json();
-  }).then(function(data){
-    fssAllData = data;
+
+  // Firestore 준비 대기
+  if (typeof isFirebaseReady === 'function' && !isFirebaseReady()) {
+    window.addEventListener('firebase-ready', function() { fssLoading = false; loadFssData(); }, { once: true });
+    console.log('[FSS] Firebase 연결 대기 중...');
+    return;
+  }
+
+  // Firestore fss_businesses 컬렉션에서 로드
+  db.collection('fss_businesses').get().then(function(snap) {
+    fssAllData = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      fssAllData.push({
+        nm: d.bssh_nm || '',
+        addr: d.locp_addr || '',
+        ceo: d.prsdnt_nm || '',
+        biz: d.induty_nm || '',
+        lic: d.lcns_no || '',
+        tel: d.telno || '',
+        org: d.instt_nm || '',
+        sido: d.addr_sido || '',
+        sigungu: d.addr_sigungu || '',
+        dong: d.addr_dong || ''
+      });
+    });
     fssLoading = false;
-    console.log('식약처 데이터 로드:', fssAllData.length + '건');
-    toast('📊 식약처 ' + fssAllData.length.toLocaleString() + '건 로드 완료');
+    console.log('[FSS] Firestore에서 ' + fssAllData.length + '건 로드');
+    toast('📊 식약처 ' + fssAllData.length.toLocaleString() + '건 로드 완료 (Firestore)');
     updateSidoLabels();
-  }).catch(function(e){
+  }).catch(function(e) {
     fssLoading = false;
-    console.error('fss_all.json 로드 실패:', e);
-    toast('⚠️ 식약처 데이터 파일이 없습니다. download_fss.py를 실행하세요.');
+    console.error('[FSS] Firestore 로드 실패:', e);
+    toast('⚠️ 식약처 데이터 로드 실패: ' + e.message);
   });
 }
 
 function fssFilterSido(sido) {
   if(!fssAllData) return [];
   var key = SIDO_ADDR[sido] || sido;
-  return fssAllData.filter(function(r){ return r.addr && r.addr.indexOf(key) >= 0; });
+  return fssAllData.filter(function(r) {
+    if (r.sido) return r.sido === key || r.sido === sido;
+    return r.addr && r.addr.indexOf(key) >= 0;
+  });
 }
 function fssFilterSg(sido, sg) {
   var list = fssFilterSido(sido);
   var sgClean = sg.replace(/시$|군$|구$/,'');
-  return list.filter(function(r){ return r.addr.indexOf(sg) >= 0 || r.addr.indexOf(sgClean) >= 0; });
+  return list.filter(function(r) {
+    if (r.sigungu) return r.sigungu.indexOf(sg) >= 0 || sg.indexOf(r.sigungu) >= 0;
+    return r.addr.indexOf(sg) >= 0 || r.addr.indexOf(sgClean) >= 0;
+  });
 }
 function fssFilterDong(sido, sg, dong) {
   var list = fssFilterSg(sido, sg);
-  return list.filter(function(r){ return r.addr.indexOf(dong) >= 0; });
+  return list.filter(function(r) {
+    if (r.dong) return r.dong.indexOf(dong) >= 0 || dong.indexOf(r.dong) >= 0;
+    return r.addr.indexOf(dong) >= 0;
+  });
 }
 
 function updateSidoLabels() {
