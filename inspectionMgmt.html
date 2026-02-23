@@ -31819,7 +31819,7 @@ async function downloadExcel(type) {
     return;
   }
 
-  if (type === '식품유형') {
+  if (type === '식품공전') {
     // ── 현재 선택된 API 탭의 원본 데이터를 그대로 엑셀로 내보내기 ──
     showToast('엑셀 파일 생성중... (대용량 데이터는 수초 소요)', 'info');
     try {
@@ -31833,17 +31833,40 @@ async function downloadExcel(type) {
 
       // 한글 헤더 매핑 (API 원본 필드명 → 한글)
       var headerMap = {
-        'PRDLST_NM': '품목명', 'PRDLST_CD_NM': '품목코드명',
-        'T_KOR_NM': '시험항목명(한글)', 'TESTITM_NM': '시험항목명',
-        'FNPRT_ITM_NM': '성분항목명', 'SPEC_VAL': '규격값',
-        'SPEC_VAL_SUMUP': '규격값(요약)', 'UNIT_NM': '단위',
+        'PRDLST_NM': '품목명', 'PRDLST_CD': '품목코드', 'PRDLST_CD_NM': '품목코드명',
+        'T_KOR_NM': '시험항목명(한글)', 'TESTITM_NM': '시험항목명', 'TESTITM_CD': '시험항목코드',
+        'FNPRT_ITM_NM': '성분항목명', 'FNPRT_ITM_INCLS_YN': '성분항목포함여부',
+        'SPEC_VAL': '규격값', 'SPEC_VAL_SUMUP': '규격값(요약)',
+        'UNIT_NM': '단위', 'UNIT_CD': '단위코드',
         'MIMM_VAL': '최소값', 'MXMM_VAL': '최대값',
+        'MIMM_VAL_DVS_CD': '최소값구분', 'MXMM_VAL_DVS_CD': '최대값구분',
         'MIMM_VAL_FNPRT_CD_NM': '최소값판정', 'MXMM_VAL_FNPRT_CD_NM': '최대값판정',
-        'JDGMNT_FNPRT_CD_NM': '판정기준', 'CHOIC_FIT_FNPRT_CD_NM': '적합판정',
-        'CHOIC_IMPROPT_FNPRT_CD_NM': '부적합판정', 'PIAM_KOR_NM': '시험법명',
-        'VALD_BEGN_DT': '유효시작일', 'VALD_END_DT': '유효종료일',
-        'INJRY_YN': '위해여부', 'NUM': '번호'
+        'JDGMNT_FOM_CD': '판정형식코드', 'JDGMNT_FNPRT_CD_NM': '판정기준',
+        'CHOIC_FIT': '적합기준', 'CHOIC_IMPROPT': '부적합기준',
+        'CHOIC_FIT_FNPRT_CD_NM': '적합판정', 'CHOIC_IMPROPT_FNPRT_CD_NM': '부적합판정',
+        'A079_FNPRT_CD_NM': '판정079', 'A080_FNPRT_CD_NM': '판정080',
+        'A081_FNPRT_CD_NM': '판정081', 'A082_CF_FNPRT_CD_NM': '판정082적합',
+        'A082_CI_FNPRT_CD_NM': '판정082부적합',
+        'PIAM_KOR_NM': '시험법명', 'SORC': '출처',
+        'VALD_BEGN_DT': '유효시작일', 'VALD_END_DT': '유효종료일', 'VALD_MANLI': '유효관리',
+        'INJRY_YN': '위해여부', 'NTR_PRSEC_ITM_YN': '영양성분여부',
+        'EMPHS_PRSEC_TESTITM_YN': '강조표시여부', 'MONTRNG_TESTITM_YN': '모니터링여부',
+        'RVLV_ELSE_TESTITM_YN': '기타시험항목여부',
+        'MCRRGNSM_2C': '미생물2C', 'MCRRGNSM_2M': '미생물2M', 'MCRRGNSM_2N': '미생물2N', 'MCRRGNSM_3M': '미생물3M',
+        'INDV_SPEC_SEQ': '개별규격일련번호', 'ATTRB_SEQ': '속성일련번호',
+        'LAST_UPDT_DTM': '최종수정일', 'UPDT_PRVNS': '수정사유',
+        'NUM': '번호'
       };
+
+      // 분류코드(PRDLST_CD)별 정렬
+      data.sort(function(a, b) {
+        var cdA = a.PRDLST_CD || a.PRDLST_CD_NM || '';
+        var cdB = b.PRDLST_CD || b.PRDLST_CD_NM || '';
+        if (cdA !== cdB) return cdA < cdB ? -1 : 1;
+        var nmA = a.TESTITM_NM || '';
+        var nmB = b.TESTITM_NM || '';
+        return nmA < nmB ? -1 : nmA > nmB ? 1 : 0;
+      });
 
       // aoa(Array of Arrays) 방식으로 성능 최적화 (json_to_sheet 대비 3~5배 빠름)
       var keys = Object.keys(data[0]);
