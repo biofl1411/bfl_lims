@@ -861,15 +861,7 @@ function togglePin(fieldId) {
     const label = checkbox.closest('.pin-check');
     const pins = getPinnedFields();
     if (checkbox.checked) {
-        if (fieldId === 'test-field') {
-            pins[fieldId] = { value: document.querySelector('input[name="test-field"]:checked')?.value || '식품', field: 'radio' };
-        } else {
-            const el = document.getElementById(fieldId);
-            pins[fieldId] = { value: el.value, field: el.tagName === 'SELECT' ? 'select' : 'input' };
-        }
-        if (fieldId === 'test-purpose') {
-            pins['_test-field-via-purpose'] = document.querySelector('input[name="test-field"]:checked')?.value || '식품';
-        }
+        savePinValue(fieldId, pins);
         label.classList.add('active');
     } else {
         delete pins[fieldId];
@@ -877,6 +869,30 @@ function togglePin(fieldId) {
         label.classList.remove('active');
     }
     localStorage.setItem('bfl_pinned_fields', JSON.stringify(pins));
+}
+
+// 고정 필드의 현재 값을 저장
+function savePinValue(fieldId, pins) {
+    if (!pins) pins = getPinnedFields();
+    if (fieldId === 'test-field') {
+        pins[fieldId] = { value: document.querySelector('input[name="test-field"]:checked')?.value || '', field: 'radio' };
+    } else {
+        const el = document.getElementById(fieldId);
+        if (el) pins[fieldId] = { value: el.value, field: el.tagName === 'SELECT' ? 'select' : 'input' };
+    }
+    if (fieldId === 'test-purpose') {
+        pins['_test-field-via-purpose'] = document.querySelector('input[name="test-field"]:checked')?.value || '';
+    }
+    localStorage.setItem('bfl_pinned_fields', JSON.stringify(pins));
+    return pins;
+}
+
+// 고정된 필드 값이 변경되면 자동 업데이트
+function updatePinnedValue(fieldId) {
+    var pins = getPinnedFields();
+    if (pins[fieldId]) {
+        savePinValue(fieldId, pins);
+    }
 }
 
 function getPinnedFields() {
@@ -906,11 +922,21 @@ function restorePinnedFields() {
             checkbox.closest('.pin-check').classList.add('active');
             // 검사목적: 시험분야 먼저 복원 후 옵션 로드 → 값 설정
             if (fieldId === 'test-purpose') {
-                var tf = pins['_test-field-via-purpose'] || (pins['test-field'] && pins['test-field'].value) || '식품';
-                const radio = document.querySelector(`input[name="test-field"][value="${tf}"]`);
-                if (radio) radio.checked = true;
-                updateTestPurposeOptions(tf).then(() => {
-                    el.value = pins[fieldId].value;
+                var tf = pins['_test-field-via-purpose'] || (pins['test-field'] && pins['test-field'].value) || '';
+                if (tf) {
+                    const radio = document.querySelector(`input[name="test-field"][value="${tf}"]`);
+                    if (radio) radio.checked = true;
+                }
+                var savedVal = pins[fieldId].value;
+                updateTestPurposeOptions(tf || document.querySelector('input[name="test-field"]:checked')?.value).then(() => {
+                    el.value = savedVal;
+                    // 커스텀 드롭다운 표시 텍스트 동기화
+                    var textSpan = document.querySelector('#test-purpose-display .custom-select-text');
+                    if (textSpan) textSpan.textContent = savedVal || '선택하세요';
+                    // 선택 표시
+                    document.querySelectorAll('.custom-select-option').forEach(function(o) {
+                        o.classList.toggle('selected', o.dataset.value === savedVal);
+                    });
                 });
             } else {
                 el.value = pins[fieldId].value;
@@ -925,6 +951,9 @@ function restorePinnedFields() {
 // ============================================================================
 function onTestFieldChange() {
     const testField = document.querySelector('input[name="test-field"]:checked')?.value;
+
+    // 고정된 경우 값 업데이트
+    updatePinnedValue('test-field');
 
     // 검사목적 드롭다운 업데이트
     updateTestPurposeOptions(testField);
@@ -1111,6 +1140,9 @@ document.addEventListener('click', function(e) {
 function onTestPurposeChange() {
     document.getElementById('food-type-input').value = '';
     document.getElementById('food-type-value').value = '';
+
+    // 고정된 경우 값 업데이트
+    updatePinnedValue('test-purpose');
 
     const testPurpose = document.getElementById('test-purpose').value;
     const testField = document.querySelector('input[name="test-field"]:checked')?.value;
