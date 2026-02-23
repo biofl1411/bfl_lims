@@ -279,7 +279,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                 <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
                     <div class="form-group company-search">
                         <label>거래처 <span class="required">*</span></label>
-                        <input type="text" id="company-search" placeholder="업체명 검색..." oninput="searchCompany(this.value)" required>
+                        <input type="text" id="company-search" placeholder="업체명, 인허가번호, 영업소명 검색..." oninput="searchCompany(this.value)" required>
                         <span class="search-icon">🔍</span>
                         <div class="suggestions" id="company-suggestions"></div>
                     </div>
@@ -2026,17 +2026,21 @@ async function _searchCompany(query) {
     }
 
     suggestions.innerHTML = companies.map(function(c) {
-        var nm = c.company || c.name || '-';
+        var companyNm = c.company || c.name || '-';
         var bizNo = c.bizNo || c.businessNo || '';
         var ceoNm = c.repName || c.ceo || '';
         // 해당 분야 인허가 찾기
         var lic = (c.licenses || []).find(function(l) { return (l.licField || l.field) === field; }) || (c.licenses || [])[0] || {};
         var licNo = lic.licNo || lic.licenseNo || '';
         var licBiz = lic.licBizForm || lic.bizForm || '';
+        var licBizName = lic.licBizName || '';
+        // 인허가 영업소명 우선 표시
+        var displayNm = licBizName || companyNm;
         var cData = JSON.stringify(c).replace(/"/g, '&quot;');
         return '<div class="suggestion-item" onclick="selectCompany(this)" data-company="' + cData + '">' +
-            '<strong>' + nm + '</strong>' +
+            '<strong>' + displayNm + '</strong>' +
             (licBiz ? ' <span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:3px">' + licBiz + '</span>' : '') +
+            (licBizName && licBizName !== companyNm ? ' <span style="font-size:10px;color:#8892a4">(' + companyNm + ')</span>' : '') +
             '<br><small style="color:#8892a4">' +
             (licNo ? '인허가: ' + licNo + ' | ' : '') +
             (bizNo ? '사업자: ' + bizNo + ' | ' : '') +
@@ -2063,8 +2067,8 @@ function selectCompany(elOrObj) {
     // 해당 분야의 인허가 찾기
     var lic = (c.licenses || []).find(function(l) { return (l.licField || l.field) === field; }) || (c.licenses || [])[0] || {};
 
-    // 거래처명
-    var nm = c.company || c.name || '';
+    // 거래처명 (인허가 영업소명 우선)
+    var nm = lic.licBizName || c.company || c.name || '';
     document.getElementById('company-search').value = nm;
 
     // 인허가 정보
