@@ -589,7 +589,8 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <!-- 서브탭: API / Custom -->
       <div style="display:flex;gap:6px;margin-bottom:12px">
         <button class="btn fc-subtab active" data-fcsub="api" onclick="switchFcSubtab('api')" style="font-size:12px;padding:6px 16px;border-radius:20px">📡 식품유형(API)</button>
-        <button class="btn fc-subtab" data-fcsub="custom" onclick="switchFcSubtab('custom')" style="font-size:12px;padding:6px 16px;border-radius:20px">📝 식품유형(Custom)</button>
+        <button class="btn fc-subtab" data-fcsub="custom" onclick="switchFcSubtab('custom')" style="font-size:12px;padding:6px 16px;border-radius:20px">📝 식품유형(커스텀)</button>
+        <button class="btn fc-subtab" data-fcsub="mapping" onclick="switchFcSubtab('mapping')" style="font-size:12px;padding:6px 16px;border-radius:20px">📊 식품유형(맵핑)</button>
       </div>
 
       <!-- API 서브탭 컨텐츠 -->
@@ -630,6 +631,31 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </div>
         <div class="card-grid" id="fcc-cards"></div>
         <div class="accordion-container" id="fcc-accordion" style="display:none"></div>
+      </div>
+
+      <!-- Mapping 서브탭 컨텐츠 -->
+      <div id="fc-sub-mapping" style="display:none">
+        <div class="page-desc" style="margin-bottom:12px;font-size:13px;color:var(--sub)">
+          📊 접수내역 기반 식품유형-검사항목-수수료 매핑 (2025년 1~11월 실적)
+        </div>
+        <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="text" id="fcm-search" placeholder="🔍 검사목적, 식품유형, 항목 검색..." style="flex:1;min-width:200px;padding:8px 14px;border-radius:8px;border:1px solid var(--bdr);font-size:13px;background:var(--card)" oninput="renderFoodClassMapping()">
+          <div class="view-toggle">
+            <button class="view-btn active" onclick="fcmView='card';this.parentElement.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderFoodClassMapping()">🗂️ 카드</button>
+            <button class="view-btn" onclick="fcmView='list';this.parentElement.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderFoodClassMapping()">📋 리스트</button>
+          </div>
+        </div>
+        <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="filter-chip active" data-fcmlabel="전체" onclick="fcmFilterLabel='전체';document.querySelectorAll('#fc-sub-mapping .filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.fcmlabel==='전체'));renderFoodClassMapping()">전체</button>
+          <button class="filter-chip" data-fcmlabel="식품" onclick="fcmFilterLabel='식품';document.querySelectorAll('#fc-sub-mapping .filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.fcmlabel==='식품'));renderFoodClassMapping()">🍽️ 식품</button>
+          <button class="filter-chip" data-fcmlabel="축산" onclick="fcmFilterLabel='축산';document.querySelectorAll('#fc-sub-mapping .filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.fcmlabel==='축산'));renderFoodClassMapping()">🥩 축산</button>
+          <select id="fcm-purpose-filter" onchange="fcmFilterPurpose=this.value;renderFoodClassMapping()" style="margin-left:8px;padding:6px 10px;border-radius:8px;border:1px solid var(--bdr);font-size:12px;background:var(--card);cursor:pointer;">
+            <option value="전체">검사목적: 전체</option>
+          </select>
+        </div>
+        <div id="fcm-stats" style="margin-bottom:12px;font-size:12px;color:var(--sub)"></div>
+        <div class="card-grid" id="fcm-cards"></div>
+        <div class="accordion-container" id="fcm-accordion" style="display:none"></div>
       </div>
     </div>
 
@@ -30345,8 +30371,149 @@ function switchFcSubtab(sub) {
   });
   document.getElementById('fc-sub-api').style.display = sub === 'api' ? '' : 'none';
   document.getElementById('fc-sub-custom').style.display = sub === 'custom' ? '' : 'none';
+  document.getElementById('fc-sub-mapping').style.display = sub === 'mapping' ? '' : 'none';
   if (sub === 'api') renderFoodClassData();
-  else renderFoodClassCustom();
+  else if (sub === 'custom') renderFoodClassCustom();
+  else if (sub === 'mapping') renderFoodClassMapping();
+}
+
+// ══ 식품유형(Mapping) 상태 ══
+let fcmView = 'card';
+let fcmFilterLabel = '전체';
+let fcmFilterPurpose = '전체';
+let _mappingDataCache = null;
+
+async function loadMappingData() {
+  if (_mappingDataCache) return _mappingDataCache;
+  try {
+    var snap = await db.collection('foodTypesMapping').get();
+    _mappingDataCache = snap.docs.map(function(d) { return d.data(); });
+    console.log('[Firestore] Mapping 데이터 로드:', _mappingDataCache.length + '건');
+  } catch(e) {
+    console.warn('[Firestore] Mapping 로드 실패:', e.message);
+    _mappingDataCache = [];
+  }
+  return _mappingDataCache;
+}
+
+async function renderFoodClassMapping() {
+  var cardsEl = document.getElementById('fcm-cards');
+  var accEl = document.getElementById('fcm-accordion');
+  var statsEl = document.getElementById('fcm-stats');
+  if (!cardsEl) return;
+
+  var data = await loadMappingData();
+  if (!data || data.length === 0) {
+    cardsEl.innerHTML = '<div style="padding:40px;text-align:center;color:#999">Mapping 데이터가 없습니다.</div>';
+    return;
+  }
+
+  // 검사목적 필터 드롭다운 생성
+  var purposeSet = new Set();
+  data.forEach(function(r) { if (r.purpose) purposeSet.add(r.purpose); });
+  var purposeSelect = document.getElementById('fcm-purpose-filter');
+  if (purposeSelect.options.length <= 1) {
+    Array.from(purposeSet).sort().forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p; opt.textContent = p;
+      purposeSelect.appendChild(opt);
+    });
+  }
+
+  var search = (document.getElementById('fcm-search').value || '').toLowerCase();
+
+  // 식품/축산 라벨 분류 (classifyFoodType 활용)
+  var filtered = data.filter(function(r) {
+    // 라벨 필터
+    if (fcmFilterLabel !== '전체') {
+      var cls = classifyFoodType(r.foodType);
+      var label = cls.label || cls.major;
+      if (label !== fcmFilterLabel && cls.major !== '식품유형') return false;
+      if (cls.major === '식품유형' && (cls.label || '') !== fcmFilterLabel) return false;
+    }
+    // 검사목적 필터
+    if (fcmFilterPurpose !== '전체' && r.purpose !== fcmFilterPurpose) return false;
+    // 검색
+    if (search) {
+      var hay = ((r.purpose || '') + (r.foodType || '') + (r.item || '') + (r.bracket || '')).toLowerCase();
+      if (hay.indexOf(search) < 0) return false;
+    }
+    return true;
+  });
+
+  // foodType 기준 그룹핑
+  var groups = {};
+  filtered.forEach(function(r) {
+    var key = r.foodType || '(미지정)';
+    if (!groups[key]) groups[key] = { foodType: key, items: [], totalFee: 0, totalCount: 0 };
+    groups[key].items.push(r);
+    groups[key].totalFee += (r.fee || 0) * (r.count || 0);
+    groups[key].totalCount += (r.count || 0);
+  });
+  var groupArr = Object.values(groups).sort(function(a,b) { return b.totalCount - a.totalCount; });
+
+  statsEl.textContent = '총 ' + groupArr.length + '개 식품유형 / ' + filtered.length + '개 항목 (전체 ' + data.length + '건)';
+
+  if (fcmView === 'card') {
+    accEl.style.display = 'none';
+    cardsEl.style.display = '';
+    var html = '';
+    groupArr.forEach(function(g) {
+      var cls = classifyFoodType(g.foodType);
+      var labelKey = cls.label || cls.major;
+      var labelColors = {'식품':'#ede7f6','축산':'#fff3e0'};
+      var labelTextColors = {'식품':'#4a148c','축산':'#e65100'};
+      var bg = labelColors[labelKey] || '#f5f5f5';
+      var txt = labelTextColors[labelKey] || '#616161';
+
+      html += '<div class="food-type-card">';
+      html += '<div class="card-header"><div>';
+      html += '<div class="card-title">' + g.foodType + '</div>';
+      html += '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">';
+      html += '<span class="badge" style="background:' + bg + ';color:' + txt + ';font-size:10px">' + cls.icon + ' ' + labelKey + '</span>';
+      html += '<span class="badge" style="background:#f5f5f5;color:#616161;font-size:10px">' + cls.minor + '</span>';
+      html += '</div></div>';
+      html += '<div style="text-align:right;font-size:11px;color:var(--sub)">' + g.items.length + '항목<br>' + g.totalCount + '건</div>';
+      html += '</div>';
+      // 항목 리스트 (최대 5개)
+      html += '<div class="card-body" style="padding:8px 14px;font-size:12px">';
+      g.items.slice(0, 5).forEach(function(it) {
+        html += '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #f3f3f3">';
+        html += '<span style="color:#344054">' + (it.item || '') + (it.bracket ? ' (' + it.bracket + ')' : '') + '</span>';
+        html += '<span style="color:#667085">' + (it.fee || 0).toLocaleString() + '원 × ' + (it.count || 0) + '</span>';
+        html += '</div>';
+      });
+      if (g.items.length > 5) {
+        html += '<div style="color:#999;padding-top:4px;text-align:center">... +' + (g.items.length - 5) + '개 더</div>';
+      }
+      html += '</div></div>';
+    });
+    cardsEl.innerHTML = html || '<div style="padding:40px;text-align:center;color:#999">검색 결과 없음</div>';
+  } else {
+    // 리스트 뷰
+    cardsEl.style.display = 'none';
+    accEl.style.display = '';
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html += '<thead><tr style="background:#f8f9fb"><th style="padding:8px;text-align:left">검사목적</th><th style="padding:8px;text-align:left">식품유형</th><th style="padding:8px;text-align:left">라벨</th><th style="padding:8px;text-align:left">항목명</th><th style="padding:8px;text-align:left">괄호</th><th style="padding:8px;text-align:right">수수료</th><th style="padding:8px;text-align:right">건수</th></tr></thead><tbody>';
+    filtered.slice(0, 200).forEach(function(r) {
+      var cls = classifyFoodType(r.foodType);
+      var labelKey = cls.label || cls.major;
+      html += '<tr style="border-bottom:1px solid #eee">';
+      html += '<td style="padding:6px 8px">' + (r.purpose || '') + '</td>';
+      html += '<td style="padding:6px 8px">' + (r.foodType || '') + '</td>';
+      html += '<td style="padding:6px 8px"><span class="badge" style="font-size:10px">' + cls.icon + ' ' + labelKey + '</span></td>';
+      html += '<td style="padding:6px 8px">' + (r.item || '') + '</td>';
+      html += '<td style="padding:6px 8px;color:#999">' + (r.bracket || '') + '</td>';
+      html += '<td style="padding:6px 8px;text-align:right">' + (r.fee || 0).toLocaleString() + '</td>';
+      html += '<td style="padding:6px 8px;text-align:right">' + (r.count || 0) + '</td>';
+      html += '</tr>';
+    });
+    if (filtered.length > 200) {
+      html += '<tr><td colspan="7" style="padding:12px;text-align:center;color:#999">... ' + (filtered.length - 200) + '건 더 (검색으로 범위를 좁혀주세요)</td></tr>';
+    }
+    html += '</tbody></table>';
+    accEl.innerHTML = html;
+  }
 }
 
 // ══ 식품유형(Custom) 렌더링 — FULL_FOOD_TYPES 기반 ══
