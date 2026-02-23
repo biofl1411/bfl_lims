@@ -267,8 +267,20 @@ async function fsSearchCompanies(query, limit) {
         var ceo = (c.repName || c.ceo || '').toLowerCase();
         var bizNo = (c.bizNo || c.businessNo || '');
         var addr = (c.addr1 || c.address || '').toLowerCase();
+        // 인허가 필드 검색
+        var licMatch = false;
+        if (c.licenses && c.licenses.length > 0) {
+          licMatch = c.licenses.some(function(lic) {
+            var licNo = (lic.licNo || '').toLowerCase();
+            var licBizName = (lic.licBizName || '').toLowerCase();
+            var licBizForm = (lic.licBizForm || '').toLowerCase();
+            var licAddr = (lic.licAddr || '').toLowerCase();
+            return licNo.indexOf(qLower) >= 0 || licBizName.indexOf(qLower) >= 0 ||
+                   licBizForm.indexOf(qLower) >= 0 || licAddr.indexOf(qLower) >= 0;
+          });
+        }
         if (company.indexOf(qLower) >= 0 || ceo.indexOf(qLower) >= 0 ||
-            bizNo.indexOf(q) >= 0 || addr.indexOf(qLower) >= 0) {
+            bizNo.indexOf(q) >= 0 || addr.indexOf(qLower) >= 0 || licMatch) {
           seenIds[c.id] = true;
           results.push(c);
         }
