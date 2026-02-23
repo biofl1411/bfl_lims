@@ -135,6 +135,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="js/full-food-types.js"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -432,6 +433,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group">
                         <label>문서번호</label>
                         <input type="text" id="document-no">
+                    </div>
+                </div>
+
+                <!-- 시험항목 테이블 -->
+                <div id="inspection-items-section" style="display:none;margin-top:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <label style="font-weight:600;font-size:14px;color:#344054">🔬 시험항목</label>
+                        <span id="inspection-items-summary" style="font-size:13px;color:#667085"></span>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table style="width:100%;border-collapse:collapse;font-size:13px">
+                            <thead>
+                                <tr style="background:#f8f9fc;border-bottom:2px solid #e0e0e0">
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:40px">No</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">시험항목</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">규격</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:100px">시험담당자</th>
+                                    <th style="padding:10px 12px;text-align:right;font-weight:600;color:#344054;width:100px">수수료</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inspection-items-tbody"></tbody>
+                            <tfoot id="inspection-items-tfoot" style="display:none">
+                                <tr style="background:#f0f4ff;border-top:2px solid #d0d5dd">
+                                    <td colspan="4" style="padding:10px 12px;font-weight:700;color:#344054;text-align:right">합계</td>
+                                    <td id="inspection-items-total" style="padding:10px 12px;font-weight:700;color:#6941C6;text-align:right"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -989,6 +1018,8 @@ function onTestFieldChange() {
     document.getElementById('bill-edit-check').checked = false;
     document.getElementById('bill-edit-area').style.display = 'none';
 
+    clearInspectionItems();
+
     showToast(`시험분야 선택: ${testField}. 검사목적을 선택하세요.`, 'info');
 }
 
@@ -1140,6 +1171,7 @@ document.addEventListener('click', function(e) {
 function onTestPurposeChange() {
     document.getElementById('food-type-input').value = '';
     document.getElementById('food-type-value').value = '';
+    clearInspectionItems();
 
     // 고정된 경우 값 업데이트
     updatePinnedValue('test-purpose');
@@ -1274,6 +1306,78 @@ function selectFoodType(type) {
     document.getElementById('food-type-value').value = type;
     document.getElementById('food-type-list').classList.remove('active');
     showToast(`검체유형 선택: ${type}`, 'info');
+    loadInspectionItems(type);
+}
+
+// ============================================================================
+// 시험항목 로드 (검체유형 기반)
+// ============================================================================
+function loadInspectionItems(foodType) {
+    var section = document.getElementById('inspection-items-section');
+    var tbody = document.getElementById('inspection-items-tbody');
+    var tfoot = document.getElementById('inspection-items-tfoot');
+    var summary = document.getElementById('inspection-items-summary');
+    var totalEl = document.getElementById('inspection-items-total');
+
+    if (!foodType || typeof FULL_FOOD_TYPES === 'undefined') {
+        section.style.display = 'none';
+        return;
+    }
+
+    // FULL_FOOD_TYPES에서 해당 검체유형 필터
+    var items = FULL_FOOD_TYPES.filter(function(item) {
+        return item['검체유형'] === foodType;
+    });
+
+    // (검체유형+항목명+규격) 기준 중복 제거
+    var seen = {};
+    var unique = [];
+    items.forEach(function(item) {
+        var key = item['항목명'] + '||' + item['규격'];
+        if (!seen[key]) {
+            seen[key] = true;
+            unique.push(item);
+        }
+    });
+
+    if (unique.length === 0) {
+        section.style.display = 'block';
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:#999;font-size:13px">해당 검체유형에 등록된 시험항목이 없습니다.</td></tr>';
+        tfoot.style.display = 'none';
+        summary.textContent = '';
+        return;
+    }
+
+    // 테이블 행 렌더링
+    var total = 0;
+    var html = '';
+    unique.forEach(function(item, idx) {
+        var fee = item['항목수수료'] || 0;
+        total += fee;
+        html += '<tr style="border-bottom:1px solid #eee">';
+        html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
+        html += '<td style="padding:8px 12px;color:#344054">' + (item['항목명'] || '') + '</td>';
+        html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (item['규격'] || '') + '</td>';
+        html += '<td style="padding:8px 12px;color:#344054">' + (item['항목담당자'] || '') + '</td>';
+        html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
+        html += '</tr>';
+    });
+
+    tbody.innerHTML = html;
+    tfoot.style.display = '';
+    totalEl.textContent = total.toLocaleString() + '원';
+    summary.textContent = unique.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
+    section.style.display = 'block';
+}
+
+function clearInspectionItems() {
+    var section = document.getElementById('inspection-items-section');
+    if (section) {
+        section.style.display = 'none';
+        document.getElementById('inspection-items-tbody').innerHTML = '';
+        document.getElementById('inspection-items-tfoot').style.display = 'none';
+        document.getElementById('inspection-items-summary').textContent = '';
+    }
 }
 
 // ============================================================================
@@ -1664,6 +1768,7 @@ function resetForm() {
     document.getElementById('receipt-no-warning').style.display = 'flex';
 
     setTodayDate();
+    clearInspectionItems();
 
     const btn = document.getElementById('save-btn');
     btn.classList.remove('modified');
