@@ -326,9 +326,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
             </div>
             <div class="section-content">
                 <div class="form-row" style="grid-template-columns:1fr 1fr auto;align-items:start">
-                    <div class="form-group">
+                    <div class="form-group" style="position:relative">
                         <label>제품/시료명 <span class="required">*</span></label>
-                        <input type="text" id="product-name" required>
+                        <div style="display:flex;gap:6px">
+                            <input type="text" id="product-name" required style="flex:1;min-width:0">
+                            <button type="button" class="btn-receipt secondary" onclick="searchProductHistory()" style="padding:8px 14px;font-size:13px;white-space:nowrap">📋 조회</button>
+                        </div>
+                        <div id="product-history-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-top:4px;max-height:300px;overflow-y:auto"></div>
                     </div>
                     <div class="form-group autocomplete-input">
                         <label>검체유형 <span class="required">*</span></label>
@@ -1677,6 +1681,84 @@ function showToast(message, type = 'success') {
 }
 
 // ============================================================================
+// 제품 접수이력 조회
+// ============================================================================
+async function searchProductHistory() {
+    var pn = (document.getElementById('product-name').value || '').trim();
+    var panel = document.getElementById('product-history-panel');
+    if (!pn) {
+        showToast('제품/시료명을 입력 후 조회하세요.', 'warning');
+        return;
+    }
+    panel.innerHTML = '<div style="padding:16px;text-align:center;color:#888"><span class="loading-spinner" style="display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#5b67f5;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 조회 중...</div>';
+    panel.style.display = '';
+    try {
+        var snap = await db.collection('receipts')
+            .where('productName', '==', pn)
+            .orderBy('createdAt', 'desc')
+            .limit(20)
+            .get();
+        if (snap.empty) {
+            panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">📭 "' + pn + '" 접수 이력이 없습니다.</div>';
+            return;
+        }
+        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">📋 접수이력 <span style="color:#5b67f5">' + snap.size + '건</span><span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
+        snap.forEach(function(doc) {
+            var r = doc.data();
+            var dt = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toISOString().slice(0,10) : '';
+            var rno = r.receiptNo || '-';
+            var ft = r.foodType || '';
+            var co = r.companyName || '';
+            var tf = r.testField || '';
+            var tp = r.testPurpose || '';
+            html += '<div class="product-history-item" onclick="fillFromHistory(\'' + doc.id + '\')" style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;transition:background 0.15s"';
+            html += ' onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'">';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">';
+            html += '<span style="font-weight:600;color:#1565c0;font-family:monospace">' + rno + '</span>';
+            html += '<span style="color:#888;font-size:11px">' + dt + '</span>';
+            html += '</div>';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+            if (tf) html += '<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:4px;font-size:10px">' + tf + '</span>';
+            if (tp) html += '<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:4px;font-size:10px">' + tp + '</span>';
+            if (ft) html += '<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:4px;font-size:10px">' + ft + '</span>';
+            if (co) html += '<span style="color:#666;font-size:11px">🏢 ' + co + '</span>';
+            html += '</div></div>';
+        });
+        panel.innerHTML = html;
+    } catch(e) {
+        console.warn('[제품이력 조회 실패]', e);
+        panel.innerHTML = '<div style="padding:16px;text-align:center;color:#e53935;font-size:13px">⚠️ 조회 실패: ' + (e.message || '') + '</div>';
+    }
+}
+
+function closeProductHistory() {
+    document.getElementById('product-history-panel').style.display = 'none';
+}
+
+async function fillFromHistory(docId) {
+    try {
+        var doc = await db.collection('receipts').doc(docId).get();
+        if (!doc.exists) { showToast('문서를 찾을 수 없습니다.', 'error'); return; }
+        var r = doc.data();
+        // 시료정보 자동 채움
+        if (r.foodType) {
+            document.getElementById('food-type-input').value = r.foodType;
+            document.getElementById('food-type-value').value = r.foodType;
+        }
+        if (r.sampleAmount) document.getElementById('sample-amount').value = r.sampleAmount;
+        if (r.sampleCount) document.getElementById('sample-count').value = r.sampleCount;
+        if (r.packageUnit) document.getElementById('package-unit').value = r.packageUnit;
+        if (r.transportStatus) document.getElementById('transport-status').value = r.transportStatus;
+        if (r.manufactureNo) document.getElementById('manufacture-no').value = r.manufactureNo;
+        closeProductHistory();
+        showToast('📋 이전 접수 정보를 불러왔습니다.', 'info');
+    } catch(e) {
+        console.warn('[이력 불러오기 실패]', e);
+        showToast('불러오기 실패', 'error');
+    }
+}
+
+// ============================================================================
 // 외부 클릭
 // ============================================================================
 document.addEventListener('click', function(e) {
@@ -1685,6 +1767,11 @@ document.addEventListener('click', function(e) {
     }
     if (!e.target.closest('.autocomplete-input')) {
         document.getElementById('food-type-list').classList.remove('active');
+    }
+    // 제품이력 패널 외부 클릭 닫기
+    if (!e.target.closest('#product-history-panel') && !e.target.closest('[onclick*="searchProductHistory"]')) {
+        var ph = document.getElementById('product-history-panel');
+        if (ph) ph.style.display = 'none';
     }
 });
 
