@@ -621,6 +621,12 @@ let firestorePurposes = [];  // Firestore에서 로드한 검사목적 P 배열
 let firestoreFields = [];    // Firestore에서 로드한 검사 분야 정보 [{code,name,color}]
 let firestoreReady = false;  // Firebase 준비 상태
 
+// 시험분야명 → 코드 변환 (Firestore 동적)
+function getFieldCode(fieldName) {
+    var f = firestoreFields.find(f => f.name === fieldName);
+    return f ? (f.code || f.id) : fieldName;
+}
+
 // ============================================================================
 // 폴백 데이터 (API 서버 미실행 시 사용)
 // ============================================================================
@@ -967,7 +973,7 @@ async function updateTestPurposeOptions(testField) {
         return;
     }
 
-    const fieldId = testField === '식품' ? 'F' : 'L';
+    const fieldId = getFieldCode(testField);
     let purposes = [];
 
     // 분야 라벨 헬퍼: firestoreFields에서 분야코드 → 이름 매핑
@@ -1252,7 +1258,7 @@ function setPrevReceiptNo() {
 function buildReceiptNoFromSegments(purposeObj, testField) {
     const segments = purposeObj.segments;
     const sep = (purposeObj.segSep === 'none' || purposeObj.segSep === '') ? '' : (purposeObj.segSep !== undefined && purposeObj.segSep !== null ? purposeObj.segSep : '-');
-    const fieldId = testField === '식품' ? 'F' : 'L';
+    const fieldId = getFieldCode(testField);
     const today = new Date();
     const y4 = today.getFullYear().toString();
     const y2 = y4.slice(2);
@@ -1311,7 +1317,7 @@ async function allocateReceiptNo() {
     let receiptNo = '';
 
     // 선택된 검사목적의 P 객체 찾기 (시험분야 매칭 우선)
-    const fieldCode = testField === '식품' ? 'F' : 'L';
+    const fieldCode = getFieldCode(testField);
     const purposeObj = firestorePurposes.find(p => p.n === testPurpose && p.fields && p.fields.includes(fieldCode))
         || firestorePurposes.find(p => p.n === testPurpose);
 
@@ -1347,7 +1353,7 @@ async function allocateReceiptNo() {
         const dd = today.getDate().toString().padStart(2, '0');
 
         const purposeCode = FALLBACK_TEST_PURPOSE_CODES[testPurpose] || 'XX';
-        const fieldCode = testField === '식품' ? 'F' : 'L';
+        const fieldCode = getFieldCode(testField);
 
         let seq = '001';
         if (prevReceiptNo) {
