@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 접수 현황</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.content{flex:1;padding:24px;overflow-y:auto}
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-sm{padding:6px 12px;font-size:11px}
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.card-bd{padding:20px;overflow-x:auto}
+
+/* 필터바 */
+.filter-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.filter-bar input,.filter-bar select{padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit}
+.filter-bar input[type="text"]{width:200px}
+.filter-bar input[type="date"]{width:140px}
+
+/* 테이블 */
+.tbl{width:100%;border-collapse:collapse;min-width:900px}
+.tbl th{background:#f8f9fb;padding:10px 14px;font-size:11px;font-weight:700;color:#5f6b7a;text-align:left;border-bottom:2px solid #e2e6ed;white-space:nowrap;cursor:pointer;user-select:none;position:relative}
+.tbl th:hover{background:#eef0f4}
+.tbl th .sort-icon{font-size:10px;margin-left:4px;color:#bbb}
+.tbl th.sorted-asc .sort-icon{color:#1a73e8}
+.tbl th.sorted-desc .sort-icon{color:#1a73e8}
+.tbl td{padding:10px 14px;border-bottom:1px solid #eef0f4;font-size:12px;color:#333;white-space:nowrap}
+.tbl tr:hover{background:#fafbfc}
+.tbl .center{text-align:center}
+
+/* 상태 태그 */
+.tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.tag-waiting{background:#fff3e0;color:#e65100}
+.tag-inprogress{background:#e3f2fd;color:#1565c0}
+.tag-complete{background:#e8f5e9;color:#2e7d32}
+
+/* 컬럼 설정 드롭다운 */
+.col-settings-wrap{position:relative}
+.col-settings-panel{display:none;position:absolute;top:100%;right:0;z-index:100;background:#fff;border:1px solid #e2e6ed;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:12px;min-width:220px;max-height:400px;overflow-y:auto;margin-top:4px}
+.col-settings-panel.active{display:block}
+.col-settings-panel label{display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:12px;cursor:pointer;border-radius:4px}
+.col-settings-panel label:hover{background:#f8f9fb}
+
+/* 페이지네이션 */
+.pagination{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:16px}
+.pagination button{padding:6px 12px;border:1px solid #e2e6ed;border-radius:6px;background:#fff;font-size:12px;cursor:pointer}
+.pagination button.active{background:#1a73e8;color:#fff;border-color:#1a73e8}
+.pagination button:disabled{opacity:0.4;cursor:not-allowed}
+.pagination .page-info{font-size:12px;color:#5f6b7a}
+
+/* 로딩 */
+.loading{text-align:center;padding:40px;color:#999;font-size:14px}
+
+/* 상세 모달 */
+.modal-bg{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:2000;align-items:center;justify-content:center}
+.modal-bg.active{display:flex}
+.modal{background:#fff;border-radius:14px;width:90%;max-width:800px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.2)}
+.modal-hd{padding:18px 24px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;justify-content:space-between}
+.modal-hd h3{font-size:16px;font-weight:700}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#666}
+.modal-bd{padding:24px}
+.detail-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:16px}
+.detail-item label{font-size:11px;font-weight:600;color:#5f6b7a;display:block;margin-bottom:4px}
+.detail-item .val{font-size:13px;color:#1a2332}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="js/sidebar.js?v=2"></script>
+</head>
+<body>
+<div class="main">
+    <div class="topbar">
+        <span class="topbar-title">접수 관리</span>
+        <span class="topbar-sep">›</span>
+        <span class="topbar-sub">접수 현황</span>
+    </div>
+    <div class="content">
+        <div class="card">
+            <div class="card-hd">
+                <h3>📋 접수 현황</h3>
+                <div class="right">
+                    <span id="total-count" style="font-size:12px;color:#5f6b7a"></span>
+                    <button class="btn btn-secondary btn-sm" onclick="loadReceipts()">🔄 새로고침</button>
+                    <div class="col-settings-wrap">
+                        <button class="btn btn-secondary btn-sm" onclick="toggleColSettings()" id="col-settings-btn">⚙️ 컬럼</button>
+                        <div class="col-settings-panel" id="col-settings-panel"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-bd">
+                <!-- 필터 -->
+                <div class="filter-bar">
+                    <input type="text" id="filter-search" placeholder="접수번호, 거래처, 제품명 검색..." oninput="applyFilter()">
+                    <select id="filter-status" onchange="applyFilter()">
+                        <option value="">전체 상태</option>
+                        <option value="대기중">대기중</option>
+                        <option value="접수중">접수중</option>
+                        <option value="접수완료">접수완료</option>
+                    </select>
+                    <input type="date" id="filter-from" onchange="applyFilter()">
+                    <span style="color:#999">~</span>
+                    <input type="date" id="filter-to" onchange="applyFilter()">
+                    <select id="filter-field" onchange="applyFilter()">
+                        <option value="">전체 분야</option>
+                        <option value="식품">식품</option>
+                        <option value="축산">축산</option>
+                    </select>
+                </div>
+                <!-- 테이블 -->
+                <div style="overflow-x:auto">
+                    <table class="tbl" id="receipt-table">
+                        <thead id="receipt-thead"></thead>
+                        <tbody id="receipt-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="loading" class="loading">데이터를 불러오는 중...</div>
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 상세 모달 -->
+<div class="modal-bg" id="detail-modal">
+    <div class="modal">
+        <div class="modal-hd">
+            <h3 id="detail-title">접수 상세</h3>
+            <button class="modal-close" onclick="closeDetailModal()">✕</button>
+        </div>
+        <div class="modal-bd" id="detail-body"></div>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// 컬럼 정의
+// ============================================================================
+var ALL_COLUMNS = [
+    { key: 'receiptNo',     label: '접수번호',   visible: true,  width: '140px' },
+    { key: 'receiptDate',   label: '접수일자',   visible: true,  width: '100px' },
+    { key: 'status',        label: '상태',       visible: true,  width: '80px' },
+    { key: 'testField',     label: '시험분야',   visible: true,  width: '70px' },
+    { key: 'companyName',   label: '거래처',     visible: true,  width: '140px' },
+    { key: 'productName',   label: '제품/시료명', visible: true,  width: '160px' },
+    { key: 'sampleTotalCount', label: '시료수',  visible: true,  width: '60px' },
+    { key: 'foodType',      label: '검체유형',   visible: true,  width: '120px' },
+    { key: 'urgent',        label: '긴급',       visible: true,  width: '50px' },
+    { key: 'salesRep',      label: '담당자',     visible: true,  width: '80px' },
+    { key: 'reportSend',    label: '발송방법',   visible: false, width: '100px' },
+    { key: 'companyPhone',  label: '전화번호',   visible: false, width: '110px' },
+    { key: 'companyFax',    label: '팩스번호',   visible: false, width: '110px' },
+    { key: 'processingDeadline', label: '처리기한', visible: false, width: '100px' },
+    { key: 'billCompany',   label: '계산서업체', visible: false, width: '130px' },
+    { key: 'bizNo',         label: '사업자번호', visible: false, width: '120px' }
+];
+
+var _allReceipts = [];
+var _filteredReceipts = [];
+var _sortKey = 'receiptDate';
+var _sortDir = 'desc';
+var _page = 1;
+var _pageSize = 30;
+
+// ============================================================================
+// 데이터 로드
+// ============================================================================
+async function loadReceipts() {
+    document.getElementById('loading').style.display = '';
+    document.getElementById('receipt-tbody').innerHTML = '';
+    try {
+        _allReceipts = await fsGetReceipts({ limit: 500 });
+        // samples[0]에서 productName, foodType 추출
+        _allReceipts.forEach(function(r) {
+            if (r.samples && r.samples.length > 0) {
+                if (!r.productName) r.productName = r.samples[0].productName || '';
+                if (!r.foodType) r.foodType = r.samples[0].foodType || '';
+            }
+            if (r.reportSend && Array.isArray(r.reportSend)) {
+                r.reportSendText = r.reportSend.join(', ');
+            }
+        });
+        applyFilter();
+    } catch(err) {
+        console.error('접수 현황 로드 실패:', err);
+        document.getElementById('loading').textContent = '데이터 로드 실패';
+    }
+}
+
+// ============================================================================
+// 필터 + 정렬
+// ============================================================================
+function applyFilter() {
+    var search = (document.getElementById('filter-search').value || '').toLowerCase();
+    var status = document.getElementById('filter-status').value;
+    var from = document.getElementById('filter-from').value;
+    var to = document.getElementById('filter-to').value;
+    var field = document.getElementById('filter-field').value;
+
+    _filteredReceipts = _allReceipts.filter(function(r) {
+        if (status && r.status !== status) return false;
+        if (field && r.testField !== field) return false;
+        if (from && r.receiptDate < from) return false;
+        if (to && r.receiptDate > to) return false;
+        if (search) {
+            var hay = ((r.receiptNo || '') + (r.companyName || '') + (r.productName || '')).toLowerCase();
+            if (hay.indexOf(search) < 0) return false;
+        }
+        return true;
+    });
+
+    // 정렬
+    _filteredReceipts.sort(function(a, b) {
+        var va = (a[_sortKey] || ''), vb = (b[_sortKey] || '');
+        if (typeof va === 'number' && typeof vb === 'number') {
+            return _sortDir === 'asc' ? va - vb : vb - va;
+        }
+        va = String(va); vb = String(vb);
+        return _sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+
+    _page = 1;
+    renderTable();
+}
+
+// ============================================================================
+// 정렬
+// ============================================================================
+function sortBy(key) {
+    if (_sortKey === key) {
+        _sortDir = (_sortDir === 'asc') ? 'desc' : 'asc';
+    } else {
+        _sortKey = key;
+        _sortDir = 'asc';
+    }
+    applyFilter();
+}
+
+// ============================================================================
+// 테이블 렌더링
+// ============================================================================
+function renderTable() {
+    var visibleCols = ALL_COLUMNS.filter(function(c) { return c.visible; });
+    // 헤더
+    var thead = document.getElementById('receipt-thead');
+    var hhtml = '<tr>';
+    visibleCols.forEach(function(col) {
+        var cls = '';
+        var icon = '↕';
+        if (_sortKey === col.key) {
+            cls = _sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc';
+            icon = _sortDir === 'asc' ? '▲' : '▼';
+        }
+        hhtml += '<th class="' + cls + '" style="width:' + col.width + '" onclick="sortBy(\'' + col.key + '\')">' +
+            col.label + ' <span class="sort-icon">' + icon + '</span></th>';
+    });
+    hhtml += '</tr>';
+    thead.innerHTML = hhtml;
+
+    // 데이터
+    var tbody = document.getElementById('receipt-tbody');
+    var start = (_page - 1) * _pageSize;
+    var pageData = _filteredReceipts.slice(start, start + _pageSize);
+    document.getElementById('loading').style.display = 'none';
+
+    if (pageData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="' + visibleCols.length + '" style="text-align:center;padding:40px;color:#999">접수 데이터가 없습니다.</td></tr>';
+        document.getElementById('total-count').textContent = '';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    document.getElementById('total-count').textContent = '총 ' + _filteredReceipts.length + '건';
+
+    var bhtml = '';
+    pageData.forEach(function(r) {
+        bhtml += '<tr onclick="openDetailModal(\'' + r.id + '\')">';
+        visibleCols.forEach(function(col) {
+            var val = r[col.key] || '';
+            if (col.key === 'status') {
+                var tagCls = val === '접수완료' ? 'tag-complete' : val === '접수중' ? 'tag-inprogress' : 'tag-waiting';
+                val = '<span class="tag ' + tagCls + '">' + val + '</span>';
+            } else if (col.key === 'urgent') {
+                val = val === '긴급' ? '<span style="color:#e53935;font-weight:700">⚡긴급</span>' : '일반';
+            } else if (col.key === 'reportSend') {
+                val = r.reportSendText || '';
+            } else if (col.key === 'sampleTotalCount') {
+                val = val || 1;
+            }
+            bhtml += '<td>' + val + '</td>';
+        });
+        bhtml += '</tr>';
+    });
+    tbody.innerHTML = bhtml;
+
+    // 페이지네이션
+    renderPagination();
+}
+
+// ============================================================================
+// 페이지네이션
+// ============================================================================
+function renderPagination() {
+    var totalPages = Math.ceil(_filteredReceipts.length / _pageSize);
+    if (totalPages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+    var html = '<button ' + (_page <= 1 ? 'disabled' : '') + ' onclick="goPage(' + (_page - 1) + ')">◀</button>';
+    for (var i = 1; i <= totalPages; i++) {
+        if (totalPages > 7 && Math.abs(i - _page) > 2 && i !== 1 && i !== totalPages) {
+            if (i === _page - 3 || i === _page + 3) html += '<span class="page-info">...</span>';
+            continue;
+        }
+        html += '<button class="' + (i === _page ? 'active' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
+    }
+    html += '<button ' + (_page >= totalPages ? 'disabled' : '') + ' onclick="goPage(' + (_page + 1) + ')">▶</button>';
+    html += '<span class="page-info" style="margin-left:8px">' + _page + ' / ' + totalPages + '</span>';
+    document.getElementById('pagination').innerHTML = html;
+}
+function goPage(p) { _page = p; renderTable(); }
+
+// ============================================================================
+// 컬럼 설정
+// ============================================================================
+function toggleColSettings() {
+    var panel = document.getElementById('col-settings-panel');
+    panel.classList.toggle('active');
+    if (panel.classList.contains('active')) renderColSettings();
+}
+function renderColSettings() {
+    var panel = document.getElementById('col-settings-panel');
+    var html = '<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#344054">컬럼 표시 설정</div>';
+    ALL_COLUMNS.forEach(function(col, i) {
+        html += '<label><input type="checkbox" ' + (col.visible ? 'checked' : '') + ' onchange="toggleColumn(' + i + ',this.checked)"> ' + col.label + '</label>';
+    });
+    panel.innerHTML = html;
+}
+function toggleColumn(idx, checked) {
+    ALL_COLUMNS[idx].visible = checked;
+    renderTable();
+    // localStorage에 저장
+    var vis = {};
+    ALL_COLUMNS.forEach(function(c) { vis[c.key] = c.visible; });
+    localStorage.setItem('receiptStatus_columns', JSON.stringify(vis));
+}
+function loadColumnSettings() {
+    var saved = localStorage.getItem('receiptStatus_columns');
+    if (saved) {
+        var vis = JSON.parse(saved);
+        ALL_COLUMNS.forEach(function(c) {
+            if (vis.hasOwnProperty(c.key)) c.visible = vis[c.key];
+        });
+    }
+}
+
+// 패널 외부 클릭 시 닫기
+document.addEventListener('click', function(e) {
+    var wrap = document.querySelector('.col-settings-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('col-settings-panel').classList.remove('active');
+    }
+});
+
+// ============================================================================
+// 상세 모달
+// ============================================================================
+function openDetailModal(id) {
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (!r) return;
+    document.getElementById('detail-title').textContent = '접수 상세 — ' + (r.receiptNo || '');
+    var html = '';
+    // 기본정보
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin-bottom:10px">📋 기본정보</div>';
+    html += '<div class="detail-row">';
+    html += di('접수번호', r.receiptNo);
+    html += di('접수일자', r.receiptDate);
+    html += di('상태', r.status);
+    html += di('시험분야', r.testField);
+    html += di('긴급여부', r.urgent);
+    html += di('시료 수', r.sampleTotalCount || 1);
+    html += '</div>';
+    // 업체정보
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">🏢 업체정보</div>';
+    html += '<div class="detail-row">';
+    html += di('거래처', r.companyName);
+    html += di('인허가번호', r.licNo);
+    html += di('전화번호', r.companyPhone);
+    html += di('팩스번호', r.companyFax);
+    html += di('담당자', r.salesRep);
+    html += '</div>';
+    html += '<div class="detail-row">';
+    html += di('주소', r.companyAddress);
+    html += '</div>';
+    // 시료정보
+    if (r.samples && r.samples.length > 0) {
+        html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">🧪 시료정보 (' + r.samples.length + '건)</div>';
+        r.samples.forEach(function(s, idx) {
+            html += '<div style="padding:10px;background:#f8f9fb;border-radius:8px;margin-bottom:8px;border:1px solid #eef0f4">';
+            html += '<div style="font-size:12px;font-weight:600;color:#6941C6;margin-bottom:6px">시료 #' + (idx + 1) + '</div>';
+            html += '<div class="detail-row">';
+            html += di('제품/시료명', s.productName);
+            html += di('검체유형', s.foodType);
+            html += di('검체량', (s.sampleAmount || '') + (s.sampleAmountUnit || ''));
+            html += di('검체수', s.sampleCount);
+            html += '</div>';
+            html += '<div class="detail-row">';
+            html += di('운반상태', s.transportStatus);
+            html += di('제조일자', s.manufactureDate);
+            html += di('소비기한', s.expiryDate);
+            html += di('시료위치', s.sampleLocation);
+            html += '</div>';
+            html += '</div>';
+        });
+    }
+    // 발송정보
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">📮 발송정보</div>';
+    html += '<div class="detail-row">';
+    html += di('발송방법', (r.reportSend || []).join(', '));
+    html += di('팩스번호', r.reportFaxNo);
+    html += di('이메일', r.reportEmail);
+    html += di('CC', (r.emailCc || []).join(', '));
+    html += '</div>';
+
+    document.getElementById('detail-body').innerHTML = html;
+    document.getElementById('detail-modal').classList.add('active');
+}
+function di(label, val) {
+    return '<div class="detail-item"><label>' + label + '</label><div class="val">' + (val || '-') + '</div></div>';
+}
+function closeDetailModal() {
+    document.getElementById('detail-modal').classList.remove('active');
+}
+document.getElementById('detail-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeDetailModal();
+});
+
+// ============================================================================
+// 초기화
+// ============================================================================
+window.onload = function() {
+    loadColumnSettings();
+    loadReceipts();
+    // 기본 날짜 필터 (최근 30일)
+    var now = new Date();
+    var from = new Date(now);
+    from.setDate(from.getDate() - 30);
+    document.getElementById('filter-to').value = now.toISOString().split('T')[0];
+    document.getElementById('filter-from').value = from.toISOString().split('T')[0];
+};
+</script>
+</body>
+</html>

@@ -2056,22 +2056,109 @@ function markAsModified() {
 }
 
 // ============================================================================
+// 접수 데이터 수집
+// ============================================================================
+function collectReceiptData() {
+    // 현재 시료 저장
+    saveSampleToArray();
+    // 성적서 발송 정보
+    var reportSend = [];
+    document.querySelectorAll('input[name="report-send"]:checked').forEach(function(cb){ reportSend.push(cb.value); });
+    var mailAddrTypes = [];
+    document.querySelectorAll('input[name="mail-addr-type"]:checked').forEach(function(cb){ mailAddrTypes.push(cb.value); });
+    var faxTypes = [];
+    document.querySelectorAll('input[name="fax-type"]:checked').forEach(function(cb){ faxTypes.push(cb.value); });
+
+    return {
+        receiptNo: document.getElementById('receipt-no').value,
+        receiptDate: document.getElementById('receipt-date').value,
+        testField: document.querySelector('input[name="test-field"]:checked')?.value || '',
+        testPurpose: document.getElementById('test-purpose')?.value || '',
+        urgent: document.querySelector('input[name="urgency"]:checked')?.value || '일반',
+        status: document.getElementById('status').value,
+        sampleTotalCount: parseInt(document.getElementById('sample-total-count').value) || 1,
+        // 업체정보
+        companyName: document.getElementById('company-search').value,
+        licNo: document.getElementById('lic-no').value,
+        licBizForm: document.getElementById('lic-biz-form').value,
+        companyPhone: document.getElementById('company-phone').value,
+        companyFax: document.getElementById('company-fax').value,
+        companyMobile: document.getElementById('company-mobile').value,
+        companyAddress: document.getElementById('company-address').value,
+        salesRep: document.getElementById('sales-rep').value,
+        // 성적서 발송
+        reportSend: reportSend,
+        mailAddrTypes: mailAddrTypes,
+        mailZipcode: document.getElementById('mail-zipcode').value,
+        mailAddr1: document.getElementById('mail-addr1').value,
+        mailAddr2: document.getElementById('mail-addr2').value,
+        faxTypes: faxTypes,
+        reportFaxNo: document.getElementById('report-fax-no').value,
+        reportEmail: document.getElementById('report-email').value,
+        emailCc: (function() {
+            var cc = [];
+            document.querySelectorAll('.cc-email-field').forEach(function(el){ if(el.value) cc.push(el.value); });
+            return cc;
+        })(),
+        // 시료 데이터 배열
+        samples: _sampleData.map(function(s, i) {
+            return {
+                idx: i + 1,
+                productName: s['product-name'] || '',
+                foodType: s['food-type-input'] || '',
+                foodTypeValue: s['food-type-value'] || '',
+                sampleAmount: s['sample-amount'] || '',
+                sampleAmountUnit: s['sample-amount-unit'] || 'g',
+                sampleCount: s['sample-count'] || '',
+                packageUnit: s['package-unit'] || '',
+                transportStatus: s['transport-status'] || '',
+                manufactureNo: s['manufacture-no'] || '',
+                manufactureDate: s['manufacture-date'] || '',
+                expiryDate: s['expiry-date'] || '',
+                expiryDays: s['expiry-days'] || '',
+                sampleLocation: s['sample-location'] || '',
+                sampleBoxNo: s['sample-box-no'] || ''
+            };
+        }),
+        // 검사정보
+        relatedLaw: document.getElementById('related-law')?.value || '',
+        documentNo: document.getElementById('document-no')?.value || '',
+        // 계산서 정보
+        billCompany: document.getElementById('company-name')?.value || '',
+        bizNo: document.getElementById('business-no')?.value || '',
+        ceo: document.getElementById('ceo')?.value || '',
+        billName: document.getElementById('bill-name')?.value || '',
+        billPhone: document.getElementById('bill-phone')?.value || '',
+        billFax: document.getElementById('bill-fax')?.value || '',
+        billMobile: document.getElementById('bill-mobile')?.value || '',
+        billEmail: document.getElementById('bill-email')?.value || '',
+        // 처리기한
+        processingDeadline: document.getElementById('processing-deadline')?.value || ''
+    };
+}
+
+// ============================================================================
 // 저장
 // ============================================================================
-function saveReceipt() {
+async function saveReceipt() {
     if (!isReceiptNoAllocated) {
         showToast('접수번호를 먼저 할당받으세요!', 'error');
         return;
     }
-    if (!isModified) {
-        showToast('변경사항이 없습니다.', 'info');
-        return;
+    try {
+        var data = collectReceiptData();
+        data.status = '접수중';
+        await fsSaveReceipt(data);
+        showToast('✅ 저장되었습니다!');
+        isModified = false;
+        var btn = document.getElementById('save-btn');
+        btn.classList.remove('modified');
+        btn.textContent = '💾 저장';
+        document.getElementById('status').value = '접수중';
+    } catch(err) {
+        console.error('저장 실패:', err);
+        showToast('저장 중 오류가 발생했습니다.', 'error');
     }
-    showToast('✅ 저장되었습니다!');
-    isModified = false;
-    const btn = document.getElementById('save-btn');
-    btn.classList.remove('modified');
-    btn.textContent = '💾 저장';
 }
 
 // ============================================================================
@@ -2160,7 +2247,7 @@ function resetForm() {
 // ============================================================================
 // 제출
 // ============================================================================
-document.getElementById('receipt-form').addEventListener('submit', function(e) {
+document.getElementById('receipt-form').addEventListener('submit', async function(e) {
     e.preventDefault();
 
     if (!isReceiptNoAllocated) {
@@ -2186,11 +2273,19 @@ document.getElementById('receipt-form').addEventListener('submit', function(e) {
         }
     }
 
-    showToast('✅ 시료 접수가 완료되었습니다!');
-    setTimeout(() => {
-        localStorage.removeItem('receipt-draft');
-        window.location.reload();
-    }, 2000);
+    try {
+        var data = collectReceiptData();
+        data.status = '접수완료';
+        await fsSaveReceipt(data);
+        showToast('✅ 시료 접수가 완료되었습니다!');
+        setTimeout(() => {
+            localStorage.removeItem('receipt-draft');
+            window.location.reload();
+        }, 2000);
+    } catch(err) {
+        console.error('접수 완료 실패:', err);
+        showToast('접수 완료 중 오류가 발생했습니다.', 'error');
+    }
 });
 
 // ============================================================================
