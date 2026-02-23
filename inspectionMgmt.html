@@ -426,6 +426,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="js/sidebar.js?v=3"></script>
 
 <div class="main">
@@ -31121,8 +31122,89 @@ function renderFees() {
   }
 }
 
-function downloadExcel(type) {
-  showToast(`${type} 데이터를 엑셀로 다운로드합니다.`, 'info');
+async function downloadExcel(type) {
+  if (typeof XLSX === 'undefined') {
+    showToast('엑셀 라이브러리가 로드되지 않았습니다.', 'error');
+    return;
+  }
+
+  if (type === '식품유형') {
+    // ── 현재 선택된 API 탭의 원본 데이터를 그대로 엑셀로 내보내기 ──
+    showToast('엑셀 파일 생성중...', 'info');
+    try {
+      var data = await loadApiDataFromFirestore(currentApiTab);
+      if (!data || data.length === 0) {
+        showToast('내보낼 데이터가 없습니다. 먼저 API 수집을 해주세요.', 'warning');
+        return;
+      }
+
+      // 원본 데이터 그대로 사용 (모든 필드)
+      var ws = XLSX.utils.json_to_sheet(data);
+
+      // 열 너비 자동 조정 (헤더 + 상위 100행 기준)
+      var headers = Object.keys(data[0]);
+      var wscols = headers.map(function(h) {
+        var maxLen = h.length;
+        var sample = data.slice(0, 100);
+        sample.forEach(function(row) {
+          var val = row[h];
+          if (val != null) {
+            var len = String(val).length;
+            if (len > maxLen) maxLen = len;
+          }
+        });
+        return { wch: Math.min(maxLen + 2, 60) };
+      });
+      ws['!cols'] = wscols;
+
+      var wb = XLSX.utils.book_new();
+      var svcName = API_SERVICES[currentApiTab] ? API_SERVICES[currentApiTab].name : currentApiTab;
+      XLSX.utils.book_append_sheet(wb, ws, svcName);
+
+      var today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      var fileName = svcName + '_원본데이터_' + today + '.xlsx';
+      XLSX.writeFile(wb, fileName);
+
+      showToast(svcName + ' 원본 데이터 ' + data.length.toLocaleString() + '건을 엑셀로 다운로드했습니다.', 'success');
+    } catch(e) {
+      console.error('엑셀 다운로드 실패:', e);
+      showToast('엑셀 다운로드 실패: ' + e.message, 'error');
+    }
+  } else if (type === '항목그룹') {
+    // ── 항목그룹 탭 데이터 (수수료 데이터) ──
+    showToast('엑셀 파일 생성중...', 'info');
+    try {
+      if (!feeData || feeData.length === 0) {
+        showToast('내보낼 데이터가 없습니다.', 'warning');
+        return;
+      }
+      var ws = XLSX.utils.json_to_sheet(feeData.map(function(d) {
+        return {
+          '검사목적': d.검사목적 || '',
+          '검체유형': d.검체유형 || '',
+          '항목명': d.항목명 || '',
+          '규격': d.규격 || '',
+          '항목단위': d.항목단위 || '',
+          '시험법근거': d.시험법근거 || '',
+          '수수료': d.수수료 || 0,
+          '비고': d.비고 || ''
+        };
+      }));
+      ws['!cols'] = [
+        {wch:12},{wch:15},{wch:25},{wch:30},{wch:10},{wch:40},{wch:10},{wch:20}
+      ];
+
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '항목그룹');
+
+      var today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      XLSX.writeFile(wb, '시험항목_수수료_' + today + '.xlsx');
+      showToast('시험항목 수수료 ' + feeData.length.toLocaleString() + '건을 엑셀로 다운로드했습니다.', 'success');
+    } catch(e) {
+      console.error('엑셀 다운로드 실패:', e);
+      showToast('엑셀 다운로드 실패: ' + e.message, 'error');
+    }
+  }
 }
 
 // ══ 수수료 변경사항 추적 ══
