@@ -300,7 +300,7 @@ function renderTable() {
 
     var bhtml = '';
     pageData.forEach(function(r) {
-        bhtml += '<tr onclick="openDetailModal(\'' + r.id + '\')">';
+        bhtml += '<tr onclick="openDetailModal(\'' + r.id + '\',' + r._sampleIdx + ')">';
         visibleCols.forEach(function(col) {
             var val = r[col.key] || '';
             if (col.key === 'status') {
@@ -388,20 +388,23 @@ document.addEventListener('click', function(e) {
 // ============================================================================
 // 상세 모달
 // ============================================================================
-function openDetailModal(id) {
-    var r = _allReceipts.find(function(x) { return x.id === id; });
+function openDetailModal(id, sampleIdx) {
+    var r = _allReceipts.find(function(x) { return x.id === id && x._sampleIdx === sampleIdx; });
     if (!r) return;
-    document.getElementById('detail-title').textContent = '접수 상세 — ' + (r.receiptNo || '');
+    var s = (r.samples && r.samples[sampleIdx]) || {};
+    var sno = String(sampleIdx + 1).padStart(3, '0');
+
+    document.getElementById('detail-title').textContent = '시료 상세 — ' + (r.receiptNo || '');
     var html = '';
     // 기본정보
     html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin-bottom:10px">📋 기본정보</div>';
     html += '<div class="detail-row">';
-    html += di('접수번호', r.receiptNo);
+    html += di('접수번호', r._baseReceiptNo);
+    html += di('시료번호', r.receiptNo);
     html += di('접수일자', r.receiptDate);
     html += di('상태', r.status);
     html += di('시험분야', r.testField);
     html += di('긴급여부', r.urgent);
-    html += di('시료 수', r.sampleTotalCount || 1);
     html += '</div>';
     // 업체정보
     html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">🏢 업체정보</div>';
@@ -415,27 +418,27 @@ function openDetailModal(id) {
     html += '<div class="detail-row">';
     html += di('주소', r.companyAddress);
     html += '</div>';
-    // 시료정보
-    if (r.samples && r.samples.length > 0) {
-        html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">🧪 시료정보 (' + r.samples.length + '건)</div>';
-        r.samples.forEach(function(s, idx) {
-            html += '<div style="padding:10px;background:#f8f9fb;border-radius:8px;margin-bottom:8px;border:1px solid #eef0f4">';
-            html += '<div style="font-size:12px;font-weight:600;color:#6941C6;margin-bottom:6px">시료 #' + (idx + 1) + '</div>';
-            html += '<div class="detail-row">';
-            html += di('제품/시료명', s.productName);
-            html += di('검체유형', s.foodType);
-            html += di('검체량', (s.sampleAmount || '') + (s.sampleAmountUnit || ''));
-            html += di('검체수', s.sampleCount);
-            html += '</div>';
-            html += '<div class="detail-row">';
-            html += di('운반상태', s.transportStatus);
-            html += di('제조일자', s.manufactureDate);
-            html += di('소비기한', s.expiryDate);
-            html += di('시료위치', s.sampleLocation);
-            html += '</div>';
-            html += '</div>';
-        });
-    }
+    // 해당 시료정보
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">🧪 시료정보</div>';
+    html += '<div style="padding:10px;background:#f8f9fb;border-radius:8px;margin-bottom:8px;border:1px solid #eef0f4">';
+    html += '<div class="detail-row">';
+    html += di('제품/시료명', s.productName || r.productName);
+    html += di('검체유형', s.foodType || r.foodType);
+    html += di('검체량', (s.sampleAmount || '') + (s.sampleAmountUnit || ''));
+    html += di('검체수', s.sampleCount);
+    html += '</div>';
+    html += '<div class="detail-row">';
+    html += di('포장단위', s.packagingUnit);
+    html += di('운반상태', s.transportStatus);
+    html += di('제조일자', s.manufactureDate);
+    html += di('소비기한', s.expiryDate);
+    html += '</div>';
+    html += '<div class="detail-row">';
+    html += di('시료위치', s.sampleLocation);
+    html += di('시료박스번호', s.sampleBoxNo);
+    html += di('품목제조NO', s.productMfgNo);
+    html += '</div>';
+    html += '</div>';
     // 발송정보
     html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">📮 발송정보</div>';
     html += '<div class="detail-row">';
