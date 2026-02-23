@@ -14,6 +14,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .biz-verify-section{margin-top:10px;padding:8px 10px;background:#f9f9f9;border-radius:6px}
 .biz-valid-ok{font-size:15px;font-weight:700;color:#2e7d32}
 .biz-valid-fail{font-size:15px;font-weight:700;color:#d32f2f}
+.file-view-section{background:#f8fafe;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.file-view-title{font-size:13px;font-weight:700;color:#1a2332;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.file-view-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.file-view-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #d0d7e2;background:#fff;color:#1a2332;transition:all .15s}
+.file-view-btn:hover{background:#e3f2fd;border-color:#90caf9;color:#1565c0}
+.file-view-btn .fv-icon{font-size:14px}
+.file-view-empty{font-size:12px;color:#8892a4;padding:4px 0}
 
 /* ====== UNIFIED SIDEBAR STYLES ====== */
 .sidebar{width:250px;background:#1a2332;color:white;position:fixed;left:0;top:0;bottom:0;z-index:1000;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
@@ -660,6 +667,12 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <div id="detailOcrStatus" style="margin-top:6px;font-size:11px;color:#1565c0;display:none"></div>
         </div>
 
+        <!-- 첨부파일 / OCR 결과 보기 -->
+        <div class="file-view-section" id="fileViewSection" style="display:none">
+          <div class="file-view-title">📂 등록된 첨부파일</div>
+          <div class="file-view-row" id="fileViewRow"></div>
+        </div>
+
         <!-- 기본 정보 -->
         <div class="sec-title"><span class="sec-num">1</span> 기본 정보</div>
         <div class="fg-row">
@@ -705,10 +718,12 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
         <!-- 세금계산서 담당자 -->
         <div class="sec-title"><span class="sec-num">5</span> 세금계산서 담당자</div>
-        <div class="fg-row3">
-          <div class="fg"><label>이름</label><input id="detTaxName" readonly style="background:#f8f9fb"></div>
-          <div class="fg"><label>전화번호</label><input id="detTaxPhone" readonly style="background:#f8f9fb"></div>
-          <div class="fg"><label>이메일</label><input id="detTaxEmail" readonly style="background:#f8f9fb"></div>
+        <div class="fg-row" style="gap:8px">
+          <div class="fg"><label>이름</label><input id="detTaxName" readonly style="background:#f8f9fb" class="det-editable"></div>
+          <div class="fg"><label>전화번호</label><input id="detTaxPhone" readonly style="background:#f8f9fb" class="det-editable"></div>
+          <div class="fg"><label>휴대폰</label><input id="detTaxMobile" readonly style="background:#f8f9fb" class="det-editable"></div>
+          <div class="fg"><label>팩스번호</label><input id="detTaxFax" readonly style="background:#f8f9fb" class="det-editable"></div>
+          <div class="fg"><label>이메일</label><input id="detTaxEmail" readonly style="background:#f8f9fb" class="det-editable"></div>
         </div>
 
         <!-- 인허가 담당자 매칭 모달 -->
@@ -2407,6 +2422,8 @@ async function openCustomerDetail(custId) {
   // 세금계산서 담당자
   document.getElementById('detTaxName').value = cust.taxName || '';
   document.getElementById('detTaxPhone').value = cust.taxPhone || '';
+  document.getElementById('detTaxMobile').value = cust.taxMobile || '';
+  document.getElementById('detTaxFax').value = cust.taxFax || '';
   document.getElementById('detTaxEmail').value = cust.taxEmail || '';
   // 메모
   document.getElementById('detMemo').value = cust.memo || '';
@@ -2416,6 +2433,8 @@ async function openCustomerDetail(custId) {
   renderDetailContacts(cust);
   // 인허가 카드에 연결된 담당자 표시
   updateLicContactDisplay();
+  // 첨부파일 보기 렌더링
+  renderFileViewSection(cust);
 
   // 파일 업로드 초기화
   document.getElementById('detailBizFileName').textContent = '📎 사업자등록증 파일';
@@ -2535,6 +2554,93 @@ var _detLicCardCount = 0;
 var _detContactCardCount = 0;
 var _licMatchContactNum = null; // 매칭 모달에서 사용 중인 담당자 번호
 
+// --- 상세 페이지: 첨부파일 보기 렌더링 ---
+function renderFileViewSection(cust) {
+  var section = document.getElementById('fileViewSection');
+  var row = document.getElementById('fileViewRow');
+  if (!section || !row) return;
+
+  var files = cust.files || {};
+  var hasFiles = false;
+  var html = '';
+
+  // 사업자등록증 원본 보기
+  if (files.bizLicenseUrl) {
+    hasFiles = true;
+    html += '<button class="file-view-btn" onclick="window.open(\'' + files.bizLicenseUrl + '\',\'_blank\')">' +
+      '<span class="fv-icon">📄</span> 사업자등록증 원본</button>';
+  }
+
+  // OCR 결과 보기
+  if (files.ocrResults && files.ocrResults.length > 0) {
+    hasFiles = true;
+    html += '<button class="file-view-btn" onclick="openOcrResultModal()" style="border-color:#90caf9;color:#1565c0">' +
+      '<span class="fv-icon">🔍</span> OCR 결과 (' + files.ocrResults.length + '건)</button>';
+    window._currentOcrResults = files.ocrResults;
+  } else {
+    window._currentOcrResults = null;
+  }
+
+  // 인허가문서 (인허가 카드에 표시 안 될 수 있는 경우)
+  var permitDocs = files.permitDocs || [];
+  var licenses = (cust.licenses && cust.licenses.length > 0) ? cust.licenses : [];
+  if (permitDocs.length > 0 && licenses.length === 0) {
+    hasFiles = true;
+    permitDocs.forEach(function(doc, i) {
+      var label = doc.name || ('인허가문서 ' + (i + 1));
+      html += '<button class="file-view-btn" onclick="window.open(\'' + doc.url + '\',\'_blank\')">' +
+        '<span class="fv-icon">📋</span> ' + escHtml(label) + '</button>';
+    });
+  }
+
+  if (hasFiles) {
+    row.innerHTML = html;
+    section.style.display = '';
+  } else {
+    section.style.display = 'none';
+  }
+}
+
+function openOcrResultModal() {
+  var results = window._currentOcrResults;
+  if (!results || results.length === 0) { toast('저장된 OCR 결과가 없습니다'); return; }
+
+  var body = document.getElementById('ocrModalBody');
+  var sub = document.getElementById('ocrModalSub');
+  sub.textContent = '총 ' + results.length + '건의 OCR 인식 결과';
+
+  var html = '';
+  results.forEach(function(r, i) {
+    var typeLabel = r.type === 'bizLicense' ? '📄 사업자등록증' : '📋 인허가문서';
+    var dateStr = r.ocrAt ? new Date(r.ocrAt).toLocaleString('ko-KR') : '';
+    html += '<div style="background:#f8f9fb;border-radius:10px;padding:14px;margin-bottom:10px">';
+    html += '<div style="font-weight:700;font-size:13px;margin-bottom:6px">' + typeLabel + (r.fileName ? ' — ' + escHtml(r.fileName) : '') + '</div>';
+    if (dateStr) html += '<div style="font-size:11px;color:#667085;margin-bottom:8px">인식일: ' + dateStr + '</div>';
+    if (r.data) {
+      var fieldMap;
+      if (r.type === 'bizLicense') {
+        fieldMap = [['companyName','회사명'],['repName','대표자'],['bizNo','사업자번호'],['corpNo','법인번호'],['taxType','과세유형'],['bizType','업태'],['bizItem','종목'],['address','소재지']];
+      } else {
+        fieldMap = [['bizName','업소명'],['repName','대표자'],['licNo','인허가번호'],['bizForm','영업형태'],['field','분야'],['address','소재지']];
+      }
+      fieldMap.forEach(function(pair) {
+        var val = r.data[pair[0]] || '';
+        if (val) {
+          html += '<div style="display:flex;gap:8px;margin-bottom:3px"><span style="color:#667085;min-width:80px;font-size:12px">' + pair[1] + '</span><span style="font-size:12px;color:#333">' + escHtml(val) + '</span></div>';
+        }
+      });
+    }
+    html += '</div>';
+  });
+
+  body.innerHTML = html;
+  document.getElementById('ocrResultModal').style.display = 'flex';
+}
+
+function closeOcrResultModal() {
+  document.getElementById('ocrResultModal').style.display = 'none';
+}
+
 // --- 상세 페이지: 다중 담당자 렌더링 ---
 function renderDetailContacts(cust) {
   var container = document.getElementById('detContactContainer');
@@ -2544,10 +2650,10 @@ function renderDetailContacts(cust) {
   // contacts 배열이 있으면 사용, 없으면 기존 단일 필드에서 1개 생성
   var contacts = cust.contacts && cust.contacts.length > 0 ? cust.contacts : [];
   if (contacts.length === 0 && (cust.contactName || cust.contactPhone || cust.contactEmail)) {
-    contacts = [{ name: cust.contactName || '', phone: cust.contactPhone || '', email: cust.contactEmail || '', role: '', salesRep: cust.salesRep || '', licNums: [] }];
+    contacts = [{ name: cust.contactName || '', phone: cust.contactPhone || '', mobile: cust.contactMobile || '', fax: cust.contactFax || '', email: cust.contactEmail || '', role: '', salesRep: cust.salesRep || '', licNums: [] }];
   }
   if (contacts.length === 0) {
-    contacts = [{ name: '', phone: '', email: '', role: '', salesRep: '', licNums: [] }];
+    contacts = [{ name: '', phone: '', mobile: '', fax: '', email: '', role: '', salesRep: '', licNums: [] }];
   }
 
   for (var i = 0; i < contacts.length; i++) {
@@ -2591,6 +2697,8 @@ function renderDetailContacts(cust) {
       '</div>' +
       '<div class="fg-row" style="gap:8px">' +
         '<div class="fg"><label>전화번호</label><input id="detContactPhone_' + num + '" value="' + escHtml(ct.phone) + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+        '<div class="fg"><label>휴대폰</label><input id="detContactMobile_' + num + '" value="' + escHtml(ct.mobile || '') + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
+        '<div class="fg"><label>팩스번호</label><input id="detContactFax_' + num + '" value="' + escHtml(ct.fax || '') + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
         '<div class="fg"><label>이메일</label><input id="detContactEmail_' + num + '" value="' + escHtml(ct.email) + '" readonly style="background:#f8f9fb" class="det-editable det-contact-field"></div>' +
       '</div>' +
       '<input type="hidden" id="detContactLicNums_' + num + '" value=\'' + JSON.stringify(licNums) + '\'>' +
@@ -2627,6 +2735,8 @@ function addDetailContactCard() {
     '</div>' +
     '<div class="fg-row" style="gap:8px">' +
       '<div class="fg"><label>전화번호</label><input id="detContactPhone_' + num + '" placeholder="전화번호" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+      '<div class="fg"><label>휴대폰</label><input id="detContactMobile_' + num + '" placeholder="휴대폰" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
+      '<div class="fg"><label>팩스번호</label><input id="detContactFax_' + num + '" placeholder="팩스번호" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
       '<div class="fg"><label>이메일</label><input id="detContactEmail_' + num + '" placeholder="이메일" style="border:1px solid #1a73e8" class="det-editable det-contact-field"></div>' +
     '</div>' +
     '<div id="detContactLicTags_' + num + '" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px"></div>';
@@ -2813,7 +2923,7 @@ function toggleDetailEdit() {
   // 기본 정보 필드도 수정 가능하게
   ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn',
-   'detTaxName','detTaxPhone','detTaxEmail','detMemo'].forEach(function(id) {
+   'detTaxName','detTaxPhone','detTaxMobile','detTaxFax','detTaxEmail','detMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
       _detailSnapshot[id] = el.value;
@@ -2874,7 +2984,7 @@ async function cancelDetailEdit() {
   });
   ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn',
-   'detTaxName','detTaxPhone','detTaxEmail','detMemo'].forEach(function(id) {
+   'detTaxName','detTaxPhone','detTaxMobile','detTaxFax','detTaxEmail','detMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
   });
@@ -2925,6 +3035,8 @@ async function saveDetailEdit() {
     { id: 'detAddrEn', key: 'addrEn', label: 'Address (EN)' },
     { id: 'detTaxName', key: 'taxName', label: '세금계산서 담당자명' },
     { id: 'detTaxPhone', key: 'taxPhone', label: '세금계산서 전화' },
+    { id: 'detTaxMobile', key: 'taxMobile', label: '세금계산서 휴대폰' },
+    { id: 'detTaxFax', key: 'taxFax', label: '세금계산서 팩스' },
     { id: 'detTaxEmail', key: 'taxEmail', label: '세금계산서 이메일' },
     { id: 'detMemo', key: 'memo', label: '메모' }
   ];
@@ -2992,6 +3104,8 @@ async function saveDetailEdit() {
     if (!document.getElementById('detContactCard_' + cti)) continue;
     var ctName = (document.getElementById('detContactName_' + cti) || {}).value || '';
     var ctPhone = (document.getElementById('detContactPhone_' + cti) || {}).value || '';
+    var ctMobile = (document.getElementById('detContactMobile_' + cti) || {}).value || '';
+    var ctFax = (document.getElementById('detContactFax_' + cti) || {}).value || '';
     var ctEmail = (document.getElementById('detContactEmail_' + cti) || {}).value || '';
     var ctRole = (document.getElementById('detContactRole_' + cti) || {}).value || '';
     var ctSalesRep = (document.getElementById('detContactSalesRep_' + cti) || {}).value || '';
@@ -3000,7 +3114,7 @@ async function saveDetailEdit() {
     if (hiddenEl && hiddenEl.value) { try { ctLicNums = JSON.parse(hiddenEl.value); } catch(e) {} }
     // 빈 담당자는 건너뛰기
     if (!ctName && !ctPhone && !ctEmail) continue;
-    newContacts.push({ name: ctName, phone: ctPhone, email: ctEmail, role: ctRole, salesRep: ctSalesRep, licNums: ctLicNums });
+    newContacts.push({ name: ctName, phone: ctPhone, mobile: ctMobile, fax: ctFax, email: ctEmail, role: ctRole, salesRep: ctSalesRep, licNums: ctLicNums });
   }
 
   // 담당자 변경 감지
@@ -3008,8 +3122,8 @@ async function saveDetailEdit() {
   if (newContacts.length !== oldContacts.length) {
     changes.push({ field: '담당자 수', from: oldContacts.length + '명', to: newContacts.length + '명' });
   }
-  var ctKeys = ['name','phone','email','role','salesRep'];
-  var ctLabels = { name:'이름', phone:'전화번호', email:'이메일', role:'역할', salesRep:'자사 담당' };
+  var ctKeys = ['name','phone','mobile','fax','email','role','salesRep'];
+  var ctLabels = { name:'이름', phone:'전화번호', mobile:'휴대폰', fax:'팩스번호', email:'이메일', role:'역할', salesRep:'자사 담당' };
   for (var cdi = 0; cdi < Math.min(newContacts.length, oldContacts.length); cdi++) {
     ctKeys.forEach(function(k) {
       var ov = (oldContacts[cdi][k] || '').trim();
@@ -3031,6 +3145,8 @@ async function saveDetailEdit() {
   if (newContacts.length > 0) {
     cust.contactName = newContacts[0].name || '';
     cust.contactPhone = newContacts[0].phone || '';
+    cust.contactMobile = newContacts[0].mobile || '';
+    cust.contactFax = newContacts[0].fax || '';
     cust.contactEmail = newContacts[0].email || '';
     cust.salesRep = newContacts[0].salesRep || '';
   }
@@ -3062,7 +3178,7 @@ async function saveDetailEdit() {
   });
   ['detCompany','detRepName','detBizNo','detCorpNo','detBizType','detBizItem','detZipcode','detAddr1','detAddr2',
    'detCompanyEn','detRepNameEn','detAddrEn',
-   'detTaxName','detTaxPhone','detTaxEmail','detMemo'].forEach(function(id) {
+   'detTaxName','detTaxPhone','detTaxMobile','detTaxFax','detTaxEmail','detMemo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.readOnly = true; el.style.background = '#f8f9fb'; el.style.border = ''; }
   });
@@ -5409,6 +5525,18 @@ function renderCollectStatus(data) {
     <div id="bizVerifyContent" style="font-size:13px;color:#333"></div>
     <div style="text-align:right;margin-top:14px">
       <button class="btn btn-secondary btn-sm" onclick="closeBizVerifyModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- OCR 결과 모달 -->
+<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:none;align-items:center;justify-content:center" id="ocrResultModal">
+  <div style="background:#fff;border-radius:14px;padding:24px;max-width:600px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25)">
+    <h3 style="font-size:16px;font-weight:700;color:#1565c0;margin-bottom:4px">🔍 OCR 인식 결과</h3>
+    <div id="ocrModalSub" style="font-size:12px;color:#667085;margin-bottom:14px"></div>
+    <div id="ocrModalBody" style="font-size:13px;color:#333"></div>
+    <div style="text-align:right;margin-top:14px">
+      <button class="btn btn-secondary btn-sm" onclick="closeOcrResultModal()">닫기</button>
     </div>
   </div>
 </div>
