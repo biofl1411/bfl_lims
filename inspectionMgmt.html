@@ -655,11 +655,14 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     </div>
 
     <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button class="filter-chip active" onclick="filterByDivision('전체')">전체</button>
-      <button class="filter-chip" onclick="filterByDivision('식품')">🍱 식품</button>
-      <button class="filter-chip" onclick="filterByDivision('축산')">🥩 축산</button>
-      <select id="food-group-filter" onchange="filterByFoodGroup(this.value)" style="margin-left:8px;padding:6px 10px;border-radius:8px;border:1px solid var(--bdr);font-size:12px;background:var(--card);cursor:pointer;">
-        <option value="전체">식품군: 전체</option>
+      <button class="filter-chip active" data-major="전체" onclick="filterByMajor('전체')">전체</button>
+      <button class="filter-chip" data-major="농산물" onclick="filterByMajor('농산물')">🌾 농산물</button>
+      <button class="filter-chip" data-major="축산물" onclick="filterByMajor('축산물')">🥩 축산물</button>
+      <button class="filter-chip" data-major="수산물" onclick="filterByMajor('수산물')">🐟 수산물</button>
+      <button class="filter-chip" data-major="가공식품" onclick="filterByMajor('가공식품')">🏭 가공식품</button>
+      <button class="filter-chip" data-major="특수식품" onclick="filterByMajor('특수식품')">💊 특수식품</button>
+      <select id="food-minor-filter" onchange="filterByMinor(this.value)" style="margin-left:8px;padding:6px 10px;border-radius:8px;border:1px solid var(--bdr);font-size:12px;background:var(--card);cursor:pointer;">
+        <option value="전체">중분류: 전체</option>
       </select>
     </div>
 
@@ -1088,6 +1091,8 @@ let currentTab = 0;
 let currentView = ['card', 'list', 'card']; // 식품유형, 항목그룹, 수수료 뷰 타입
 let currentFilter = {
   division: '전체',
+  major: '전체',
+  minor: '전체',
   purpose: '전체',
   feeCategory: '전체',
   search: ''
@@ -1181,6 +1186,124 @@ const 축산_검체유형 = ["소시지", "중류소시지", "발효소시지", 
 function getDivision(foodType) {
   if (!foodType) return '식품';
   return 축산_검체유형.includes(foodType) ? '축산' : '식품';
+}
+
+// ══ 식품 대분류 자동 분류 시스템 ══
+const FOOD_CLASSIFY_RULES = [
+  // 순서 중요: 구체적 규칙이 먼저, 포괄적 규칙이 나중
+  // --- 축산물 ---
+  { major:'축산물', minor:'육류', keywords:['소고기','돼지고기','닭고기','오리고기','거위고기','꿩고기','칠면조고기','메추리고기',
+    '양고기','말고기','염소고기','사슴고기','토끼고기','기타가금류고기','기타동물고기'] },
+  { major:'축산물', minor:'육류-부위', match: function(n) {
+    var animals = ['소','돼지','양','말','닭','오리','거위','꿩','칠면조','메추리','기타가금류','기타동물','기타포유류'];
+    var parts = ['근육','간','신장','지방','껍질','심장','발','모래주머니','기타부산물','혀','뇌','위','폐'];
+    for (var a of animals) { for (var p of parts) { if (n === a+p) return true; } }
+    return false;
+  }},
+  { major:'축산물', minor:'육가공품', keywords:['소시지','햄','베이컨','양념육','분쇄가공육','식육추출','식육조제',
+    '건조저장육','갈비가공','포장육','식육가공','곤충가공'] },
+  { major:'축산물', minor:'유제품', keywords:['소유','양유','염소유','당나귀유','기타포유류유','우유','가공유류','강화우유',
+    '산양유','환원유','발효유','농축유','분유','연유','가당분유','가당연유','가당탈지','탈지분유','전지분유',
+    '유크림','가공유크림','가공버터','가공연유','버터류','치즈','가공치즈','자연치즈','유가공','유음료',
+    '조제유류','아이스크림','아이스밀크','샤베트','동물성유지'] },
+  { major:'축산물', minor:'알류', keywords:['달걀','꿩알','오리알','거위알','칠면조알','메추리알','기타가금류알',
+    '알가공','난황','난백','전란'] },
+  { major:'축산물', minor:'벌꿀류', keywords:['벌꿀','화분가공','로열젤리','프로폴리스','가공화분','가공밀납'] },
+  // --- 수산물 ---
+  { major:'수산물', minor:'어류', keywords:['어류','고등어','정어리','멸치','꽁치','삼치','방어','연어','청어','참치',
+    '물치다래','몽치다래','넙치','광어','도미','조기','갈치','장어','뱀장어','메기','붕어','잉어','송어',
+    '민물어','해양어','회유어','틸라피아','다랑어','가자미','대구','명태','아귀','농어','복어','숭어',
+    '날치','다금바리','능성어'] },
+  { major:'수산물', minor:'갑각류', keywords:['갑각류','게','새우','꽃게','대게','랍스터','가재','크릴'] },
+  { major:'수산물', minor:'패류·연체류', keywords:['패류','굴','홍합','전복','바지락','꼬막','조개','오징어','문어','낙지',
+    '주꾸미','해삼','소라','피조개','가리비','키조개','맛조개','대합','백합','연체류'] },
+  { major:'수산물', minor:'해조류', keywords:['해조류','미역','다시마','파래','톳','매생이','우뭇가사리','한천'] },
+  { major:'수산물', minor:'수산가공품', keywords:['수산가공','어묵','어육','맛살','건어포','젓갈','건포류','액젓','어간장'] },
+  // --- 농산물-곡류 ---
+  { major:'농산물', minor:'곡류', keywords:['쌀','현미','보리','밀','호밀','귀리','옥수수','메밀','수수','기장','율무',
+    '트리티케일','조','피','곡류가공','잡곡'] },
+  { major:'농산물', minor:'두류', keywords:['대두','강낭콩','녹두','팥','완두','렌틸','검정콩','서리태','리마콩','동부',
+    '콩나물','잠두','편두','작두콩'] },
+  { major:'농산물', minor:'서류', keywords:['감자','고구마','토란','마','카사바','서류'] },
+  // --- 농산물-채소류 ---
+  { major:'농산물', minor:'엽채류', keywords:['배추','시금치','양배추','상추','쑥갓','들깻잎','양상추','엇갈이','경수채',
+    '근대','청경채','냉이','부추','미나리','셀러리','케일','갓','곤달비','고들빼기','공심채','비름',
+    '쌈추','취나물','머위','치커리','엽채류','결구','엽경채','갯기름나물','고수','겨자채','아욱',
+    '곰취','쑥','방풍나물','수영','갈퀴나물','갈퀴덩굴','참나물','두릅','고려엉겅퀴','브로콜리',
+    '고춧잎','무(잎)','고구마줄기'] },
+  { major:'농산물', minor:'과채류', keywords:['고추','토마토','피망','파프리카','오이','호박','가지','참외','수박','딸기','멜론'] },
+  { major:'농산물', minor:'근채류', keywords:['당근','우엉','연근','생강','마늘','양파','파','대파','쪽파','무','비트',
+    '순무','셀러리악','콜라비','래디시','고추냉이'] },
+  // --- 농산물-과일류 ---
+  { major:'농산물', minor:'과일류', keywords:['사과','배','포도','감귤','복숭아','자두','살구','체리','키위','바나나','망고',
+    '파인애플','감','밤','호두','잣','아몬드','대추','매실','석류','무화과','블루베리','라즈베리',
+    '구아바','구기자','가시여지','오디','아로니아','유자','앵두','모과','잔대','건포도','과일류',
+    '견과','개암','감귤류','올리브'] },
+  { major:'농산물', minor:'버섯류', keywords:['버섯','표고','양송이','느타리','팽이','송이','목이','새송이','영지'] },
+  { major:'농산물', minor:'약용식물', keywords:['인삼','건삼','수삼','홍삼','강황','결명자','고본','고비','고사리',
+    '더덕','도라지','삼지구엽초','산수유','오미자','작약','천궁','치자','하수오',
+    '갈대','갈랏','가시여지','개미나리','개미취','개별꽃','개사철쑥','갯개미자리'] },
+  { major:'농산물', minor:'유지작물', keywords:['참깨','들깨','해바라기','면실','유채','홍화','아마','대마',
+    '고추씨기름','들기름','참기름','콩기름','식용유지','유지가공'] },
+  // --- 가공식품 ---
+  { major:'가공식품', minor:'과자·빵·떡', keywords:['과자','캔디','추잉껌','떡류','빵류','과자류'] },
+  { major:'가공식품', minor:'빙과류', keywords:['빙과','식용얼음','어업용얼음','얼음류'] },
+  { major:'가공식품', minor:'초콜릿류', keywords:['코코아','초콜릿'] },
+  { major:'가공식품', minor:'당류', keywords:['설탕','포도당','물엿','올리고당','당시럽','과당','엿류','당류'] },
+  { major:'가공식품', minor:'잼류', keywords:['잼류','기타잼'] },
+  { major:'가공식품', minor:'두부·묵류', keywords:['두부','유바','묵류'] },
+  { major:'가공식품', minor:'면류', keywords:['생면','숙면','건면','유탕면','국수','면류','당면','냉면'] },
+  { major:'가공식품', minor:'음료류', keywords:['침출차','커피','과채즙','과채주스','탄산음료','혼합음료','음료','차류',
+    '고형차','액상차'] },
+  { major:'가공식품', minor:'장류', keywords:['메주','간장','된장','고추장','춘장','청국장','혼합장','장류',
+    '혼합간장','산분해간장','양조간장'] },
+  { major:'가공식품', minor:'조미식품', keywords:['식초','소스','마요네즈','드레싱','카레','고춧가루','실고추','조미',
+    '향신료','후추','겨자','와사비','식염','가공소금','천일염'] },
+  { major:'가공식품', minor:'절임·김치류', keywords:['김치','절임','조림류','피클','장아찌'] },
+  { major:'가공식품', minor:'주류', keywords:['탁주','맥주','소주','위스키','브랜디','과실주','약주','청주','주류','막걸리'] },
+  { major:'가공식품', minor:'농산가공품', keywords:['전분','시리얼','곡류가공','농산가공','곡물가루'] },
+  { major:'가공식품', minor:'즉석식품', keywords:['즉석섭취','즉석조리','만두','즉석식품','간편조리세트'] },
+  { major:'가공식품', minor:'기타가공품', keywords:['기타가공','효모식품','기타식품'] },
+  // --- 특수식품 ---
+  { major:'특수식품', minor:'영유아식품', keywords:['영아용','조제식','영유아','이유식','성장기용'] },
+  { major:'특수식품', minor:'환자용식품', keywords:['환자용','의료용도','식단형','영양조제식품'] },
+  { major:'특수식품', minor:'임산부식품', keywords:['임산','수유부'] },
+  // --- 일반 카테고리명 (API 데이터의 공식 분류명) ---
+  { major:'가공식품', minor:'일반분류', keywords:['가공식품','동물성가공식품류','농산가공식품류','벌꿀 및 화분가공품류',
+    '식용유지류','수산가공식품류'] },
+  { major:'일반', minor:'식물성', keywords:['식물성'] },
+  { major:'일반', minor:'동물성', keywords:['동물성'] }
+];
+
+// 식품 자동 분류 (캐시 포함)
+const _foodClassifyCache = new Map();
+function classifyFoodType(name) {
+  if (!name) return { major:'미분류', minor:'기타', icon:'❓' };
+  if (_foodClassifyCache.has(name)) return _foodClassifyCache.get(name);
+
+  for (var rule of FOOD_CLASSIFY_RULES) {
+    var matched = false;
+    if (rule.match) {
+      matched = rule.match(name);
+    } else if (rule.keywords) {
+      matched = rule.keywords.some(function(kw) { return name.includes(kw); });
+    }
+    if (matched) {
+      var icons = {'축산물':'🥩','수산물':'🐟','농산물':'🌾','가공식품':'🏭','특수식품':'💊','일반':'📦','미분류':'❓'};
+      var result = { major: rule.major, minor: rule.minor, icon: icons[rule.major] || '📦' };
+      _foodClassifyCache.set(name, result);
+      return result;
+    }
+  }
+  // 건조 접미사 → 농산물 약용식물로 분류
+  if (name.endsWith('건조')) {
+    var result = { major:'농산물', minor:'약용식물', icon:'🌾' };
+    _foodClassifyCache.set(name, result);
+    return result;
+  }
+  var result = { major:'미분류', minor:'기타', icon:'❓' };
+  _foodClassifyCache.set(name, result);
+  return result;
 }
 
 // 전역 변수
@@ -30192,6 +30315,41 @@ function filterByDivision(division) {
   renderData();
 }
 
+function filterByMajor(major) {
+  currentFilter.major = major;
+  currentFilter.minor = '전체'; // 대분류 변경 시 중분류 초기화
+  document.querySelectorAll('#panel-2 .filter-chip').forEach(function(chip) {
+    chip.classList.toggle('active', chip.dataset.major === major);
+  });
+  // 중분류 드롭다운 업데이트
+  updateMinorFilter(major);
+  renderData();
+}
+
+function filterByMinor(minor) {
+  currentFilter.minor = minor;
+  renderData();
+}
+
+function updateMinorFilter(major) {
+  var sel = document.getElementById('food-minor-filter');
+  if (!sel) return;
+  var html = '<option value="전체">중분류: 전체</option>';
+  if (major !== '전체') {
+    var minors = {};
+    var data = apiDataCache[currentApiTab] || [];
+    var prdField = (currentApiTab === 'I0930') ? 'PRDLST_NM' : 'PRDLST_CD_NM';
+    data.forEach(function(r) {
+      var cls = classifyFoodType(r[prdField] || '');
+      if (cls.major === major) minors[cls.minor] = (minors[cls.minor] || 0) + 1;
+    });
+    Object.entries(minors).sort(function(a,b){ return b[1]-a[1]; }).forEach(function(item) {
+      html += '<option value="' + item[0] + '">' + item[0] + ' (' + item[1].toLocaleString() + ')</option>';
+    });
+  }
+  sel.innerHTML = html;
+}
+
 function filterByPurpose(purpose) {
   currentFilter.purpose = purpose;
   renderData(); // buildItemGroupChips()가 renderItemGroups() 내에서 칩 active 상태를 자동 관리
@@ -31980,13 +32138,16 @@ async function loadAndRenderApiData(serviceId) {
   var prdField = (serviceId === 'I0930') ? 'PRDLST_NM' : 'PRDLST_CD_NM';
   var testItemField = (serviceId === 'I0930' || serviceId === 'I0960') ? 'T_KOR_NM' : 'TESTITM_NM';
 
-  // 분야 필터 적용 (축산_검체유형 배열 기반)
+  // 대분류/중분류 필터 적용
   var filtered = data;
-  if (currentFilter.division && currentFilter.division !== '전체') {
+  if (currentFilter.major && currentFilter.major !== '전체') {
     filtered = filtered.filter(function(r) {
-      var name = r[prdField] || '';
-      var div = 축산_검체유형.includes(name) ? '축산' : '식품';
-      return div === currentFilter.division;
+      var cls = classifyFoodType(r[prdField] || '');
+      if (cls.major !== currentFilter.major) return false;
+      if (currentFilter.minor && currentFilter.minor !== '전체') {
+        return cls.minor === currentFilter.minor;
+      }
+      return true;
     });
   }
 
@@ -32011,17 +32172,6 @@ async function loadAndRenderApiData(serviceId) {
 
   var entries = Object.entries(grouped);
 
-  // 식품군 드롭다운 옵션 빌드
-  buildFoodGroupOptions(entries);
-
-  // 식품군 필터 적용
-  if (currentFoodGroup && currentFoodGroup !== '전체') {
-    entries = entries.filter(function(entry) {
-      var g = getFoodGroup(entry[0]);
-      return g && g.name === currentFoodGroup;
-    });
-  }
-
   // 정렬 적용
   if (currentSort === 'count-desc') {
     entries.sort(function(a, b) { return b[1].length - a[1].length; });
@@ -32045,10 +32195,15 @@ async function loadAndRenderApiData(serviceId) {
   var PAGE_SIZE = 200;
   var displayEntries = entries.slice(0, PAGE_SIZE);
 
+  var filterLabel = '';
+  if (currentFilter.major !== '전체') {
+    filterLabel = ' / ' + currentFilter.major;
+    if (currentFilter.minor !== '전체') filterLabel += ' > ' + currentFilter.minor;
+  }
   var statsHtml = '<div style="grid-column:1/-1;font-size:12px;color:var(--sub);margin-bottom:12px">' +
     '품목 <b>' + totalGroups.toLocaleString() + '</b>개 / 시험항목 <b>' + totalItems.toLocaleString() + '</b>건' +
     (searchTerm ? ' (검색: "' + searchTerm + '")' : '') +
-    (currentFilter.division !== '전체' ? ' / ' + currentFilter.division : '') + '</div>';
+    filterLabel + '</div>';
 
   var paginationHtml = '';
   if (entries.length > PAGE_SIZE) {
@@ -32065,10 +32220,11 @@ async function loadAndRenderApiData(serviceId) {
     displayEntries.forEach(function(entry) {
       var prdName = entry[0];
       var items = entry[1];
-      var division = 축산_검체유형.includes(prdName) ? '축산' : '식품';
-      var divBadge = division === '축산' ? '🥩' : '🍱';
-      var fg = getFoodGroup(prdName);
-      var fgBadge = fg ? '<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:10px;margin-left:4px">' + fg.no + '. ' + fg.name + '</span>' : '';
+      var cls = classifyFoodType(prdName);
+      var majorColors = {'축산물':'#fff3e0','수산물':'#e3f2fd','농산물':'#e8f5e9','가공식품':'#fce4ec','특수식품':'#f3e5f5','일반':'#f5f5f5','미분류':'#f5f5f5'};
+      var majorTextColors = {'축산물':'#e65100','수산물':'#0d47a1','농산물':'#2e7d32','가공식품':'#c62828','특수식품':'#6a1b9a','일반':'#616161','미분류':'#9e9e9e'};
+      var majorBg = majorColors[cls.major] || '#f5f5f5';
+      var majorTxt = majorTextColors[cls.major] || '#616161';
       var itemsHtml = items.slice(0, 10).map(function(it) {
         return '<div class="item-list-item">' +
           '<div class="item-list-name">' + (it[testItemField] || it.FNPRT_ITM_NM || '-') + '</div>' +
@@ -32082,7 +32238,10 @@ async function loadAndRenderApiData(serviceId) {
         '<div class="card-header">' +
           '<div>' +
             '<div class="card-title">' + prdName + '</div>' +
-            '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px"><span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' + fgBadge + '</div>' +
+            '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">' +
+              '<span class="badge" style="background:' + majorBg + ';color:' + majorTxt + ';font-size:10px">' + cls.icon + ' ' + cls.major + '</span>' +
+              '<span class="badge" style="background:#f5f5f5;color:#616161;font-size:10px">' + cls.minor + '</span>' +
+            '</div>' +
           '</div>' +
           '<div><div class="card-badge">' + items.length + '건</div></div>' +
         '</div>' +
@@ -32101,16 +32260,16 @@ async function loadAndRenderApiData(serviceId) {
     displayEntries.forEach(function(entry) {
       var prdName = entry[0];
       var items = entry[1];
-      var division = 축산_검체유형.includes(prdName) ? '축산' : '식품';
-      var divBadge = division === '축산' ? '🥩' : '🍱';
-      var fg = getFoodGroup(prdName);
-      var fgBadge = fg ? '<span class="badge" style="background:#e3f2fd;color:#1565c0;font-size:10px;margin-left:4px">' + fg.no + '. ' + fg.name + '</span>' : '';
+      var cls = classifyFoodType(prdName);
+      var majorColors = {'축산물':'#fff3e0','수산물':'#e3f2fd','농산물':'#e8f5e9','가공식품':'#fce4ec','특수식품':'#f3e5f5','일반':'#f5f5f5','미분류':'#f5f5f5'};
+      var majorTextColors = {'축산물':'#e65100','수산물':'#0d47a1','농산물':'#2e7d32','가공식품':'#c62828','특수식품':'#6a1b9a','일반':'#616161','미분류':'#9e9e9e'};
       accHtml += '<div class="accordion-group">' +
         '<div class="accordion-header" onclick="toggleAccordion(this)">' +
           '<div class="accordion-title">' +
             '<span class="accordion-icon">▶</span>' +
             '<span class="accordion-name">' + prdName + '</span>' +
-            '<span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' + fgBadge +
+            '<span class="badge" style="background:' + (majorColors[cls.major]||'#f5f5f5') + ';color:' + (majorTextColors[cls.major]||'#616161') + ';font-size:10px">' + cls.icon + ' ' + cls.major + '</span>' +
+            '<span class="badge" style="background:#f5f5f5;color:#616161;font-size:10px;margin-left:4px">' + cls.minor + '</span>' +
           '</div>' +
           '<div class="accordion-info" style="display:flex;gap:12px;align-items:center;">' +
             '<span class="accordion-count">' + items.length + '건</span>' +
