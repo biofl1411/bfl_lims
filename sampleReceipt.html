@@ -453,8 +453,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                                 <tr style="background:#f8f9fc;border-bottom:2px solid #e0e0e0">
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:40px">No</th>
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">시험항목</th>
-                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">규격</th>
-                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:100px">시험담당자</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:60px">실적</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:100px">검사목적</th>
                                     <th style="padding:10px 12px;text-align:right;font-weight:600;color:#344054;width:100px">수수료</th>
                                 </tr>
                             </thead>
@@ -1410,7 +1410,7 @@ async function fetchLatestReceiptNo(testField, testPurpose) {
 }
 
 // ============================================================================
-// 식품유형 Firestore 연동 (foodTypes 컬렉션)
+// 식품유형 Firestore 연동 (foodTypesMapping 컬렉션 - 접수내역 기반 맵핑)
 // ============================================================================
 let _foodTypeCache = null;
 let _foodTypeCacheTime = 0;
@@ -1420,12 +1420,12 @@ async function loadFoodTypesFromFirestore() {
     // 5분 캐시
     if (_foodTypeCache && (now - _foodTypeCacheTime < 300000)) return _foodTypeCache;
     try {
-        var snap = await db.collection('foodTypes').get();
+        var snap = await db.collection('foodTypesMapping').get();
         _foodTypeCache = snap.docs.map(function(d) { return d.data(); });
         _foodTypeCacheTime = now;
-        console.log('[Firestore] 식품유형 로드:', _foodTypeCache.length + '건');
+        console.log('[Firestore] 식품유형(맵핑) 로드:', _foodTypeCache.length + '건');
     } catch (e) {
-        console.warn('[Firestore] 식품유형 로드 실패:', e.message);
+        console.warn('[Firestore] 식품유형(맵핑) 로드 실패:', e.message);
         _foodTypeCache = _foodTypeCache || [];
     }
     return _foodTypeCache;
@@ -1444,18 +1444,18 @@ async function searchFoodType(query) {
         return;
     }
 
-    // Firestore에서 식품유형 데이터 로드
+    // Firestore에서 식품유형(맵핑) 데이터 로드
     var foodTypes = await loadFoodTypesFromFirestore();
 
-    // 시험분야(식품/축산) 라벨 기준 필터링
-    var filtered분야 = foodTypes.filter(function(item) {
-        return item['분야'] === testField;
+    // 검사목적 + 시험분야(식품/축산) 기준 필터링
+    var filtered = foodTypes.filter(function(item) {
+        return item.purpose === testPurpose && item['분야'] === testField;
     });
 
-    // 고유한 검체유형 목록 추출
+    // 고유한 검체유형(foodType) 목록 추출
     var typeSet = new Set();
-    filtered분야.forEach(function(item) {
-        if (item['검체유형']) typeSet.add(item['검체유형']);
+    filtered.forEach(function(item) {
+        if (item.foodType) typeSet.add(item.foodType);
     });
     var allTypes = Array.from(typeSet).sort();
 
@@ -1506,18 +1506,20 @@ async function loadInspectionItems(foodType) {
         return;
     }
 
-    // Firestore foodTypes에서 해당 검체유형 + 분야 필터
+    // Firestore 맵핑에서 검사목적 + 검체유형 + 분야 필터
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
+    var currentPurpose = document.getElementById('test-purpose').value || '';
     var allData = await loadFoodTypesFromFirestore();
     var items = allData.filter(function(item) {
-        return item['검체유형'] === foodType && (!currentField || item['분야'] === currentField);
+        return item.foodType === foodType && item.purpose === currentPurpose &&
+               (!currentField || item['분야'] === currentField);
     });
 
-    // (검체유형+항목명+규격) 기준 중복 제거
+    // (항목명+괄호) 기준 중복 제거
     var seen = {};
     var unique = [];
     items.forEach(function(item) {
-        var key = item['항목명'] + '||' + item['규격'];
+        var key = (item.item || '') + '||' + (item.bracket || '');
         if (!seen[key]) {
             seen[key] = true;
             unique.push(item);
@@ -1536,13 +1538,13 @@ async function loadInspectionItems(foodType) {
     var total = 0;
     var html = '';
     unique.forEach(function(item, idx) {
-        var fee = item['항목수수료'] || 0;
+        var fee = item.fee || 0;
         total += fee;
         html += '<tr style="border-bottom:1px solid #eee">';
         html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
-        html += '<td style="padding:8px 12px;color:#344054">' + (item['항목명'] || '') + '</td>';
-        html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (item['규격'] || '') + '</td>';
-        html += '<td style="padding:8px 12px;color:#344054">' + (item['항목담당자'] || '') + '</td>';
+        html += '<td style="padding:8px 12px;color:#344054">' + (item.item || '') + (item.bracket ? ' (' + item.bracket + ')' : '') + '</td>';
+        html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (item.count || 0) + '건</td>';
+        html += '<td style="padding:8px 12px;color:#344054">' + (item.purpose || '') + '</td>';
         html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
         html += '</tr>';
     });
@@ -1761,15 +1763,20 @@ function loadSampleFromArray(idx) {
 async function updateFeeSummary() {
     var grandTotal = 0;
     var allData = await loadFoodTypesFromFirestore();
+    var currentPurpose = document.getElementById('test-purpose').value || '';
+    var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
     // 모든 시료의 검체유형으로 수수료 합산
     _sampleData.forEach(function(s) {
         var ft = s['food-type-value'] || '';
         if (ft && allData.length > 0) {
-            var items = allData.filter(function(item) { return item['검체유형'] === ft; });
+            var items = allData.filter(function(item) {
+                return item.foodType === ft && item.purpose === currentPurpose &&
+                       (!currentField || item['분야'] === currentField);
+            });
             var seen = {};
             items.forEach(function(item) {
-                var key = item['항목명'] + '||' + item['규격'];
-                if (!seen[key]) { seen[key] = true; grandTotal += (item['항목수수료'] || 0); }
+                var key = (item.item || '') + '||' + (item.bracket || '');
+                if (!seen[key]) { seen[key] = true; grandTotal += (item.fee || 0); }
             });
         }
     });
