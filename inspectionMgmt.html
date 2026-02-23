@@ -591,6 +591,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <button class="btn fc-subtab active" data-fcsub="api" onclick="switchFcSubtab('api')" style="font-size:12px;padding:6px 16px;border-radius:20px">📡 식품유형(API)</button>
         <button class="btn fc-subtab" data-fcsub="custom" onclick="switchFcSubtab('custom')" style="font-size:12px;padding:6px 16px;border-radius:20px">📝 식품유형(커스텀)</button>
         <button class="btn fc-subtab" data-fcsub="mapping" onclick="switchFcSubtab('mapping')" style="font-size:12px;padding:6px 16px;border-radius:20px">📊 식품유형(맵핑)</button>
+        <button class="btn fc-subtab" data-fcsub="ilab" onclick="switchFcSubtab('ilab')" style="font-size:12px;padding:6px 16px;border-radius:20px">🔬 식품유형(ILAB)</button>
       </div>
 
       <!-- API 서브탭 컨텐츠 -->
@@ -656,6 +657,60 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <div id="fcm-stats" style="margin-bottom:12px;font-size:12px;color:var(--sub)"></div>
         <div class="card-grid" id="fcm-cards"></div>
         <div class="accordion-container" id="fcm-accordion" style="display:none"></div>
+      </div>
+
+      <!-- ILAB 서브탭 컨텐츠 -->
+      <div id="fc-sub-ilab" style="display:none">
+        <div class="page-desc" style="margin-bottom:12px;font-size:13px;color:var(--sub)">
+          🔬 자가품질위탁검사용 식품유형별 검사항목 관리 (Firestore 기반, 편집 가능)
+        </div>
+
+        <!-- 통계 칩 -->
+        <div class="stats-row" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <div class="stat-chip"><div class="sc-icon" style="background:var(--mint-l)">🍱</div><div><div class="sc-num" id="fci-stat-types" style="color:var(--mint)">0</div><div class="sc-label">검체유형</div></div></div>
+          <div class="stat-chip"><div class="sc-icon" style="background:var(--pri-l)">📋</div><div><div class="sc-num" id="fci-stat-cards" style="color:var(--pri)">0</div><div class="sc-label">카드 수</div></div></div>
+          <div class="stat-chip"><div class="sc-icon" style="background:var(--violet-l)">🧪</div><div><div class="sc-num" id="fci-stat-items" style="color:var(--violet)">0</div><div class="sc-label">전체 항목</div></div></div>
+          <div class="stat-chip"><div class="sc-icon" style="background:var(--amber-l)">👤</div><div><div class="sc-num" id="fci-stat-managers" style="color:var(--amber)">0</div><div class="sc-label">담당자</div></div></div>
+        </div>
+
+        <!-- 도구바 -->
+        <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="text" id="fci-search" placeholder="🔍 검체유형, 항목명, 규격 검색..." style="flex:1;min-width:200px;padding:8px 14px;border-radius:8px;border:1px solid var(--bdr);font-size:13px;background:var(--card)" oninput="renderFoodClassIlab()">
+          <div class="view-toggle">
+            <button class="view-btn active" onclick="fciView='card';this.parentElement.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderFoodClassIlab()">🗂️ 카드</button>
+            <button class="view-btn" onclick="fciView='list';this.parentElement.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderFoodClassIlab()">📋 리스트</button>
+          </div>
+          <button class="btn btn-outline" onclick="fciToggleCardSelectMode()" style="color:#e53935;border-color:#e53935;font-size:12px;">🗑️ 선택삭제</button>
+          <div class="sort-dropdown">
+            <button class="sort-button" onclick="fciToggleSortMenu(event)" style="font-size:12px;">
+              <span>🔄</span><span id="fci-current-sort">정렬: 기본</span><span style="font-size:10px;">▼</span>
+            </button>
+            <div class="sort-menu" id="fci-sort-menu">
+              <div class="sort-option selected" onclick="fciSortData('default')"><span>📋</span><span>기본 순서</span></div>
+              <div class="sort-option" onclick="fciSortData('name')"><span>🔤</span><span>항목명순</span></div>
+              <div class="sort-option" onclick="fciSortData('type')"><span>🏷️</span><span>검체유형순</span></div>
+              <div class="sort-option" onclick="fciSortData('manager')"><span>👤</span><span>담당자순</span></div>
+              <div class="sort-option" onclick="fciSortData('fee-desc')"><span>💰</span><span>수수료 높은순</span></div>
+              <div class="sort-option" onclick="fciSortData('fee-asc')"><span>💰</span><span>수수료 낮은순</span></div>
+              <div class="sort-option" onclick="fciSortData('count-desc')"><span>📊</span><span>항목수 많은순</span></div>
+              <div class="sort-option" onclick="fciSortData('count-asc')"><span>📊</span><span>항목수 적은순</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 필터 칩 -->
+        <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="filter-chip active" data-fcilabel="전체" onclick="fciFilterByDivision('전체')">전체</button>
+          <button class="filter-chip" data-fcilabel="식품" onclick="fciFilterByDivision('식품')">🍱 식품</button>
+          <button class="filter-chip" data-fcilabel="축산" onclick="fciFilterByDivision('축산')">🥩 축산</button>
+        </div>
+
+        <!-- 카드 선택 툴바 -->
+        <div id="fci-card-select-toolbar" style="display:none;align-items:center;gap:12px;padding:8px 16px;background:#fff5f5;border:1px solid #ffcdd2;border-radius:10px;margin-bottom:12px;"></div>
+
+        <!-- 카드 그리드 / 아코디언 -->
+        <div class="card-grid" id="fci-cards"></div>
+        <div class="accordion-container" id="fci-accordion" style="display:none"></div>
       </div>
     </div>
 
@@ -1016,7 +1071,16 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <textarea id="input-시험법근거"></textarea>
         </div>
       </div>
-      
+
+      <!-- ILAB 전용 섹션 -->
+      <div class="detail-section" id="group-ilab-extra" style="display:none;">
+        <div class="detail-section-title">🔬 ILAB 정보</div>
+        <div class="form-group"><label>항목담당자</label><input type="text" id="input-ilab-담당자"></div>
+        <div class="form-group"><label>항목수수료</label><input type="number" id="input-ilab-수수료" min="0"></div>
+        <div class="form-group"><label>카드 ID</label><input type="text" id="input-ilab-cardId"></div>
+        <div class="form-group"><label>시료수</label><input type="number" id="input-ilab-시료수" min="0"></div>
+      </div>
+
       <!-- 수수료 섹션 (수수료 탭에서만 표시) -->
       <div class="detail-section" id="group-수수료" style="display: none;">
         <div class="detail-section-title">💰 수수료</div>
@@ -1214,6 +1278,14 @@ let fcFilterLabel = '전체';
 let fcFilterMinor = '전체';
 let currentFcSubtab = 'api'; // 'api' | 'custom'
 let fccView = 'card'; // Custom 뷰 상태
+// 식품유형(ILAB) 탭 전용 상태
+let fciView = 'card';
+let fciFilterDivision = '전체';
+let fciSort = 'default';
+let fciCardSelectMode = false;
+let fciSelectedCards = new Set();
+let _ilabDataCache = null;
+let fciData = [];
 
 // ══ 식품군 마스터 (식약처 홈페이지 분류표 기반) ══
 const FOOD_GROUP_MASTER = [
@@ -29748,7 +29820,11 @@ function updateManagerFromMap() {
 function navigateItem(dir) {
   const newPos = navCurrentPos + dir;
   if (newPos < 0 || newPos >= navItemList.length) return;
-  openDetailItem(editingType, navItemList[newPos], navItemList, newPos);
+  if (editingType === 'ilab') {
+    openFciDetailItem(navItemList[newPos], navItemList, newPos);
+  } else {
+    openDetailItem(editingType, navItemList[newPos], navItemList, newPos);
+  }
 }
 
 function updateNavButtons() {
@@ -30051,6 +30127,10 @@ document.addEventListener('click', function(event) {
   const sortMenu = document.getElementById('sort-menu');
   if (sortMenu && !event.target.closest('.sort-dropdown')) {
     sortMenu.classList.remove('active');
+  }
+  const fciSortMenu = document.getElementById('fci-sort-menu');
+  if (fciSortMenu && !event.target.closest('.sort-dropdown')) {
+    fciSortMenu.classList.remove('active');
   }
 });
 
@@ -30357,7 +30437,9 @@ function showTab(i) {
   // 식품유형 탭 (서브탭에 따라 분기)
   if (i === 2) {
     if (currentFcSubtab === 'api') renderFoodClassData();
-    else renderFoodClassCustom();
+    else if (currentFcSubtab === 'custom') renderFoodClassCustom();
+    else if (currentFcSubtab === 'mapping') renderFoodClassMapping();
+    else if (currentFcSubtab === 'ilab') renderFoodClassIlab();
   }
   // 식품공전/항목그룹/수수료 탭
   if (i === 3 || i === 5 || i === 6) renderData();
@@ -30372,9 +30454,389 @@ function switchFcSubtab(sub) {
   document.getElementById('fc-sub-api').style.display = sub === 'api' ? '' : 'none';
   document.getElementById('fc-sub-custom').style.display = sub === 'custom' ? '' : 'none';
   document.getElementById('fc-sub-mapping').style.display = sub === 'mapping' ? '' : 'none';
+  document.getElementById('fc-sub-ilab').style.display = sub === 'ilab' ? '' : 'none';
   if (sub === 'api') renderFoodClassData();
   else if (sub === 'custom') renderFoodClassCustom();
   else if (sub === 'mapping') renderFoodClassMapping();
+  else if (sub === 'ilab') renderFoodClassIlab();
+}
+
+// ══════════════════════════════════════════════════════
+// 식품유형(ILAB) 전용 함수
+// ══════════════════════════════════════════════════════
+
+// --- Firestore 로드 ---
+async function loadIlabData() {
+  if (_ilabDataCache) return _ilabDataCache;
+  try {
+    var snap = await db.collection('foodTypesIlab').get();
+    _ilabDataCache = snap.docs.map(function(d) { return d.data(); });
+    console.log('[Firestore] ILAB 데이터 로드:', _ilabDataCache.length + '건');
+  } catch(e) {
+    console.warn('[Firestore] ILAB 로드 실패:', e.message);
+    _ilabDataCache = [];
+  }
+  return _ilabDataCache;
+}
+
+// --- Firestore 저장 (batch 450건) ---
+async function saveIlabToFirestore() {
+  try {
+    var BATCH_SIZE = 450;
+    var existing = await db.collection('foodTypesIlab').get();
+    for (var bi = 0; bi < existing.docs.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      existing.docs.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
+      await batch.commit();
+    }
+    for (var bi = 0; bi < fciData.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      fciData.slice(bi, bi + BATCH_SIZE).forEach(function(item, j) {
+        batch.set(db.collection('foodTypesIlab').doc('ilab_' + (bi + j)), item);
+      });
+      await batch.commit();
+    }
+    _ilabDataCache = [...fciData];
+    console.log('[Firestore] ILAB 저장 완료:', fciData.length + '건');
+  } catch(e) {
+    console.error('[Firestore] ILAB 저장 실패:', e);
+    showToast('ILAB 저장 실패: ' + e.message, 'error');
+  }
+}
+
+// --- 초기 데이터 소스 (js/full-food-types.js에서 로드된 FULL_FOOD_TYPES 사용) ---
+function getIlabFullFoodTypes() {
+  if (typeof FULL_FOOD_TYPES !== 'undefined' && FULL_FOOD_TYPES.length > 0) {
+    return FULL_FOOD_TYPES;
+  }
+  showToast('FULL_FOOD_TYPES 데이터를 찾을 수 없습니다.', 'error');
+  return [];
+}
+
+// --- 초기 데이터 업로드 ---
+async function uploadIlabInitialData() {
+  if (!confirm('ILAB 초기 데이터(FULL_FOOD_TYPES)를 Firestore에 업로드합니다.\n기존 데이터가 있다면 덮어씁니다.\n계속하시겠습니까?')) return;
+  showToast('ILAB 데이터 업로드 중...', 'info');
+  try {
+    var rawData = getIlabFullFoodTypes();
+    fciData = rawData.map(function(item) {
+      return Object.assign({}, item, { 분야: getDivision(item.검체유형) });
+    });
+    await saveIlabToFirestore();
+    updateFciStats();
+    renderFoodClassIlab();
+    showToast('ILAB 데이터 업로드 완료: ' + fciData.length + '건', 'success');
+  } catch(e) {
+    console.error('ILAB 업로드 실패:', e);
+    showToast('업로드 실패: ' + e.message, 'error');
+  }
+}
+
+// --- 통계 업데이트 ---
+function updateFciStats() {
+  var types = new Set(fciData.map(function(d) { return d.검체유형; })).size;
+  var cards = new Set(fciData.map(function(d) { return d.검체유형 + '||' + d.cardId; })).size;
+  var managers = new Set(fciData.map(function(d) { return d.항목담당자; }).filter(Boolean)).size;
+  var el1 = document.getElementById('fci-stat-types'); if (el1) el1.textContent = types;
+  var el2 = document.getElementById('fci-stat-cards'); if (el2) el2.textContent = cards;
+  var el3 = document.getElementById('fci-stat-items'); if (el3) el3.textContent = fciData.length;
+  var el4 = document.getElementById('fci-stat-managers'); if (el4) el4.textContent = managers;
+}
+
+// --- 필터 ---
+function filterFciData() {
+  var data = fciData.slice();
+  if (fciFilterDivision !== '전체') {
+    data = data.filter(function(d) { return d.분야 === fciFilterDivision; });
+  }
+  var searchEl = document.getElementById('fci-search');
+  if (searchEl && searchEl.value) {
+    var s = searchEl.value.toLowerCase();
+    data = data.filter(function(d) {
+      return (d.검체유형 || '').toLowerCase().indexOf(s) >= 0 ||
+             (d.항목명 || '').toLowerCase().indexOf(s) >= 0 ||
+             (d.규격 || '').toLowerCase().indexOf(s) >= 0;
+    });
+  }
+  return data;
+}
+
+function fciFilterByDivision(div) {
+  fciFilterDivision = div;
+  document.querySelectorAll('#fc-sub-ilab .filter-chip').forEach(function(chip) {
+    chip.classList.toggle('active', chip.dataset.fcilabel === div);
+  });
+  renderFoodClassIlab();
+}
+
+// --- 정렬 ---
+function fciSortData(type) {
+  fciSort = type;
+  document.querySelectorAll('#fci-sort-menu .sort-option').forEach(function(o) {
+    var txt = o.textContent.trim();
+    o.classList.toggle('selected',
+      type === 'default' ? txt.indexOf('기본') >= 0 : type === 'name' ? txt.indexOf('항목명') >= 0 :
+      type === 'type' ? txt.indexOf('검체유형') >= 0 : type === 'manager' ? txt.indexOf('담당자') >= 0 :
+      type === 'fee-desc' ? txt.indexOf('높은순') >= 0 : type === 'fee-asc' ? txt.indexOf('낮은순') >= 0 :
+      type === 'count-desc' ? txt.indexOf('많은순') >= 0 : txt.indexOf('적은순') >= 0
+    );
+  });
+  var labels = {default:'기본',name:'항목명순',type:'검체유형순',manager:'담당자순','fee-desc':'수수료↓','fee-asc':'수수료↑','count-desc':'항목수↓','count-asc':'항목수↑'};
+  var sortLabel = document.getElementById('fci-current-sort');
+  if (sortLabel) sortLabel.textContent = '정렬: ' + (labels[type] || '기본');
+  var sm = document.getElementById('fci-sort-menu');
+  if (sm) sm.classList.remove('active');
+
+  if (['name','type','manager'].indexOf(type) >= 0) {
+    var key = type === 'name' ? '항목명' : type === 'type' ? '검체유형' : '항목담당자';
+    fciData.sort(function(a, b) { return (a[key] || '').localeCompare(b[key] || '', 'ko'); });
+  }
+  renderFoodClassIlab();
+}
+
+function fciToggleSortMenu(e) {
+  e.stopPropagation();
+  var sm = document.getElementById('fci-sort-menu');
+  if (sm) sm.classList.toggle('active');
+}
+
+// --- 카드 선택/삭제 ---
+function fciToggleCardSelectMode() {
+  fciCardSelectMode = !fciCardSelectMode;
+  fciSelectedCards.clear();
+  var toolbar = document.getElementById('fci-card-select-toolbar');
+  toolbar.style.display = fciCardSelectMode ? 'flex' : 'none';
+  toolbar.innerHTML = fciCardSelectMode ? '<span style="font-weight:700;color:#e53935;">🗑️ 선택 모드</span><span id="fci-select-count" style="font-size:12px;">0개 선택</span><button class="btn" onclick="fciDeleteSelectedCards()" style="color:#e53935;border-color:#e53935;">삭제</button><button class="btn" onclick="fciToggleCardSelectMode()">취소</button>' : '';
+  renderFoodClassIlab();
+}
+
+function fciToggleCardSelect(key) {
+  if (fciSelectedCards.has(key)) fciSelectedCards.delete(key);
+  else fciSelectedCards.add(key);
+  var cnt = document.getElementById('fci-select-count');
+  if (cnt) cnt.textContent = fciSelectedCards.size + '개 선택';
+  renderFoodClassIlab();
+}
+
+function fciDeleteSelectedCards() {
+  if (!fciSelectedCards.size) return;
+  if (!confirm(fciSelectedCards.size + '개 카드를 삭제하시겠습니까?')) return;
+  fciSelectedCards.forEach(function(key) {
+    fciData = fciData.filter(function(d) { return (d.검체유형 + '||' + d.cardId) !== key; });
+  });
+  fciSelectedCards.clear();
+  fciCardSelectMode = false;
+  document.getElementById('fci-card-select-toolbar').style.display = 'none';
+  updateFciStats();
+  saveIlabToFirestore();
+  renderFoodClassIlab();
+}
+
+// --- 메인 렌더링 ---
+async function renderFoodClassIlab() {
+  var cardsEl = document.getElementById('fci-cards');
+  var accEl = document.getElementById('fci-accordion');
+  if (!cardsEl) return;
+
+  // 첫 로드
+  if (fciData.length === 0 && !_ilabDataCache) {
+    var loaded = await loadIlabData();
+    if (loaded && loaded.length > 0) {
+      fciData = loaded.slice();
+    }
+  }
+
+  // 데이터 없으면 업로드 안내
+  if (fciData.length === 0) {
+    cardsEl.style.display = 'block';
+    accEl.style.display = 'none';
+    cardsEl.innerHTML = '<div style="padding:60px;text-align:center;">' +
+      '<div style="font-size:48px;margin-bottom:16px;">🔬</div>' +
+      '<div style="font-size:16px;font-weight:700;margin-bottom:8px;">ILAB 데이터가 없습니다</div>' +
+      '<div style="font-size:13px;color:#888;margin-bottom:20px;">초기 데이터(FULL_FOOD_TYPES 3,062항목)를 Firestore에 업로드하세요.</div>' +
+      '<button class="btn btn-primary" onclick="uploadIlabInitialData()" style="font-size:14px;padding:10px 24px;">📤 초기 데이터 업로드</button>' +
+      '</div>';
+    updateFciStats();
+    return;
+  }
+
+  updateFciStats();
+  var filtered = filterFciData();
+
+  if (fciView === 'card') {
+    cardsEl.style.display = 'grid';
+    accEl.style.display = 'none';
+
+    var grouped = {};
+    filtered.forEach(function(item) {
+      var key = item.cardId !== undefined ? item.검체유형 + '||' + item.cardId : item.검체유형;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(item);
+    });
+
+    var entries = Object.entries(grouped);
+    if (fciSort === 'fee-desc' || fciSort === 'fee-asc') {
+      entries.sort(function(a, b) {
+        var fa = a[1].reduce(function(s, i) { return s + (i.항목수수료 || 0); }, 0);
+        var fb = b[1].reduce(function(s, i) { return s + (i.항목수수료 || 0); }, 0);
+        return fciSort === 'fee-desc' ? fb - fa : fa - fb;
+      });
+    } else if (fciSort === 'count-desc' || fciSort === 'count-asc') {
+      entries.sort(function(a, b) { return fciSort === 'count-desc' ? b[1].length - a[1].length : a[1].length - b[1].length; });
+    } else if (fciSort === 'type') {
+      entries.sort(function(a, b) { return a[0].localeCompare(b[0], 'ko'); });
+    }
+
+    var html = entries.map(function(entry) {
+      var key = entry[0];
+      var items = entry[1];
+      var type = items[0].검체유형;
+      var division = items[0].분야;
+      var divBadge = division === '축산' ? '🥩' : '🍱';
+      var totalFee = items.reduce(function(s, i) { return s + (i.항목수수료 || 0); }, 0);
+      var 시료수 = items[0].시료수 || 0;
+      var sel = fciCardSelectMode && fciSelectedCards.has(key);
+      var bracketTags = getBracketTags(extractBracket(type)).map(function(tag) {
+        return '<span class="badge" style="background:' + tag.color + ';color:#fff;font-size:10px;">' + tag.label + '</span>';
+      }).join('');
+
+      var itemsHtml = items.map(function(item, pos) {
+        var idx = fciData.indexOf(item);
+        var idxList = items.map(function(i) { return fciData.indexOf(i); });
+        var mk = item.검체유형 + '||' + item.항목명;
+        var mm = MANAGER_MAP[mk];
+        var mn = mm ? mm.m : item.항목담당자;
+        var fee = item.항목수수료 || 0;
+        return '<div class="item-list-item" onclick="openFciDetailItem(' + idx + ', [' + idxList.join(',') + '], ' + pos + ')" style="cursor:pointer;">' +
+          '<div class="item-list-name">' + item.항목명 + (mn ? '<span style="color:#888;font-size:11px;margin-left:6px;">' + mn + '</span>' : '') + '</div>' +
+          '<div class="item-list-spec">' + (item.규격 || '-') + '</div>' +
+          '<span class="item-fee">' + (fee ? fee.toLocaleString() + '원' : '') + '</span>' +
+          '</div>';
+      }).join('');
+
+      var safeKey = key.replace(/'/g, "\\'");
+      return '<div class="food-type-card' + (sel ? ' card-selected' : '') + '" data-card-key="' + key + '" style="position:relative;" ' + (fciCardSelectMode ? 'onclick="fciToggleCardSelect(\'' + safeKey + '\')"' : '') + '>' +
+        (fciCardSelectMode ? '<input type="checkbox" class="card-select-checkbox" ' + (sel ? 'checked' : '') + ' onclick="event.stopPropagation(); fciToggleCardSelect(\'' + safeKey + '\')" />' : '') +
+        '<div class="card-header" ' + (!fciCardSelectMode ? 'onclick="openFciDetailItem(' + fciData.indexOf(items[0]) + ')" style="cursor:pointer;"' : '') + '>' +
+        '<div><div class="card-title">' + type + '</div>' +
+        '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">' +
+        '<span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' +
+        bracketTags + '</div></div>' +
+        '<div><div class="card-badge">' + items.length + '개</div>' +
+        (시료수 > 0 ? '<div style="font-size:11px;color:#888;text-align:right;">' + 시료수 + '시료</div>' : '') +
+        (totalFee > 0 ? '<div class="fee-badge" style="margin-top:4px;">💰 ' + totalFee.toLocaleString() + '원</div>' : '') +
+        '</div></div>' +
+        '<div class="item-list">' + itemsHtml + '</div>' +
+        (totalFee > 0 ? '<div class="fee-total-row"><span>합계</span><span>💰 ' + totalFee.toLocaleString() + '원</span></div>' : '') +
+        '</div>';
+    }).join('');
+
+    cardsEl.innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
+
+  } else {
+    // 리스트(아코디언) 뷰
+    cardsEl.style.display = 'none';
+    accEl.style.display = 'block';
+
+    var grouped = {};
+    filtered.forEach(function(item) {
+      var key = item.cardId !== undefined ? item.검체유형 + '||' + item.cardId : item.검체유형;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(item);
+    });
+
+    var html = Object.entries(grouped).map(function(entry) {
+      var key = entry[0];
+      var items = entry[1];
+      var type = items[0].검체유형;
+      var division = items[0].분야;
+      var divBadge = division === '축산' ? '🥩' : '🍱';
+      var totalFee = items.reduce(function(s, i) { return s + (i.항목수수료 || 0); }, 0);
+      var bracketTags = getBracketTags(extractBracket(type)).map(function(tag) {
+        return '<span class="badge" style="background:' + tag.color + ';color:#fff;font-size:10px;margin-left:4px;">' + tag.label + '</span>';
+      }).join('');
+
+      var itemsHtml = items.map(function(item, pos) {
+        var idx = fciData.indexOf(item);
+        var idxList = items.map(function(i) { return fciData.indexOf(i); });
+        var mk = item.검체유형 + '||' + item.항목명;
+        var mm = MANAGER_MAP[mk];
+        var mn = mm ? mm.m : item.항목담당자;
+        var fee = item.항목수수료 || 0;
+        return '<div class="accordion-item" onclick="event.stopPropagation(); openFciDetailItem(' + idx + ', [' + idxList.join(',') + '], ' + pos + ')">' +
+          '<div class="item-col item-col-name">' + item.항목명 + (mn ? '<span style="color:#888;font-size:11px;margin-left:6px;">' + mn + '</span>' : '') + '</div>' +
+          '<div class="item-col item-col-spec">' + (item.규격 || '-') + '</div>' +
+          '<div class="item-col" style="min-width:80px;text-align:right;"><span class="item-fee">' + (fee ? fee.toLocaleString() + '원' : '') + '</span></div>' +
+          '</div>';
+      }).join('');
+
+      return '<div class="accordion-group">' +
+        '<div class="accordion-header" onclick="toggleAccordion(this)">' +
+        '<div class="accordion-title"><span class="accordion-icon">▶</span><span class="accordion-name">' + type + '</span>' +
+        '<span class="badge badge-' + (division === '축산' ? 'warning' : 'primary') + '">' + divBadge + ' ' + division + '</span>' +
+        bracketTags + '</div>' +
+        '<div style="display:flex;gap:12px;align-items:center;">' +
+        (totalFee > 0 ? '<span class="fee-badge">💰 ' + totalFee.toLocaleString() + '원</span>' : '') +
+        '<span class="accordion-count">' + items.length + '개</span></div>' +
+        '</div>' +
+        '<div class="accordion-content"><div class="accordion-items">' + itemsHtml + '</div></div>' +
+        '</div>';
+    }).join('');
+
+    accEl.innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
+  }
+}
+
+// --- ILAB 상세 패널 열기 (편집 가능) ---
+function openFciDetailItem(index, itemList, pos) {
+  editingMode = 'edit';
+  editingType = 'ilab';
+  editingIndex = index;
+  if (itemList) { navItemList = itemList; navCurrentPos = pos || 0; }
+  else { navItemList = [index]; navCurrentPos = 0; }
+
+  var item = fciData[index];
+  if (!item) return;
+  editingItem = Object.assign({}, item);
+
+  // 제목
+  document.getElementById('detail-title').textContent = item.검체유형 + ' - ' + item.항목명;
+
+  // 기본 필드
+  document.getElementById('input-검체유형').value = item.검체유형 || '';
+  document.getElementById('input-분야').value = item.분야 || '';
+  document.getElementById('input-항목명').value = item.항목명 || '';
+  document.getElementById('input-규격').value = item.규격 || '';
+  document.getElementById('input-항목단위').value = item.항목단위 || '';
+  document.getElementById('input-시험법근거').value = item.시험법근거 || '';
+
+  // ILAB 전용 필드
+  var mk = item.검체유형 + '||' + item.항목명;
+  var mm = MANAGER_MAP[mk];
+  document.getElementById('input-ilab-담당자').value = mm ? mm.m : (item.항목담당자 || '');
+  document.getElementById('input-ilab-수수료').value = item.항목수수료 || 0;
+  document.getElementById('input-ilab-cardId').value = item.cardId ?? '';
+  document.getElementById('input-ilab-시료수').value = item.시료수 || 0;
+
+  // 섹션 표시/숨김
+  document.getElementById('group-ilab-extra').style.display = '';
+  document.getElementById('group-수수료').style.display = 'none';
+  document.getElementById('group-검사목적').style.display = 'none';
+  var labelGroup = document.getElementById('group-라벨');
+  if (labelGroup) labelGroup.style.display = 'none';
+  var managerEl = document.getElementById('detail-항목담당자');
+  if (managerEl) managerEl.parentElement.style.display = 'none';
+  var itemFeeEl = document.getElementById('detail-항목수수료');
+  if (itemFeeEl) itemFeeEl.parentElement.style.display = 'none';
+  var historySection = document.getElementById('section-담당자이력');
+  if (historySection) historySection.style.display = 'none';
+
+  // 네비 업데이트
+  updateNavButtons();
+
+  // 패널 열기
+  document.getElementById('overlay').classList.add('active');
+  document.getElementById('detail-panel').classList.add('active');
 }
 
 // ══ 식품유형(Mapping) 상태 ══
@@ -31074,6 +31536,9 @@ function openDetailItem(type, index, itemList, pos) {
     itemFeeEl.parentElement.style.display = type === '식품유형' ? '' : 'none';
   }
 
+  // ILAB 전용 섹션 숨김 (openDetailItem에서는 항상 숨김)
+  document.getElementById('group-ilab-extra').style.display = 'none';
+
   // 검사목적 필드
   if (type === '항목그룹') {
     document.getElementById('group-검사목적').style.display = 'block';
@@ -31271,6 +31736,12 @@ function saveItem() {
       } else if (editingType === '항목그룹') {
         newItem.검사목적 = document.getElementById('input-검사목적').value;
         itemGroupData.push(newItem);
+      } else if (editingType === 'ilab') {
+        newItem.항목담당자 = document.getElementById('input-ilab-담당자').value || '';
+        newItem.항목수수료 = parseInt(document.getElementById('input-ilab-수수료').value) || 0;
+        newItem.cardId = document.getElementById('input-ilab-cardId').value || '';
+        newItem.시료수 = parseInt(document.getElementById('input-ilab-시료수').value) || 0;
+        fciData.push(newItem);
       }
     }
 
@@ -31278,6 +31749,7 @@ function saveItem() {
     if (editingType === '식품유형') saveFoodTypesToFirestore();
     else if (editingType === '항목그룹') saveItemGroupsToFirestore();
     else if (editingType === '수수료') saveFeesToFirestore();
+    else if (editingType === 'ilab') { saveIlabToFirestore(); updateFciStats(); renderFoodClassIlab(); }
     closeDetailItem();
     updateStats();
     renderData();
@@ -31322,6 +31794,12 @@ function saveItem() {
           updatedItem.customLabels = [...editingItem.customLabels];
         }
         foodTypeData[editingIndex] = updatedItem;
+      } else if (editingType === 'ilab') {
+        updatedItem.항목담당자 = document.getElementById('input-ilab-담당자').value || '';
+        updatedItem.항목수수료 = parseInt(document.getElementById('input-ilab-수수료').value) || 0;
+        updatedItem.cardId = document.getElementById('input-ilab-cardId').value || '';
+        updatedItem.시료수 = parseInt(document.getElementById('input-ilab-시료수').value) || 0;
+        fciData[editingIndex] = updatedItem;
       } else {
         itemGroupData[editingIndex] = updatedItem;
       }
@@ -31333,6 +31811,7 @@ function saveItem() {
     if (editingType === '식품유형') saveFoodTypesToFirestore();
     else if (editingType === '항목그룹') saveItemGroupsToFirestore();
     else if (editingType === '수수료') saveFeesToFirestore();
+    else if (editingType === 'ilab') { saveIlabToFirestore(); updateFciStats(); renderFoodClassIlab(); }
     closeDetailItem();
     updateStats();
     renderData();
@@ -31357,12 +31836,15 @@ function deleteItem() {
     }
     dirtyFeeItems.delete(deletedId);
     updateFeeSaveBar();
+  } else if (editingType === 'ilab') {
+    fciData.splice(editingIndex, 1);
   }
 
   showToast('삭제되었습니다!', 'info');
   if (editingType === '식품유형') saveFoodTypesToFirestore();
   else if (editingType === '항목그룹') saveItemGroupsToFirestore();
   else if (editingType === '수수료') { saveFeesToFirestore(); buildFeePurposeMenu(); }
+  else if (editingType === 'ilab') { saveIlabToFirestore(); updateFciStats(); renderFoodClassIlab(); }
   closeDetailItem();
   updateStats();
   renderData();
