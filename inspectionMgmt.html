@@ -33427,30 +33427,30 @@ function renderFoodClassCustom() {
     });
   }
 
+  // cardId 중복 제거 (검체유형+항목명+규격 기준 고유 항목만)
+  var uniqueMap = {};
+  var uniqueData = [];
+  filtered.forEach(function(r) {
+    var key = (r.검체유형 || '') + '||' + (r.항목명 || '') + '||' + (r.규격 || '');
+    if (!uniqueMap[key]) {
+      uniqueMap[key] = true;
+      uniqueData.push(r);
+    }
+  });
+
   // 검체유형별 그룹핑
   var groups = {};
-  filtered.forEach(function(r) {
+  uniqueData.forEach(function(r) {
     var prd = r.검체유형 || '미분류';
     if (!groups[prd]) groups[prd] = [];
     groups[prd].push(r);
   });
   var entries = Object.entries(groups).sort(function(a,b){ return b[1].length - a[1].length; });
 
-  // 동일 항목+규격 묶기 헬퍼
-  function dedupItems(items) {
-    var dedup = [], map = {};
-    items.forEach(function(it) {
-      var key = (it.항목명||'') + '||' + (it.규격||'');
-      if (map[key] !== undefined) { dedup[map[key]].cnt++; }
-      else { map[key] = dedup.length; dedup.push({ it: it, cnt: 1 }); }
-    });
-    return dedup;
-  }
-
   var PAGE_SIZE = 50;
   var displayEntries = entries.slice(0, PAGE_SIZE);
   var statsHtml = '<div style="grid-column:1/-1;padding:8px 0;font-size:12px;color:var(--sub)">' +
-    '📝 Custom ' + entries.length + '개 검체유형 / ' + filtered.length.toLocaleString() + '건' +
+    '📝 Custom ' + entries.length + '개 검체유형 / ' + uniqueData.length.toLocaleString() + '건 (고유 항목)' +
     (searchTerm ? ' (검색: "' + searchTerm + '")' : '') + '</div>';
 
   // ── 카드 뷰 ──
@@ -33462,19 +33462,18 @@ function renderFoodClassCustom() {
       var prdName = entry[0];
       var items = entry[1];
       var cls = classifyFoodType(prdName);
-      var dedup = dedupItems(items);
-      var itemsHtml = dedup.slice(0, 10).map(function(d) {
-        var it = d.it;
-        var cntBadge = d.cnt > 1 ? ' <span style="color:#999;font-size:10px">(×' + d.cnt + ')</span>' : '';
+      var itemsHtml = items.slice(0, 10).map(function(it) {
         var feeText = it.항목수수료 > 0 ? it.항목수수료.toLocaleString() + '원' : '-';
+        var mgrText = it.항목담당자 || '';
         return '<div class="item-list-item">' +
-          '<div class="item-list-name">' + (it.항목명 || '-') + cntBadge + '</div>' +
+          '<div class="item-list-name">' + (it.항목명 || '-') + '</div>' +
+          (mgrText ? '<span style="font-size:10px;color:#2e7d32;margin:0 4px">' + mgrText + '</span>' : '') +
           '<span class="item-fee" style="font-size:11px">' + feeText + '</span>' +
           '<div class="item-list-spec" title="' + (it.규격 || '').replace(/"/g, '&quot;') + '">' + (it.규격 || '-') + '</div>' +
         '</div>';
       }).join('');
-      if (dedup.length > 10) {
-        itemsHtml += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:6px 0">... 외 ' + (dedup.length - 10) + '건</div>';
+      if (items.length > 10) {
+        itemsHtml += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:6px 0">... 외 ' + (items.length - 10) + '건</div>';
       }
       // 담당자 뱃지 (고유 담당자만)
       var managers = {};
@@ -33510,7 +33509,6 @@ function renderFoodClassCustom() {
       var prdName = entry[0];
       var items = entry[1];
       var cls = classifyFoodType(prdName);
-      var dedup = dedupItems(items);
       accHtml += '<div class="accordion-group">' +
         '<div class="accordion-header" onclick="toggleAccordion(this)">' +
           '<div class="accordion-title">' +
@@ -33521,15 +33519,13 @@ function renderFoodClassCustom() {
           '<div class="accordion-info"><span class="accordion-count">' + items.length + '건</span></div>' +
         '</div>' +
         '<div class="accordion-content"><div class="accordion-items">';
-      dedup.forEach(function(d) {
-        var it = d.it;
-        var cntBadge = d.cnt > 1 ? ' <span style="color:#999;font-size:10px">(×' + d.cnt + ')</span>' : '';
+      items.forEach(function(it) {
         var feeText = it.항목수수료 > 0 ? it.항목수수료.toLocaleString() + '원' : '-';
         accHtml += '<div class="accordion-item">' +
-          '<div class="item-col item-col-name">' + (it.항목명 || '-') + cntBadge + '</div>' +
+          '<div class="item-col item-col-name">' + (it.항목명 || '-') + '</div>' +
+          '<div class="item-col" style="flex:0 0 60px;text-align:right;font-size:10px;color:#2e7d32">' + (it.항목담당자 || '') + '</div>' +
           '<div class="item-col" style="flex:0 0 80px;text-align:right"><span class="item-fee" style="font-size:11px">' + feeText + '</span></div>' +
           '<div class="item-col item-col-spec">' + (it.규격 || '-') + '</div>' +
-          '<div class="item-col" style="flex:0 0 60px;text-align:right;font-size:10px;color:#666">' + (it.항목담당자 || '') + '</div>' +
         '</div>';
       });
       accHtml += '</div></div></div>';
