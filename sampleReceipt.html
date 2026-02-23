@@ -262,7 +262,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     </div>
                     <div class="form-group">
                         <label>시료 수</label>
-                        <input type="number" id="sample-total-count" placeholder="예: 1" min="1" value="1">
+                        <input type="number" id="sample-total-count" placeholder="예: 1" min="1" value="1" onchange="updateSampleCount(this.value)" oninput="updateSampleCount(this.value)">
                     </div>
                 </div>
 
@@ -414,6 +414,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
+                <!-- 시료 네비게이션 -->
+                <div id="sample-nav" style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;background:linear-gradient(135deg,#f0f4ff,#f8f0ff);border-radius:10px;border:1px solid #e2e6ed">
+                    <button type="button" onclick="switchSample(_currentSampleIdx-1)" id="sample-nav-prev" style="background:none;border:1px solid #d0d5dd;border-radius:6px;padding:4px 10px;font-size:16px;cursor:pointer;color:#344054" disabled>◀</button>
+                    <div id="sample-nav-tabs" style="display:flex;gap:4px;flex:1;overflow-x:auto"></div>
+                    <button type="button" onclick="switchSample(_currentSampleIdx+1)" id="sample-nav-next" style="background:none;border:1px solid #d0d5dd;border-radius:6px;padding:4px 10px;font-size:16px;cursor:pointer;color:#344054" disabled>▶</button>
+                </div>
+                <!-- 시료 라벨 -->
+                <div id="sample-label" style="font-size:15px;font-weight:700;color:#6941C6;margin-bottom:10px">📌 시료 #1</div>
                 <div class="form-row" style="grid-template-columns:1fr 1fr auto;align-items:start">
                     <div class="form-group" style="position:relative">
                         <label>제품/시료명 <span class="required">*</span></label>
@@ -905,6 +913,7 @@ window.onload = async function() {
 
     loadDraft();
     setupTeamMemoPermissions();
+    renderSampleNav();
 
     // 입력 필드 변경 감지
     document.querySelectorAll('input:not([readonly]), select:not([disabled]), textarea:not([disabled])').forEach(el => {
@@ -1592,6 +1601,90 @@ function addCcField() {
 }
 
 // ============================================================================
+// 시료 멀티 폼 관리
+// ============================================================================
+var _sampleData = [{}];
+var _currentSampleIdx = 0;
+var _sampleFieldIds = [
+    'product-name','food-type-input','food-type-value',
+    'sample-amount','sample-amount-unit','sample-count','package-unit',
+    'transport-status','manufacture-no','manufacture-date',
+    'expiry-date','expiry-days','sample-location','sample-box-no'
+];
+
+function updateSampleCount(val) {
+    var count = parseInt(val) || 1;
+    if (count < 1) count = 1;
+    // 현재 시료 저장
+    saveSampleToArray();
+    // 배열 크기 조정
+    while (_sampleData.length < count) _sampleData.push({});
+    if (_sampleData.length > count) _sampleData.length = count;
+    // 현재 인덱스 범위 보정
+    if (_currentSampleIdx >= count) {
+        _currentSampleIdx = count - 1;
+        loadSampleFromArray(_currentSampleIdx);
+    }
+    renderSampleNav();
+}
+
+function renderSampleNav() {
+    var count = _sampleData.length;
+    var tabs = document.getElementById('sample-nav-tabs');
+    var html = '';
+    for (var i = 0; i < count; i++) {
+        var active = (i === _currentSampleIdx);
+        html += '<button type="button" onclick="switchSample(' + i + ')" style="' +
+            'padding:5px 12px;border-radius:6px;font-size:12px;font-weight:' + (active ? '700' : '500') + ';' +
+            'border:1px solid ' + (active ? '#6941C6' : '#d0d5dd') + ';' +
+            'background:' + (active ? '#6941C6' : '#fff') + ';' +
+            'color:' + (active ? '#fff' : '#344054') + ';' +
+            'cursor:pointer;white-space:nowrap">' +
+            '시료 ' + (i + 1) + '</button>';
+    }
+    tabs.innerHTML = html;
+    document.getElementById('sample-nav-prev').disabled = (_currentSampleIdx <= 0);
+    document.getElementById('sample-nav-next').disabled = (_currentSampleIdx >= count - 1);
+    document.getElementById('sample-label').textContent = '📌 시료 #' + (_currentSampleIdx + 1);
+    // 1개일 때 네비 숨김
+    document.getElementById('sample-nav').style.display = (count <= 1) ? 'none' : 'flex';
+}
+
+function switchSample(idx) {
+    if (idx < 0 || idx >= _sampleData.length || idx === _currentSampleIdx) return;
+    saveSampleToArray();
+    _currentSampleIdx = idx;
+    loadSampleFromArray(idx);
+    renderSampleNav();
+}
+
+function saveSampleToArray() {
+    var obj = {};
+    _sampleFieldIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) obj[id] = el.value;
+    });
+    // 시험항목은 검체유형에 의해 자동 결정되므로 별도 저장 불필요
+    _sampleData[_currentSampleIdx] = obj;
+}
+
+function loadSampleFromArray(idx) {
+    var obj = _sampleData[idx] || {};
+    _sampleFieldIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = obj[id] || '';
+    });
+    // 검체유형 변경에 따라 시험항목 다시 로드
+    var foodType = obj['food-type-value'] || '';
+    if (foodType) {
+        loadInspectionItems(foodType);
+    } else {
+        clearInspectionItems();
+    }
+    document.getElementById('sample-label').textContent = '📌 시료 #' + (idx + 1);
+}
+
+// ============================================================================
 // 소비기한 일수 → 날짜 자동 계산
 // ============================================================================
 function calcExpiryDate() {
@@ -2027,6 +2120,12 @@ function resetForm() {
 
     setTodayDate();
     clearInspectionItems();
+
+    // 시료 폼 초기화
+    _sampleData = [{}];
+    _currentSampleIdx = 0;
+    document.getElementById('sample-total-count').value = '1';
+    renderSampleNav();
 
     // 성적서 발송 옵션 초기화
     document.querySelectorAll('input[name="report-send"]').forEach(function(cb){ cb.checked = false; });
