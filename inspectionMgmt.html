@@ -31003,6 +31003,32 @@ function applyBatchEdit() {
 
 // ══ 수수료 렌더링 ══
 function renderFees() {
+  // Firestore 로딩 완료 전이면 로딩 표시 + 폴링
+  if (!_inspectionDataLoaded.fee && feeData.length === 0) {
+    var feeCardsEl = document.getElementById('fee-cards');
+    var feeAccEl = document.getElementById('fee-accordion');
+    if (feeCardsEl) {
+      feeCardsEl.style.display = 'grid';
+      feeCardsEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--sub)">' +
+        '<div style="font-size:36px;margin-bottom:12px">⏳</div>' +
+        '<div style="font-size:15px;font-weight:600;margin-bottom:6px">수수료 데이터 로딩중...</div>' +
+        '<div style="font-size:12px">Firestore에서 데이터를 불러오고 있습니다</div></div>';
+    }
+    if (feeAccEl) feeAccEl.style.display = 'none';
+    // 0.5초마다 로딩 완료 체크
+    if (!window._feeLoadingPoll) {
+      window._feeLoadingPoll = setInterval(function() {
+        if (_inspectionDataLoaded.fee || feeData.length > 0) {
+          clearInterval(window._feeLoadingPoll);
+          window._feeLoadingPoll = null;
+          buildFeePurposeMenu();
+          renderFees();
+        }
+      }, 500);
+    }
+    return;
+  }
+
   const search = document.getElementById('search-fee')?.value?.toLowerCase() || '';
   let filtered = feeData.filter(d => {
     if (currentFeePurpose !== '전체' && d.검사목적 !== currentFeePurpose) return false;
@@ -31130,7 +31156,7 @@ async function downloadExcel(type) {
 
   if (type === '식품유형') {
     // ── 현재 선택된 API 탭의 원본 데이터를 그대로 엑셀로 내보내기 ──
-    showToast('엑셀 파일 생성중...', 'info');
+    showToast('엑셀 파일 생성중... (대용량 데이터는 수초 소요)', 'info');
     try {
       var data = await loadApiDataFromFirestore(currentApiTab);
       if (!data || data.length === 0) {
@@ -31138,27 +31164,64 @@ async function downloadExcel(type) {
         return;
       }
 
-      // 원본 데이터 그대로 사용 (모든 필드)
-      var ws = XLSX.utils.json_to_sheet(data);
+      var svcName = API_SERVICES[currentApiTab] ? API_SERVICES[currentApiTab].name : currentApiTab;
 
-      // 열 너비 자동 조정 (헤더 + 상위 100행 기준)
-      var headers = Object.keys(data[0]);
-      var wscols = headers.map(function(h) {
-        var maxLen = h.length;
-        var sample = data.slice(0, 100);
-        sample.forEach(function(row) {
-          var val = row[h];
+      // 한글 헤더 매핑 (API 원본 필드명 → 한글)
+      var headerMap = {
+        'PRDLST_NM': '품목명', 'PRDLST_CD_NM': '품목코드명',
+        'T_KOR_NM': '시험항목명(한글)', 'TESTITM_NM': '시험항목명',
+        'FNPRT_ITM_NM': '성분항목명', 'SPEC_VAL': '규격값',
+        'SPEC_VAL_SUMUP': '규격값(요약)', 'UNIT_NM': '단위',
+        'MIMM_VAL': '최소값', 'MXMM_VAL': '최대값',
+        'MIMM_VAL_FNPRT_CD_NM': '최소값판정', 'MXMM_VAL_FNPRT_CD_NM': '최대값판정',
+        'JDGMNT_FNPRT_CD_NM': '판정기준', 'CHOIC_FIT_FNPRT_CD_NM': '적합판정',
+        'CHOIC_IMPROPT_FNPRT_CD_NM': '부적합판정', 'PIAM_KOR_NM': '시험법명',
+        'VALD_BEGN_DT': '유효시작일', 'VALD_END_DT': '유효종료일',
+        'INJRY_YN': '위해여부', 'NUM': '번호'
+      };
+
+      // aoa(Array of Arrays) 방식으로 성능 최적화 (json_to_sheet 대비 3~5배 빠름)
+      var keys = Object.keys(data[0]);
+      var headerRow = keys.map(function(k) { return headerMap[k] || k; });
+      var aoa = [headerRow];
+
+      // 청크 단위로 처리하여 UI 블로킹 최소화
+      var CHUNK = 10000;
+      for (var ci = 0; ci < data.length; ci += CHUNK) {
+        var end = Math.min(ci + CHUNK, data.length);
+        for (var ri = ci; ri < end; ri++) {
+          var row = data[ri];
+          var arr = new Array(keys.length);
+          for (var ki = 0; ki < keys.length; ki++) {
+            arr[ki] = row[keys[ki]] != null ? row[keys[ki]] : '';
+          }
+          aoa.push(arr);
+        }
+        // 중간 진행 표시
+        if (data.length > CHUNK) {
+          showToast(svcName + ' 변환중... ' + Math.min(end, data.length).toLocaleString() + '/' + data.length.toLocaleString(), 'info');
+        }
+        await new Promise(function(r) { setTimeout(r, 0); }); // UI 갱신 허용
+      }
+
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      // 열 너비 자동 조정 (헤더 + 상위 50행 기준)
+      var wscols = keys.map(function(h, idx) {
+        var maxLen = headerRow[idx].length;
+        var sample = Math.min(50, data.length);
+        for (var si = 0; si < sample; si++) {
+          var val = data[si][h];
           if (val != null) {
             var len = String(val).length;
             if (len > maxLen) maxLen = len;
           }
-        });
+        }
         return { wch: Math.min(maxLen + 2, 60) };
       });
       ws['!cols'] = wscols;
 
       var wb = XLSX.utils.book_new();
-      var svcName = API_SERVICES[currentApiTab] ? API_SERVICES[currentApiTab].name : currentApiTab;
       XLSX.utils.book_append_sheet(wb, ws, svcName);
 
       var today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
