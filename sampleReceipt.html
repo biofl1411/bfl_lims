@@ -1695,15 +1695,20 @@ async function searchProductHistory() {
     try {
         var snap = await db.collection('receipts')
             .where('productName', '==', pn)
-            .orderBy('createdAt', 'desc')
-            .limit(20)
+            .limit(50)
             .get();
         if (snap.empty) {
             panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">📭 "' + pn + '" 접수 이력이 없습니다.</div>';
             return;
         }
-        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">📋 접수이력 <span style="color:#5b67f5">' + snap.size + '건</span><span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
-        snap.forEach(function(doc) {
+        // 클라이언트 정렬 (최신순)
+        var docs = snap.docs.sort(function(a, b) {
+            var ta = a.data().createdAt?.toDate?.() || new Date(0);
+            var tb = b.data().createdAt?.toDate?.() || new Date(0);
+            return tb - ta;
+        }).slice(0, 20);
+        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">📋 접수이력 <span style="color:#5b67f5">' + docs.length + '건</span><span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
+        docs.forEach(function(doc) {
             var r = doc.data();
             var dt = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toISOString().slice(0,10) : '';
             var rno = r.receiptNo || '-';
