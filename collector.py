@@ -165,6 +165,10 @@ def fetch_api(service_id, start, end, chng_dt=None):
         with urlopen(req, timeout=30) as resp:
             raw = resp.read()
 
+        if not raw or len(raw) == 0:
+            logger.warning(f'  빈 응답 ({service_id} {start}-{end}), url={url}')
+            return 0, [], 'error'
+
         text = raw.decode('utf-8', errors='replace')
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
 
@@ -611,6 +615,16 @@ def collect_api_auto(service_id, api_info):
     # 2) Firestore 건수 확인
     db_count = get_collected_count(service_id, collection_name)
 
+    # 2-1) API 조회 실패 방어: api_total=0인데 Firestore에 데이터가 있으면 에러
+    if api_total == 0 and status in ('error', 'empty'):
+        if db_count > 0:
+            logger.warning(f'⚠️ [{service_id}] {name}: API 조회 실패 (status={status}) '
+                          f'but Firestore has {db_count:,}건 — 건너뛰기')
+            return 'error'
+        else:
+            logger.info(f'  → [{service_id}] {name}: 데이터 없음 (API 및 Firestore 모두 0건)')
+            return 'empty'
+
     # 3) 판단
     if api_total > 0 and db_count < api_total:
         pct = (db_count / api_total * 100) if api_total else 0
@@ -618,10 +632,10 @@ def collect_api_auto(service_id, api_info):
         return collect_api(service_id, api_info,
                           collect_type='full', chng_dt=None, resume=True)
     else:
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-        logger.info(f'✅ [{service_id}] {name}: Firestore {db_count:,} / API {api_total:,} — 증분 수집 ({yesterday})')
+        week_ago = (datetime.now() - timedelta(days=7)).strftime('%Y%m%d')
+        logger.info(f'✅ [{service_id}] {name}: Firestore {db_count:,} / API {api_total:,} — 증분 수집 ({week_ago}~)')
         return collect_api(service_id, api_info,
-                          collect_type='incremental', chng_dt=yesterday, resume=False)
+                          collect_type='incremental', chng_dt=week_ago, resume=False)
 
 # ============================================================
 # 수집 현황
