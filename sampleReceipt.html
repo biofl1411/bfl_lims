@@ -1447,9 +1447,14 @@ async function searchFoodType(query) {
     // Firestore에서 식품유형 데이터 로드
     var foodTypes = await loadFoodTypesFromFirestore();
 
+    // 시험분야(식품/축산) 라벨 기준 필터링
+    var filtered분야 = foodTypes.filter(function(item) {
+        return item['분야'] === testField;
+    });
+
     // 고유한 검체유형 목록 추출
     var typeSet = new Set();
-    foodTypes.forEach(function(item) {
+    filtered분야.forEach(function(item) {
         if (item['검체유형']) typeSet.add(item['검체유형']);
     });
     var allTypes = Array.from(typeSet).sort();
@@ -1501,10 +1506,11 @@ async function loadInspectionItems(foodType) {
         return;
     }
 
-    // Firestore foodTypes에서 해당 검체유형 필터
+    // Firestore foodTypes에서 해당 검체유형 + 분야 필터
+    var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
     var allData = await loadFoodTypesFromFirestore();
     var items = allData.filter(function(item) {
-        return item['검체유형'] === foodType;
+        return item['검체유형'] === foodType && (!currentField || item['분야'] === currentField);
     });
 
     // (검체유형+항목명+규격) 기준 중복 제거
