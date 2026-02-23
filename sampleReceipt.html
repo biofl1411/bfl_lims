@@ -335,15 +335,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <div id="mail-option-panel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #e2e6ed">
                             <div style="display:flex;flex-direction:column;gap:8px">
                                 <label class="radio-label" style="padding:6px 12px;font-size:13px">
-                                    <input type="radio" name="mail-addr-type" value="biz" onchange="selectMailAddrType()" checked>
+                                    <input type="checkbox" name="mail-addr-type" value="biz" onchange="toggleMailAddrType()">
                                     사업자등록증 주소 <span id="mail-biz-addr-preview" style="color:#5f6b7a;font-size:12px;margin-left:8px"></span>
                                 </label>
                                 <label class="radio-label" style="padding:6px 12px;font-size:13px">
-                                    <input type="radio" name="mail-addr-type" value="lic" onchange="selectMailAddrType()">
+                                    <input type="checkbox" name="mail-addr-type" value="lic" onchange="toggleMailAddrType()">
                                     인허가 주소 <span id="mail-lic-addr-preview" style="color:#5f6b7a;font-size:12px;margin-left:8px"></span>
                                 </label>
                                 <label class="radio-label" style="padding:6px 12px;font-size:13px">
-                                    <input type="radio" name="mail-addr-type" value="other" onchange="selectMailAddrType()">
+                                    <input type="checkbox" name="mail-addr-type" value="other" onchange="toggleMailAddrType()">
                                     다른 주소
                                 </label>
                             </div>
@@ -358,9 +358,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         </div>
                         <!-- 팩스(선) 옵션 패널 -->
                         <div id="fax-option-panel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #e2e6ed">
-                            <div style="display:flex;align-items:center;gap:8px">
-                                <label style="font-size:13px;font-weight:500;white-space:nowrap">팩스번호:</label>
-                                <input type="tel" id="report-fax-no" placeholder="팩스번호 입력" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                            <div style="display:flex;flex-direction:column;gap:8px">
+                                <label class="radio-label" style="padding:6px 12px;font-size:13px">
+                                    <input type="checkbox" name="fax-type" value="registered" onchange="toggleFaxType()">
+                                    등록된 팩스번호 <span id="fax-registered-preview" style="color:#5f6b7a;font-size:12px;margin-left:8px"></span>
+                                </label>
+                                <label class="radio-label" style="padding:6px 12px;font-size:13px">
+                                    <input type="checkbox" name="fax-type" value="other" onchange="toggleFaxType()">
+                                    다른 팩스번호
+                                </label>
+                            </div>
+                            <div id="fax-other-panel" style="display:none;margin-top:10px">
+                                <input type="tel" id="report-fax-no" placeholder="팩스번호 입력" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
                             </div>
                         </div>
                         <!-- 메일(사본) 옵션 패널 -->
@@ -1481,10 +1490,8 @@ function toggleReportSendOption() {
     emailPanel.style.display = emailChecked ? '' : 'none';
     // 우편 체크 시 주소 미리보기 업데이트
     if (mailChecked) updateMailAddrPreviews();
-    // 팩스 체크 시 기본값 채우기
-    if (faxChecked && !document.getElementById('report-fax-no').value) {
-        document.getElementById('report-fax-no').value = document.getElementById('company-fax').value || '';
-    }
+    // 팩스 체크 시 미리보기 업데이트
+    if (faxChecked) updateFaxPreview();
     // 메일 체크 시 기본값 채우기
     if (emailChecked && !document.getElementById('report-email').value) {
         var sc = window._selectedCompany || {};
@@ -1503,10 +1510,19 @@ function updateMailAddrPreviews() {
         : '';
 }
 
-function selectMailAddrType() {
-    var val = document.querySelector('input[name="mail-addr-type"]:checked')?.value;
-    var otherPanel = document.getElementById('mail-other-addr-panel');
-    otherPanel.style.display = (val === 'other') ? '' : 'none';
+function toggleMailAddrType() {
+    var otherCb = document.querySelector('input[name="mail-addr-type"][value="other"]');
+    document.getElementById('mail-other-addr-panel').style.display = (otherCb && otherCb.checked) ? '' : 'none';
+}
+
+function updateFaxPreview() {
+    var faxVal = document.getElementById('company-fax').value || '';
+    document.getElementById('fax-registered-preview').textContent = faxVal ? '(' + faxVal + ')' : '(없음)';
+}
+
+function toggleFaxType() {
+    var otherCb = document.querySelector('input[name="fax-type"][value="other"]');
+    document.getElementById('fax-other-panel').style.display = (otherCb && otherCb.checked) ? '' : 'none';
 }
 
 function openMailPostcode() {
@@ -1856,8 +1872,10 @@ function selectCompany(elOrObj) {
     document.getElementById('mail-zipcode').value = '';
     document.getElementById('mail-addr1').value = '';
     document.getElementById('mail-addr2').value = '';
-    document.querySelector('input[name="mail-addr-type"][value="biz"]').checked = true;
+    document.querySelectorAll('input[name="mail-addr-type"]').forEach(function(cb){ cb.checked = false; });
     document.getElementById('mail-other-addr-panel').style.display = 'none';
+    document.querySelectorAll('input[name="fax-type"]').forEach(function(cb){ cb.checked = false; });
+    document.getElementById('fax-other-panel').style.display = 'none';
 
     document.getElementById('company-suggestions').classList.remove('active');
     showToast('업체 선택: ' + nm + (lic.licNo ? ' (인허가: ' + lic.licNo + ')' : ''), 'info');
@@ -1973,10 +1991,13 @@ function resetForm() {
     document.getElementById('mail-zipcode').value = '';
     document.getElementById('mail-addr1').value = '';
     document.getElementById('mail-addr2').value = '';
-    document.querySelector('input[name="mail-addr-type"][value="biz"]').checked = true;
+    document.querySelectorAll('input[name="mail-addr-type"]').forEach(function(cb){ cb.checked = false; });
     document.getElementById('mail-other-addr-panel').style.display = 'none';
     document.getElementById('mail-biz-addr-preview').textContent = '';
     document.getElementById('mail-lic-addr-preview').textContent = '';
+    document.querySelectorAll('input[name="fax-type"]').forEach(function(cb){ cb.checked = false; });
+    document.getElementById('fax-other-panel').style.display = 'none';
+    document.getElementById('fax-registered-preview').textContent = '';
     document.getElementById('company-fax').value = '';
     window._selectedCompany = null;
 
