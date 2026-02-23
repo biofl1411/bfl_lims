@@ -1983,14 +1983,19 @@ async function _searchCompany(query) {
     try {
         if (typeof fsSearchCompanies === 'function') {
             const allResults = await fsSearchCompanies(query, 50);
-            // 분야 필터: licenses[].licField 매칭
-            companies = allResults.filter(function(c) {
-                if (!c.licenses || c.licenses.length === 0) return true;
-                return c.licenses.some(function(lic) {
-                    return (lic.licField || lic.field) === field;
-                });
-            }).slice(0, 20);
-            console.log(`[Firestore] 업체 검색: "${query}" (${field}) - ${companies.length}건`);
+            // 분야 일치 업체 우선, 불일치 업체도 포함
+            var matched = [], unmatched = [];
+            allResults.forEach(function(c) {
+                if (!c.licenses || c.licenses.length === 0) {
+                    matched.push(c);
+                } else if (c.licenses.some(function(lic) { return (lic.licField || lic.field) === field; })) {
+                    matched.push(c);
+                } else {
+                    unmatched.push(c);
+                }
+            });
+            companies = matched.concat(unmatched).slice(0, 20);
+            console.log(`[Firestore] 업체 검색: "${query}" (${field}) - ${companies.length}건 (분야일치: ${matched.length}, 기타: ${unmatched.length})`);
         }
     } catch (e) {
         console.warn('[Firestore] 업체 검색 실패:', e.message);

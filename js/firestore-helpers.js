@@ -212,7 +212,7 @@ async function fsDeleteCompanyFiles(companyId) {
 }
 
 /**
- * 업체 검색 (회사명 or 사업자번호)
+ * 업체 검색 (회사명, 대표자명, 사업자번호 - prefix + 부분일치)
  * @param {string} query
  * @param {number} limit
  * @returns {Promise<Array>}
@@ -222,59 +222,63 @@ async function fsSearchCompanies(query, limit) {
   if (!query || query.trim() === '') return fsGetCompanies({ limit: limit });
 
   var q = query.trim();
+  var qLower = q.toLowerCase();
   var results = [];
+  var seenIds = {};
 
-  // 회사명 검색: 표준 필드(company) + 레거시 필드(name) 모두 검색
-  var snap1 = await db.collection('companies')
-    .where('company', '>=', q)
-    .where('company', '<=', q + '\uf8ff')
-    .limit(limit)
-    .get();
-  snap1.docs.forEach(function(d) {
-    results.push(Object.assign({ id: d.id }, d.data()));
-  });
-
-  if (results.length < limit) {
-    var snap1b = await db.collection('companies')
-      .where('name', '>=', q)
-      .where('name', '<=', q + '\uf8ff')
-      .limit(limit - results.length)
-      .get();
-    snap1b.docs.forEach(function(d) {
-      if (!results.find(function(r) { return r.id === d.id; })) {
-        results.push(Object.assign({ id: d.id }, d.data()));
-      }
-    });
+  function addResult(d) {
+    if (seenIds[d.id]) return;
+    seenIds[d.id] = true;
+    results.push(Object.assign({ id: d.id }, d.data ? d.data() : d));
   }
 
-  // 사업자번호 검색: 표준 필드(bizNo) + 레거시 필드(businessNo) 모두 검색
-  if (results.length < limit) {
-    var snap2 = await db.collection('companies')
-      .where('bizNo', '>=', q)
-      .where('bizNo', '<=', q + '\uf8ff')
-      .limit(limit - results.length)
-      .get();
-    snap2.docs.forEach(function(d) {
-      if (!results.find(function(r) { return r.id === d.id; })) {
-        results.push(Object.assign({ id: d.id }, d.data()));
-      }
+  // 1단계: Firestore prefix 검색 (빠름)
+  try {
+    var prefixQueries = [
+      db.collection('companies').where('company', '>=', q).where('company', '<=', q + '\uf8ff').limit(limit).get(),
+      db.collection('companies').where('name', '>=', q).where('name', '<=', q + '\uf8ff').limit(limit).get(),
+      db.collection('companies').where('bizNo', '>=', q).where('bizNo', '<=', q + '\uf8ff').limit(limit).get(),
+      db.collection('companies').where('businessNo', '>=', q).where('businessNo', '<=', q + '\uf8ff').limit(limit).get(),
+      db.collection('companies').where('repName', '>=', q).where('repName', '<=', q + '\uf8ff').limit(limit).get(),
+      db.collection('companies').where('ceo', '>=', q).where('ceo', '<=', q + '\uf8ff').limit(limit).get()
+    ];
+    var snaps = await Promise.all(prefixQueries);
+    snaps.forEach(function(snap) {
+      snap.docs.forEach(function(d) { addResult(d); });
     });
+  } catch (e) {
+    console.warn('[fsSearchCompanies] prefix 검색 오류:', e.message);
   }
 
+  // 2단계: prefix 검색 결과가 부족하면 전체에서 부분일치(contains) 검색
   if (results.length < limit) {
-    var snap2b = await db.collection('companies')
-      .where('businessNo', '>=', q)
-      .where('businessNo', '<=', q + '\uf8ff')
-      .limit(limit - results.length)
-      .get();
-    snap2b.docs.forEach(function(d) {
-      if (!results.find(function(r) { return r.id === d.id; })) {
-        results.push(Object.assign({ id: d.id }, d.data()));
+    try {
+      // 캐시된 전체 업체 목록 사용 (5분 캐시)
+      var now = Date.now();
+      if (!fsSearchCompanies._cache || !fsSearchCompanies._cacheTime || (now - fsSearchCompanies._cacheTime > 300000)) {
+        var allSnap = await db.collection('companies').orderBy('createdAt', 'desc').get();
+        fsSearchCompanies._cache = allSnap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+        fsSearchCompanies._cacheTime = now;
       }
-    });
+      var allCompanies = fsSearchCompanies._cache;
+      allCompanies.forEach(function(c) {
+        if (seenIds[c.id]) return;
+        var company = (c.company || c.name || '').toLowerCase();
+        var ceo = (c.repName || c.ceo || '').toLowerCase();
+        var bizNo = (c.bizNo || c.businessNo || '');
+        var addr = (c.addr1 || c.address || '').toLowerCase();
+        if (company.indexOf(qLower) >= 0 || ceo.indexOf(qLower) >= 0 ||
+            bizNo.indexOf(q) >= 0 || addr.indexOf(qLower) >= 0) {
+          seenIds[c.id] = true;
+          results.push(c);
+        }
+      });
+    } catch (e) {
+      console.warn('[fsSearchCompanies] 부분일치 검색 오류:', e.message);
+    }
   }
 
-  return results.map(function(r) { return normalizeCompany(r); });
+  return results.slice(0, limit).map(function(r) { return normalizeCompany(r); });
 }
 
 /**
