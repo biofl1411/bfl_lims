@@ -185,16 +185,26 @@ async function loadReceipts() {
     document.getElementById('loading').style.display = '';
     document.getElementById('receipt-tbody').innerHTML = '';
     try {
-        _allReceipts = await fsGetReceipts({ limit: 500 });
-        // samples[0]에서 productName, foodType 추출
-        _allReceipts.forEach(function(r) {
-            if (r.samples && r.samples.length > 0) {
-                if (!r.productName) r.productName = r.samples[0].productName || '';
-                if (!r.foodType) r.foodType = r.samples[0].foodType || '';
-            }
+        var rawReceipts = await fsGetReceipts({ limit: 500 });
+        // 시료별 행 펼침: 접수 1건 → 시료 수만큼 행 생성
+        _allReceipts = [];
+        rawReceipts.forEach(function(r) {
             if (r.reportSend && Array.isArray(r.reportSend)) {
                 r.reportSendText = r.reportSend.join(', ');
             }
+            var samples = r.samples && r.samples.length > 0 ? r.samples : [{}];
+            var totalCount = r.sampleTotalCount || samples.length || 1;
+            samples.forEach(function(s, idx) {
+                var sno = String(idx + 1).padStart(3, '0');
+                var row = Object.assign({}, r);
+                row.receiptNo = (r.receiptNo || '') + '-' + sno;
+                row._baseReceiptNo = r.receiptNo || '';
+                row.productName = s.productName || r.productName || '';
+                row.foodType = s.foodType || r.foodType || '';
+                row.sampleTotalCount = totalCount;
+                row._sampleIdx = idx;
+                _allReceipts.push(row);
+            });
         });
         applyFilter();
     } catch(err) {
@@ -219,7 +229,7 @@ function applyFilter() {
         if (from && r.receiptDate < from) return false;
         if (to && r.receiptDate > to) return false;
         if (search) {
-            var hay = ((r.receiptNo || '') + (r.companyName || '') + (r.productName || '')).toLowerCase();
+            var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '')).toLowerCase();
             if (hay.indexOf(search) < 0) return false;
         }
         return true;
