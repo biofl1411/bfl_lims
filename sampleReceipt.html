@@ -136,6 +136,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <script src="js/firebase-init.js"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="js/full-food-types.js"></script>
+<script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -312,6 +313,76 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     </div>
                 </div>
                 <input type="hidden" id="lic-biz-name">
+                <!-- 성적서 발송 -->
+                <div class="form-row" style="grid-template-columns:1fr">
+                    <div class="form-group">
+                        <label>성적서 발송</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
+                                <input type="checkbox" name="report-send" value="우편" onchange="toggleReportSendOption()"> 우편
+                            </label>
+                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
+                                <input type="checkbox" name="report-send" value="선발송" onchange="toggleReportSendOption()"> 선발송
+                            </label>
+                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
+                                <input type="checkbox" name="report-send" value="팩스(선)" onchange="toggleReportSendOption()"> 팩스(선)
+                            </label>
+                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
+                                <input type="checkbox" name="report-send" value="메일(사본)" onchange="toggleReportSendOption()"> 메일(사본)
+                            </label>
+                        </div>
+                        <!-- 우편 옵션 패널 -->
+                        <div id="mail-option-panel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #e2e6ed">
+                            <div style="display:flex;flex-direction:column;gap:8px">
+                                <label class="radio-label" style="padding:6px 12px;font-size:13px">
+                                    <input type="radio" name="mail-addr-type" value="biz" onchange="selectMailAddrType()" checked>
+                                    사업자등록증 주소 <span id="mail-biz-addr-preview" style="color:#5f6b7a;font-size:12px;margin-left:8px"></span>
+                                </label>
+                                <label class="radio-label" style="padding:6px 12px;font-size:13px">
+                                    <input type="radio" name="mail-addr-type" value="lic" onchange="selectMailAddrType()">
+                                    인허가 주소 <span id="mail-lic-addr-preview" style="color:#5f6b7a;font-size:12px;margin-left:8px"></span>
+                                </label>
+                                <label class="radio-label" style="padding:6px 12px;font-size:13px">
+                                    <input type="radio" name="mail-addr-type" value="other" onchange="selectMailAddrType()">
+                                    다른 주소
+                                </label>
+                            </div>
+                            <div id="mail-other-addr-panel" style="display:none;margin-top:10px">
+                                <div style="display:flex;gap:6px;margin-bottom:6px">
+                                    <button type="button" class="btn-receipt secondary" onclick="openMailPostcode()" style="padding:8px 14px;font-size:13px;white-space:nowrap">우편번호 검색</button>
+                                    <input type="text" id="mail-zipcode" placeholder="우편번호" readonly style="width:100px;background:#e8f5e9">
+                                </div>
+                                <input type="text" id="mail-addr1" placeholder="주소" readonly style="width:100%;margin-bottom:6px;background:#e8f5e9">
+                                <input type="text" id="mail-addr2" placeholder="상세주소 입력" style="width:100%">
+                            </div>
+                        </div>
+                        <!-- 팩스(선) 옵션 패널 -->
+                        <div id="fax-option-panel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #e2e6ed">
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <label style="font-size:13px;font-weight:500;white-space:nowrap">팩스번호:</label>
+                                <input type="tel" id="report-fax-no" placeholder="팩스번호 입력" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                            </div>
+                        </div>
+                        <!-- 메일(사본) 옵션 패널 -->
+                        <div id="email-option-panel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fb;border-radius:8px;border:1px solid #e2e6ed">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                                <label style="font-size:13px;font-weight:500;white-space:nowrap">수신 이메일:</label>
+                                <input type="email" id="report-email" placeholder="이메일 주소" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                            </div>
+                            <div>
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                                    <input type="checkbox" id="email-cc-toggle" onchange="toggleMailCc()"> CC 참여자 추가
+                                </label>
+                                <div id="email-cc-panel" style="display:none;margin-top:8px">
+                                    <div id="email-cc-fields">
+                                        <input type="email" class="cc-email-field" placeholder="CC 이메일 1" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:4px">
+                                    </div>
+                                    <button type="button" onclick="addCcField()" class="btn-receipt secondary" style="padding:4px 12px;font-size:12px;margin-top:4px">+ CC 추가</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <!-- 업체 변경이력 -->
                 <div id="company-changelog" style="display:none;margin-top:12px;border-top:1px solid #e2e6ed;padding-top:10px">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -319,37 +390,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <button type="button" onclick="toggleChangeLog()" id="changelog-toggle-btn" style="background:none;border:1px solid #e2e6ed;border-radius:4px;padding:2px 8px;font-size:11px;color:#5f6b7a;cursor:pointer">접기 ▲</button>
                     </div>
                     <div id="company-changelog-body" style="max-height:150px;overflow-y:auto;font-size:11px"></div>
-                </div>
-                <div class="form-row" style="grid-template-columns:1fr 1fr">
-                    <div class="form-group">
-                        <label>성적서 발송</label>
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
-                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
-                                <input type="checkbox" name="report-send" value="우편"> 우편
-                            </label>
-                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
-                                <input type="checkbox" name="report-send" value="선발송"> 선발송
-                            </label>
-                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
-                                <input type="checkbox" name="report-send" value="팩스(선)"> 팩스(선)
-                            </label>
-                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
-                                <input type="checkbox" name="report-send" value="메일(사본)"> 메일(사본)
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>성적서 수령지</label>
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;margin-bottom:8px">
-                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
-                                <input type="radio" name="report-receive" value="소재지" checked onchange="toggleReportReceiveAddr()"> 소재지
-                            </label>
-                            <label class="radio-label" style="padding:8px 14px;font-size:13px">
-                                <input type="radio" name="report-receive" value="기타" onchange="toggleReportReceiveAddr()"> 기타 수령지
-                            </label>
-                        </div>
-                        <input type="text" id="report-receive-addr" placeholder="수령지 주소 입력" style="display:none">
-                    </div>
                 </div>
             </div>
         </div>
@@ -1423,18 +1463,82 @@ function clearInspectionItems() {
 }
 
 // ============================================================================
-// 성적서 수령지 토글
+// 성적서 발송 옵션 토글
 // ============================================================================
-function toggleReportReceiveAddr() {
-    var val = document.querySelector('input[name="report-receive"]:checked')?.value;
-    var addrInput = document.getElementById('report-receive-addr');
-    if (val === '기타') {
-        addrInput.style.display = '';
-        addrInput.focus();
-    } else {
-        addrInput.style.display = 'none';
-        addrInput.value = '';
+function toggleReportSendOption() {
+    var checks = document.querySelectorAll('input[name="report-send"]');
+    var mailPanel = document.getElementById('mail-option-panel');
+    var faxPanel = document.getElementById('fax-option-panel');
+    var emailPanel = document.getElementById('email-option-panel');
+    var mailChecked = false, faxChecked = false, emailChecked = false;
+    checks.forEach(function(cb) {
+        if (cb.value === '우편') mailChecked = cb.checked;
+        if (cb.value === '팩스(선)') faxChecked = cb.checked;
+        if (cb.value === '메일(사본)') emailChecked = cb.checked;
+    });
+    mailPanel.style.display = mailChecked ? '' : 'none';
+    faxPanel.style.display = faxChecked ? '' : 'none';
+    emailPanel.style.display = emailChecked ? '' : 'none';
+    // 우편 체크 시 주소 미리보기 업데이트
+    if (mailChecked) updateMailAddrPreviews();
+    // 팩스 체크 시 기본값 채우기
+    if (faxChecked && !document.getElementById('report-fax-no').value) {
+        document.getElementById('report-fax-no').value = document.getElementById('company-fax').value || '';
     }
+    // 메일 체크 시 기본값 채우기
+    if (emailChecked && !document.getElementById('report-email').value) {
+        var sc = window._selectedCompany || {};
+        document.getElementById('report-email').value = sc.taxEmail || (sc.contacts && sc.contacts[0] ? sc.contacts[0].email : '') || '';
+    }
+}
+
+function updateMailAddrPreviews() {
+    var sc = window._selectedCompany || {};
+    var bizAddr = (sc.addr1 || '') + (sc.addr2 ? ' ' + sc.addr2 : '');
+    var licAddr = document.getElementById('company-address').value || '';
+    var licBizName = document.getElementById('lic-biz-name').value || '';
+    document.getElementById('mail-biz-addr-preview').textContent = bizAddr ? '(' + bizAddr + ')' : '';
+    document.getElementById('mail-lic-addr-preview').textContent = licAddr
+        ? (licBizName ? '- ' + licBizName + ' ' : '') + '(' + licAddr + ')'
+        : '';
+}
+
+function selectMailAddrType() {
+    var val = document.querySelector('input[name="mail-addr-type"]:checked')?.value;
+    var otherPanel = document.getElementById('mail-other-addr-panel');
+    otherPanel.style.display = (val === 'other') ? '' : 'none';
+}
+
+function openMailPostcode() {
+    new daum.Postcode({
+        oncomplete: function(data) {
+            document.getElementById('mail-zipcode').value = data.zonecode;
+            document.getElementById('mail-addr1').value = data.roadAddress || data.jibunAddress;
+            document.getElementById('mail-addr2').value = '';
+            document.getElementById('mail-addr2').focus();
+        }
+    }).open();
+}
+
+function toggleMailCc() {
+    var checked = document.getElementById('email-cc-toggle').checked;
+    document.getElementById('email-cc-panel').style.display = checked ? '' : 'none';
+}
+
+function addCcField() {
+    var container = document.getElementById('email-cc-fields');
+    var existing = container.querySelectorAll('.cc-email-field');
+    if (existing.length >= 5) {
+        showToast('CC는 최대 5개까지 추가할 수 있습니다.', 'info');
+        return;
+    }
+    var input = document.createElement('input');
+    input.type = 'email';
+    input.className = 'cc-email-field';
+    input.placeholder = 'CC 이메일 ' + (existing.length + 1);
+    input.style.cssText = 'width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:4px';
+    container.appendChild(input);
+    input.focus();
 }
 
 // ============================================================================
@@ -1730,6 +1834,31 @@ function selectCompany(elOrObj) {
         clWrap.style.display = 'none';
     }
 
+    // 성적서 발송용 데이터 보관
+    window._selectedCompany = {
+        company: nm,
+        addr1: c.addr1 || c.address || '',
+        addr2: c.addr2 || c.addressDetail || '',
+        contactFax: fax,
+        taxEmail: c.taxEmail || '',
+        contacts: c.contacts || []
+    };
+    // 발송 옵션 초기화
+    document.querySelectorAll('input[name="report-send"]').forEach(function(cb){ cb.checked = false; });
+    document.getElementById('mail-option-panel').style.display = 'none';
+    document.getElementById('fax-option-panel').style.display = 'none';
+    document.getElementById('email-option-panel').style.display = 'none';
+    document.getElementById('report-fax-no').value = '';
+    document.getElementById('report-email').value = '';
+    document.getElementById('email-cc-toggle').checked = false;
+    document.getElementById('email-cc-panel').style.display = 'none';
+    document.getElementById('email-cc-fields').innerHTML = '<input type="email" class="cc-email-field" placeholder="CC 이메일 1" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:4px">';
+    document.getElementById('mail-zipcode').value = '';
+    document.getElementById('mail-addr1').value = '';
+    document.getElementById('mail-addr2').value = '';
+    document.querySelector('input[name="mail-addr-type"][value="biz"]').checked = true;
+    document.getElementById('mail-other-addr-panel').style.display = 'none';
+
     document.getElementById('company-suggestions').classList.remove('active');
     showToast('업체 선택: ' + nm + (lic.licNo ? ' (인허가: ' + lic.licNo + ')' : ''), 'info');
 }
@@ -1830,6 +1959,26 @@ function resetForm() {
 
     setTodayDate();
     clearInspectionItems();
+
+    // 성적서 발송 옵션 초기화
+    document.querySelectorAll('input[name="report-send"]').forEach(function(cb){ cb.checked = false; });
+    document.getElementById('mail-option-panel').style.display = 'none';
+    document.getElementById('fax-option-panel').style.display = 'none';
+    document.getElementById('email-option-panel').style.display = 'none';
+    document.getElementById('report-fax-no').value = '';
+    document.getElementById('report-email').value = '';
+    document.getElementById('email-cc-toggle').checked = false;
+    document.getElementById('email-cc-panel').style.display = 'none';
+    document.getElementById('email-cc-fields').innerHTML = '<input type="email" class="cc-email-field" placeholder="CC 이메일 1" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:4px">';
+    document.getElementById('mail-zipcode').value = '';
+    document.getElementById('mail-addr1').value = '';
+    document.getElementById('mail-addr2').value = '';
+    document.querySelector('input[name="mail-addr-type"][value="biz"]').checked = true;
+    document.getElementById('mail-other-addr-panel').style.display = 'none';
+    document.getElementById('mail-biz-addr-preview').textContent = '';
+    document.getElementById('mail-lic-addr-preview').textContent = '';
+    document.getElementById('company-fax').value = '';
+    window._selectedCompany = null;
 
     const btn = document.getElementById('save-btn');
     btn.classList.remove('modified');
