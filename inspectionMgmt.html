@@ -656,6 +656,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 
     <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
       <button class="filter-chip active" data-major="전체" onclick="filterByMajor('전체')">전체</button>
+      <button class="filter-chip" data-major="식품유형" onclick="filterByMajor('식품유형')">🍽️ 식품유형</button>
       <button class="filter-chip" data-major="농산물" onclick="filterByMajor('농산물')">🌾 농산물</button>
       <button class="filter-chip" data-major="축산물" onclick="filterByMajor('축산물')">🥩 축산물</button>
       <button class="filter-chip" data-major="수산물" onclick="filterByMajor('수산물')">🐟 수산물</button>
@@ -30341,7 +30342,12 @@ function updateMinorFilter(major) {
     var prdField = (currentApiTab === 'I0930') ? 'PRDLST_NM' : 'PRDLST_CD_NM';
     data.forEach(function(r) {
       var cls = classifyFoodType(r[prdField] || '');
-      if (cls.major === major) minors[cls.minor] = (minors[cls.minor] || 0) + 1;
+      // '식품유형' = 축산물 제외 전체
+      if (major === '식품유형') {
+        if (cls.major !== '축산물') minors[cls.minor] = (minors[cls.minor] || 0) + 1;
+      } else {
+        if (cls.major === major) minors[cls.minor] = (minors[cls.minor] || 0) + 1;
+      }
     });
     Object.entries(minors).sort(function(a,b){ return b[1]-a[1]; }).forEach(function(item) {
       html += '<option value="' + item[0] + '">' + item[0] + ' (' + item[1].toLocaleString() + ')</option>';
@@ -32143,7 +32149,12 @@ async function loadAndRenderApiData(serviceId) {
   if (currentFilter.major && currentFilter.major !== '전체') {
     filtered = filtered.filter(function(r) {
       var cls = classifyFoodType(r[prdField] || '');
-      if (cls.major !== currentFilter.major) return false;
+      // '식품유형' = 축산물 제외 식품 전체 (농산물+수산물+가공식품+특수식품+미분류)
+      if (currentFilter.major === '식품유형') {
+        if (cls.major === '축산물') return false;
+      } else {
+        if (cls.major !== currentFilter.major) return false;
+      }
       if (currentFilter.minor && currentFilter.minor !== '전체') {
         return cls.minor === currentFilter.minor;
       }
