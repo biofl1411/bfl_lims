@@ -1552,8 +1552,15 @@ function formatCorpNo(el) {
 function formatPhone(el) {
   let v = el.value.replace(/[^0-9]/g,'');
   if(v.length>11) v=v.slice(0,11);
-  if(v.length>7) v=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7);
-  else if(v.length>3) v=v.slice(0,3)+'-'+v.slice(3);
+  if(v.startsWith('02')) {
+    if(v.length>6 && v.length<=9) v=v.slice(0,2)+'-'+v.slice(2,5)+'-'+v.slice(5);
+    else if(v.length>9) v=v.slice(0,2)+'-'+v.slice(2,6)+'-'+v.slice(6);
+    else if(v.length>2) v=v.slice(0,2)+'-'+v.slice(2);
+  } else {
+    if(v.length===10) v=v.slice(0,3)+'-'+v.slice(3,6)+'-'+v.slice(6);
+    else if(v.length>7) v=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7);
+    else if(v.length>3) v=v.slice(0,3)+'-'+v.slice(3);
+  }
   el.value=v;
 }
 
@@ -1726,8 +1733,17 @@ async function submitCompanyForm() {
   data.memo = (document.getElementById('regNote') || {}).value || '';
 
   // 등록일/변경이력 (표준 필드)
+  var _regNow = new Date().toISOString().slice(0,16).replace('T',' ');
   data.regDate = new Date().toISOString().slice(0, 10);
-  data.changeLog = [];
+  data.changeLog = [{
+    date: _regNow,
+    who: '시스템 (신규등록)',
+    detail: '최초 업체 등록 — 회사명: ' + (data.company || '') + ', 사업자번호: ' + (data.bizNo || '') + ', 대표자: ' + (data.repName || '')
+  }];
+  // OCR 등 이전에 축적된 변경이력 합산
+  if (changeLog && changeLog.length > 0) {
+    data.changeLog = data.changeLog.concat(changeLog);
+  }
 
   // --- 신호등/미수금 승계 ---
   data.trafficLight = _inheritedTrafficLight;
