@@ -439,6 +439,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <div class="stats-row">
       <div class="stat-chip"><div class="sc-icon" style="background:var(--amber-l)">🏷️</div><div><div class="sc-num" id="stat-field-cnt" style="color:#d49000">2</div><div class="sc-label">검사 분야</div></div></div>
       <div class="stat-chip"><div class="sc-icon" style="background:var(--pri-l)">🎯</div><div><div class="sc-num" id="stat-purpose-cnt" style="color:var(--pri)">29</div><div class="sc-label">검사 목적</div></div></div>
+      <div class="stat-chip"><div class="sc-icon" style="background:#e8eaf6">📋</div><div><div class="sc-num" id="stat-food-class" style="color:#3949ab">0</div><div class="sc-label">식품유형</div></div></div>
       <div class="stat-chip"><div class="sc-icon" style="background:var(--mint-l)">📋</div><div><div class="sc-num" id="stat-food-types" style="color:var(--mint)">0</div><div class="sc-label">식품공전</div></div></div>
       <div class="stat-chip"><div class="sc-icon" style="background:var(--violet-l)">🧪</div><div><div class="sc-num" id="stat-total-items" style="color:var(--violet)">0</div><div class="sc-label">총 검사항목</div></div></div>
       <div class="stat-chip"><div class="sc-icon" style="background:var(--coral-l)">📦</div><div><div class="sc-num" id="stat-item-groups" style="color:var(--coral)">0</div><div class="sc-label">항목 그룹</div></div></div>
@@ -449,10 +450,11 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <div class="tabs">
       <div class="tab active" data-c="a" onclick="showTab(0)">🏷️ 검사 분야</div>
       <div class="tab" data-c="b" onclick="showTab(1)">🎯 검사 목적</div>
-      <div class="tab" data-c="m" onclick="showTab(2)">📋 식품공전</div>
-      <div class="tab" data-c="v" onclick="showTab(3)">🧪 검사 항목</div>
-      <div class="tab" data-c="c" onclick="showTab(4)">📦 항목 그룹</div>
-      <div class="tab" data-c="f" onclick="showTab(5)">💰 수수료</div>
+      <div class="tab" data-c="t" onclick="showTab(2)">📋 식품유형</div>
+      <div class="tab" data-c="m" onclick="showTab(3)">📋 식품공전</div>
+      <div class="tab" data-c="v" onclick="showTab(4)">🧪 검사 항목</div>
+      <div class="tab" data-c="c" onclick="showTab(5)">📦 항목 그룹</div>
+      <div class="tab" data-c="f" onclick="showTab(6)">💰 수수료</div>
     </div>
 
     <!-- ═══ 패널 0: 검사 분야 ═══ -->
@@ -578,7 +580,31 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       </div>
     </div>
 
-    <!-- ═══ 패널 2: 식품공전 ═══ -->
+    <!-- ═══ 패널 2: 식품유형 ═══ -->
+    <div class="panel" id="panel-foodclass">
+      <div class="page-desc" style="margin-bottom:12px;font-size:13px;color:var(--sub)">
+        📋 식품유형 — 식품공전 API 데이터를 식품/축산 유형별로 분류하여 수수료와 매칭합니다.
+      </div>
+      <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="fc-search" placeholder="🔍 항목 검색..." style="flex:1;min-width:200px;padding:8px 14px;border-radius:8px;border:1px solid var(--bdr);font-size:13px;background:var(--card)" oninput="renderFoodClassData()">
+        <div class="view-toggle" style="display:flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
+          <button class="vt-btn active" data-view="card" onclick="fcView='card';this.parentElement.querySelectorAll('.vt-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderFoodClassData()">카드</button>
+          <button class="vt-btn" data-view="list" onclick="fcView='list';this.parentElement.querySelectorAll('.vt-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderFoodClassData()">리스트</button>
+        </div>
+      </div>
+      <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="filter-chip active" data-fclabel="전체" onclick="fcFilterLabel='전체';document.querySelectorAll('#panel-foodclass .filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.fclabel==='전체'));fcFilterMinor='전체';renderFoodClassData()">전체</button>
+        <button class="filter-chip" data-fclabel="식품" onclick="fcFilterLabel='식품';document.querySelectorAll('#panel-foodclass .filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.fclabel==='식품'));fcFilterMinor='전체';renderFoodClassData()">🍽️ 식품</button>
+        <button class="filter-chip" data-fclabel="축산" onclick="fcFilterLabel='축산';document.querySelectorAll('#panel-foodclass .filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.fclabel==='축산'));fcFilterMinor='전체';renderFoodClassData()">🥩 축산</button>
+        <select id="fc-minor-filter" onchange="fcFilterMinor=this.value;renderFoodClassData()" style="margin-left:8px;padding:6px 10px;border-radius:8px;border:1px solid var(--bdr);font-size:12px;background:var(--card);cursor:pointer;">
+          <option value="전체">중분류: 전체</option>
+        </select>
+      </div>
+      <div class="card-grid" id="fc-cards"></div>
+      <div class="accordion-container" id="fc-accordion" style="display:none"></div>
+    </div>
+
+    <!-- ═══ 패널 3: 식품공전 ═══ -->
     <div class="panel" id="panel-2">
 
     <!-- API 서브탭 -->
@@ -656,7 +682,6 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 
     <div class="filter-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
       <button class="filter-chip active" data-major="전체" onclick="filterByMajor('전체')">전체</button>
-      <button class="filter-chip" data-major="식품유형" onclick="filterByMajor('식품유형')">📋 식품유형</button>
       <button class="filter-chip" data-major="식품" onclick="filterByMajor('식품')">🍽️ 식품</button>
       <button class="filter-chip" data-major="농산물" onclick="filterByMajor('농산물')">🌾 농산물</button>
       <button class="filter-chip" data-major="축산물" onclick="filterByMajor('축산물')">🥩 축산물</button>
@@ -1128,6 +1153,10 @@ let currentApiTab = 'I0930'; // 현재 선택된 API 서브탭
 let apiDataCache = {}; // { I0930: [...], I2580: [...], ... } 메모리 캐시
 let apiCollecting = false; // 수집 중 여부
 let currentFoodGroup = '전체'; // 식품군 필터
+// 식품유형 탭 전용 상태
+let fcView = 'card';
+let fcFilterLabel = '전체';
+let fcFilterMinor = '전체';
 
 // ══ 식품군 마스터 (식약처 홈페이지 분류표 기반) ══
 const FOOD_GROUP_MASTER = [
@@ -30045,7 +30074,185 @@ function updateStats() {
   el('stat-fee-count', feeData.length);
 }
 
-// ══ 탭 전환 (6탭: 0=분야, 1=목적, 2=식품공전, 3=검사항목, 4=항목그룹, 5=수수료) ══
+// ══ 식품유형 탭 렌더링 ══
+async function renderFoodClassData() {
+  var cardsEl = document.getElementById('fc-cards');
+  var accEl = document.getElementById('fc-accordion');
+  if (!cardsEl) return;
+
+  cardsEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub)">데이터 로딩중...</div>';
+  if (accEl) accEl.style.display = 'none';
+
+  // API 데이터 로드 (I0930 기본)
+  var data = await loadApiDataFromFirestore('I0930');
+  if (!data || data.length === 0) {
+    cardsEl.style.display = 'grid';
+    cardsEl.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--sub)"><div style="font-size:48px;margin-bottom:16px">📭</div><div style="font-size:16px;font-weight:600;margin-bottom:8px">수집된 데이터가 없습니다</div><div style="font-size:13px">식품공전 탭에서 🔄 API 수집을 먼저 진행해주세요</div></div>';
+    return;
+  }
+
+  var prdField = 'PRDLST_NM';
+  var testItemField = 'T_KOR_NM';
+
+  // 식품유형만 필터
+  var filtered = data.filter(function(r) {
+    var cls = classifyFoodType(r[prdField] || '');
+    if (cls.major !== '식품유형') return false;
+    if (fcFilterLabel !== '전체' && cls.label !== fcFilterLabel) return false;
+    if (fcFilterMinor !== '전체' && cls.minor !== fcFilterMinor) return false;
+    return true;
+  });
+
+  // 검색 필터
+  var searchEl = document.getElementById('fc-search');
+  var searchTerm = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  if (searchTerm) {
+    filtered = filtered.filter(function(r) {
+      return (r[prdField] || '').toLowerCase().includes(searchTerm) ||
+             (r[testItemField] || '').toLowerCase().includes(searchTerm);
+    });
+  }
+
+  // 품목별 그룹핑
+  var groups = {};
+  filtered.forEach(function(r) {
+    var prd = r[prdField] || '미분류';
+    if (!groups[prd]) groups[prd] = [];
+    groups[prd].push(r);
+  });
+  var entries = Object.entries(groups).sort(function(a,b){ return b[1].length - a[1].length; });
+
+  // 중분류 드롭다운 업데이트
+  var minorSel = document.getElementById('fc-minor-filter');
+  if (minorSel) {
+    var minors = {};
+    data.forEach(function(r) {
+      var cls = classifyFoodType(r[prdField] || '');
+      if (cls.major === '식품유형' && (fcFilterLabel === '전체' || cls.label === fcFilterLabel)) {
+        minors[cls.minor] = (minors[cls.minor] || 0) + 1;
+      }
+    });
+    var mhtml = '<option value="전체">중분류: 전체</option>';
+    Object.entries(minors).sort(function(a,b){ return b[1]-a[1]; }).forEach(function(item) {
+      mhtml += '<option value="' + item[0] + '"' + (fcFilterMinor === item[0] ? ' selected' : '') + '>' + item[0] + ' (' + item[1].toLocaleString() + ')</option>';
+    });
+    minorSel.innerHTML = mhtml;
+  }
+
+  // stat chip 업데이트
+  var statEl = document.getElementById('stat-food-class');
+  if (statEl) statEl.textContent = entries.length.toLocaleString();
+
+  // 수수료 매칭 lookup
+  var feeLookup = {};
+  if (typeof feeData !== 'undefined' && feeData.length > 0) {
+    feeData.forEach(function(f) {
+      if (f.검사목적 === '자가품질위탁검사용') {
+        var key = f.항목명 || '';
+        if (!feeLookup[key]) feeLookup[key] = f;
+      }
+    });
+  }
+
+  var PAGE_SIZE = 50;
+  var displayEntries = entries.slice(0, PAGE_SIZE);
+  var statsHtml = '<div style="grid-column:1/-1;padding:8px 0;font-size:12px;color:var(--sub)">' +
+    '📋 식품유형 ' + entries.length + '개 품목 / ' + filtered.length.toLocaleString() + '건' +
+    (searchTerm ? ' (검색: "' + searchTerm + '")' : '') + '</div>';
+
+  // ── 카드 뷰 ──
+  if (fcView === 'card') {
+    cardsEl.style.display = 'grid';
+    if (accEl) accEl.style.display = 'none';
+    var html = statsHtml;
+    displayEntries.forEach(function(entry) {
+      var prdName = entry[0];
+      var items = entry[1];
+      var cls = classifyFoodType(prdName);
+      var labelColors = {'식품':'#ede7f6','축산':'#fff3e0'};
+      var labelTextColors = {'식품':'#4a148c','축산':'#e65100'};
+      var labelKey = cls.label || cls.major;
+      var majorBg = labelColors[labelKey] || '#f5f5f5';
+      var majorTxt = labelTextColors[labelKey] || '#616161';
+      var itemsHtml = items.slice(0, 10).map(function(it) {
+        var itemName = it[testItemField] || it.FNPRT_ITM_NM || '-';
+        var feeMatch = feeLookup[itemName];
+        var feeText = feeMatch && feeMatch.수수료 > 0 ? feeMatch.수수료.toLocaleString() + '원' : '-';
+        var specText = feeMatch && feeMatch.규격 ? feeMatch.규격 : (it.SPEC_VAL_SUMUP || it.SPEC_VAL || '-');
+        return '<div class="item-list-item">' +
+          '<div class="item-list-name">' + itemName + '</div>' +
+          '<span class="item-fee" style="font-size:11px">' + feeText + '</span>' +
+          '<div class="item-list-spec" title="' + (specText || '').replace(/"/g, '&quot;') + '">' + specText + '</div>' +
+        '</div>';
+      }).join('');
+      if (items.length > 10) {
+        itemsHtml += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:6px 0">... 외 ' + (items.length - 10) + '건</div>';
+      }
+      html += '<div class="food-type-card">' +
+        '<div class="card-header">' +
+          '<div>' +
+            '<div class="card-title">' + prdName + '</div>' +
+            '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">' +
+              '<span class="badge" style="background:' + majorBg + ';color:' + majorTxt + ';font-size:10px">' + cls.icon + ' ' + labelKey + '</span>' +
+              '<span class="badge" style="background:#f5f5f5;color:#616161;font-size:10px">' + cls.minor + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div><div class="card-badge">' + items.length + '건</div></div>' +
+        '</div>' +
+        '<div class="item-list">' + itemsHtml + '</div>' +
+      '</div>';
+    });
+    if (entries.length > PAGE_SIZE) {
+      html += '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--sub);font-size:13px">총 ' + entries.length + '개 품목 중 ' + PAGE_SIZE + '개 표시 중. 검색으로 범위를 좁혀주세요.</div>';
+    }
+    cardsEl.innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
+
+  // ── 리스트 뷰 ──
+  } else {
+    cardsEl.style.display = 'none';
+    if (accEl) accEl.style.display = 'block';
+    var accHtml = statsHtml;
+    displayEntries.forEach(function(entry) {
+      var prdName = entry[0];
+      var items = entry[1];
+      var cls = classifyFoodType(prdName);
+      var labelColors2 = {'식품':'#ede7f6','축산':'#fff3e0'};
+      var labelTextColors2 = {'식품':'#4a148c','축산':'#e65100'};
+      var labelKey = cls.label || cls.major;
+      accHtml += '<div class="accordion-group">' +
+        '<div class="accordion-header" onclick="toggleAccordion(this)">' +
+          '<div class="accordion-title">' +
+            '<span class="accordion-icon">▶</span>' +
+            '<span class="accordion-name">' + prdName + '</span>' +
+            '<span class="badge" style="background:' + (labelColors2[labelKey]||'#f5f5f5') + ';color:' + (labelTextColors2[labelKey]||'#616161') + ';font-size:10px">' + cls.icon + ' ' + labelKey + '</span>' +
+            '<span class="badge" style="background:#f5f5f5;color:#616161;font-size:10px;margin-left:4px">' + cls.minor + '</span>' +
+          '</div>' +
+          '<div class="accordion-info" style="display:flex;gap:12px;align-items:center;">' +
+            '<span class="accordion-count">' + items.length + '건</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="accordion-content"><div class="accordion-items">';
+      items.forEach(function(it) {
+        var itemName = it[testItemField] || it.FNPRT_ITM_NM || '-';
+        var feeMatch = feeLookup[itemName];
+        var feeText = feeMatch && feeMatch.수수료 > 0 ? feeMatch.수수료.toLocaleString() + '원' : '-';
+        var specText = feeMatch && feeMatch.규격 ? feeMatch.규격 : (it.SPEC_VAL_SUMUP || it.SPEC_VAL || '-');
+        accHtml += '<div class="accordion-item">' +
+          '<div class="item-col item-col-name">' + itemName + '</div>' +
+          '<div class="item-col" style="flex:0 0 80px;text-align:right"><span class="item-fee" style="font-size:11px">' + feeText + '</span></div>' +
+          '<div class="item-col item-col-spec">' + specText + '</div>' +
+        '</div>';
+      });
+      accHtml += '</div></div></div>';
+    });
+    if (entries.length > PAGE_SIZE) {
+      accHtml += '<div style="text-align:center;padding:20px;color:var(--sub);font-size:13px">총 ' + entries.length + '개 품목 중 ' + PAGE_SIZE + '개 표시 중. 검색으로 범위를 좁혀주세요.</div>';
+    }
+    accEl.innerHTML = accHtml || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
+  }
+}
+
+// ══ 탭 전환 (7탭: 0=분야, 1=목적, 2=식품유형, 3=식품공전, 4=검사항목, 5=항목그룹, 6=수수료) ══
 function showTab(i) {
   currentTab = i;
   document.querySelectorAll('.tab').forEach((t, j) => t.classList.toggle('active', j === i));
@@ -30054,8 +30261,10 @@ function showTab(i) {
   closeDetail();
   // FAB 표시
   document.getElementById('fb').style.display = 'flex';
-  // 데이터 탭이면 렌더링
-  if (i === 2 || i === 4 || i === 5) renderData();
+  // 식품유형 탭
+  if (i === 2) renderFoodClassData();
+  // 식품공전/항목그룹/수수료 탭
+  if (i === 3 || i === 5 || i === 6) renderData();
 }
 
 // 뷰 전환 (식품공전=0, 항목그룹=1, 수수료=2 인덱스 유지)
@@ -30076,11 +30285,11 @@ function setView(viewIdx, viewType) {
 
 // 데이터 렌더링 (탭 인덱스 기반)
 function renderData() {
-  if (currentTab === 2) {
+  if (currentTab === 3) {
     renderFoodTypes();
-  } else if (currentTab === 4) {
-    renderItemGroups();
   } else if (currentTab === 5) {
+    renderItemGroups();
+  } else if (currentTab === 6) {
     buildFeePurposeMenu();
     renderFees();
   }
@@ -31982,9 +32191,9 @@ function showToast(message, type='success'){
 
 // ══ filterData 업데이트 ══
 function filterData() {
-  if (currentTab === 2) {
+  if (currentTab === 3) {
     currentFilter.search = document.getElementById('search-food-type').value;
-  } else if (currentTab === 4) {
+  } else if (currentTab === 5) {
     currentFilter.search = document.getElementById('search-item-group').value;
   }
   renderData();
