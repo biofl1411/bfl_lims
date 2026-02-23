@@ -171,9 +171,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     </div>
                 </div>
 
-                <div class="form-row" style="grid-template-columns:auto 1fr auto;align-items:end">
+                <div class="form-row" style="grid-template-columns:auto 1fr auto;align-items:start">
                     <div class="form-group">
-                        <label>시험분야 <span class="required">*</span></label>
+                        <label>시험분야 <span class="required">*</span>
+                            <label class="pin-check" title="고정: 다음 접수에도 이 시험분야를 유지합니다">
+                                <input type="checkbox" id="pin-test-field" onchange="togglePin('test-field')"> 📌 고정
+                            </label>
+                        </label>
                         <div class="radio-group">
                             <label class="radio-label">
                                 <input type="radio" name="test-field" value="식품" checked onchange="onTestFieldChange()">
@@ -201,9 +205,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                             </div>
                             <div class="custom-select-options" id="test-purpose-options"></div>
                         </div>
-                        <small class="field-help" id="test-purpose-help">시험분야 선택 시 자동으로 표시됩니다</small>
                     </div>
-                    <div style="padding-bottom:18px">
+                    <div style="padding-top:22px">
                         <button type="button" class="btn-receipt primary" onclick="allocateReceiptNo()" style="padding:10px 24px;white-space:nowrap">
                             🔢 접수번호 할당
                         </button>
@@ -852,15 +855,19 @@ function togglePin(fieldId) {
     const label = checkbox.closest('.pin-check');
     const pins = getPinnedFields();
     if (checkbox.checked) {
-        const el = document.getElementById(fieldId);
-        pins[fieldId] = { value: el.value, field: el.tagName === 'SELECT' ? 'select' : 'input' };
+        if (fieldId === 'test-field') {
+            pins[fieldId] = { value: document.querySelector('input[name="test-field"]:checked')?.value || '식품', field: 'radio' };
+        } else {
+            const el = document.getElementById(fieldId);
+            pins[fieldId] = { value: el.value, field: el.tagName === 'SELECT' ? 'select' : 'input' };
+        }
         if (fieldId === 'test-purpose') {
-            pins['test-field'] = document.querySelector('input[name="test-field"]:checked')?.value || '식품';
+            pins['_test-field-via-purpose'] = document.querySelector('input[name="test-field"]:checked')?.value || '식품';
         }
         label.classList.add('active');
     } else {
         delete pins[fieldId];
-        if (fieldId === 'test-purpose') delete pins['test-field'];
+        if (fieldId === 'test-purpose') delete pins['_test-field-via-purpose'];
         label.classList.remove('active');
     }
     localStorage.setItem('bfl_pinned_fields', JSON.stringify(pins));
@@ -874,18 +881,29 @@ function getPinnedFields() {
 
 function restorePinnedFields() {
     const pins = getPinnedFields();
+    // 시험분야 먼저 복원
+    if (pins['test-field']) {
+        const checkbox = document.getElementById('pin-test-field');
+        if (checkbox) {
+            checkbox.checked = true;
+            checkbox.closest('.pin-check').classList.add('active');
+        }
+        const radio = document.querySelector(`input[name="test-field"][value="${pins['test-field'].value}"]`);
+        if (radio) radio.checked = true;
+    }
     Object.keys(pins).forEach(fieldId => {
-        if (fieldId === 'test-field') return; // 시험분야는 별도 처리
+        if (fieldId === 'test-field' || fieldId === '_test-field-via-purpose') return;
         const checkbox = document.getElementById('pin-' + fieldId);
         const el = document.getElementById(fieldId);
         if (checkbox && el) {
             checkbox.checked = true;
             checkbox.closest('.pin-check').classList.add('active');
             // 검사목적: 시험분야 먼저 복원 후 옵션 로드 → 값 설정
-            if (fieldId === 'test-purpose' && pins['test-field']) {
-                const radio = document.querySelector(`input[name="test-field"][value="${pins['test-field']}"]`);
+            if (fieldId === 'test-purpose') {
+                var tf = pins['_test-field-via-purpose'] || (pins['test-field'] && pins['test-field'].value) || '식품';
+                const radio = document.querySelector(`input[name="test-field"][value="${tf}"]`);
                 if (radio) radio.checked = true;
-                updateTestPurposeOptions(pins['test-field']).then(() => {
+                updateTestPurposeOptions(tf).then(() => {
                     el.value = pins[fieldId].value;
                 });
             } else {
