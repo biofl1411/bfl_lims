@@ -30183,19 +30183,28 @@ async function renderFoodClassData() {
       var labelKey = cls.label || cls.major;
       var majorBg = labelColors[labelKey] || '#f5f5f5';
       var majorTxt = labelTextColors[labelKey] || '#616161';
-      var itemsHtml = items.slice(0, 10).map(function(it) {
+      // 동일 항목명+규격 묶기
+      var dedup = [];
+      var dedupMap = {};
+      items.forEach(function(it) {
         var itemName = it[testItemField] || it.FNPRT_ITM_NM || '-';
-        var feeMatch = feeLookup[itemName];
-        var feeText = feeMatch && feeMatch.수수료 > 0 ? feeMatch.수수료.toLocaleString() + '원' : '-';
         var specText = it.SPEC_VAL_SUMUP || it.SPEC_VAL || '-';
+        var key = itemName + '||' + specText;
+        if (dedupMap[key] !== undefined) { dedup[dedupMap[key]].cnt++; }
+        else { dedupMap[key] = dedup.length; dedup.push({ it: it, name: itemName, spec: specText, cnt: 1 }); }
+      });
+      var itemsHtml = dedup.slice(0, 10).map(function(d) {
+        var feeMatch = feeLookup[d.name];
+        var feeText = feeMatch && feeMatch.수수료 > 0 ? feeMatch.수수료.toLocaleString() + '원' : '-';
+        var cntBadge = d.cnt > 1 ? ' <span style="color:#999;font-size:10px">(×' + d.cnt + ')</span>' : '';
         return '<div class="item-list-item">' +
-          '<div class="item-list-name">' + itemName + '</div>' +
+          '<div class="item-list-name">' + d.name + cntBadge + '</div>' +
           '<span class="item-fee" style="font-size:11px">' + feeText + '</span>' +
-          '<div class="item-list-spec" title="' + (specText || '').replace(/"/g, '&quot;') + '">' + specText + '</div>' +
+          '<div class="item-list-spec" title="' + (d.spec || '').replace(/"/g, '&quot;') + '">' + d.spec + '</div>' +
         '</div>';
       }).join('');
-      if (items.length > 10) {
-        itemsHtml += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:6px 0">... 외 ' + (items.length - 10) + '건</div>';
+      if (dedup.length > 10) {
+        itemsHtml += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:6px 0">... 외 ' + (dedup.length - 10) + '건</div>';
       }
       html += '<div class="food-type-card">' +
         '<div class="card-header">' +
@@ -30241,15 +30250,24 @@ async function renderFoodClassData() {
           '</div>' +
         '</div>' +
         '<div class="accordion-content"><div class="accordion-items">';
+      // 동일 항목명+규격 묶기 (리스트뷰)
+      var dedupL = [];
+      var dedupMapL = {};
       items.forEach(function(it) {
         var itemName = it[testItemField] || it.FNPRT_ITM_NM || '-';
-        var feeMatch = feeLookup[itemName];
-        var feeText = feeMatch && feeMatch.수수료 > 0 ? feeMatch.수수료.toLocaleString() + '원' : '-';
         var specText = it.SPEC_VAL_SUMUP || it.SPEC_VAL || '-';
+        var key = itemName + '||' + specText;
+        if (dedupMapL[key] !== undefined) { dedupL[dedupMapL[key]].cnt++; }
+        else { dedupMapL[key] = dedupL.length; dedupL.push({ name: itemName, spec: specText, cnt: 1 }); }
+      });
+      dedupL.forEach(function(d) {
+        var feeMatch = feeLookup[d.name];
+        var feeText = feeMatch && feeMatch.수수료 > 0 ? feeMatch.수수료.toLocaleString() + '원' : '-';
+        var cntBadge = d.cnt > 1 ? ' <span style="color:#999;font-size:10px">(×' + d.cnt + ')</span>' : '';
         accHtml += '<div class="accordion-item">' +
-          '<div class="item-col item-col-name">' + itemName + '</div>' +
+          '<div class="item-col item-col-name">' + d.name + cntBadge + '</div>' +
           '<div class="item-col" style="flex:0 0 80px;text-align:right"><span class="item-fee" style="font-size:11px">' + feeText + '</span></div>' +
-          '<div class="item-col item-col-spec">' + specText + '</div>' +
+          '<div class="item-col item-col-spec">' + d.spec + '</div>' +
         '</div>';
       });
       accHtml += '</div></div></div>';
