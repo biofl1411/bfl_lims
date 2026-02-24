@@ -72,6 +72,26 @@
 .main{transition:margin-left 0.25s ease}
 body.sidebar-collapsed .main{margin-left:64px}
 @media(max-width:768px){.sidebar{display:none}}
+/* ── Sidebar Weather Widget ── */
+.sidebar-weather{flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);padding:14px 20px;background:rgba(0,0,0,0.15)}
+.sidebar-weather .weather-main{display:flex;align-items:center;gap:10px}
+.sidebar-weather .weather-icon{font-size:24px;line-height:1}
+.sidebar-weather .weather-temp{font-size:20px;font-weight:700;color:#e2e8f0}
+.sidebar-weather .weather-city{font-size:12px;color:#94a3b8;margin-left:auto}
+.sidebar-weather .weather-detail{display:flex;gap:14px;margin-top:6px;font-size:11px;color:#64748b}
+.sidebar-weather .weather-detail span{display:flex;align-items:center;gap:3px}
+.sidebar-weather .weather-setup{text-align:center;padding:6px 0}
+.sidebar-weather .weather-setup a{color:#64748b;font-size:12px;text-decoration:none;transition:color .15s}
+.sidebar-weather .weather-setup a:hover{color:#94a3b8}
+.sidebar-weather .weather-error{font-size:11px;color:#64748b;text-align:center;padding:4px 0}
+.sidebar-weather .weather-loading{font-size:12px;color:#64748b;text-align:center;padding:8px 0}
+.sidebar.collapsed .sidebar-weather{padding:8px 4px;text-align:center}
+.sidebar.collapsed .sidebar-weather .weather-main{flex-direction:column;gap:2px}
+.sidebar.collapsed .sidebar-weather .weather-icon{font-size:18px}
+.sidebar.collapsed .sidebar-weather .weather-temp{font-size:13px}
+.sidebar.collapsed .sidebar-weather .weather-city{display:none}
+.sidebar.collapsed .sidebar-weather .weather-detail{display:none}
+.sidebar.collapsed .sidebar-weather .weather-setup a{font-size:10px}
 /* ====== END UNIFIED SIDEBAR STYLES ====== */
 `;
   document.head.appendChild(style);
@@ -113,6 +133,7 @@ const SIDEBAR_MENU = [
     sub: [
       { label: '업체등록·수정',     href: 'companyMgmt.html',  page: 'reception-company' },
       { label: '검사목적 관리',     href: 'inspectionMgmt.html',  page: 'reception-inspection' },
+      { label: '식품유형(test)',     href: 'foodTypesTest.html',   page: 'food-types-test' },
       { label: '접수 등록',         href: 'sampleReceipt.html',   page: 'reception-register' },
       { label: '접수 현황',         href: 'receiptStatus.html',  page: 'reception-status' },
       { label: '접수대장',          disabled: true },
@@ -249,7 +270,10 @@ ${subHtmlArr.join('\n')}
   });
 
   html += `
-  </nav>`;
+  </nav>
+  <div class="sidebar-weather" id="sidebar-weather">
+    <div class="weather-loading">🌤️ 날씨 로딩...</div>
+  </div>`;
 
   sidebar.innerHTML = html;
 }
@@ -292,12 +316,177 @@ function _restoreSidebarState() {
 }
 
 // ============================================================
-// 4. 초기화 — DOM 준비 후 실행
+// 4. 사이드바 날씨 위젯
+// ============================================================
+var _weatherRefreshTimer = null;
+
+function _getWeatherBaseTime() {
+  var now = new Date();
+  var h = now.getHours();
+  var m = now.getMinutes();
+  if (m < 40) h = h - 1;
+  if (h < 0) h = 23;
+  return String(h).padStart(2, '0') + '00';
+}
+
+function _getWeatherBaseDate(bt) {
+  var now = new Date();
+  if (bt === '2300' && now.getHours() < 1) {
+    now.setDate(now.getDate() - 1);
+  }
+  var y = now.getFullYear();
+  var mo = String(now.getMonth() + 1).padStart(2, '0');
+  var d = String(now.getDate()).padStart(2, '0');
+  return y + mo + d;
+}
+
+function _getWeatherIcon(pty) {
+  var p = parseInt(pty) || 0;
+  if (p === 1) return '🌧️';
+  if (p === 2) return '🌨️';
+  if (p === 3) return '❄️';
+  if (p === 5) return '💧';
+  if (p === 6) return '💧';
+  if (p === 7) return '🌨️';
+  var h = new Date().getHours();
+  return (h >= 6 && h < 18) ? '☀️' : '🌙';
+}
+
+function _renderWeatherWidget(data) {
+  var el = document.getElementById('sidebar-weather');
+  if (!el) return;
+  if (!data) {
+    el.innerHTML = '<div class="weather-setup"><a href="adminSettings.html" title="날씨 설정">⚙️ 날씨 설정</a></div>';
+    return;
+  }
+  if (data.error) {
+    el.innerHTML = '<div class="weather-error">' + data.error + '</div>';
+    return;
+  }
+  var icon = _getWeatherIcon(data.pty);
+  el.innerHTML =
+    '<div class="weather-main">' +
+      '<span class="weather-icon">' + icon + '</span>' +
+      '<span class="weather-temp">' + data.temp + '°</span>' +
+      '<span class="weather-city">' + (data.city || '') + '</span>' +
+    '</div>' +
+    '<div class="weather-detail">' +
+      '<span>💧 ' + data.hum + '%</span>' +
+      '<span>🌬️ ' + data.wind + 'm/s</span>' +
+    '</div>';
+}
+
+async function loadSidebarWeather() {
+  var el = document.getElementById('sidebar-weather');
+  if (!el) return;
+
+  // 1. 캐시 확인 (30분)
+  try {
+    var cached = localStorage.getItem('bfl_weather_cache');
+    if (cached) {
+      var cache = JSON.parse(cached);
+      var age = Date.now() - (cache.ts || 0);
+      if (age < 30 * 60 * 1000) {
+        _renderWeatherWidget(cache.data);
+        // 30분 후 자동 갱신 타이머
+        if (_weatherRefreshTimer) clearTimeout(_weatherRefreshTimer);
+        _weatherRefreshTimer = setTimeout(loadSidebarWeather, 30 * 60 * 1000 - age);
+        return;
+      }
+    }
+  } catch(e) {}
+
+  // 2. Firestore에서 설정 로드
+  var settings = null;
+  try {
+    if (typeof waitForFirebase === 'function') await waitForFirebase();
+    if (typeof fsGetSettings === 'function') {
+      settings = await fsGetSettings('weatherSettings');
+    }
+  } catch(e) {
+    console.warn('[sidebar-weather] Firestore 설정 로드 실패:', e.message);
+  }
+
+  if (!settings || !settings.apiKey || !settings.nx) {
+    _renderWeatherWidget(null); // "설정 필요" 표시
+    return;
+  }
+
+  // 3. 기상청 API 호출
+  var bt = _getWeatherBaseTime();
+  var bd = _getWeatherBaseDate(bt);
+  var url = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst'
+    + '?serviceKey=' + encodeURIComponent(settings.apiKey)
+    + '&dataType=JSON&numOfRows=10&pageNo=1'
+    + '&base_date=' + bd
+    + '&base_time=' + bt
+    + '&nx=' + settings.nx + '&ny=' + settings.ny;
+
+  try {
+    var resp = await fetch(url);
+    var json = await resp.json();
+
+    if (json.response && json.response.header && json.response.header.resultCode === '00') {
+      var items = json.response.body.items.item;
+      var vals = {};
+      items.forEach(function(it) { vals[it.category] = it.obsrValue; });
+
+      var weatherData = {
+        temp: vals.T1H || '-',
+        hum: vals.REH || '-',
+        wind: vals.WSD || '-',
+        pty: vals.PTY || '0',
+        city: settings.city || ''
+      };
+
+      _renderWeatherWidget(weatherData);
+
+      // 캐시 저장
+      try {
+        localStorage.setItem('bfl_weather_cache', JSON.stringify({
+          ts: Date.now(),
+          data: weatherData
+        }));
+      } catch(e) {}
+
+      // 30분 후 갱신 타이머
+      if (_weatherRefreshTimer) clearTimeout(_weatherRefreshTimer);
+      _weatherRefreshTimer = setTimeout(loadSidebarWeather, 30 * 60 * 1000);
+    } else {
+      var errMsg = (json.response && json.response.header) ? json.response.header.resultMsg : '';
+      console.warn('[sidebar-weather] API 오류:', errMsg);
+      _renderWeatherWidget({ error: '날씨 로드 실패' });
+    }
+  } catch(e) {
+    console.warn('[sidebar-weather] 요청 실패:', e.message);
+    // 캐시 데이터가 있으면 만료되어도 표시
+    try {
+      var old = localStorage.getItem('bfl_weather_cache');
+      if (old) {
+        _renderWeatherWidget(JSON.parse(old).data);
+        return;
+      }
+    } catch(ex) {}
+    _renderWeatherWidget({ error: '날씨 로드 실패' });
+  }
+}
+
+// ============================================================
+// 5. 초기화 — DOM 준비 후 실행
 // ============================================================
 (function initSidebar() {
   function _init() {
     renderSidebar();
     _restoreSidebarState();
+    // 날씨 위젯 로드 (Firebase 준비 후)
+    if (typeof waitForFirebase === 'function') {
+      loadSidebarWeather();
+    } else {
+      // firebase-init.js 미로드 시 firebase-ready 이벤트 대기
+      window.addEventListener('firebase-ready', function() {
+        loadSidebarWeather();
+      });
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _init);

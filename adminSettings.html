@@ -86,6 +86,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       <div class="settings-tab active" onclick="showSettingsTab(0)">🚦 신호등 규칙</div>
       <div class="settings-tab" onclick="showSettingsTab(1)">🏅 등급 규칙</div>
       <div class="settings-tab" onclick="showSettingsTab(2)">📅 휴일 관리</div>
+      <div class="settings-tab" onclick="showSettingsTab(3)">🌤️ 날씨 설정</div>
     </div>
 
     <!-- ======================== 탭 0: 신호등 규칙 ======================== -->
@@ -247,6 +248,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
     <!-- ======================== 탭 2: 휴일 관리 ======================== -->
     <div class="tab-panel" id="panel-holiday">
+
       <div class="card">
         <div class="card-title">📅 휴일 관리</div>
         <p style="font-size:13px;color:#6b7280;margin-bottom:16px">등록된 휴일은 처리기한 계산(워킹데이) 시 제외됩니다. 주말(토/일)은 자동 제외됩니다.</p>
@@ -267,6 +269,59 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div class="holiday-grid" id="holiday-list"></div>
       </div>
     </div>
+
+    <!-- ======================== 탭 3: 날씨 설정 ======================== -->
+    <div class="tab-panel" id="panel-weather">
+      <div class="card">
+        <div class="card-title">🌤️ 사이드바 날씨 위젯 설정</div>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:20px">
+          사이드바 하단에 현재 날씨를 표시합니다. 공공데이터포털에서 기상청 단기예보 API 인증키를 발급받아 입력하세요.
+          <br><a href="https://www.data.go.kr/data/15084084/openapi.do" target="_blank" style="color:#2563eb;text-decoration:underline">공공데이터포털 바로가기</a>
+        </p>
+
+        <div style="display:flex;flex-direction:column;gap:16px;max-width:600px">
+          <div>
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">API 인증키 (Encoding)</label>
+            <input type="text" id="weather-api-key" placeholder="공공데이터포털에서 발급받은 인증키 입력" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+            <p style="font-size:11px;color:#9ca3af;margin-top:4px">마이페이지 > 인증키 발급현황 > 일반 인증키 (Encoding) 값을 사용하세요.</p>
+          </div>
+
+          <div>
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">지역 선택</label>
+            <select id="weather-region" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff">
+              <option value="">-- 지역을 선택하세요 --</option>
+              <option value="60,127">서울</option>
+              <option value="55,124">인천</option>
+              <option value="60,121">수원</option>
+              <option value="69,106">청주</option>
+              <option value="67,100">대전</option>
+              <option value="66,103">세종</option>
+              <option value="89,90">대구</option>
+              <option value="98,76">부산</option>
+              <option value="102,84">울산</option>
+              <option value="58,74">광주</option>
+              <option value="63,89">전주</option>
+              <option value="73,134">춘천</option>
+              <option value="92,131">강릉</option>
+              <option value="52,38">제주</option>
+              <option value="89,77">창원</option>
+              <option value="102,94">포항</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-top:20px">
+          <button class="btn btn-primary" onclick="saveWeatherSettings()">💾 저장</button>
+          <button class="btn btn-outline" onclick="testWeatherAPI()">🔍 API 테스트</button>
+        </div>
+
+        <div id="weather-test-result" style="margin-top:16px;display:none">
+          <div class="card" style="background:#f0fdf4;border-color:#86efac;margin-bottom:0">
+            <div id="weather-test-content" style="font-size:14px;color:#166534"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -284,7 +339,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 // ============================================================================
 // 탭 전환
 // ============================================================================
-const panels = ['panel-signal', 'panel-grade', 'panel-holiday'];
+const panels = ['panel-signal', 'panel-grade', 'panel-holiday', 'panel-weather'];
 function showSettingsTab(idx) {
     document.querySelectorAll('.settings-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
     panels.forEach((p,i) => document.getElementById(p).classList.toggle('active', i===idx));
@@ -613,6 +668,154 @@ async function addDefaultHolidays() {
 }
 
 // ============================================================================
+// 날씨 설정
+// ============================================================================
+const WEATHER_REGIONS = {
+    '60,127':'서울','55,124':'인천','60,121':'수원','69,106':'청주',
+    '67,100':'대전','66,103':'세종','89,90':'대구','98,76':'부산',
+    '102,84':'울산','58,74':'광주','63,89':'전주','73,134':'춘천',
+    '92,131':'강릉','52,38':'제주','89,77':'창원','102,94':'포항'
+};
+
+async function loadWeatherSettings() {
+    try {
+        var saved = await fsGetSettings('weatherSettings');
+        if (saved) {
+            if (saved.apiKey) document.getElementById('weather-api-key').value = saved.apiKey;
+            if (saved.nx && saved.ny) {
+                document.getElementById('weather-region').value = saved.nx + ',' + saved.ny;
+            }
+        }
+    } catch(e) { console.warn('날씨 설정 로드 실패:', e.message); }
+}
+
+async function saveWeatherSettings() {
+    var apiKey = document.getElementById('weather-api-key').value.trim();
+    var regionVal = document.getElementById('weather-region').value;
+    if (!apiKey) { toast('⚠️ API 인증키를 입력하세요'); return; }
+    if (!regionVal) { toast('⚠️ 지역을 선택하세요'); return; }
+    var parts = regionVal.split(',');
+    var city = WEATHER_REGIONS[regionVal] || '';
+    var data = {
+        apiKey: apiKey,
+        city: city,
+        nx: parseInt(parts[0]),
+        ny: parseInt(parts[1])
+    };
+    try {
+        await fsSaveSettings('weatherSettings', data);
+        // localStorage 캐시 클리어 (새 설정 즉시 반영)
+        try { localStorage.removeItem('bfl_weather_cache'); } catch(e){}
+        toast('✅ 날씨 설정이 저장되었습니다');
+    } catch(e) {
+        console.error('날씨 설정 저장 실패:', e);
+        toast('❌ 저장 실패: ' + e.message);
+    }
+}
+
+function getWeatherBaseTime() {
+    var now = new Date();
+    var hour = now.getHours();
+    var min = now.getMinutes();
+    // 초단기실황: 매시 정각 발표, API 제공은 약 40분 후
+    if (min < 40) hour = hour - 1;
+    if (hour < 0) hour = 23;
+    return String(hour).padStart(2, '0') + '00';
+}
+
+function getWeatherBaseDate(baseTime) {
+    var now = new Date();
+    // base_time이 2300인데 현재가 00시대면 어제 날짜
+    if (baseTime === '2300' && now.getHours() < 1) {
+        now.setDate(now.getDate() - 1);
+    }
+    var y = now.getFullYear();
+    var m = String(now.getMonth() + 1).padStart(2, '0');
+    var d = String(now.getDate()).padStart(2, '0');
+    return y + m + d;
+}
+
+function getWeatherIcon(pty) {
+    var p = parseInt(pty) || 0;
+    if (p === 1) return '🌧️';
+    if (p === 2) return '🌨️';
+    if (p === 3) return '❄️';
+    if (p === 5) return '💧';
+    if (p === 6) return '💧';
+    if (p === 7) return '🌨️';
+    // PTY 0 = 맑음 — 시간대별 아이콘
+    var h = new Date().getHours();
+    return (h >= 6 && h < 18) ? '☀️' : '🌙';
+}
+
+async function testWeatherAPI() {
+    var apiKey = document.getElementById('weather-api-key').value.trim();
+    var regionVal = document.getElementById('weather-region').value;
+    var resultDiv = document.getElementById('weather-test-result');
+    var contentDiv = document.getElementById('weather-test-content');
+
+    if (!apiKey) { toast('⚠️ API 인증키를 입력하세요'); return; }
+    if (!regionVal) { toast('⚠️ 지역을 선택하세요'); return; }
+
+    var parts = regionVal.split(',');
+    var nx = parts[0], ny = parts[1];
+    var city = WEATHER_REGIONS[regionVal] || '';
+    var baseTime = getWeatherBaseTime();
+    var baseDate = getWeatherBaseDate(baseTime);
+
+    contentDiv.textContent = '⏳ API 호출 중...';
+    resultDiv.style.display = 'block';
+    resultDiv.querySelector('.card').style.background = '#f3f4f6';
+    resultDiv.querySelector('.card').style.borderColor = '#d1d5db';
+
+    try {
+        var url = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst'
+            + '?serviceKey=' + encodeURIComponent(apiKey)
+            + '&dataType=JSON&numOfRows=10&pageNo=1'
+            + '&base_date=' + baseDate
+            + '&base_time=' + baseTime
+            + '&nx=' + nx + '&ny=' + ny;
+
+        var resp = await fetch(url);
+        var json = await resp.json();
+
+        if (json.response && json.response.header && json.response.header.resultCode === '00') {
+            var items = json.response.body.items.item;
+            var data = {};
+            items.forEach(function(item) { data[item.category] = item.obsrValue; });
+
+            var icon = getWeatherIcon(data.PTY);
+            var temp = data.T1H || '-';
+            var hum = data.REH || '-';
+            var wind = data.WSD || '-';
+            var pty = parseInt(data.PTY) || 0;
+            var ptyText = ['맑음','비','비/눈','눈','','빗방울','빗방울눈날림','눈날림'][pty] || '맑음';
+
+            contentDiv.innerHTML = '<div style="font-size:18px;font-weight:700;margin-bottom:8px">' + icon + ' ' + city + ' 현재 날씨</div>'
+                + '<div style="display:flex;gap:24px;flex-wrap:wrap">'
+                + '<span>🌡️ 기온: <b>' + temp + '°C</b></span>'
+                + '<span>💧 습도: <b>' + hum + '%</b></span>'
+                + '<span>🌬️ 풍속: <b>' + wind + 'm/s</b></span>'
+                + '<span>☁️ 상태: <b>' + ptyText + '</b></span>'
+                + '</div>'
+                + '<div style="font-size:11px;color:#6b7280;margin-top:8px">기준시각: ' + baseDate + ' ' + baseTime + '</div>';
+
+            resultDiv.querySelector('.card').style.background = '#f0fdf4';
+            resultDiv.querySelector('.card').style.borderColor = '#86efac';
+        } else {
+            var errMsg = (json.response && json.response.header) ? json.response.header.resultMsg : 'Unknown error';
+            contentDiv.innerHTML = '❌ API 오류: ' + errMsg;
+            resultDiv.querySelector('.card').style.background = '#fef2f2';
+            resultDiv.querySelector('.card').style.borderColor = '#fca5a5';
+        }
+    } catch(e) {
+        contentDiv.innerHTML = '❌ 요청 실패: ' + e.message;
+        resultDiv.querySelector('.card').style.background = '#fef2f2';
+        resultDiv.querySelector('.card').style.borderColor = '#fca5a5';
+    }
+}
+
+// ============================================================================
 // 초기화 — Firebase 준비 후 데이터 로드
 // ============================================================================
 window.addEventListener('firebase-ready', async function() {
@@ -620,6 +823,7 @@ window.addEventListener('firebase-ready', async function() {
     await loadSignalRules();
     await loadGradeRules();
     await renderHolidays();
+    await loadWeatherSettings();
 });
 // Firebase 이미 준비된 경우 (캐시 등)
 window.onload = async function() {
@@ -627,6 +831,7 @@ window.onload = async function() {
         await loadSignalRules();
         await loadGradeRules();
         await renderHolidays();
+        await loadWeatherSettings();
     }
 };
 </script>
