@@ -819,6 +819,25 @@ function buildUniqueItems(apiData) {
   return Array.from(seen.values());
 }
 
+// --- ILAB 데이터에서 항목→담당자 매핑 로드 ---
+async function loadIlabManagerMap() {
+  try {
+    // foodTypesIlab은 개별 문서 구조 (ilab_0, ilab_1, ...)
+    var snap = await db.collection('foodTypesIlab').get();
+    var map = {};
+    snap.docs.forEach(function(d) {
+      var r = d.data();
+      var name = (r['항목명'] || '').trim();
+      var mgr = (r['항목담당자'] || '').trim();
+      if (name && mgr && !map[name]) {
+        map[name] = mgr;
+      }
+    });
+    console.log('[항목배정] ILAB 담당자 매핑: ' + Object.keys(map).length + '건');
+    return map;
+  } catch(e) { console.warn('ILAB 담당자 매핑 로드 실패:', e); return {}; }
+}
+
 // --- Firestore 배정 데이터 저장/로드 ---
 async function loadSavedAssignments() {
   try {
@@ -862,10 +881,23 @@ async function init() {
   // I2580 API 데이터 로드
   var apiData = await loadApiDataFromFirestore('I2580');
 
+  // ILAB 데이터에서 항목→담당자 매핑 로드
+  var ilabMgrMap = await loadIlabManagerMap();
+
   // 중복 제거된 항목 목록 생성
   allItems = buildUniqueItems(apiData);
 
-  // 저장된 배정 정보 병합
+  // 1단계: ILAB 담당자 매핑 적용 (기본 매핑)
+  allItems.forEach(function(item) {
+    if (ilabMgrMap[item.item]) {
+      var mgrName = ilabMgrMap[item.item];
+      var mgrObj = MANAGERS.find(function(m) { return m.name === mgrName; });
+      item.manager = mgrName;
+      item.team = mgrObj ? mgrObj.team : null;
+    }
+  });
+
+  // 2단계: 수동 저장된 배정 정보로 덮어쓰기 (사용자가 직접 변경한 것 우선)
   var saved = await loadSavedAssignments();
   allItems.forEach(function(item) {
     if (saved[item.item]) {
