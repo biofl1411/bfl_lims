@@ -259,42 +259,15 @@ function calcCustomerScore(customer) {
 
 /**
  * 미수금 기반 신호등 자동 계산
- * changeLog의 receivable 필드에서 미수금 경과일을 계산하여 색상 결정
+ * 접수 데이터에서 미수금(수수료>0 & 결제일 없음)을 집계하여 경과일 기반 색상 결정
+ * @param {Object} receivableInfo - { oldestDate: '2026-01-15', totalAmount: 712800 }
+ * @returns {string} 신호등 색상 (green/blue/yellow/orange/red)
  */
-function calcTrafficLight(company) {
-    var logs = company.changeLog || [];
-    // changeLog 없으면 저장된 값 또는 green
-    if (logs.length === 0) return company.trafficLight || 'green';
+function calcTrafficLight(receivableInfo) {
+    if (!receivableInfo || receivableInfo.totalAmount === 0 || !receivableInfo.oldestDate) return 'green';
 
-    // changeLog를 시간순 정렬
-    var sorted = logs.slice().sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
-
-    // 미수금 이력 추적
-    var firstDebtDate = null;
-    var latestReceivable = 0;
-    var hasReceivableData = false;
-
-    for (var i = 0; i < sorted.length; i++) {
-        if (sorted[i].receivable === undefined && sorted[i].receivable === null) continue;
-        var recvText = (sorted[i].receivable || '0').toString().replace(/[,원\s]/g, '');
-        var recv = parseInt(recvText) || 0;
-        if (sorted[i].receivable !== undefined) hasReceivableData = true;
-        if (recv > 0 && !firstDebtDate) {
-            firstDebtDate = sorted[i].date; // 미수금 발생 시작일
-        }
-        if (recv === 0) {
-            firstDebtDate = null; // 미수금 해소 → 리셋
-        }
-        latestReceivable = recv;
-    }
-
-    // 미수금 데이터 자체가 없으면 저장된 trafficLight 또는 기본값
-    if (!hasReceivableData) return company.trafficLight || 'green';
-    // 미수금 없음 → green
-    if (latestReceivable === 0 || !firstDebtDate) return 'green';
-
-    // 경과일 계산
-    var debtStart = new Date(firstDebtDate.split(' ')[0]);
+    // 가장 오래된 미수금 접수일로부터 경과일 계산
+    var debtStart = new Date(receivableInfo.oldestDate);
     var now = new Date();
     var days = Math.floor((now - debtStart) / (1000 * 60 * 60 * 24));
 
@@ -306,6 +279,9 @@ function calcTrafficLight(company) {
     if (days <= rules.orangeMax) return 'orange';
     return 'red';
 }
+
+// 거래처별 미수금 집계 맵 (loadReceipts에서 구축)
+var _companyReceivables = {}; // companyKey → { oldestDate, totalAmount }
 
 /**
  * 복합 매칭: 접수 데이터에서 거래처 찾기
@@ -390,15 +366,35 @@ async function loadReceipts() {
         });
 
         var rawReceipts = await fsGetReceipts({ limit: 500 });
-        // 시료별 행 펼침: 접수 1건 → 시료 수만큼 행 생성
+
+        // ── 1단계: 거래처별 미수금 집계 (수수료>0 & 결제일 없음 = 미수금) ──
+        _companyReceivables = {};
+        rawReceipts.forEach(function(r) {
+            var cust = findCompanyForReceipt(r);
+            if (!cust) return;
+            var key = cust.id || (cust.company || '').trim();
+            if (!_companyReceivables[key]) _companyReceivables[key] = { oldestDate: null, totalAmount: 0 };
+            var fee = r.feeTotal || 0;
+            var hasPaid = !!(r.payDate); // 결제일이 있으면 결제 완료
+            if (fee > 0 && !hasPaid) {
+                _companyReceivables[key].totalAmount += fee;
+                var rd = r.receiptDate || '';
+                if (rd && (!_companyReceivables[key].oldestDate || rd < _companyReceivables[key].oldestDate)) {
+                    _companyReceivables[key].oldestDate = rd;
+                }
+            }
+        });
+
+        // ── 2단계: 시료별 행 펼침 ──
         _allReceipts = [];
         rawReceipts.forEach(function(r) {
             if (r.reportSend && Array.isArray(r.reportSend)) {
                 r.reportSendText = r.reportSend.join(', ');
             }
-            // 거래처 복합 매칭 → 신호등(미수금 자동 계산)/등급
+            // 거래처 복합 매칭 → 신호등(미수금 접수 데이터 기반)/등급
             var cust = findCompanyForReceipt(r);
-            var trafficLight = cust ? calcTrafficLight(cust) : '';
+            var custKey = cust ? (cust.id || (cust.company || '').trim()) : '';
+            var trafficLight = cust ? calcTrafficLight(_companyReceivables[custKey]) : '';
             var grade = '';
             if (cust) { try { grade = calcCustomerScore(cust).grade; } catch(e) {} }
             // 수수료 계산 (공급가액/세액/총계)
@@ -547,7 +543,18 @@ function renderTable() {
             } else if (col.key === 'trafficLight') {
                 if (val) {
                     var tlLabels = {green:'정상',blue:'양호',yellow:'주의',orange:'경고',red:'위험'};
-                    val = '<span class="tl tl-' + val + '" data-tooltip="수금상태: ' + (tlLabels[val]||val) + '"></span>';
+                    // 미수금 상세 정보 툴팁
+                    var cust2 = findCompanyForReceipt(r);
+                    var custKey2 = cust2 ? (cust2.id || (cust2.company||'').trim()) : '';
+                    var recv2 = _companyReceivables[custKey2];
+                    var tipText = '수금상태: ' + (tlLabels[val]||val);
+                    if (recv2 && recv2.totalAmount > 0) {
+                        var days2 = Math.floor((new Date() - new Date(recv2.oldestDate)) / 86400000);
+                        tipText += '\n미수금: ' + recv2.totalAmount.toLocaleString() + '원\n경과: ' + days2 + '일';
+                    } else {
+                        tipText += '\n미수금 없음';
+                    }
+                    val = '<span class="tl tl-' + val + '" data-tooltip="' + tipText + '"></span>';
                 } else { val = '-'; }
             } else if (col.key === 'grade') {
                 if (val) {
