@@ -1667,6 +1667,16 @@ const pageNames = {
 // ============================================================
 var _cachedGradeRules = null;
 var _cachedSignalRules = null;
+// 복합 매칭 맵 (인허가 기준)
+var _companyByBizNo = {};
+var _companyByLicNo = {};
+var _companyByLicName = {};
+var _companyByName2 = {};
+// 접수 데이터 기반 계산 결과
+var _companyReceivables = {};    // companyKey → { oldestDate, totalAmount }
+var _companyReceiptStats = {};   // companyKey → { annualRevenue, monthlyFrequency, tradeDuration }
+var _companyTrafficLight = {};   // companyKey → 'green'|'blue'|..
+var _rawReceipts = [];           // 캐시된 접수 데이터
 
 function getGradeRules() {
     if (_cachedGradeRules) return _cachedGradeRules;
@@ -1689,14 +1699,154 @@ function getSignalRules() {
     };
 }
 
-function calcCustomerScore(customer) {
+/**
+ * 복합 매칭: 접수 데이터에서 거래처 찾기
+ * 우선순위: 사업자번호 → 인허가번호 → 인허가영업소명 → 회사명
+ */
+function findCompanyForReceipt(r) {
+    return _companyByBizNo[(r.bizNo || '').trim()]
+        || _companyByLicNo[(r.licNo || '').trim()]
+        || _companyByLicName[(r.companyName || '').trim()]
+        || _companyByName2[(r.companyName || '').trim()]
+        || null;
+}
+
+/**
+ * 미수금 기반 신호등 자동 계산
+ * @param {Object} receivableInfo - { oldestDate, totalAmount }
+ * @returns {string} 신호등 색상
+ */
+function calcTrafficLight(receivableInfo) {
+    if (!receivableInfo || receivableInfo.totalAmount === 0 || !receivableInfo.oldestDate) return 'green';
+    var debtStart = new Date(receivableInfo.oldestDate);
+    var now = new Date();
+    var days = Math.floor((now - debtStart) / (1000 * 60 * 60 * 24));
+    var rules = getSignalRules();
+    if (days <= rules.green) return 'green';
+    if (days <= rules.blueMax) return 'blue';
+    if (days <= rules.yellowMax) return 'yellow';
+    if (days <= rules.orangeMax) return 'orange';
+    return 'red';
+}
+
+/**
+ * 거래처별 접수 통계 계산
+ * @param {string} companyKey - 거래처 키
+ * @param {Array} receipts - 전체 접수 데이터
+ */
+function calcReceiptStats(companyKey, receipts) {
+    var now = new Date();
+    var oneYearAgo = new Date(now);
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    var oneYearAgoStr = oneYearAgo.toISOString().slice(0, 10);
+
+    var totalFeeLastYear = 0;
+    var receiptDates = [];
+    var monthSet = {};
+
+    for (var i = 0; i < receipts.length; i++) {
+        var r = receipts[i];
+        var cust = findCompanyForReceipt(r);
+        if (!cust) continue;
+        var key = cust.id || (cust.company || '').trim();
+        if (key !== companyKey) continue;
+
+        var rd = r.receiptDate || '';
+        if (rd) receiptDates.push(rd);
+
+        if (rd >= oneYearAgoStr) {
+            totalFeeLastYear += (r.feeTotal || 0);
+            var ym = rd.slice(0, 7);
+            monthSet[ym] = (monthSet[ym] || 0) + 1;
+        }
+    }
+
+    var annualRevenue = Math.round(totalFeeLastYear / 10000);
+    var monthKeys = Object.keys(monthSet);
+    var monthlyFrequency = monthKeys.length > 0 ? Math.round(monthKeys.reduce(function(s, k) { return s + monthSet[k]; }, 0) / monthKeys.length) : 0;
+    var tradeDuration = 0;
+    if (receiptDates.length > 0) {
+        receiptDates.sort();
+        var firstDate = new Date(receiptDates[0]);
+        tradeDuration = Math.max(0, Math.round((now - firstDate) / (1000 * 60 * 60 * 24 * 365) * 10) / 10);
+    }
+
+    return { annualRevenue: annualRevenue, monthlyFrequency: monthlyFrequency, tradeDuration: tradeDuration };
+}
+
+/**
+ * 접수 데이터 로드 및 거래처별 미수금/통계/신호등 계산
+ * @param {Array} companies - 거래처 목록
+ */
+async function loadReceiptDataForCompanies(companies) {
+    // 복합 매칭 맵 구축
+    _companyByBizNo = {}; _companyByLicNo = {}; _companyByLicName = {}; _companyByName2 = {};
+    companies.forEach(function(c) {
+        if (c.bizNo) _companyByBizNo[c.bizNo.trim()] = c;
+        var name = (c.company || c.name || '').trim();
+        if (name) _companyByName2[name] = c;
+        (c.licenses || []).forEach(function(lic) {
+            if (lic.licNo) _companyByLicNo[lic.licNo.trim()] = c;
+            if (lic.licBizName) _companyByLicName[lic.licBizName.trim()] = c;
+        });
+    });
+
+    // 접수 데이터 로드
+    try {
+        _rawReceipts = await fsGetReceipts({ limit: 5000 });
+    } catch(e) {
+        console.warn('접수 데이터 로드 실패:', e);
+        _rawReceipts = [];
+    }
+
+    // 미수금 집계 (수수료>0 & 결제일 없음 = 미수금)
+    _companyReceivables = {};
+    _rawReceipts.forEach(function(r) {
+        var cust = findCompanyForReceipt(r);
+        if (!cust) return;
+        var key = cust.id || (cust.company || '').trim();
+        if (!_companyReceivables[key]) _companyReceivables[key] = { oldestDate: null, totalAmount: 0 };
+        var fee = r.feeTotal || 0;
+        var hasPaid = !!(r.payDate);
+        if (fee > 0 && !hasPaid) {
+            _companyReceivables[key].totalAmount += fee;
+            var rd = r.receiptDate || '';
+            if (rd && (!_companyReceivables[key].oldestDate || rd < _companyReceivables[key].oldestDate)) {
+                _companyReceivables[key].oldestDate = rd;
+            }
+        }
+    });
+
+    // 접수 통계 + 신호등 계산
+    _companyReceiptStats = {};
+    _companyTrafficLight = {};
+    var processedKeys = {};
+    companies.forEach(function(c) {
+        var key = c.id || (c.company || '').trim();
+        if (!processedKeys[key]) {
+            processedKeys[key] = true;
+            _companyReceiptStats[key] = calcReceiptStats(key, _rawReceipts);
+            _companyTrafficLight[key] = calcTrafficLight(_companyReceivables[key]);
+        }
+    });
+}
+
+/**
+ * 고객 등급 점수 계산 (접수 데이터 기반)
+ * @param {Object} customer - 거래처 데이터
+ * @param {Object} [receiptStats] - 접수 통계
+ * @param {string} [computedTrafficLight] - 미수금 기반 계산된 신호등
+ */
+function calcCustomerScore(customer, receiptStats, computedTrafficLight) {
     var rules = getGradeRules();
     var detail = {};
     var total = 0;
+    var stats = receiptStats || {};
+    var tl = computedTrafficLight || customer.trafficLight || 'green';
 
-    // 1. 연간 매출액
+    // 1. 연간 매출액 (접수 데이터 기반)
     var rev = rules.revenue || { scores:[5,10,20,30,40], thresholds:[1000,3000,5000,10000] };
-    var revVal = customer.annualRevenue || 0;
+    var revVal = stats.annualRevenue || customer.annualRevenue || 0;
     var revScore = rev.scores[0];
     for (var i = rev.thresholds.length - 1; i >= 0; i--) {
         if (revVal >= rev.thresholds[i]) { revScore = rev.scores[i + 1]; break; }
@@ -1704,9 +1854,9 @@ function calcCustomerScore(customer) {
     detail.revenue = { label:'연간매출액', value: Number(revVal).toLocaleString() + '만원', score: revScore, max: rev.scores[rev.scores.length-1] };
     total += revScore;
 
-    // 2. 거래 빈도
+    // 2. 거래 빈도 (접수 데이터 기반)
     var freq = rules.frequency || { scores:[5,10,15,20,25], thresholds:[1,3,5,10] };
-    var freqVal = customer.monthlyFrequency || 0;
+    var freqVal = stats.monthlyFrequency || customer.monthlyFrequency || 0;
     var freqScore = freq.scores[0];
     for (var i = freq.thresholds.length - 1; i >= 0; i--) {
         if (freqVal >= freq.thresholds[i]) { freqScore = freq.scores[i + 1]; break; }
@@ -1714,9 +1864,9 @@ function calcCustomerScore(customer) {
     detail.frequency = { label:'거래빈도', value: '월 ' + freqVal + '건', score: freqScore, max: freq.scores[freq.scores.length-1] };
     total += freqScore;
 
-    // 3. 거래 기간
+    // 3. 거래 기간 (접수 데이터 기반)
     var dur = rules.duration || { scores:[3,6,9,12,15], thresholds:[1,2,3,5] };
-    var durVal = customer.tradeDuration || 0;
+    var durVal = stats.tradeDuration || customer.tradeDuration || 0;
     var durScore = dur.scores[0];
     for (var i = dur.thresholds.length - 1; i >= 0; i--) {
         if (durVal >= dur.thresholds[i]) { durScore = dur.scores[i + 1]; break; }
@@ -1724,13 +1874,13 @@ function calcCustomerScore(customer) {
     detail.duration = { label:'거래기간', value: durVal + '년', score: durScore, max: dur.scores[dur.scores.length-1] };
     total += durScore;
 
-    // 4. 결제 신뢰도 (신호등 매핑: green=최고, red=최저)
+    // 4. 결제 신뢰도 (미수금 기반 계산된 신호등 사용)
     var pay = rules.payment || { scores:[3,6,9,12,15] };
     var tlMap = { red:0, orange:1, yellow:2, blue:3, green:4 };
-    var tlIdx = tlMap[customer.trafficLight] !== undefined ? tlMap[customer.trafficLight] : 3;
+    var tlIdx = tlMap[tl] !== undefined ? tlMap[tl] : 4;
     var payScore = pay.scores[tlIdx];
     var tlLabels = { green:'정상', blue:'양호', yellow:'주의', orange:'경고', red:'위험' };
-    detail.payment = { label:'결제신뢰도', value: tlLabels[customer.trafficLight] || '양호', score: payScore, max: pay.scores[pay.scores.length-1] };
+    detail.payment = { label:'결제신뢰도', value: tlLabels[tl] || '정상', score: payScore, max: pay.scores[pay.scores.length-1] };
     total += payScore;
 
     // 5. 담당부서
@@ -1769,18 +1919,25 @@ function calcCustomerScore(customer) {
 var COLUMNS = [
   { key:'trafficLight', label:'신호등', defaultVisible:true, render:function(c){
     var sr = getSignalRules();
-    var tipMap = {
-      green: '정상: 미수금 없음 또는 ' + sr.green + '일 이내',
-      blue: '양호: 미수금 경과 ' + sr.blueMin + '~' + sr.blueMax + '일',
-      yellow: '주의: 미수금 경과 ' + sr.yellowMin + '~' + sr.yellowMax + '일',
-      orange: '경고: 미수금 경과 ' + sr.orangeMin + '~' + sr.orangeMax + '일',
-      red: '위험: 미수금 경과 ' + sr.redMin + '일 이상'
-    };
-    var tip = tipMap[c.trafficLight] || '';
-    return '<td class="center"><span class="tl tl-' + (c.trafficLight||'blue') + '" data-tooltip="' + tip + '"></span></td>';
+    var custKey = c.id || (c.company || '').trim();
+    var tl = _companyTrafficLight[custKey] || 'green';
+    var recv = _companyReceivables[custKey];
+    var tipText = '';
+    var tlLabels2 = {green:'정상',blue:'양호',yellow:'주의',orange:'경고',red:'위험'};
+    tipText = '수금상태: ' + (tlLabels2[tl]||tl);
+    if (recv && recv.totalAmount > 0) {
+      var days2 = Math.floor((new Date() - new Date(recv.oldestDate)) / 86400000);
+      tipText += '\n미수금: ' + recv.totalAmount.toLocaleString() + '원\n경과: ' + days2 + '일';
+    } else {
+      tipText += '\n미수금 없음';
+    }
+    return '<td class="center"><span class="tl tl-' + tl + '" data-tooltip="' + tipText + '"></span></td>';
   }},
   { key:'grade', label:'등급', defaultVisible:true, render:function(c){
-    var si = calcCustomerScore(c);
+    var custKey = c.id || (c.company || '').trim();
+    var stats = _companyReceiptStats[custKey] || {};
+    var tl = _companyTrafficLight[custKey] || 'green';
+    var si = calcCustomerScore(c, stats, tl);
     var d = si.detail;
     var tip = '총점: ' + si.total + '/105\n'
       + d.revenue.label + ': ' + d.revenue.score + '/' + d.revenue.max + ' (' + d.revenue.value + ')\n'
@@ -1796,7 +1953,7 @@ var COLUMNS = [
       'B':'<span class="tag tag-b" data-tooltip="' + tip + '">B</span>',
       'C':'<span class="tag tag-c" data-tooltip="' + tip + '">C</span>'
     };
-    return '<td>' + (t[g] || t['B']) + '</td>';
+    return '<td>' + (t[g] || t['C']) + '</td>';
   }},
   { key:'company', label:'회사명', defaultVisible:true, render:function(c){ return '<td><strong>'+(c.company||'')+'</strong></td>'; }},
   { key:'repName', label:'대표자', defaultVisible:true, render:function(c){ return '<td>'+(c.repName||'-')+'</td>'; }},
@@ -2236,6 +2393,13 @@ async function loadCustomers() {
     console.warn('Firestore 업체 로드 실패:', e.message);
   }
 
+  // ── 접수 데이터 로드 → 미수금/통계/신호등 계산 ──
+  try {
+    await loadReceiptDataForCompanies(allCustomers);
+  } catch(e) {
+    console.warn('접수 데이터 기반 계산 실패:', e.message);
+  }
+
   // ── 검색 필터 ──
   var q = _custSearchQuery.toLowerCase().trim();
   var filtered = allCustomers;
@@ -2253,9 +2417,11 @@ async function loadCustomers() {
   tbody.innerHTML = '';
   filtered.forEach(function(c) {
     var tr = document.createElement('tr');
-    // 신호등에 따른 행 배경색
-    if (c.trafficLight === 'orange') tr.style.background = '#fff8e1';
-    if (c.trafficLight === 'red') tr.style.background = '#fce4ec';
+    // 신호등에 따른 행 배경색 (접수 데이터 기반 계산된 값 사용)
+    var custKey = c.id || (c.company || '').trim();
+    var rowTL = _companyTrafficLight[custKey] || 'green';
+    if (rowTL === 'orange') tr.style.background = '#fff8e1';
+    if (rowTL === 'red') tr.style.background = '#fce4ec';
     if (c.id) {
       tr.setAttribute('data-cust-id', c.id);
       tr.style.cursor = 'pointer';
