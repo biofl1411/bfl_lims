@@ -398,6 +398,10 @@ td {
 
 <div class="app-layout">
   <aside class="sidebar" id="sidebar"></aside>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-init.js"></script>
   <script src="js/sidebar.js?v=2"></script>
 
   <div class="main-container">
@@ -411,8 +415,13 @@ td {
     <main class="main-content">
       <div class="stats-row">
         <div class="stat-card">
+          <div class="stat-icon" style="background: #e8eaf6; color: #3949ab;">📋</div>
+          <div class="stat-value" style="color: #3949ab;" id="stat-total">0</div>
+          <div class="stat-label">전체 항목</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-icon" style="background: var(--success-light); color: var(--success);">✅</div>
-          <div class="stat-value" style="color: var(--success);" id="stat-assigned">100</div>
+          <div class="stat-value" style="color: var(--success);" id="stat-assigned">0</div>
           <div class="stat-label">배정 완료</div>
         </div>
         <div class="stat-card">
@@ -422,7 +431,7 @@ td {
         </div>
         <div class="stat-card">
           <div class="stat-icon" style="background: #fef3c7; color: var(--warning);">👥</div>
-          <div class="stat-value" style="color: var(--warning);">56</div>
+          <div class="stat-value" style="color: var(--warning);" id="stat-managers">0</div>
           <div class="stat-label">담당자 수</div>
         </div>
       </div>
@@ -450,7 +459,7 @@ td {
 
         <div class="toolbar-row">
           <div class="search-box">
-            <input type="text" id="search-input" placeholder="검체유형, 항목명 검색..." oninput="filterData()">
+            <input type="text" id="search-input" placeholder="항목명 검색..." oninput="filterData()">
           </div>
           <button class="btn btn-outline" onclick="showBulkAssignModal()">📋 일괄 배정</button>
           <button class="btn btn-warning" onclick="showTeamChangeModal()">🔄 팀 변경</button>
@@ -468,9 +477,7 @@ td {
                 <th style="width: 50px;"><input type="checkbox" id="select-all" onchange="toggleSelectAll()"></th>
                 <th style="width: 60px;">No.</th>
                 <th style="width: 80px;">분야</th>
-                <th style="width: 150px;">검체유형</th>
                 <th>항목명</th>
-                <th style="width: 250px;">규격</th>
                 <th style="width: 250px;">담당자</th>
                 <th style="width: 100px;">작업</th>
               </tr>
@@ -767,1111 +774,75 @@ const MANAGERS = [
   }
 ];
 
-const SAMPLE_ITEMS = [
-  {
-    "id": "F1",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "조미김",
-    "item": "산가",
-    "spec": "4.0 이하(유처리한 김에 한한다)",
-    "unit": "mg KOH/g",
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F2",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "조미김",
-    "item": "타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F3",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타수산물가공품",
-    "item": "이물",
-    "spec": "적합하여야 한다",
-    "unit": NaN,
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F4",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타수산물가공품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (비살균제품 중 더 이상 가공,가열 조리를 하지 않고 그대로 섭취하는 제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F5",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타농산가공품",
-    "item": "이물",
-    "spec": "적합하여야 한다",
-    "unit": NaN,
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F6",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타농산가공품",
-    "item": "산가",
-    "spec": "5.0 이하 (유탕,유처리식품에 한한다)",
-    "unit": "mg KOH/g",
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F7",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타농산가공품",
-    "item": "과산화물가",
-    "spec": "60 이하 (유탕,유처리식품에 한한다)",
-    "unit": "meq/kg",
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F8",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타농산가공품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (더 이상 가공,가열조리를 하지 않고 그대로 섭취하는 비살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F9",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "체중조절용조제식품",
-    "item": "대장균군",
-    "spec": "n=5, c=2, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F10",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "체중조절용조제식품",
-    "item": "바실루스 세레우스",
-    "spec": "n=5, c=0, m=100",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F11",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "체중조절용조제식품",
-    "item": "대장균",
-    "spec": "n=5, c=2, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F12",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "당뇨환자용식단형식품",
-    "item": "타르색소",
-    "spec": "불검출",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F13",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "당뇨환자용식단형식품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (살균제품은 제외한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F14",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "당뇨환자용식단형식품",
-    "item": "황색포도상구균",
-    "spec": "1g당 100 이하",
-    "unit": "CFU/g",
-    "manager": "권혜원",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F15",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "당뇨환자용식단형식품",
-    "item": "살모넬라",
-    "spec": "n=5, c=0, m=0/25g",
-    "unit": NaN,
-    "manager": "이진아",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F16",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "당뇨환자용식단형식품",
-    "item": "장출혈성대장균",
-    "spec": "n=5, c=0, m=0/25g",
-    "unit": NaN,
-    "manager": "이종훈",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F17",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "프로바이오틱스",
-    "item": "성상",
-    "spec": "고유의 색택과 향미를 가지며 이미,이취가 없어야 함",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F18",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "프로바이오틱스",
-    "item": "프로바이오틱스 수",
-    "spec": "표시량 이상",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F19",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "프로바이오틱스",
-    "item": "대장균군",
-    "spec": "음성",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F20",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "성상",
-    "spec": "고유의 색택과 향미를 가지며 이미,이취가 없어야 함",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F21",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "비타민 E",
-    "spec": "표시량의 80 ~ 150%",
-    "unit": "%",
-    "manager": "",
-    "team": ""
-  },
-  {
-    "id": "F22",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "비타민 D",
-    "spec": "표시량의 80 ~ 180%",
-    "unit": "%",
-    "manager": "문유진",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F23",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "비타민 C",
-    "spec": "표시량의 80 ~ 150%",
-    "unit": "%",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F24",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "엽산",
-    "spec": "표시량의 80 ~ 150%",
-    "unit": "%",
-    "manager": "문유진",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F25",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "비타민 A",
-    "spec": "표시량의 80 ~ 150%",
-    "unit": "%",
-    "manager": "",
-    "team": ""
-  },
-  {
-    "id": "F26",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "프로바이오틱스 수",
-    "spec": "표시량 이상",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F27",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "비타민 E, 비타민 D, 비타",
-    "item": "대장균군",
-    "spec": "음성",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F28",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "성상",
-    "spec": "제품은 고유의 형태, 색택을 가지고 이미,이취가 없어야 한다",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F29",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "보존료",
-    "spec": "0.05 이하 (소브산으로서)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F30",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "그외 보존료",
-    "spec": "검출되어서는 아니된다",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F31",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "대장균군",
-    "spec": "n=5, c=1, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F32",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "프로바이오틱스 수",
-    "spec": "표시량 이상",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F33",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "식이섬유",
-    "spec": "표시량의 80% 이상 (최종제품)",
-    "unit": "%",
-    "manager": "박영주",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F34",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "살모넬라",
-    "spec": "n=5, c=0, m=0/25g",
-    "unit": NaN,
-    "manager": "이진아",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F35",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "황색포도상구균",
-    "spec": "n=5, c=0, m=0/25g",
-    "unit": NaN,
-    "manager": "권혜원",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F36",
-    "category": "식품유형",
-    "division": "축산",
-    "type": "유산균음료(기능성표시식품)",
-    "item": "리스테리아모노사이토제네스",
-    "spec": "n=5, c=0, m=0/25g",
-    "unit": NaN,
-    "manager": "김선화",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F37",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "성상",
-    "spec": "적합하여야 한다",
-    "unit": NaN,
-    "manager": "최주리",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F38",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "이물",
-    "spec": "적합하여야 한다",
-    "unit": NaN,
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F39",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "금속성이물",
-    "spec": "10.0 미만",
-    "unit": "mg/kg",
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F40",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "금속성이물",
-    "spec": "2 미만",
-    "unit": "mm",
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F41",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (비살균제품 중 더 이상 가공,가열 조리를 하지 않고 그대로 섭취하는 제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F42",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "잼",
-    "item": "총아플라톡신",
-    "spec": "15.0 이하 (B1, B2, G1 및 G2의 합으로서)",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F43",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "잼",
-    "item": "아플라톡신B1",
-    "spec": "10.0 이하",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F44",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "납",
-    "spec": "0.05 이하",
-    "unit": "mg/kg",
-    "manager": "김대성",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F45",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "카드뮴",
-    "spec": "0.1 이하",
-    "unit": "mg/kg",
-    "manager": "김대성",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F46",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "세균수",
-    "spec": "n=5, c=1, m=100, M=1,000",
-    "unit": NaN,
-    "manager": "신경석",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F47",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "대장균군",
-    "spec": "n=5, c=1, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F48",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "보존료",
-    "spec": "0.6 이하 (안식향산으로서)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F49",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "보존료",
-    "spec": "1.0 이하 (소브산으로서)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F50",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "보존료",
-    "spec": "1.0 이하 (병용할때에는 소브산으로서 사용량과 안식향산으로서 사용량의 합계가 1.0g/kg 이하이어야 하고, 그 중 안식향산으로서의 사용량은 0.6g/kg 이하)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F51",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채주스",
-    "item": "그외 보존료",
-    "spec": "검출되어서는 아니된다",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F52",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "발효식초",
-    "item": "총산(초산으로서)",
-    "spec": "4.0 ~ 20.0",
-    "unit": "w/v%",
-    "manager": "김고은",
-    "team": "분석실 이화학 2팀"
-  },
-  {
-    "id": "F53",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "발효식초",
-    "item": "타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F54",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "발효식초",
-    "item": "보존료",
-    "spec": "0.1 이하 (파라옥시안식향산으로서)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F55",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "발효식초",
-    "item": "그외 보존료",
-    "spec": "검출되어서는 아니된다",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F56",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "복합조미식품",
-    "item": "허용외 타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F57",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "복합조미식품",
-    "item": "대장균",
-    "spec": "n=5, c=2, m=0, M=10 (비살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F58",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채가공품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (비살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F59",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과.채가공품",
-    "item": "세균수",
-    "spec": "n=5, c=2, m=1,000,000, M=5,000,000",
-    "unit": NaN,
-    "manager": "신경석",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F60",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "만두",
-    "item": "사카린나트륨",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "안준이",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F61",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "만두",
-    "item": "세균수",
-    "spec": "n=5, c=2, m=1,000,000, M=5,000,000",
-    "unit": NaN,
-    "manager": "신경석",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F62",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "만두",
-    "item": "대장균",
-    "spec": "n=5, c=2, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F63",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "세균수",
-    "spec": "n=5, c=2, m=1,000,000, M=5,000,000",
-    "unit": NaN,
-    "manager": "신경석",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F64",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "대장균",
-    "spec": "n=5, c=2, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F65",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "총아플라톡신",
-    "spec": "15.0 이하 (B1, B2, G1 및 G2의 합으로서)",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F66",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타가공품",
-    "item": "아플라톡신B1",
-    "spec": "10.0 이하",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F67",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "허용외 타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F68",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "보존료",
-    "spec": "1.0 이하 (소브산으로서)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F69",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "보존료",
-    "spec": "0.2 이하 (파라옥시안식향산으로서)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F70",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "보존료",
-    "spec": "1.0 이하 (병용할 때에는 소브산으로서 사용량과 파라옥시안식향산으로서 사용량의 합계가 1.0g/kg 이하이어야 하며, 그 중 파라옥시안식향산으로서의 사용량은 0.2g/kg 이하)",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F71",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "그외 보존료",
-    "spec": "검출되어서는 아니된다",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F72",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (비살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F73",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "신선편의식품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=10, M=100",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F74",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "신선편의식품",
-    "item": "황색포도상구균",
-    "spec": "n=5, c=1, m=100, M=1,000",
-    "unit": NaN,
-    "manager": "권혜원",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F75",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "신선편의식품",
-    "item": "살모넬라",
-    "spec": "n=5, c=0, m=0/25g",
-    "unit": NaN,
-    "manager": "이진아",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F76",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "신선편의식품",
-    "item": "바실루스 세레우스",
-    "spec": "1g당 1,000 이하",
-    "unit": "CFU/g",
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F77",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "떡류",
-    "item": "보존료",
-    "spec": "검출되어서는 아니된다",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F78",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "떡류",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F79",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "두부",
-    "item": "타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F80",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "커피",
-    "item": "납",
-    "spec": "2.0 이하",
-    "unit": "mg/kg",
-    "manager": "김대성",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F81",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "커피",
-    "item": "허용외 타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F82",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "기타수산물가공품",
-    "item": "세균수",
-    "spec": "n=5, c=2, m=100,000, M=500,000",
-    "unit": NaN,
-    "manager": "신경석",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F83",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "식육함유가공품",
-    "item": "아질산이온",
-    "spec": "0.07 미만",
-    "unit": "g/kg",
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F84",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "소스",
-    "item": "대장균군",
-    "spec": "n=5, c=1, m=0, M=10 (살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F85",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과자",
-    "item": "총아플라톡신",
-    "spec": "15.0 이하 (B1, B2, G1 및 G2의 합으로서)",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F86",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "과자",
-    "item": "아플라톡신B1",
-    "spec": "10.0 이하",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F87",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "떡류",
-    "item": "세균수",
-    "spec": "n=5, c=2, m=100,000, M=500,000",
-    "unit": NaN,
-    "manager": "신경석",
-    "team": "분석실 미생물 1팀"
-  },
-  {
-    "id": "F88",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "곡류가공품",
-    "item": "이물",
-    "spec": "적합하여야 한다",
-    "unit": NaN,
-    "manager": "태혁진",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F89",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "곡류가공품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (더 이상 가공,가열조리를 하지 않고 그대로 섭취하는 비살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F90",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "곡류가공품",
-    "item": "총아플라톡신",
-    "spec": "15.0 이하 (B1, B2, G1 및 G2의 합으로서)",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F91",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "곡류가공품",
-    "item": "아플라톡신B1",
-    "spec": "10.0 이하",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F92",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "땅콩또는견과류가공품",
-    "item": "총아플라톡신",
-    "spec": "15.0 이하 (B1, B2, G1 및 G2의 합으로서)",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F93",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "땅콩또는견과류가공품",
-    "item": "아플라톡신B1",
-    "spec": "10.0 이하",
-    "unit": "㎍/kg",
-    "manager": "장민경",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F94",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "절임식품",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10 (비살균제품에 한한다)",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F95",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "김치",
-    "item": "납",
-    "spec": "0.3 이하",
-    "unit": "mg/kg",
-    "manager": "김대성",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F96",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "김치",
-    "item": "카드뮴",
-    "spec": "0.2 이하",
-    "unit": "mg/kg",
-    "manager": "김대성",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F97",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "김치",
-    "item": "타르색소",
-    "spec": "검출되어서는 아니된다",
-    "unit": NaN,
-    "manager": "김현정",
-    "team": "분석실 이화학 1팀"
-  },
-  {
-    "id": "F98",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "김치",
-    "item": "보존료",
-    "spec": "검출되어서는 아니된다",
-    "unit": "g/kg",
-    "manager": "박시은",
-    "team": "분석실 이화학 3팀"
-  },
-  {
-    "id": "F99",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "간편조리세트",
-    "item": "대장균",
-    "spec": "n=5, c=1, m=0, M=10",
-    "unit": NaN,
-    "manager": "진미정",
-    "team": "분석실 미생물 2팀"
-  },
-  {
-    "id": "F100",
-    "category": "식품유형",
-    "division": "식품",
-    "type": "간편조리세트",
-    "item": "황색포도상구균",
-    "spec": "n=5, c=1, m=100, M=1,000",
-    "unit": NaN,
-    "manager": "권혜원",
-    "team": "분석실 미생물 1팀"
-  }
-];
+// --- 축산 검체유형 목록 (54개) ---
+const 축산_검체유형 = ["소시지","중류소시지","발효소시지","소시지(결고제품)","햄","프레스햄","건조햄","햄(결고제품)","베이컨","식육조제품","식육조제냉장제품","식육조제냉동제품","양념육","분쇄가공육제품","식육추출가공품","건조저장육류","갈비","포장육","유가공품","가공유류","강화우유","강화유유유","강화우우유","농축유류","발효유류","유산균음료","유산균음료(기능성표시식품)","가공치즈","가공치즈(축산물즉석판매제품)","자연치즈","치즈","치즈(결고제품)","분유류","조제유류","영아용조제식","성장기용조제식","영아용조제유","유음료류","발효유류(레토르트)","버터류","가공버터","버터","아이스크림류","아이스크림","아이스밀크","아이스크림믹스","샤베트","아이스크림믹스(분말)","아이스크림믹스(액상)","동물성유지류","알가공품","난황액","난백액","전란액"];
+
+function getDivision(foodType) {
+  if (!foodType) return '식품';
+  return 축산_검체유형.includes(foodType) ? '축산' : '식품';
+}
+
+// --- Firestore API 데이터 로드 ---
+let apiDataCache = {};
+async function loadApiDataFromFirestore(serviceId) {
+  if (apiDataCache[serviceId] && apiDataCache[serviceId].length > 0) return apiDataCache[serviceId];
+  try {
+    var metaDoc = await db.collection('api_data').doc(serviceId).collection('meta').doc('info').get();
+    if (!metaDoc.exists) return [];
+    var batchCount = metaDoc.data().batchCount || 0;
+    var allItems = [];
+    for (var i = 0; i < batchCount; i++) {
+      var bDoc = await db.collection('api_data').doc(serviceId).collection('batches').doc('batch_' + i).get();
+      if (bDoc.exists && bDoc.data().items) allItems = allItems.concat(bDoc.data().items);
+    }
+    apiDataCache[serviceId] = allItems;
+    return allItems;
+  } catch(e) { console.warn('API 데이터 로드 실패:', serviceId, e); return []; }
+}
+
+// --- API 데이터 → 중복 제거된 항목 변환 ---
+function buildUniqueItems(apiData) {
+  var seen = new Map();
+  var idx = 0;
+  apiData.forEach(function(r) {
+    var itemName = (r.TESTITM_NM || '').trim();
+    if (!itemName || seen.has(itemName)) return;
+    var prdName = r.PRDLST_CD_NM || '';
+    seen.set(itemName, {
+      id: 'A' + (++idx),
+      division: getDivision(prdName),
+      item: itemName,
+      manager: null,
+      team: null
+    });
+  });
+  return Array.from(seen.values());
+}
+
+// --- Firestore 배정 데이터 저장/로드 ---
+async function loadSavedAssignments() {
+  try {
+    var doc = await db.collection('itemAssignments').doc('data').get();
+    return doc.exists ? (doc.data().assignments || {}) : {};
+  } catch(e) { console.warn('배정 데이터 로드 실패:', e); return {}; }
+}
+
+async function saveAssignmentsToFirestore() {
+  var assignments = {};
+  allItems.forEach(function(item) {
+    if (item.manager) {
+      assignments[item.item] = { manager: item.manager, team: item.team };
+    }
+  });
+  await db.collection('itemAssignments').doc('data').set({
+    assignments: assignments,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    count: Object.keys(assignments).length
+  });
+}
 
 // 전역 변수
-let allItems = [...SAMPLE_ITEMS];
+let allItems = [];
 let filteredItems = [];
 let selectedIds = new Set();
 let currentFilters = {
@@ -1880,12 +851,34 @@ let currentFilters = {
   search: ''
 };
 
-// 초기화
-function init() {
+// 초기화 (Firestore에서 API 데이터 로드)
+async function init() {
+  // 로딩 표시
+  var tbody = document.getElementById('table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#888;">⏳ 데이터 로드 중...</td></tr>';
+
+  await waitForFirebase();
+
+  // I2580 API 데이터 로드
+  var apiData = await loadApiDataFromFirestore('I2580');
+
+  // 중복 제거된 항목 목록 생성
+  allItems = buildUniqueItems(apiData);
+
+  // 저장된 배정 정보 병합
+  var saved = await loadSavedAssignments();
+  allItems.forEach(function(item) {
+    if (saved[item.item]) {
+      item.manager = saved[item.item].manager;
+      item.team = saved[item.item].team;
+    }
+  });
+
   loadManagers();
   filterData();
   updateStats();
   renderTable();
+  console.log('[항목배정] 로드 완료: ' + allItems.length + '개 항목 (중복 제거)');
 }
 
 // 담당자 로드
@@ -1942,10 +935,9 @@ function filterData() {
     if (currentFilters.status === '배정' && !item.manager) return false;
     if (currentFilters.status === '미배정' && item.manager) return false;
     
-    // 검색
+    // 검색 (항목명)
     if (currentFilters.search) {
-      if (!item.type.toLowerCase().includes(currentFilters.search) &&
-          !item.item.toLowerCase().includes(currentFilters.search)) {
+      if (!item.item.toLowerCase().includes(currentFilters.search)) {
         return false;
       }
     }
@@ -1975,9 +967,7 @@ function renderTable() {
             ${item.division === '축산' ? '🥩' : '🍱'} ${item.division}
           </span>
         </td>
-        <td style="font-weight: 500;">${item.type}</td>
-        <td>${item.item}</td>
-        <td style="font-size: 13px; color: var(--gray-600);">${item.spec || '-'}</td>
+        <td style="font-weight: 500;">${item.item}</td>
         <td>
           <select class="manager-select ${isUnassigned ? 'unassigned' : ''}" 
                   onchange="assignManager('${item.id}', this.value)">
@@ -2036,13 +1026,16 @@ function updateStats() {
   const total = allItems.length;
   const assigned = allItems.filter(i => i.manager).length;
   const unassigned = total - assigned;
-  
+  const managers = new Set(allItems.filter(i => i.manager).map(i => i.manager)).size;
+
   const elTotal = document.getElementById('stat-total');
   const elAssigned = document.getElementById('stat-assigned');
   const elUnassigned = document.getElementById('stat-unassigned');
+  const elManagers = document.getElementById('stat-managers');
   if (elTotal) elTotal.textContent = total;
   if (elAssigned) elAssigned.textContent = assigned;
   if (elUnassigned) elUnassigned.textContent = unassigned;
+  if (elManagers) elManagers.textContent = managers;
 }
 
 // 일괄 배정
@@ -2146,7 +1139,7 @@ function showHistory(itemId) {
   
   const historyHtml = `
     <div style="margin-bottom: 20px;">
-      <strong>${item.type} - ${item.item}</strong>
+      <strong>${item.item}</strong>
     </div>
     
     <div class="timeline">
@@ -2191,9 +1184,14 @@ function closeHistoryModal() {
 }
 
 // 전체 저장
-function saveAll() {
-  // 실제로는 API 호출
-  showAlert('success', '모든 변경사항이 저장되었습니다.');
+async function saveAll() {
+  try {
+    await saveAssignmentsToFirestore();
+    showAlert('success', '모든 변경사항이 저장되었습니다.');
+  } catch(e) {
+    console.error('저장 실패:', e);
+    showAlert('warning', '저장 중 오류가 발생했습니다.');
+  }
 }
 
 // 알림 표시
