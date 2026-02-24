@@ -63,6 +63,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 /* 로딩 */
 .loading{text-align:center;padding:40px;color:#999;font-size:14px}
 
+/* 신호등 */
+.tl{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
+.tl-blue{background:#2196f3}.tl-green{background:#4caf50}.tl-yellow{background:#ffeb3b}.tl-orange{background:#ff9800}.tl-red{background:#f44336}
+/* 등급 태그 */
+.tag-vip{background:#fce4ec;color:#c62828}.tag-a{background:#e3f2fd;color:#1565c0}.tag-b{background:#e8f5e9;color:#2e7d32}.tag-c{background:#f3e5f5;color:#7b1fa2}
+/* 신호등 툴팁 */
+[data-tooltip]{position:relative;cursor:help}
+[data-tooltip]:hover::after{content:attr(data-tooltip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 14px;border-radius:8px;font-size:11px;white-space:pre-line;min-width:240px;max-width:320px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);line-height:1.7;pointer-events:none;font-weight:400;letter-spacing:0}
+[data-tooltip]:hover::before{content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#1e293b;z-index:9999;pointer-events:none}
+
 /* 상세 모달 */
 .modal-bg{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:2000;align-items:center;justify-content:center}
 .modal-bg.active{display:flex}
@@ -150,25 +160,139 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
 <script>
 // ============================================================================
+// 신호등 / 등급 함수 (salesMgmt.html에서 복제)
+// ============================================================================
+var _cachedGradeRules = null;
+var _cachedSignalRules = null;
+var _companyMap = {}; // companyName → company 데이터
+
+function getGradeRules() {
+    if (_cachedGradeRules) return _cachedGradeRules;
+    return JSON.parse(localStorage.getItem('bfl_grade_rules') || 'null') || {
+        gradeThresholds: { vip: 90, a: 70, b: 50 },
+        revenue:      { scores: [5,10,20,30,40], thresholds: [1000,3000,5000,10000] },
+        frequency:    { scores: [5,10,15,20,25], thresholds: [1,3,5,10] },
+        duration:     { scores: [3,6,9,12,15],   thresholds: [1,2,3,5] },
+        payment:      { scores: [3,6,9,12,15] },
+        department:   { scores: [1,3,5], conditions: ['지사','고객관리','고객지원팀, 마케팅사업부'] },
+        receiptType:  { scores: [1,3,5], conditions: ['택배접수','방문접수','홈페이지접수'] }
+    };
+}
+
+function getSignalRules() {
+    if (_cachedSignalRules) return _cachedSignalRules;
+    return JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || {
+        green:30, blueMin:31, blueMax:60, yellowMin:61, yellowMax:90,
+        orangeMin:91, orangeMax:120, redMin:121
+    };
+}
+
+function calcCustomerScore(customer) {
+    var rules = getGradeRules();
+    var detail = {};
+    var total = 0;
+    // 1. 연간 매출액
+    var rev = rules.revenue || { scores:[5,10,20,30,40], thresholds:[1000,3000,5000,10000] };
+    var revVal = customer.annualRevenue || 0;
+    var revScore = rev.scores[0];
+    for (var i = rev.thresholds.length - 1; i >= 0; i--) {
+        if (revVal >= rev.thresholds[i]) { revScore = rev.scores[i + 1]; break; }
+    }
+    detail.revenue = { label:'연간매출액', value: Number(revVal).toLocaleString() + '만원', score: revScore, max: rev.scores[rev.scores.length-1] };
+    total += revScore;
+    // 2. 거래 빈도
+    var freq = rules.frequency || { scores:[5,10,15,20,25], thresholds:[1,3,5,10] };
+    var freqVal = customer.monthlyFrequency || 0;
+    var freqScore = freq.scores[0];
+    for (var i = freq.thresholds.length - 1; i >= 0; i--) {
+        if (freqVal >= freq.thresholds[i]) { freqScore = freq.scores[i + 1]; break; }
+    }
+    detail.frequency = { label:'거래빈도', value: '월 ' + freqVal + '건', score: freqScore, max: freq.scores[freq.scores.length-1] };
+    total += freqScore;
+    // 3. 거래 기간
+    var dur = rules.duration || { scores:[3,6,9,12,15], thresholds:[1,2,3,5] };
+    var durVal = customer.tradeDuration || 0;
+    var durScore = dur.scores[0];
+    for (var i = dur.thresholds.length - 1; i >= 0; i--) {
+        if (durVal >= dur.thresholds[i]) { durScore = dur.scores[i + 1]; break; }
+    }
+    detail.duration = { label:'거래기간', value: durVal + '년', score: durScore, max: dur.scores[dur.scores.length-1] };
+    total += durScore;
+    // 4. 결제 신뢰도 (신호등 매핑)
+    var pay = rules.payment || { scores:[3,6,9,12,15] };
+    var tlMap = { red:0, orange:1, yellow:2, blue:3, green:4 };
+    var tlIdx = tlMap[customer.trafficLight] !== undefined ? tlMap[customer.trafficLight] : 3;
+    var payScore = pay.scores[tlIdx];
+    var tlLabels = { green:'정상', blue:'양호', yellow:'주의', orange:'경고', red:'위험' };
+    detail.payment = { label:'결제신뢰도', value: tlLabels[customer.trafficLight] || '양호', score: payScore, max: pay.scores[pay.scores.length-1] };
+    total += payScore;
+    // 5. 담당부서
+    var dept = rules.department || { scores:[1,3,5], conditions:['지사','고객관리','고객지원팀, 마케팅사업부'] };
+    var custDept = customer.department || '';
+    var deptScore = 0;
+    for (var i = dept.conditions.length - 1; i >= 0; i--) {
+        if (dept.conditions[i].indexOf(custDept) !== -1 && custDept) { deptScore = dept.scores[i]; break; }
+    }
+    detail.department = { label:'담당부서', value: custDept || '미지정', score: deptScore, max: dept.scores[dept.scores.length-1] };
+    total += deptScore;
+    // 6. 접수형태
+    var rcpt = rules.receiptType || { scores:[1,3,5], conditions:['택배접수','방문접수','홈페이지접수'] };
+    var custRcpt = customer.receiptType || '';
+    var rcptScore = 0;
+    for (var i = rcpt.conditions.length - 1; i >= 0; i--) {
+        if (rcpt.conditions[i] === custRcpt) { rcptScore = rcpt.scores[i]; break; }
+    }
+    detail.receiptType = { label:'접수형태', value: custRcpt || '없음', score: rcptScore, max: rcpt.scores[rcpt.scores.length-1] };
+    total += rcptScore;
+    // 등급 판정
+    var th = rules.gradeThresholds || { vip:90, a:70, b:50 };
+    var grade = 'C';
+    if (total >= th.vip) grade = 'VIP';
+    else if (total >= th.a) grade = 'A';
+    else if (total >= th.b) grade = 'B';
+    return { total: total, grade: grade, detail: detail };
+}
+
+// ============================================================================
 // 컬럼 정의
 // ============================================================================
 var ALL_COLUMNS = [
     { key: 'receiptNo',     label: '접수번호',   visible: true,  width: '140px' },
     { key: 'receiptDate',   label: '접수일자',   visible: true,  width: '100px' },
     { key: 'status',        label: '상태',       visible: true,  width: '80px' },
+    { key: 'trafficLight',  label: '신호등',     visible: true,  width: '50px' },
+    { key: 'grade',         label: '등급',       visible: true,  width: '50px' },
     { key: 'testField',     label: '시험분야',   visible: true,  width: '70px' },
+    { key: 'testPurpose',   label: '검사목적',   visible: true,  width: '100px' },
     { key: 'companyName',   label: '거래처',     visible: true,  width: '140px' },
     { key: 'productName',   label: '제품/시료명', visible: true,  width: '160px' },
     { key: 'sampleTotalCount', label: '시료수',  visible: true,  width: '60px' },
-    { key: 'foodType',      label: '검체유형',   visible: true,  width: '120px' },
+    { key: 'foodType',      label: '식품유형',   visible: true,  width: '120px' },
     { key: 'urgent',        label: '긴급',       visible: true,  width: '50px' },
     { key: 'salesRep',      label: '담당자',     visible: true,  width: '80px' },
+    { key: 'feeSupply',     label: '공급가액',   visible: true,  width: '100px' },
+    { key: 'feeVat',        label: '세액',       visible: true,  width: '90px' },
+    { key: 'feeTotal',      label: '수수료총계', visible: true,  width: '100px' },
     { key: 'reportSend',    label: '발송방법',   visible: false, width: '100px' },
     { key: 'companyPhone',  label: '전화번호',   visible: false, width: '110px' },
     { key: 'companyFax',    label: '팩스번호',   visible: false, width: '110px' },
+    { key: 'companyMobile', label: '휴대전화',   visible: false, width: '110px' },
+    { key: 'companyAddress',label: '주소',       visible: false, width: '200px' },
+    { key: 'licNo',         label: '인허가번호', visible: false, width: '120px' },
+    { key: 'licBizForm',    label: '업종/업태',  visible: false, width: '100px' },
+    { key: 'payMethod',     label: '결제방법',   visible: false, width: '80px' },
+    { key: 'payDate',       label: '결제일',     visible: false, width: '100px' },
     { key: 'processingDeadline', label: '처리기한', visible: false, width: '100px' },
     { key: 'billCompany',   label: '계산서업체', visible: false, width: '130px' },
-    { key: 'bizNo',         label: '사업자번호', visible: false, width: '120px' }
+    { key: 'bizNo',         label: '사업자번호', visible: false, width: '120px' },
+    { key: 'ceo',           label: '대표자',     visible: false, width: '80px' },
+    { key: 'billName',      label: '담당자명',   visible: false, width: '80px' },
+    { key: 'billPhone',     label: '계산서전화', visible: false, width: '110px' },
+    { key: 'billEmail',     label: '계산서이메일', visible: false, width: '140px' },
+    { key: 'relatedLaw',    label: '관련법령',   visible: false, width: '120px' },
+    { key: 'documentNo',    label: '문서번호',   visible: false, width: '100px' },
+    { key: 'reportFaxNo',   label: '발송팩스',   visible: false, width: '110px' },
+    { key: 'reportEmail',   label: '발송이메일', visible: false, width: '140px' }
 ];
 
 var _allReceipts = [];
@@ -185,6 +309,15 @@ async function loadReceipts() {
     document.getElementById('loading').style.display = '';
     document.getElementById('receipt-tbody').innerHTML = '';
     try {
+        // 거래처 데이터 로드 → 신호등/등급 매칭용
+        var companies = [];
+        try { companies = await fsGetCompanies({ limit: 5000 }); } catch(e) { console.warn('거래처 로드 실패:', e); }
+        _companyMap = {};
+        companies.forEach(function(c) {
+            var name = (c.company || c.name || '').trim();
+            if (name && !_companyMap[name]) _companyMap[name] = c;
+        });
+
         var rawReceipts = await fsGetReceipts({ limit: 500 });
         // 시료별 행 펼침: 접수 1건 → 시료 수만큼 행 생성
         _allReceipts = [];
@@ -192,6 +325,16 @@ async function loadReceipts() {
             if (r.reportSend && Array.isArray(r.reportSend)) {
                 r.reportSendText = r.reportSend.join(', ');
             }
+            // 거래처 매칭 → 신호등/등급
+            var cust = _companyMap[(r.companyName || '').trim()];
+            var trafficLight = cust ? (cust.trafficLight || 'blue') : '';
+            var grade = '';
+            if (cust) { try { grade = calcCustomerScore(cust).grade; } catch(e) {} }
+            // 수수료 계산 (공급가액/세액/총계)
+            var ft = r.feeTotal || 0;
+            var feeSupply = ft ? Math.round(ft / 1.1) : 0;
+            var feeVat = ft ? ft - feeSupply : 0;
+
             var samples = r.samples && r.samples.length > 0 ? r.samples : [{}];
             var totalCount = r.sampleTotalCount || samples.length || 1;
             samples.forEach(function(s, idx) {
@@ -203,6 +346,29 @@ async function loadReceipts() {
                 row.foodType = s.foodType || r.foodType || '';
                 row.sampleTotalCount = totalCount;
                 row._sampleIdx = idx;
+                // 신호등/등급
+                row.trafficLight = trafficLight;
+                row.grade = grade;
+                // 수수료
+                row.feeSupply = feeSupply;
+                row.feeVat = feeVat;
+                row.feeTotal = ft;
+                // 접수등록 누락 필드
+                row.testPurpose = r.testPurpose || '';
+                row.payMethod = r.payMethod || '';
+                row.payDate = r.payDate || '';
+                row.licNo = r.licNo || '';
+                row.licBizForm = r.licBizForm || '';
+                row.companyMobile = r.companyMobile || '';
+                row.companyAddress = r.companyAddress || '';
+                row.ceo = r.ceo || '';
+                row.billName = r.billName || '';
+                row.billPhone = r.billPhone || '';
+                row.billEmail = r.billEmail || '';
+                row.relatedLaw = r.relatedLaw || '';
+                row.documentNo = r.documentNo || '';
+                row.reportFaxNo = r.reportFaxNo || '';
+                row.reportEmail = r.reportEmail || '';
                 _allReceipts.push(row);
             });
         });
@@ -229,7 +395,7 @@ function applyFilter() {
         if (from && r.receiptDate < from) return false;
         if (to && r.receiptDate > to) return false;
         if (search) {
-            var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '')).toLowerCase();
+            var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '') + (r.testPurpose || '') + (r.billCompany || '') + (r.salesRep || '')).toLowerCase();
             if (hay.indexOf(search) < 0) return false;
         }
         return true;
@@ -302,10 +468,23 @@ function renderTable() {
     pageData.forEach(function(r) {
         bhtml += '<tr onclick="openDetailModal(\'' + r.id + '\',' + r._sampleIdx + ')">';
         visibleCols.forEach(function(col) {
-            var val = r[col.key] || '';
+            var val = r[col.key];
+            if (val === undefined || val === null) val = '';
             if (col.key === 'status') {
                 var tagCls = val === '접수완료' ? 'tag-complete' : val === '접수중' ? 'tag-inprogress' : 'tag-waiting';
                 val = '<span class="tag ' + tagCls + '">' + val + '</span>';
+            } else if (col.key === 'trafficLight') {
+                if (val) {
+                    var tlLabels = {green:'정상',blue:'양호',yellow:'주의',orange:'경고',red:'위험'};
+                    val = '<span class="tl tl-' + val + '" data-tooltip="수금상태: ' + (tlLabels[val]||val) + '"></span>';
+                } else { val = '-'; }
+            } else if (col.key === 'grade') {
+                if (val) {
+                    var g = val.toLowerCase();
+                    val = '<span class="tag tag-' + g + '">' + val + '</span>';
+                } else { val = '-'; }
+            } else if (col.key === 'feeSupply' || col.key === 'feeVat' || col.key === 'feeTotal') {
+                val = val ? Number(val).toLocaleString() + '원' : '-';
             } else if (col.key === 'urgent') {
                 val = val === '긴급' ? '<span style="color:#e53935;font-weight:700">⚡긴급</span>' : '일반';
             } else if (col.key === 'reportSend') {
@@ -395,6 +574,11 @@ function openDetailModal(id, sampleIdx) {
     var sno = String(sampleIdx + 1).padStart(3, '0');
 
     document.getElementById('detail-title').textContent = '시료 상세 — ' + (r.receiptNo || '');
+    // 신호등/등급 표시용
+    var tlLabels = {green:'정상',blue:'양호',yellow:'주의',orange:'경고',red:'위험'};
+    var tlDisplay = r.trafficLight ? '<span class="tl tl-' + r.trafficLight + '"></span> ' + (tlLabels[r.trafficLight]||'') : '-';
+    var gradeDisplay = r.grade ? '<span class="tag tag-' + r.grade.toLowerCase() + '">' + r.grade + '</span>' : '-';
+
     var html = '';
     // 기본정보
     html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin-bottom:10px">📋 기본정보</div>';
@@ -404,15 +588,23 @@ function openDetailModal(id, sampleIdx) {
     html += di('접수일자', r.receiptDate);
     html += di('상태', r.status);
     html += di('시험분야', r.testField);
+    html += di('검사목적', r.testPurpose);
     html += di('긴급여부', r.urgent);
+    html += di('처리기한', r.processingDeadline);
     html += '</div>';
     // 업체정보
     html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">🏢 업체정보</div>';
     html += '<div class="detail-row">';
     html += di('거래처', r.companyName);
+    html += '<div class="detail-item"><label>신호등</label><div class="val">' + tlDisplay + '</div></div>';
+    html += '<div class="detail-item"><label>등급</label><div class="val">' + gradeDisplay + '</div></div>';
     html += di('인허가번호', r.licNo);
+    html += di('업종/업태', r.licBizForm);
+    html += '</div>';
+    html += '<div class="detail-row">';
     html += di('전화번호', r.companyPhone);
     html += di('팩스번호', r.companyFax);
+    html += di('휴대전화', r.companyMobile);
     html += di('담당자', r.salesRep);
     html += '</div>';
     html += '<div class="detail-row">';
@@ -423,12 +615,12 @@ function openDetailModal(id, sampleIdx) {
     html += '<div style="padding:10px;background:#f8f9fb;border-radius:8px;margin-bottom:8px;border:1px solid #eef0f4">';
     html += '<div class="detail-row">';
     html += di('제품/시료명', s.productName || r.productName);
-    html += di('검체유형', s.foodType || r.foodType);
+    html += di('식품유형', s.foodType || r.foodType);
     html += di('검체량', (s.sampleAmount || '') + (s.sampleAmountUnit || ''));
     html += di('검체수', s.sampleCount);
     html += '</div>';
     html += '<div class="detail-row">';
-    html += di('포장단위', s.packagingUnit);
+    html += di('포장단위', s.packageUnit || s.packagingUnit);
     html += di('운반상태', s.transportStatus);
     html += di('제조일자', s.manufactureDate);
     html += di('소비기한', s.expiryDate);
@@ -436,8 +628,31 @@ function openDetailModal(id, sampleIdx) {
     html += '<div class="detail-row">';
     html += di('시료위치', s.sampleLocation);
     html += di('시료박스번호', s.sampleBoxNo);
-    html += di('품목제조NO', s.productMfgNo);
+    html += di('품목제조NO', s.manufactureNo || s.productMfgNo);
     html += '</div>';
+    html += '</div>';
+    // 수수료 정보
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">💰 수수료 정보</div>';
+    html += '<div class="detail-row">';
+    html += di('공급가액', r.feeSupply ? Number(r.feeSupply).toLocaleString() + '원' : '-');
+    html += di('세액', r.feeVat ? Number(r.feeVat).toLocaleString() + '원' : '-');
+    html += di('총계', r.feeTotal ? Number(r.feeTotal).toLocaleString() + '원' : '-');
+    html += di('결제방법', r.payMethod);
+    html += di('결제일', r.payDate);
+    html += '</div>';
+    // 계산서 정보
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">📄 계산서 정보</div>';
+    html += '<div class="detail-row">';
+    html += di('계산서업체', r.billCompany);
+    html += di('사업자번호', r.bizNo);
+    html += di('대표자', r.ceo);
+    html += di('담당자명', r.billName);
+    html += '</div>';
+    html += '<div class="detail-row">';
+    html += di('전화', r.billPhone);
+    html += di('팩스', r.billFax);
+    html += di('휴대전화', r.billMobile);
+    html += di('이메일', r.billEmail);
     html += '</div>';
     // 발송정보
     html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">📮 발송정보</div>';
@@ -446,6 +661,12 @@ function openDetailModal(id, sampleIdx) {
     html += di('팩스번호', r.reportFaxNo);
     html += di('이메일', r.reportEmail);
     html += di('CC', (r.emailCc || []).join(', '));
+    html += '</div>';
+    // 검사관련
+    html += '<div style="font-size:13px;font-weight:700;color:#1a2332;margin:16px 0 10px">📑 검사 관련</div>';
+    html += '<div class="detail-row">';
+    html += di('관련법령', r.relatedLaw);
+    html += di('문서번호', r.documentNo);
     html += '</div>';
 
     document.getElementById('detail-body').innerHTML = html;
