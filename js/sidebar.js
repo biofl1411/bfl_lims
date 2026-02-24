@@ -416,7 +416,7 @@ async function loadSidebarWeather() {
   var bt = _getWeatherBaseTime();
   var bd = _getWeatherBaseDate(bt);
   var url = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst'
-    + '?serviceKey=' + encodeURIComponent(settings.apiKey)
+    + '?serviceKey=' + settings.apiKey
     + '&dataType=JSON&numOfRows=10&pageNo=1'
     + '&base_date=' + bd
     + '&base_time=' + bt
@@ -424,7 +424,13 @@ async function loadSidebarWeather() {
 
   try {
     var resp = await fetch(url);
-    var json = await resp.json();
+    var text = await resp.text();
+    var json;
+    try { json = JSON.parse(text); } catch(pe) {
+      console.warn('[sidebar-weather] 응답 파싱 실패:', text.substring(0, 100));
+      _renderWeatherWidget({ error: '인증키 확인 필요' });
+      return;
+    }
 
     if (json.response && json.response.header && json.response.header.resultCode === '00') {
       var items = json.response.body.items.item;
