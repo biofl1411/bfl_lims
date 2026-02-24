@@ -318,7 +318,7 @@ body {
             <div class="stat-icon" style="background:#e3f2fd;color:#1565c0;">📝</div>
           </div>
           <div class="stat-value" style="color:#1565c0;" id="kpi-receipt-count">-</div>
-          <div class="stat-label">이번 달 접수</div>
+          <div class="stat-label">이번 달 접수 업체</div>
           <div class="stat-change neutral" id="kpi-receipt-change">로딩 중...</div>
         </div>
 
@@ -540,14 +540,27 @@ function renderKPICards(receipts, companies) {
     var thisMonthReceipts = receipts.filter(function(r) { return (r.receiptDate || '').slice(0, 7) === thisMonth; });
     var prevMonthReceipts = receipts.filter(function(r) { return (r.receiptDate || '').slice(0, 7) === prevMonth; });
 
-    // 이번 달 접수
-    var thisCount = thisMonthReceipts.length;
-    var prevCount = prevMonthReceipts.length;
-    document.getElementById('kpi-receipt-count').innerHTML = thisCount + '<span class="stat-unit">건</span>';
-    document.getElementById('kpi-receipt-change').textContent = prevCount > 0
-        ? (thisCount >= prevCount ? '▲' : '▼') + ' 전월 ' + prevCount + '건'
-        : '전월 데이터 없음';
-    document.getElementById('kpi-receipt-change').className = 'stat-change ' + (thisCount >= prevCount ? 'up' : 'down');
+    // 이번 달 접수 — 업체 수 + 제품(시료) 수
+    var thisCompanySet = {};
+    var thisSampleCount = 0;
+    thisMonthReceipts.forEach(function(r) {
+        var cn = r.companyName || r.bizNo || 'unknown';
+        thisCompanySet[cn] = true;
+        thisSampleCount += (r.samples && r.samples.length > 0) ? r.samples.length : 1;
+    });
+    var thisCompanyCount = Object.keys(thisCompanySet).length;
+
+    var prevCompanySet = {};
+    prevMonthReceipts.forEach(function(r) {
+        var cn = r.companyName || r.bizNo || 'unknown';
+        prevCompanySet[cn] = true;
+    });
+    var prevCompanyCount = Object.keys(prevCompanySet).length;
+
+    document.getElementById('kpi-receipt-count').innerHTML = thisCompanyCount + '<span class="stat-unit">개소</span>';
+    document.getElementById('kpi-receipt-change').textContent = '제품 ' + thisSampleCount + '건'
+        + (prevCompanyCount > 0 ? ' · 전월 ' + prevCompanyCount + '개소' : '');
+    document.getElementById('kpi-receipt-change').className = 'stat-change ' + (thisCompanyCount >= prevCompanyCount ? 'up' : 'neutral');
 
     // 이번 달 매출
     var thisRevenue = thisMonthReceipts.reduce(function(s, r) { return s + (r.feeTotal || 0); }, 0);
