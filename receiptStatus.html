@@ -164,7 +164,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 // ============================================================================
 var _cachedGradeRules = null;
 var _cachedSignalRules = null;
-var _companyMap = {}; // companyName → company 데이터
+// 복합 매칭 맵 (인허가 기준)
+var _companyByBizNo = {};    // 사업자번호 → company
+var _companyByLicNo = {};    // 인허가번호 → company
+var _companyByLicName = {};  // 인허가영업소명 → company
+var _companyByName = {};     // 회사명 → company
 
 function getGradeRules() {
     if (_cachedGradeRules) return _cachedGradeRules;
@@ -253,6 +257,68 @@ function calcCustomerScore(customer) {
     return { total: total, grade: grade, detail: detail };
 }
 
+/**
+ * 미수금 기반 신호등 자동 계산
+ * changeLog의 receivable 필드에서 미수금 경과일을 계산하여 색상 결정
+ */
+function calcTrafficLight(company) {
+    var logs = company.changeLog || [];
+    // changeLog 없으면 저장된 값 또는 green
+    if (logs.length === 0) return company.trafficLight || 'green';
+
+    // changeLog를 시간순 정렬
+    var sorted = logs.slice().sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+
+    // 미수금 이력 추적
+    var firstDebtDate = null;
+    var latestReceivable = 0;
+    var hasReceivableData = false;
+
+    for (var i = 0; i < sorted.length; i++) {
+        if (sorted[i].receivable === undefined && sorted[i].receivable === null) continue;
+        var recvText = (sorted[i].receivable || '0').toString().replace(/[,원\s]/g, '');
+        var recv = parseInt(recvText) || 0;
+        if (sorted[i].receivable !== undefined) hasReceivableData = true;
+        if (recv > 0 && !firstDebtDate) {
+            firstDebtDate = sorted[i].date; // 미수금 발생 시작일
+        }
+        if (recv === 0) {
+            firstDebtDate = null; // 미수금 해소 → 리셋
+        }
+        latestReceivable = recv;
+    }
+
+    // 미수금 데이터 자체가 없으면 저장된 trafficLight 또는 기본값
+    if (!hasReceivableData) return company.trafficLight || 'green';
+    // 미수금 없음 → green
+    if (latestReceivable === 0 || !firstDebtDate) return 'green';
+
+    // 경과일 계산
+    var debtStart = new Date(firstDebtDate.split(' ')[0]);
+    var now = new Date();
+    var days = Math.floor((now - debtStart) / (1000 * 60 * 60 * 24));
+
+    // 신호등 규칙 적용
+    var rules = getSignalRules();
+    if (days <= rules.green) return 'green';
+    if (days <= rules.blueMax) return 'blue';
+    if (days <= rules.yellowMax) return 'yellow';
+    if (days <= rules.orangeMax) return 'orange';
+    return 'red';
+}
+
+/**
+ * 복합 매칭: 접수 데이터에서 거래처 찾기
+ * 우선순위: 사업자번호 → 인허가번호 → 인허가영업소명 → 회사명
+ */
+function findCompanyForReceipt(r) {
+    return _companyByBizNo[(r.bizNo || '').trim()]
+        || _companyByLicNo[(r.licNo || '').trim()]
+        || _companyByLicName[(r.companyName || '').trim()]
+        || _companyByName[(r.companyName || '').trim()]
+        || null;
+}
+
 // ============================================================================
 // 컬럼 정의
 // ============================================================================
@@ -309,13 +375,18 @@ async function loadReceipts() {
     document.getElementById('loading').style.display = '';
     document.getElementById('receipt-tbody').innerHTML = '';
     try {
-        // 거래처 데이터 로드 → 신호등/등급 매칭용
+        // 거래처 데이터 로드 → 복합 매칭 맵 구축 (인허가 기준)
         var companies = [];
         try { companies = await fsGetCompanies({ limit: 5000 }); } catch(e) { console.warn('거래처 로드 실패:', e); }
-        _companyMap = {};
+        _companyByBizNo = {}; _companyByLicNo = {}; _companyByLicName = {}; _companyByName = {};
         companies.forEach(function(c) {
+            if (c.bizNo) _companyByBizNo[c.bizNo.trim()] = c;
             var name = (c.company || c.name || '').trim();
-            if (name && !_companyMap[name]) _companyMap[name] = c;
+            if (name) _companyByName[name] = c;
+            (c.licenses || []).forEach(function(lic) {
+                if (lic.licNo) _companyByLicNo[lic.licNo.trim()] = c;
+                if (lic.licBizName) _companyByLicName[lic.licBizName.trim()] = c;
+            });
         });
 
         var rawReceipts = await fsGetReceipts({ limit: 500 });
@@ -325,9 +396,9 @@ async function loadReceipts() {
             if (r.reportSend && Array.isArray(r.reportSend)) {
                 r.reportSendText = r.reportSend.join(', ');
             }
-            // 거래처 매칭 → 신호등/등급
-            var cust = _companyMap[(r.companyName || '').trim()];
-            var trafficLight = cust ? (cust.trafficLight || 'blue') : '';
+            // 거래처 복합 매칭 → 신호등(미수금 자동 계산)/등급
+            var cust = findCompanyForReceipt(r);
+            var trafficLight = cust ? calcTrafficLight(cust) : '';
             var grade = '';
             if (cust) { try { grade = calcCustomerScore(cust).grade; } catch(e) {} }
             // 수수료 계산 (공급가액/세액/총계)
