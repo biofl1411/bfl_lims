@@ -61,9 +61,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 .form-group input,.form-group select,.form-group textarea{padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;transition:all 0.3s;font-family:inherit}
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(102,126,234,0.1)}
 .form-group input:disabled,.form-group select:disabled,.form-group textarea:disabled{background:#f5f5f5;color:#999;cursor:not-allowed}
-.pin-check{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:400;color:#888;cursor:pointer;margin-left:8px;vertical-align:middle}
-.pin-check input[type="checkbox"]{width:14px;height:14px;accent-color:#ff9800;cursor:pointer}
-.pin-check.active{color:#ff9800;font-weight:600}
+.pin-check{display:inline-flex;align-items:center;font-size:13px;font-weight:400;color:#bbb;cursor:pointer;margin-left:6px;vertical-align:middle;user-select:none;transition:color 0.2s}
+.pin-check:hover{color:#888}
+.pin-check input[type="checkbox"]{display:none}
+.pin-check.active{color:#ff9800}
 .radio-group{display:flex;gap:20px;margin-top:8px}
 .radio-label{display:flex;align-items:center;padding:10px 20px;border:2px solid #ddd;border-radius:8px;cursor:pointer;transition:all 0.3s;margin-bottom:0!important}
 .radio-label:hover{border-color:var(--accent);background:#f8f9ff}
@@ -182,7 +183,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group">
                         <label>시험분야 <span class="required">*</span>
                             <label class="pin-check" title="고정: 다음 접수에도 이 시험분야를 유지합니다">
-                                <input type="checkbox" id="pin-test-field" onchange="togglePin('test-field')"> 📌 고정
+                                <input type="checkbox" id="pin-test-field" onchange="togglePin('test-field')"><span class="pin-icon">🔓</span>
                             </label>
                         </label>
                         <div class="radio-group" style="margin-top:0;gap:12px">
@@ -199,7 +200,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group">
                         <label>검사목적 <span class="required">*</span>
                             <label class="pin-check" title="고정: 다음 접수에도 이 검사목적을 유지합니다">
-                                <input type="checkbox" id="pin-test-purpose" onchange="togglePin('test-purpose')"> 📌 고정
+                                <input type="checkbox" id="pin-test-purpose" onchange="togglePin('test-purpose')"><span class="pin-icon">🔓</span>
                             </label>
                         </label>
                         <select id="test-purpose" required onchange="onTestPurposeChange()" style="display:none;">
@@ -216,7 +217,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group">
                         <label>접수일자 <span class="required">*</span>
                             <label class="pin-check" title="고정: 다음 접수에도 이 접수일자를 유지합니다">
-                                <input type="checkbox" id="pin-receipt-date" onchange="togglePin('receipt-date')"> 📌 고정
+                                <input type="checkbox" id="pin-receipt-date" onchange="togglePin('receipt-date')"><span class="pin-icon">🔓</span>
                             </label>
                         </label>
                         <input type="date" id="receipt-date" required onchange="calculateProcessingDeadline()">
@@ -436,9 +437,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         </div>
                         <div id="product-history-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-top:4px;max-height:300px;overflow-y:auto"></div>
                     </div>
-                    <div class="form-group autocomplete-input" id="food-type-group" style="display:none">
+                    <div class="form-group autocomplete-input" id="food-type-group">
                         <label>검체유형 <span class="required">*</span></label>
-                        <input type="text" id="food-type-input" placeholder="검색 또는 클릭..." oninput="searchFoodType(this.value)" onfocus="searchFoodType('')" autocomplete="off">
+                        <input type="text" id="food-type-input" placeholder="검사목적을 먼저 선택하세요" oninput="searchFoodType(this.value)" onfocus="searchFoodType('')" autocomplete="off" disabled>
                         <input type="hidden" id="food-type-value">
                         <div class="autocomplete-list" id="food-type-list"></div>
                         <small class="field-help">시험분야 + 검사목적에 따라 표시됩니다</small>
@@ -1107,14 +1108,17 @@ function calculateProcessingDeadline() {
 function togglePin(fieldId) {
     const checkbox = document.getElementById('pin-' + fieldId);
     const label = checkbox.closest('.pin-check');
+    const icon = label.querySelector('.pin-icon');
     const pins = getPinnedFields();
     if (checkbox.checked) {
         savePinValue(fieldId, pins);
         label.classList.add('active');
+        if (icon) icon.textContent = '🔒';
     } else {
         delete pins[fieldId];
         if (fieldId === 'test-purpose') delete pins['_test-field-via-purpose'];
         label.classList.remove('active');
+        if (icon) icon.textContent = '🔓';
     }
     localStorage.setItem('bfl_pinned_fields', JSON.stringify(pins));
 }
@@ -1156,7 +1160,9 @@ function restorePinnedFields() {
         const checkbox = document.getElementById('pin-test-field');
         if (checkbox) {
             checkbox.checked = true;
-            checkbox.closest('.pin-check').classList.add('active');
+            var lbl = checkbox.closest('.pin-check');
+            lbl.classList.add('active');
+            var ico = lbl.querySelector('.pin-icon'); if (ico) ico.textContent = '🔒';
         }
         const radio = document.querySelector(`input[name="test-field"][value="${pins['test-field'].value}"]`);
         if (radio) radio.checked = true;
@@ -1167,7 +1173,9 @@ function restorePinnedFields() {
         const el = document.getElementById(fieldId);
         if (checkbox && el) {
             checkbox.checked = true;
-            checkbox.closest('.pin-check').classList.add('active');
+            var lbl2 = checkbox.closest('.pin-check');
+            lbl2.classList.add('active');
+            var ico2 = lbl2.querySelector('.pin-icon'); if (ico2) ico2.textContent = '🔒';
             // 검사목적: 시험분야 먼저 복원 후 옵션 로드 → 값 설정
             if (fieldId === 'test-purpose') {
                 var tf = pins['_test-field-via-purpose'] || (pins['test-field'] && pins['test-field'].value) || '';
@@ -1443,21 +1451,38 @@ function updateInspectionMode(testPurpose) {
     var foodTypeGroup = document.getElementById('food-type-group');
     var inspectionItemsEl = document.getElementById('inspection-items-section');
 
+    // 검체유형 input 요소
+    var foodTypeInput = document.getElementById('food-type-input');
+
     if (isLims) {
-        // 식약처 연동 모드: 품목코드 피커 표시, 검체유형 숨김
+        // 식약처 연동 모드: 품목코드 피커 표시, 검체유형 비활성화
         if (mfdsPickerEl) mfdsPickerEl.style.display = '';
-        if (foodTypeGroup) foodTypeGroup.style.display = 'none';
+        if (foodTypeGroup) foodTypeGroup.style.display = '';
+        if (foodTypeInput) {
+            foodTypeInput.disabled = true;
+            foodTypeInput.placeholder = '식약처 품목코드로 대체됩니다';
+            foodTypeInput.value = '';
+        }
         if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
     } else if (testPurpose) {
-        // 기존 모드: 검체유형 표시, 식약처 섹션 숨김
+        // 기존 모드: 검체유형 활성화, 식약처 섹션 숨김
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
         if (foodTypeGroup) foodTypeGroup.style.display = '';
+        if (foodTypeInput) {
+            foodTypeInput.disabled = false;
+            foodTypeInput.placeholder = '검색 또는 클릭...';
+        }
     } else {
-        // 미선택: 둘 다 숨김
+        // 미선택: 품목코드 숨김, 검체유형 비활성화
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
-        if (foodTypeGroup) foodTypeGroup.style.display = 'none';
+        if (foodTypeGroup) foodTypeGroup.style.display = '';
+        if (foodTypeInput) {
+            foodTypeInput.disabled = true;
+            foodTypeInput.placeholder = '검사목적을 먼저 선택하세요';
+            foodTypeInput.value = '';
+        }
         if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
     }
 }
