@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>식약처 코드매핑 데이터 업로드</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; padding: 20px; }
+    .card { margin-bottom: 15px; }
+    .progress { height: 25px; }
+    .status-badge { font-size: 0.85rem; }
+    .log-area {
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.8rem;
+      background: #1a1a2e;
+      color: #0f0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .dataset-card { transition: all 0.3s; }
+    .dataset-card.uploading { border-left: 4px solid #0d6efd; }
+    .dataset-card.done { border-left: 4px solid #198754; opacity: 0.8; }
+    .dataset-card.error { border-left: 4px solid #dc3545; }
+    h1 { font-size: 1.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid" style="max-width: 900px;">
+    <h1 class="mb-3">식약처 코드매핑 데이터 Firestore 업로드</h1>
+    <p class="text-muted mb-4">
+      <code>mfds_integration/코드매핑자료/</code> Excel에서 변환된 JSON 데이터를 Firestore에 업로드합니다.
+      <br>식품 분야(IM36) 데이터만 포함됩니다.
+    </p>
+
+    <!-- 전체 진행 -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong>전체 진행률</strong>
+          <span id="totalProgress">0 / 0건</span>
+        </div>
+        <div class="progress">
+          <div id="totalBar" class="progress-bar" style="width: 0%">0%</div>
+        </div>
+        <div class="mt-3">
+          <button id="btnUploadAll" class="btn btn-primary" onclick="uploadAll()">
+            전체 업로드 시작
+          </button>
+          <button id="btnStop" class="btn btn-outline-danger ms-2" onclick="stopUpload()" disabled>
+            중지
+          </button>
+          <button class="btn btn-outline-secondary ms-2" onclick="checkExisting()">
+            기존 데이터 확인
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 데이터셋 카드 -->
+    <div id="datasetCards"></div>
+
+    <!-- 로그 -->
+    <div class="card mt-3">
+      <div class="card-header">실행 로그</div>
+      <div class="card-body p-0">
+        <div id="logArea" class="log-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-init.js"></script>
+
+  <script>
+    // ============================================================
+    // 1. 데이터셋 정의
+    // ============================================================
+    var DATASETS = [
+      {
+        id: 'common_codes',
+        name: '공통코드',
+        file: 'data/mfds/common_codes.json',
+        collection: 'mfds_common_codes',
+        docIdField: null,           // 자동생성 ID → 공통코드종류+공통코드 조합
+        docIdFn: function(row) { return row['공통코드종류'] + '_' + row['공통코드']; },
+        expectedCount: 383,
+        description: '업무분야, 검체유형, 판정구분 등 (42종 383건)'
+      },
+      {
+        id: 'product_codes',
+        name: '품목코드 (식품)',
+        file: 'data/mfds/product_codes.json',
+        collection: 'mfds_product_codes',
+        docIdField: '품목 코드',
+        docIdFn: null,
+        expectedCount: 8404,
+        description: '식품 품목 분류 트리 (곡류, 과일류 등 8,404건)'
+      },
+      {
+        id: 'test_items',
+        name: '시험항목 (식품)',
+        file: 'data/mfds/test_items.json',
+        collection: 'mfds_test_items',
+        docIdField: '시험항목코드',
+        docIdFn: null,
+        expectedCount: 2940,
+        description: '검사항목 (납, 대장균, 수분 등 2,940건)'
+      },
+      {
+        id: 'units',
+        name: '단위 (식품)',
+        file: 'data/mfds/units.json',
+        collection: 'mfds_units',
+        docIdField: '단위코드',
+        docIdFn: null,
+        expectedCount: 106,
+        description: '시험 결과 단위 (%, mg/kg 등 106건)'
+      }
+    ];
+
+    // ============================================================
+    // 2. 상태 관리
+    // ============================================================
+    var state = {
+      running: false,
+      stopRequested: false,
+      totalUploaded: 0,
+      totalTarget: 0
+    };
+
+    // ============================================================
+    // 3. UI 렌더링
+    // ============================================================
+    function renderCards() {
+      var html = '';
+      DATASETS.forEach(function(ds) {
+        html += '<div id="card_' + ds.id + '" class="card dataset-card">'
+          + '<div class="card-body">'
+          + '<div class="d-flex justify-content-between align-items-center">'
+          + '<div>'
+          + '<strong>' + ds.name + '</strong>'
+          + '<br><small class="text-muted">' + ds.description + '</small>'
+          + '<br><small>컬렉션: <code>' + ds.collection + '</code> | 예상: ' + ds.expectedCount.toLocaleString() + '건</small>'
+          + '</div>'
+          + '<span id="badge_' + ds.id + '" class="badge bg-secondary status-badge">대기</span>'
+          + '</div>'
+          + '<div class="progress mt-2" style="height:20px;">'
+          + '<div id="bar_' + ds.id + '" class="progress-bar bg-info" style="width:0%">0%</div>'
+          + '</div>'
+          + '<small id="detail_' + ds.id + '" class="text-muted mt-1 d-block"></small>'
+          + '</div></div>';
+      });
+      document.getElementById('datasetCards').innerHTML = html;
+    }
+
+    function updateProgress(dsId, current, total) {
+      var pct = total > 0 ? Math.round(current / total * 100) : 0;
+      var bar = document.getElementById('bar_' + dsId);
+      bar.style.width = pct + '%';
+      bar.textContent = pct + '% (' + current.toLocaleString() + '/' + total.toLocaleString() + ')';
+    }
+
+    function updateTotalProgress() {
+      var pct = state.totalTarget > 0 ? Math.round(state.totalUploaded / state.totalTarget * 100) : 0;
+      document.getElementById('totalBar').style.width = pct + '%';
+      document.getElementById('totalBar').textContent = pct + '%';
+      document.getElementById('totalProgress').textContent =
+        state.totalUploaded.toLocaleString() + ' / ' + state.totalTarget.toLocaleString() + '건';
+    }
+
+    function setBadge(dsId, text, color) {
+      var badge = document.getElementById('badge_' + dsId);
+      badge.textContent = text;
+      badge.className = 'badge bg-' + color + ' status-badge';
+    }
+
+    function setDetail(dsId, text) {
+      document.getElementById('detail_' + dsId).textContent = text;
+    }
+
+    function setCardState(dsId, state) {
+      var card = document.getElementById('card_' + dsId);
+      card.className = 'card dataset-card ' + state;
+    }
+
+    function log(msg) {
+      var area = document.getElementById('logArea');
+      var time = new Date().toLocaleTimeString('ko-KR');
+      area.innerHTML += '[' + time + '] ' + msg + '\n';
+      area.scrollTop = area.scrollHeight;
+    }
+
+    // ============================================================
+    // 4. 데이터 로드 (JSON fetch)
+    // ============================================================
+    function loadJson(url) {
+      return fetch(url)
+        .then(function(res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status + ' - ' + url);
+          return res.json();
+        });
+    }
+
+    // ============================================================
+    // 5. Firestore 배치 업로드
+    //    500건씩 batch.commit() → Firestore 제한 = 500건/배치
+    // ============================================================
+    function uploadDataset(ds, data) {
+      return new Promise(function(resolve, reject) {
+        var BATCH_SIZE = 450; // 안전하게 450건씩
+        var total = data.length;
+        var uploaded = 0;
+        var batchIndex = 0;
+
+        setBadge(ds.id, '업로드 중...', 'primary');
+        setCardState(ds.id, 'uploading');
+
+        function processBatch() {
+          if (state.stopRequested) {
+            setBadge(ds.id, '중지됨', 'warning');
+            resolve(uploaded);
+            return;
+          }
+
+          var start = batchIndex * BATCH_SIZE;
+          var end = Math.min(start + BATCH_SIZE, total);
+
+          if (start >= total) {
+            // 완료
+            setBadge(ds.id, '완료', 'success');
+            setCardState(ds.id, 'done');
+            updateProgress(ds.id, total, total);
+            log(ds.name + ': ' + total.toLocaleString() + '건 업로드 완료');
+            resolve(uploaded);
+            return;
+          }
+
+          var batch = db.batch();
+          for (var i = start; i < end; i++) {
+            var row = data[i];
+            var docId;
+
+            if (ds.docIdFn) {
+              docId = ds.docIdFn(row);
+            } else if (ds.docIdField && row[ds.docIdField]) {
+              docId = String(row[ds.docIdField]);
+            } else {
+              docId = null; // auto ID
+            }
+
+            // null 값 제거 (Firestore 저장 최적화)
+            var cleanRow = {};
+            Object.keys(row).forEach(function(key) {
+              if (row[key] !== null && row[key] !== undefined && row[key] !== '') {
+                cleanRow[key] = row[key];
+              }
+            });
+
+            var docRef;
+            if (docId) {
+              docRef = db.collection(ds.collection).doc(docId);
+            } else {
+              docRef = db.collection(ds.collection).doc();
+            }
+            batch.set(docRef, cleanRow);
+          }
+
+          batch.commit()
+            .then(function() {
+              uploaded += (end - start);
+              state.totalUploaded += (end - start);
+              updateProgress(ds.id, uploaded, total);
+              updateTotalProgress();
+              setDetail(ds.id, uploaded.toLocaleString() + '건 완료 (배치 ' + (batchIndex + 1) + ')');
+              batchIndex++;
+              // 다음 배치 (약간의 딜레이로 Firestore 부하 방지)
+              setTimeout(processBatch, 100);
+            })
+            .catch(function(err) {
+              log('[오류] ' + ds.name + ' 배치 ' + (batchIndex + 1) + ': ' + err.message);
+              setBadge(ds.id, '오류', 'danger');
+              setCardState(ds.id, 'error');
+              reject(err);
+            });
+        }
+
+        processBatch();
+      });
+    }
+
+    // ============================================================
+    // 6. 전체 업로드
+    // ============================================================
+    function uploadAll() {
+      if (state.running) return;
+      state.running = true;
+      state.stopRequested = false;
+      state.totalUploaded = 0;
+      state.totalTarget = DATASETS.reduce(function(sum, ds) { return sum + ds.expectedCount; }, 0);
+
+      document.getElementById('btnUploadAll').disabled = true;
+      document.getElementById('btnStop').disabled = false;
+
+      log('=== 전체 업로드 시작 ===');
+      updateTotalProgress();
+
+      // 순차 업로드 (병렬 하면 Firestore quota 초과 위험)
+      var chain = Promise.resolve();
+      DATASETS.forEach(function(ds) {
+        chain = chain.then(function() {
+          if (state.stopRequested) return;
+          log(ds.name + ': JSON 로드 중...');
+          return loadJson(ds.file)
+            .then(function(data) {
+              log(ds.name + ': ' + data.length.toLocaleString() + '건 로드됨, 업로드 시작');
+              return uploadDataset(ds, data);
+            })
+            .catch(function(err) {
+              log('[오류] ' + ds.name + ': ' + err.message);
+            });
+        });
+      });
+
+      chain.then(function() {
+        log('=== 전체 업로드 완료 (' + state.totalUploaded.toLocaleString() + '건) ===');
+        state.running = false;
+        document.getElementById('btnUploadAll').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+      });
+    }
+
+    function stopUpload() {
+      state.stopRequested = true;
+      log('업로드 중지 요청됨...');
+      document.getElementById('btnStop').disabled = true;
+    }
+
+    // ============================================================
+    // 7. 기존 데이터 확인
+    // ============================================================
+    function checkExisting() {
+      log('기존 Firestore 데이터 확인 중...');
+      DATASETS.forEach(function(ds) {
+        db.collection(ds.collection).get()
+          .then(function(snapshot) {
+            var count = snapshot.size;
+            setDetail(ds.id, '현재 Firestore: ' + count.toLocaleString() + '건');
+            if (count > 0) {
+              setBadge(ds.id, count.toLocaleString() + '건', 'info');
+            }
+            log(ds.collection + ': ' + count.toLocaleString() + '건');
+          })
+          .catch(function(err) {
+            setDetail(ds.id, '조회 실패: ' + err.message);
+            log('[오류] ' + ds.collection + ': ' + err.message);
+          });
+      });
+    }
+
+    // ============================================================
+    // 초기화
+    // ============================================================
+    window.addEventListener('firebase-ready', function() {
+      log('Firebase 연결 완료');
+      renderCards();
+    });
+
+    // Firebase 초기화 실패 시에도 카드는 표시
+    renderCards();
+  </script>
+</body>
+</html>
