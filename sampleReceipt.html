@@ -970,9 +970,23 @@ window.addEventListener('firebase-ready', async function() {
             // 정렬순서(c) 기준 정렬
             firestorePurposes.sort((a, b) => (a.c || 999) - (b.c || 999));
             console.log('[Firestore] 검사목적 로드 완료:', firestorePurposes.length + '개');
-            // 현재 선택된 시험분야가 있으면 드롭다운 갱신
+            // 현재 선택된 시험분야가 있으면 드롭다운 갱신 (잠금 상태면 값 보존)
             const currentField = document.querySelector('input[name="test-field"]:checked')?.value;
-            if (currentField) updateTestPurposeOptions(currentField);
+            if (currentField) {
+                var pinnedPurpose = getPinnedFields()['test-purpose'];
+                var savedVal = pinnedPurpose ? pinnedPurpose.value : null;
+                await updateTestPurposeOptions(currentField);
+                if (savedVal) {
+                    var sel = document.getElementById('test-purpose');
+                    if (sel) sel.value = savedVal;
+                    var textSpan = document.querySelector('#test-purpose-display .custom-select-text');
+                    if (textSpan) textSpan.textContent = savedVal;
+                    document.querySelectorAll('.custom-select-option').forEach(function(o) {
+                        o.classList.toggle('selected', o.dataset.value === savedVal);
+                    });
+                    updateInspectionMode(savedVal);
+                }
+            }
         }
     } catch(e) {
         console.warn('[Firestore] 로드 실패, 기존 방식 사용:', e.message);
