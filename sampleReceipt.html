@@ -139,6 +139,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
+<script src="js/mfds-fee-mapping.js"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
@@ -448,6 +449,43 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                 </div>
                 <!-- 식약처 품목코드 선택 (식약처 통합LIMS 연동용) -->
                 <div id="mfds-product-picker-container" style="margin:12px 0"></div>
+                <!-- 식약처 기준규격 시험항목 (품목코드 선택 시 표시) -->
+                <div id="mfds-std-section" style="display:none;margin:12px 0;padding:16px;background:#f0f7ff;border-radius:10px;border:1px solid #b3d4fc">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                        <label style="font-weight:600;font-size:14px;color:#1565c0">📋 식약처 기준규격 시험항목</label>
+                        <span id="mfds-std-summary" style="font-size:13px;color:#667085"></span>
+                    </div>
+                    <div id="mfds-std-info" style="font-size:12px;color:#667085;margin-bottom:8px"></div>
+                    <div style="overflow-x:auto">
+                        <table style="width:100%;border-collapse:collapse;font-size:13px">
+                            <thead>
+                                <tr style="background:#e3f2fd;border-bottom:2px solid #90caf9">
+                                    <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1565c0;width:36px">No</th>
+                                    <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1565c0">시험항목</th>
+                                    <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1565c0;width:180px">기준규격값</th>
+                                    <th style="padding:8px 10px;text-align:center;font-weight:600;color:#1565c0;width:100px">범위(최소~최대)</th>
+                                    <th style="padding:8px 10px;text-align:center;font-weight:600;color:#1565c0;width:60px">단위</th>
+                                    <th style="padding:8px 10px;text-align:right;font-weight:600;color:#1565c0;width:90px">수수료(원)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mfds-std-tbody"></tbody>
+                            <tfoot id="mfds-std-tfoot" style="display:none">
+                                <tr style="background:#e3f2fd;border-top:2px solid #90caf9">
+                                    <td colspan="5" style="padding:8px 10px;font-weight:700;color:#1565c0;text-align:right">합계</td>
+                                    <td id="mfds-std-fee-total" style="padding:8px 10px;font-weight:700;color:#1565c0;text-align:right"></td>
+                                </tr>
+                                <tr style="background:#e3f2fd">
+                                    <td colspan="5" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right">공급가액</td>
+                                    <td id="mfds-std-fee-supply" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right"></td>
+                                </tr>
+                                <tr style="background:#e3f2fd">
+                                    <td colspan="5" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right">세액 (VAT 10%)</td>
+                                    <td id="mfds-std-fee-vat" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
                 <!-- 시험항목 테이블 -->
                 <div id="inspection-items-section" style="display:none;margin:20px 0;padding:16px;background:#fafbfc;border-radius:10px;border:1px solid #e2e6ed">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -943,6 +981,7 @@ window.addEventListener('firebase-ready', async function() {
     if (typeof MFDS_CODES !== 'undefined') {
         MFDS_CODES.renderProductPicker('mfds-product-picker-container', function(item) {
             console.log('[식약처] 품목코드 선택:', item['품목 코드'], item['한글 명']);
+            loadMfdsStandardItems(item['품목 코드'], item['한글 명']);
         });
         console.log('[MFDS] 품목코드 피커 초기화 완료');
     }
@@ -1585,6 +1624,129 @@ function clearInspectionItems() {
         document.getElementById('inspection-items-tbody').innerHTML = '';
         document.getElementById('inspection-items-tfoot').style.display = 'none';
         document.getElementById('inspection-items-summary').textContent = '';
+    }
+}
+
+// ============================================================================
+// 식약처 기준규격 시험항목 로드 (품목코드 기반)
+// ============================================================================
+var _mfdsStdCache = null;       // 개별기준규격 캐시
+var _mfdsProductMap = null;     // 품목코드→한글명
+var _mfdsTestItemMap = null;    // 시험항목코드→한글명
+var _mfdsUnitMap = null;        // 단위코드→단위명
+
+async function loadMfdsStandardItems(productCode, productName) {
+    var section = document.getElementById('mfds-std-section');
+    var tbody = document.getElementById('mfds-std-tbody');
+    var summary = document.getElementById('mfds-std-summary');
+    var info = document.getElementById('mfds-std-info');
+
+    if (!productCode || !section) return;
+
+    // 로딩 표시
+    section.style.display = 'block';
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#667085">기준규격 로딩중...</td></tr>';
+    info.textContent = '선택: ' + productCode + ' — ' + (productName || '');
+    summary.textContent = '';
+
+    try {
+        // 데이터 로드 (캐시 활용)
+        if (!_mfdsStdCache) _mfdsStdCache = await MFDS_CODES.loadIndividualStandards();
+        if (!_mfdsTestItemMap) _mfdsTestItemMap = await MFDS_CODES.getTestItemNameMap();
+        if (!_mfdsUnitMap) _mfdsUnitMap = await MFDS_CODES.getUnitNameMap();
+
+        // 선택된 품목코드의 기준규격 필터링
+        // prefix 매칭: 선택 코드의 유효 부분(뒤 0 제거)으로 시작하는 기준규격 + 정확 일치
+        var trimmed = productCode.replace(/0+$/, ''); // C0101000000000 → C0101
+        var matched = _mfdsStdCache.filter(function(s) {
+            var stdCode = s['품목코드'] || '';
+            // 기준규격 코드가 선택코드로 시작하거나, 선택코드가 기준규격 코드로 시작
+            return stdCode.indexOf(trimmed) === 0 || trimmed.indexOf(stdCode.replace(/0+$/, '')) === 0;
+        });
+
+        if (matched.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#999;font-size:13px">이 품목코드에 등록된 기준규격이 없습니다.</td></tr>';
+            summary.textContent = '0건';
+            return;
+        }
+
+        // 시험항목코드 기준 중복 제거 (같은 항목이 상위/하위에 모두 있을 경우 하위 우선)
+        var seenItems = {};
+        matched.forEach(function(s) {
+            var key = s['시험항목코드'];
+            if (!seenItems[key] || s['품목코드'].length > seenItems[key]['품목코드'].length) {
+                seenItems[key] = s;
+            }
+        });
+        var unique = Object.values(seenItems);
+
+        // 테이블 렌더링 (수수료 포함)
+        var hasFeeMap = typeof MFDS_FEE_MAP !== 'undefined';
+        var html = '';
+        var totalFee = 0;
+        var feeCount = 0;
+        unique.forEach(function(s, idx) {
+            var testCode = s['시험항목코드'] || '';
+            var testName = (_mfdsTestItemMap && _mfdsTestItemMap[testCode]) || testCode;
+            var stdVal = s['기준규격값'] || s['기준규격값설명'] || '';
+            var min = s['기준규격최소값'] || '';
+            var max = s['기준규격최대값'] || '';
+            var range = (min || max) ? (min + ' ~ ' + max) : '-';
+            var unitCode = s['단위코드'] || '';
+            var unit = (_mfdsUnitMap && _mfdsUnitMap[unitCode]) || unitCode;
+
+            // 수수료 조회
+            var fee = 0;
+            var feeText = '-';
+            if (hasFeeMap && MFDS_FEE_MAP[testCode]) {
+                fee = MFDS_FEE_MAP[testCode].fee || 0;
+                feeText = fee.toLocaleString() + '원';
+                totalFee += fee;
+                feeCount++;
+            }
+
+            html += '<tr style="border-bottom:1px solid #d4e5f7;">';
+            html += '<td style="padding:7px 10px;color:#667085">' + (idx + 1) + '</td>';
+            html += '<td style="padding:7px 10px;color:#344054">' + testName;
+            if (testCode !== testName) html += ' <span style="color:#999;font-size:11px;">(' + testCode + ')</span>';
+            html += '</td>';
+            html += '<td style="padding:7px 10px;color:#344054;font-size:12px;max-width:180px;word-break:break-all;">' + stdVal + '</td>';
+            html += '<td style="padding:7px 10px;text-align:center;color:#667085;font-size:12px">' + range + '</td>';
+            html += '<td style="padding:7px 10px;text-align:center;color:#667085;font-size:12px">' + unit + '</td>';
+            html += '<td style="padding:7px 10px;text-align:right;color:' + (fee > 0 ? '#1565c0' : '#ccc') + ';font-weight:' + (fee > 0 ? '600' : '400') + '">' + feeText + '</td>';
+            html += '</tr>';
+        });
+
+        tbody.innerHTML = html;
+
+        // 수수료 합계 표시
+        var tfoot = document.getElementById('mfds-std-tfoot');
+        if (totalFee > 0 && tfoot) {
+            tfoot.style.display = '';
+            document.getElementById('mfds-std-fee-total').textContent = totalFee.toLocaleString() + '원';
+            var supply = Math.round(totalFee / 1.1);
+            var vat = totalFee - supply;
+            document.getElementById('mfds-std-fee-supply').textContent = supply.toLocaleString() + '원';
+            document.getElementById('mfds-std-fee-vat').textContent = vat.toLocaleString() + '원';
+        } else if (tfoot) {
+            tfoot.style.display = 'none';
+        }
+
+        summary.textContent = unique.length + '개 시험항목' + (feeCount > 0 ? ' / ' + totalFee.toLocaleString() + '원' : '');
+
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#e53e3e">로드 실패: ' + e.message + '</td></tr>';
+        console.error('[기준규격] 로드 오류:', e);
+    }
+}
+
+function clearMfdsStandardItems() {
+    var section = document.getElementById('mfds-std-section');
+    if (section) {
+        section.style.display = 'none';
+        document.getElementById('mfds-std-tbody').innerHTML = '';
+        document.getElementById('mfds-std-summary').textContent = '';
+        document.getElementById('mfds-std-info').textContent = '';
     }
 }
 

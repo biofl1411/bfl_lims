@@ -2095,15 +2095,49 @@ keyStore.clientEthName=enp4s0
     - `mfds_common_codes` 383건, `mfds_product_codes` 8,404건
     - `mfds_test_items` 2,940건, `mfds_units` 106건
 
+### ✅ 31단계 테스트 시나리오 전체 통과 (2026-02-26)
+
+식약처 테스트 시나리오 엑셀 기반, **의뢰→시료→결과→결재→성적서** 전체 흐름 검증 완료.
+
+| 단계 | 서비스 | 설명 | 결과 | 핵심 데이터 |
+|------|--------|------|------|-------------|
+| 1 | `saveInspctReqest` | 의뢰등록 | ✅ | 임시번호: T0260100020 |
+| 2 | `selectListInspctReqest` | 의뢰조회 | ✅ | 등록 확인 |
+| 3 | `saveReqestSplore` | 시료등록 | ✅ | sploreSn=1, 3항목 |
+| 4 | `selectListReqestSplore` | 시료조회 | ✅ | |
+| 5 | `selectListReqestSploreExprIem` | 시험항목조회 | ✅ | 3건 (타르색소/대장균군/세균수) |
+| 6 | `saveReqestSploreFee` | 수수료저장 | ✅ | 12,100원 |
+| 7 | `saveInspctReqestRequst` | 의뢰요청 | ✅ | **정식번호: 260100059** |
+| 10 | `saveSploreChargerAsign` | 접수배정 | ✅ | apitest34 배정 |
+| 11 | `insertExprDiary` | 시험일지 | ✅ | exprDiarySn=24160551 |
+| 16 | `saveSploreInspctResult` | 결과입력 | ✅ | 불검출/음성 |
+| 21 | `saveSploreSanctnRecom` | 결재상신 | ✅ | |
+| 28 | `saveSploreSanctn` | 최종결재 | ✅ | 1건 완료/총 1건 |
+| 29 | `saveGrdcrtIssu` | 성적서발급 | ✅ | IM27000001/IM42000001 |
+| 30 | `selectGrdcrtDmOutpt` | DM출력 | ✅ | DM_ADRESS_260100059.pdf (23KB) |
+| 31 | `selectGrdcrtPdfOutpt` | PDF출력 | ⚠️ | 파일 다운로드 형식 (빈 JSON) |
+
+**31단계 테스트 중 발견된 주요 사항:**
+
+| 항목 | 내용 |
+|------|------|
+| `inspctInsttCntcValue` | 가이드 미수록 필수필드, reqestInfo에 포함 필요 (max 60자) |
+| 품목코드 형식 | 2018년 `C01xxxxx` 형식 무효 → 현재 `A01xxxxx` 형식 사용 |
+| `feeSeCode` | `IM26000004`(개별) 사용, `IM26000001`(그룹)은 feeGroupSn 필요 |
+| `sploreChargerId` | `mfdsLimsId` 형식(apitest34) 사용, codeNo(L0330159) 불가 |
+| `fdqntLimitApplcAt` | 결과입력 시 각 항목에 `"N"` 필수 |
+| `jobSeCode` | 대부분의 write 서비스에 `"IM18000001"` 필수 |
+| `prductNm` | 시료등록 시 제품명 필수 (가이드에 비중 낮게 표기됨) |
+
+**미들웨어 URL 수정 (2026-02-26):**
+- **문제**: `WebApiController.selectUnitTest()`가 서비스명만 AuthenticateCert에 전달 → `HttpPost("saveXxx")` → "Target host is not specified"
+- **원인**: 원본 JSP 페이지에서는 `wslimsUrl + "/webService/rest/" + serviceName`으로 전체 URL 조합 후 전달했으나, `selectUnitTest`에는 이 로직이 없었음
+- **해결**: `WebApiController.java`에 `buildRestUrl()` 메서드 추가, `url`이 `http`로 시작하지 않으면 자동으로 `wslimsUrl + "/webService/rest/"` 프리픽스 추가
+- **파일**: `/home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/classes/gov/mfds/lms_client/Controller/WebApiController.class` (Java 17 컴파일)
+
 ### ⏳ 다음 작업 (우선순위)
 
-**1순위 — 31단계 테스트 시나리오 실행:**
-- 식약처 테스트 시나리오 엑셀(`통합LIMS_WEB_API_테스트시나리오.xls`) 기반
-- 순서: 의뢰등록 → 시료등록 → 시료배정 → 시험일지 → 검사결과 → 결재상신 → 성적서 발급
-- 이누리 대리에게 테스트 시나리오 정보 회신 필요 (다음 번에)
-- **주의**: O000170 테스트 기관은 여러 기관 공유이므로 다른 기관 데이터 수정 금지
-
-**2순위 — 접수등록 ↔ 식약처 의뢰 연동:**
+**1순위 — 접수등록 ↔ 식약처 의뢰 연동 (31단계 테스트 완료, 실제 연동 구현):**
 - `sampleReceipt.html`에서 접수 저장 시 식약처 `saveInspctReqest` API 동시 호출
 - 의뢰번호(`sploreReqestNo`) 발급받아 Firestore `receipts`에 저장
 - 시료 정보도 `saveReqestSplore` API로 동시 전송
@@ -2146,6 +2180,9 @@ keyStore.clientEthName=enp4s0
 | **Test 4 직원목록 실패** | 서비스명 오류(`selectListUser`→`selectListEmp`) + `deptCode` 필수 누락 | 서비스명/파라미터 수정 | ✅ |
 | **Test 5 품목분류 실패** | `jobRealmCode` 필수 파라미터 누락 | `jobRealmCode: 'IM36000001'` 추가 | ✅ |
 | **Tomcat 재시작 실패** | shutdown.sh 후 기존 프로세스가 남아 8080 포트 점유 | 프로세스 완전 종료 대기 후 startup.sh | ✅ |
+| **API 호출 빈 응답 (Content-Length:0)** | `selectUnitTest`가 서비스명만 전달 → `HttpPost("saveXxx")` 호스트 없음 | `WebApiController.buildRestUrl()` 추가, `wslimsUrl + "/webService/rest/"` 자동 프리픽스 | ✅ |
+| **Step 3 시료등록 품목코드 오류** | 2018년 테스트코드(`C0113010000000`) 무효 | `A0100100000000` (쌀) 사용 | ✅ |
+| **Step 10 접수배정 사용자ID 오류** | `codeNo`(L0330159) 대신 `mfdsLimsId`(apitest34) 사용해야 함 | ID 형식 변경 | ✅ |
 
 ### 포트 사용 현황
 | 포트 | 서비스 | 비고 |
@@ -2158,30 +2195,54 @@ keyStore.clientEthName=enp4s0
 
 **⛔ 사용 금지 포트**: `443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964`
 
-### 참고: mfds_integration 폴더 구조
-```
-mfds_integration/
-├── (먼저읽어주세요)_개발테스트절차 및 주의사항.pdf  # 개발테스트 신청양식, MAC 등록 절차
-├── 통합LIMS_WEB_API_검사기관개발가이드_V1.1.pdf    # 핵심 개발가이드 (19p)
-├── 통합LIMS_WEB_API_검사기관개발가이드_개정이력.pdf
-├── 통합LIMS_WEB_API_테스트시나리오.xls              # 31단계 시나리오
-├── 통합테스트시나리오_자체의뢰 일반배정 시료별 결재상신.xls
-├── 검사기관별_테스트계정_20260225.xlsx              # 테스트 계정 목록 (2026-02-25)
-├── 식약처 안내 메일.txt                             # MAC 등록 안내, 임시비밀번호
-├── O000170.jks / O000026.jks                       # 인증서 (테스트/운영)
-├── DirectApiTest.java                               # 독립 API 테스트 (WAR 우회)
-├── MacTest.java                                     # MAC 주소 감지 테스트
-├── Sample/                                          # 클라이언트 API 샘플 (Java 소스)
-│   ├── src/gov/mfds/lms_client/                     # WebApiController.java, WebApiService.java
-│   └── WebContent/WEB-INF/                          # web.xml, applicationContext.xml, lib/
-├── Sample_중간모듈/
-│   ├── web Service(중간모듈)/LMS_CLIENT_API.war      # 배포용 WAR (62MB)
-│   └── 검사기관클라이언트_Sample/iisTset.zip
-├── 서비스별 가이드/                                  # 167개 API PDF (I-LMS-0101 ~ I-LMS-0818)
-└── 코드매핑자료/                                     # 13개 Excel (공통코드, 품목, 시험항목 등)
-    # 식품 전용: 공통코드 383건, 품목 8,404건, 시험항목 2,940건,
-    #           개별기준규격 15,993건, 공통기준규격 33,739건, 단위 106건
-```
+### 식약처 통합LIMS 수령 파일 패키지 (mfds_integration/)
+
+**수령일**: 2026-02-25
+**출처**: 식약처 통합LIMS 운영팀 (정보화도움터 043-234-3100)
+**목적**: 통합LIMS WEB API 연동 개발용 자료 일체
+**비고**: Git 미추적 (로컬 전용, `.gitignore` 대상 아님 — 인증서 포함으로 커밋 금지)
+
+#### 파일 목록 (2026-02-25 일괄 수령)
+
+| # | 파일/폴더 | 설명 | 비고 |
+|---|----------|------|------|
+| 1 | `(먼저읽어주세요)_개발테스트절차 및 주의사항.pdf` | 개발테스트 신청양식, MAC 등록 절차 | |
+| 2 | `통합LIMS_WEB_API_검사기관개발가이드_V1.1.pdf` | 핵심 개발가이드 (19p) | API 연동 필독 |
+| 3 | `통합LIMS_WEB_API_검사기관개발가이드_개정이력.pdf` | 가이드 변경 이력 | |
+| 4 | `통합LIMS_WEB_API_테스트시나리오.xls` | 31단계 테스트 시나리오 | ✅ 전체 통과 (2026-02-26) |
+| 5 | `통합테스트시나리오_자체의뢰 일반배정 시료별 결재상신.xls` | 자체의뢰 흐름 시나리오 | |
+| 6 | `검사기관별_테스트계정_20260225.xlsx` | 테스트 계정 목록 (apitest01~40) | 바이오푸드랩: **apitest34** |
+| 7 | `식약처 안내 메일.txt` | MAC 등록 안내, 임시비밀번호 | |
+| 8 | `O000170.jks` | 테스트 기관 인증서 (비밀번호: mfds2015) | ⚠️ 커밋 금지 |
+| 9 | `O000026.jks` | 운영 기관 인증서 (바이오푸드랩) | ⚠️ 커밋 금지 |
+| 10 | `Sample/` | 클라이언트 API 샘플 (Java 소스) | WebApiController, WebApiService |
+| 11 | `Sample_중간모듈/` | 중간모듈 WAR (62MB) + 샘플 | LMS_CLIENT_API.war |
+| 12 | `서비스별 가이드/` | 167개 API 서비스별 PDF 가이드 | I-LMS-0101 ~ I-LMS-0818 |
+| 13 | `DirectApiTest.java` | 독립 API 테스트 (WAR 우회) | 2026-02-26 작성 |
+| 14 | `MacTest.java` | MAC 주소 감지 테스트 | 2026-02-26 작성 |
+
+#### 코드매핑자료 (13개 Excel, 2026-02-25 수령)
+
+식약처가 제공하는 **식품 분야(IM36000001) 코드 레퍼런스 데이터**. 검사기관이 통합LIMS 연동 시 사용할 품목/시험항목/기준규격 등의 표준 코드 체계.
+
+| # | 파일 | 건수 | JSON 변환 | Firestore 컬렉션 | 현재 활용 |
+|---|------|------|:---------:|-----------------|----------|
+| 1 | `공통코드.xlsx` | 383건 | ✅ `common_codes.json` | `mfds_common_codes` | 드롭다운 코드 |
+| 2 | `품목코드.xlsx` | 8,404건 | ✅ `product_codes.json` | `mfds_product_codes` | 접수등록 품목 선택 |
+| 3 | `시험항목.xlsx` | 2,940건 | ✅ `test_items.json` | `mfds_test_items` | 검사항목 매핑 |
+| 4 | `단위.xlsx` | 106건 | ✅ `units.json` | `mfds_units` | 단위 선택 |
+| 5 | `기준_개별기준규격.xlsx` | ~15,993건 | ❌ 미변환 | — | 미활용 |
+| 6 | `기준_공통기준규격.xlsx` | ~33,739건 | ❌ 미변환 | — | 미활용 |
+| 7 | `기준_공통기준규격종류.xlsx` | ~11건 | ❌ 미변환 | — | 미활용 |
+| 8 | `기준_개별기준상세규격.xlsx` | — | ❌ 미변환 | — | 미활용 |
+| 9 | `기준_공통기준상세규격.xlsx` | — | ❌ 미변환 | — | 미활용 |
+| 10 | `기준_단서조항.xlsx` | — | ❌ 미변환 | — | 미활용 |
+| 11 | `품목속성.xlsx` | — | ❌ 미변환 | — | 미활용 |
+| 12 | `부서_사용자목록.xlsx` | 5부서 16명 | ❌ 미변환 | — | 미활용 (테스트용) |
+| 13 | `의뢰업체담당자목록.xlsx` | — | ❌ 미변환 | — | 미활용 |
+
+**JSON 변환 경로**: `data/mfds/*.json` (2026-02-26 변환, 커밋 `4b69594`)
+**업로드 도구**: `mfdsCodeUpload.html` (브라우저에서 Firestore 배치 업로드)
 
 ---
 

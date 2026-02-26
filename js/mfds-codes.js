@@ -11,6 +11,10 @@
  *   mfds_units           — 단위 106건 (결과 단위)
  *   mfds_item_mappings   — BFL↔식약처 항목 매핑 (사용자 설정)
  *
+ * 정적 JSON (data/mfds/):
+ *   individual_standards.json — 개별기준규격 15,803건 (식품)
+ *   common_standards.json     — 공통기준규격 33,663건 (식품)
+ *
  * 사용법:
  *   <script src="js/firebase-init.js"></script>
  *   <script src="js/mfds-codes.js"></script>
@@ -30,6 +34,11 @@ var _mc_testItemCache = null;
 var _mc_unitCache = null;
 var _mc_commonCodeCache = null;
 var _mc_itemMappingCache = null;
+var _mc_indStdCache = null;
+var _mc_cmnStdCache = null;
+var _mc_productNameMap = null;   // 품목코드 → 한글명 빠른 조회용
+var _mc_testItemNameMap = null;  // 시험항목코드 → 한글명 빠른 조회용
+var _mc_unitNameMap = null;      // 단위코드 → 단위명 빠른 조회용
 
 /** 캐시 유효시간 (밀리초) — 10분 */
 var MC_CACHE_TTL = 600000;
@@ -313,6 +322,8 @@ MFDS_CODES._clearProductSelection = function(containerId) {
   document.getElementById('mfds-cat2').disabled = true;
   document.getElementById('mfds-cat3').innerHTML = '<option value="">소분류 선택</option>';
   document.getElementById('mfds-cat3').disabled = true;
+  // 기준규격 섹션도 숨기기
+  if (typeof clearMfdsStandardItems === 'function') clearMfdsStandardItems();
 };
 
 // ============================================================
@@ -499,7 +510,122 @@ MFDS_CODES.deleteItemMapping = function(bflItemName) {
 };
 
 // ============================================================
-// 7. 캐시 초기화
+// 7. 기준규격 (정적 JSON — data/mfds/)
+// ============================================================
+
+/**
+ * 개별기준규격 로드 (식품 15,803건, 정적 JSON)
+ * @returns {Promise<Array>}
+ */
+MFDS_CODES.loadIndividualStandards = function() {
+  if (_mc_indStdCache) return Promise.resolve(_mc_indStdCache);
+
+  return fetch('data/mfds/individual_standards.json')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      _mc_indStdCache = data;
+      console.log('[MFDS_CODES] 개별기준규격 로드:', data.length + '건');
+      return data;
+    })
+    .catch(function(err) {
+      console.warn('[MFDS_CODES] 개별기준규격 로드 실패:', err.message);
+      return [];
+    });
+};
+
+/**
+ * 공통기준규격 로드 (식품 33,663건, 정적 JSON)
+ * @returns {Promise<Array>}
+ */
+MFDS_CODES.loadCommonStandards = function() {
+  if (_mc_cmnStdCache) return Promise.resolve(_mc_cmnStdCache);
+
+  return fetch('data/mfds/common_standards.json')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      _mc_cmnStdCache = data;
+      console.log('[MFDS_CODES] 공통기준규격 로드:', data.length + '건');
+      return data;
+    })
+    .catch(function(err) {
+      console.warn('[MFDS_CODES] 공통기준규격 로드 실패:', err.message);
+      return [];
+    });
+};
+
+/**
+ * 기준규격 검색 (품목코드, 시험항목코드, 기준규격값, 기준규격값설명)
+ * @param {string} query - 검색어
+ * @param {Array} standards - 기준규격 배열
+ * @returns {Array} 매칭된 기준규격 (최대 200건)
+ */
+MFDS_CODES.searchStandards = function(query, standards) {
+  if (!query || query.length < 1) return [];
+  var q = query.toLowerCase();
+  var results = [];
+
+  for (var i = 0; i < standards.length && results.length < 200; i++) {
+    var s = standards[i];
+    var pCode = (s['품목코드'] || '').toLowerCase();
+    var tCode = (s['시험항목코드'] || '').toLowerCase();
+    var val = (s['기준규격값'] || '').toLowerCase();
+    var desc = (s['기준규격값설명'] || '').toLowerCase();
+    var src = (s['출처'] || '').toLowerCase();
+    if (pCode.indexOf(q) >= 0 || tCode.indexOf(q) >= 0 ||
+        val.indexOf(q) >= 0 || desc.indexOf(q) >= 0 || src.indexOf(q) >= 0) {
+      results.push(s);
+    }
+  }
+  return results;
+};
+
+/**
+ * 품목코드 → 한글명 조회 맵 생성 (최초 1회)
+ * @returns {Promise<Object>} { 품목코드: 한글명, ... }
+ */
+MFDS_CODES.getProductNameMap = function() {
+  if (_mc_productNameMap) return Promise.resolve(_mc_productNameMap);
+  return MFDS_CODES.loadProductCodes().then(function(codes) {
+    _mc_productNameMap = {};
+    codes.forEach(function(c) {
+      _mc_productNameMap[c['품목 코드']] = c['한글 명'] || '';
+    });
+    return _mc_productNameMap;
+  });
+};
+
+/**
+ * 시험항목코드 → 한글명 조회 맵 생성 (최초 1회)
+ * @returns {Promise<Object>} { 시험항목코드: 한글명, ... }
+ */
+MFDS_CODES.getTestItemNameMap = function() {
+  if (_mc_testItemNameMap) return Promise.resolve(_mc_testItemNameMap);
+  return MFDS_CODES.loadTestItems().then(function(items) {
+    _mc_testItemNameMap = {};
+    items.forEach(function(t) {
+      _mc_testItemNameMap[t['시험항목코드']] = t['한글명'] || '';
+    });
+    return _mc_testItemNameMap;
+  });
+};
+
+/**
+ * 단위코드 → 단위명 조회 맵 생성 (최초 1회)
+ * @returns {Promise<Object>} { 단위코드: 단위명, ... }
+ */
+MFDS_CODES.getUnitNameMap = function() {
+  if (_mc_unitNameMap) return Promise.resolve(_mc_unitNameMap);
+  return MFDS_CODES.loadUnits().then(function(units) {
+    _mc_unitNameMap = {};
+    units.forEach(function(u) {
+      _mc_unitNameMap[u['단위코드']] = u['단위명'] || '';
+    });
+    return _mc_unitNameMap;
+  });
+};
+
+// ============================================================
+// 8. 캐시 초기화
 // ============================================================
 
 /**
@@ -512,6 +638,11 @@ MFDS_CODES.clearCache = function() {
   _mc_unitCache = null;
   _mc_commonCodeCache = null;
   _mc_itemMappingCache = null;
+  _mc_indStdCache = null;
+  _mc_cmnStdCache = null;
+  _mc_productNameMap = null;
+  _mc_testItemNameMap = null;
+  _mc_unitNameMap = null;
   console.log('[MFDS_CODES] 캐시 초기화');
 };
 
