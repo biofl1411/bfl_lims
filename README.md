@@ -47,11 +47,14 @@ bfl_lims/
 │   ├── sidebar.js                   # ★ 통합 사이드바 (Single Source of Truth) — 전체 메뉴 정의·렌더링·CSS
 │   ├── firebase-init.js             # ★ Firebase 초기화 + Firestore/Storage 전역 변수 + firebase-ready 이벤트
 │   ├── food_item_fee_mapping.js     # 수수료 매핑 데이터 (9,237건, 16개 검사목적, purpose 태그)
-│   └── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
+│   ├── ref_nonstandard_data.js      # 참고용(기준규격외) 데이터 (3,374건)
+│   ├── mfds-api.js                  # ★ 식약처 통합LIMS API 호출 모듈 (MFDS 네임스페이스)
+│   └── mfds-codes.js                # ★ 식약처 코드매핑 데이터 로딩/캐싱/검색 (MFDS_CODES 네임스페이스)
 ├── img/
 │   └── bfl_logo.svg                 # BFL 로고
 ├── api_server.py                    # Flask REST API 서버 (식약처 데이터, port 5003)
 ├── collector.py                     # 식약처 데이터 수집기 (cron)
+├── mfdsTest.html                    # ★ 식약처 API 연결 테스트 페이지
 └── deploy.ps1                       # 배포 스크립트
 ```
 
@@ -1533,6 +1536,12 @@ items.forEach((item, i) => {
 | `inspectionFees` | 수수료 데이터 | 7,481건 |
 | `settings/inspectionPurposes` | 검사목적 (P 배열) | 22건 |
 | `settings/inspectionFields` | 검사분야 (FIELDS 배열) | 2건 |
+| `mfds_common_codes` | 식약처 공통코드 (IM01~IM42) | 383건 |
+| `mfds_product_codes` | 식약처 품목코드 (식품) | 8,404건 |
+| `mfds_test_items` | 식약처 시험항목 (식품) | 2,940건 |
+| `mfds_units` | 식약처 단위코드 (식품) | 106건 |
+| `mfds_item_mappings` | BFL↔식약처 항목 매핑 | 사용자 생성 |
+| `mfds_cache` | API 응답 캐시 (TTL 기반) | 자동 관리 |
 
 #### 업체 데이터 호환성 통일 (`d2da910`)
 
@@ -1835,7 +1844,8 @@ window.addEventListener('firebase-ready', function() {
 - 아키텍처: `BFL LIMS (HTML+JS)` → `nginx 프록시` → `중간모듈 (Java WAR/Tomcat)` → `식약처 통합LIMS API`
 - 문서/샘플 위치: `mfds_integration/` 폴더
 - 테스트URL: https://wslims.mfds.go.kr
-- 테스트 페이지: https://wslims.mfds.go.kr/ApiClient/ (시나리오별 수동 테스트 가능)
+- 테스트 페이지(식약처): https://wslims.mfds.go.kr/ApiClient/ (시나리오별 수동 테스트 가능)
+- 테스트 페이지(자체): https://192.168.0.96:8443/mfdsTest.html (연결 + 전체 API 테스트)
 
 ### 서버 환경 (192.168.0.96)
 - **Java**: OpenJDK 17.0.18 (설치 완료)
@@ -1875,6 +1885,18 @@ keyStore.clientEthName=enp4s0
 > **주의**: `ResourceBundle.getBundle("application")`는 `WEB-INF/classes/`에서 읽음.
 > `WEB-INF/config/`는 Spring의 `<util:properties>`에서 읽음.
 > 두 파일 모두 수정해야 설정이 제대로 반영됨.
+
+### 서버 설정 변경 이력 (WAR 내부 수정 — git 미추적)
+| 파일 | 변경 내용 | 날짜 |
+|------|----------|------|
+| `WEB-INF/spring/appServlet/servlet-context.xml` | `StringHttpMessageConverter` UTF-8 추가 (한글 깨짐 해결) | 2026-02-26 |
+| `WEB-INF/web.xml` | `CharacterEncodingFilter` `forceEncoding=true` 추가 | 2026-02-26 |
+| `conf/server.xml` (Tomcat) | Connector에 `URIEncoding="UTF-8"` 추가 | 2026-02-26 |
+| `WebApiController.class` | 5파라미터 생성자 사용 (clientEthName) | 2026-02-25 |
+
+> **⚠️ 주의**: 이 파일들은 서버의 `/home/biofl/tomcat/` 아래에 있으며, git으로 추적되지 않음.
+> WAR를 재배포하면 이 설정이 초기화되므로 반드시 다시 적용해야 함.
+> 원본 백업: `WebApiController.class.bak`
 
 ### 인증서 정보
 | 파일 | alias | 비밀번호 | 용도 | CN | 유효기간 |
@@ -1976,80 +1998,139 @@ keyStore.clientEthName=enp4s0
 9. ✅ WebApiController 수정 — 5파라미터 생성자로 MAC 명시적 전달
 10. ✅ Tomcat 로그로 MAC 포함 확인 (`data:177207770551500-24-54-91-D8-12`)
 
-### 🚫 현재 차단 이슈: "유효하지 않는 인증정보입니다" (2026-02-26)
+### ✅ 인증 이슈 해결 완료 (2026-02-26)
 
-**에러 메시지:**
-```json
-{"resultFlag":"0","validate":"false","errorMessage":" 유효하지 않는 인증정보입니다."}
-```
+**이전 이슈:** "유효하지 않는 인증정보입니다" → **해결됨!**
 
-**확인된 사항:**
-- MAC 주소 `00-24-54-91-D8-12`가 certValue 서명에 정상 포함됨 (Tomcat 로그 확인)
-- 인증서 파일 무결성 확인 (MD5 일치)
-- REST URL 형식 정확 (`/webService/rest/selectListCmmnCode`)
-- 필수 파라미터 정상 (`mfdsLimsId`, `psitnInsttCode` 최상위 레벨)
-- 서버 시간 NTP 동기화 정상
-- 독립 테스트(DirectApiTest.java — WAR/Tomcat 완전 우회)에서도 동일 에러 → 미들웨어 문제 아님
+**원인 2가지:**
+1. **MAC 주소 등록 형식 오류**: 식약처 DB에 MAC이 `:` 구분자로 등록되었으나, 실제로는 `-` 구분자가 필요했음
+   - 이누리 대리(통합림스)가 2026-02-26 09:30경 MAC 재등록 완료
+2. **`webApi: "Y"` 미전송 (가이드 미수록 필수 파라미터)**: 모든 API 호출에 `"webApi":"Y"`를 포함해야 함
+   - 이누리 대리가 이메일로 직접 안내한 파라미터 (공식 가이드에 없음!)
+   - `mfds-api.js`의 `callApi()`, `testConnection()` 모두 수정 완료
 
-**추가 확인 사항 (2026-02-26 후반):**
+**추가 해결: 한글 깨짐 (인코딩)**
+- 증상: API 응답의 한글이 `??` 또는 `-`로 표시됨
+- 해결: Spring MVC `servlet-context.xml`에 `StringHttpMessageConverter` UTF-8 추가
+  ```xml
+  <mvc:annotation-driven>
+    <mvc:message-converters>
+      <bean class="org.springframework.http.converter.StringHttpMessageConverter">
+        <constructor-arg value="UTF-8"/>
+      </bean>
+    </mvc:message-converters>
+  </mvc:annotation-driven>
+  ```
+- `CharacterEncodingFilter`의 `forceEncoding=true`만으로는 부족, `URIEncoding="UTF-8"`도 불충분
 
-1. **공개 엔드포인트 확인**: `selectUnityTest`와 `selectUnityTestSenario`는 **인증 불필요**(PUBLIC) 엔드포인트임. 우리 서버에서 정상 호출 성공 → 네트워크/TLS 연결 자체는 문제 없음
-2. **식약처 테스트 페이지 미들웨어 통한 인증 성공**: 식약처 테스트 페이지(https://wslims.mfds.go.kr/ApiClient/)에서 `selectListCmmnCode` 호출 시 **인증 성공** 확인
-   ```json
-   {"resultFlag":"1", "validate":"true", ...}  // 업무분야 코드 9건 반환
-   ```
-   - 사용 파라미터: `mfdsLimsId=apitest34`, `psitnInsttCode=O000170`, `classCode=IM36`
-   - 이는 **API 파라미터(계정/기관코드/업무분야)가 올바르다는 것을 증명**함
-3. **REST/SOAP 모두 동일 에러**: 우리 서버에서 REST, SOAP 양쪽 모두 "유효하지 않는 인증정보" 에러 발생
-4. **인증서 교차 테스트**: O000170(테스트)과 O000026(운영) 인증서 **모두** 동일 에러 → 인증서 자체 문제 아님
-5. **MAC 대소문자 테스트**: `00:24:54:91:d8:12`(소문자)와 `00:24:54:91:D8:12`(대문자) 모두 실패
+**연결 테스트 결과 (2026-02-26 전체 통과):**
+| 테스트 | API | 결과 | 데이터 |
+|--------|-----|------|--------|
+| 1 | `selectListCmmnCode` (공통코드) | ✅ 성공 | 9건 |
+| 2 | `selectListInspctReqest` (의뢰목록) | ✅ 성공 | 236건 |
+| 3 | `selectListDept` (부서목록) | ✅ 성공 | 28건 (바이오푸드랩 D003194 포함) |
+| 4 | `selectListEmp` (직원목록) | ✅ 성공 | 1건 — API테스터34(apitest34) / L0330159 |
+| 5 | `selectListPrdlstLclas` (품목분류대분류) | ✅ 성공 | 18건 |
 
-**결론: 문제는 100% 인증서/MAC 등록 문제**
-- API 파라미터, 인증서 파일, 네트워크 연결은 모두 정상
-- 식약처 테스트 페이지의 미들웨어(식약처 측 인증서+MAC 사용)로는 인증 성공
-- 우리 서버의 인증서+MAC 조합이 식약처 DB에 등록되지 않았거나 잘못 등록됨
+> 테스트 페이지: `https://192.168.0.96:8443/mfdsTest.html` (연결 테스트 + 전체 API 테스트)
 
-**원인 분석:**
-| 가능성 | 설명 | 확률 |
-|--------|------|------|
-| **MAC 미등록/등록오류** | 식약처 DB에 우리 MAC(`00:24:54:91:d8:12`)이 O000170 기관에 등록되지 않았거나 잘못 등록됨 | **매우 높음** |
-| 인증서-MAC 매핑 오류 | MAC이 O000026에 등록되었으나 O000170에는 미등록, 또는 둘 다 미등록 | 중간 |
-| 인증서 재발급 | 식약처에서 O000170 인증서를 재생성했으나 우리 사본은 구버전 | 낮음 |
+### API 필드명 주의사항 ⚠️
 
-> **근거**: 인증 흐름에서 MAC 검증이 1순위임. certValue에 macAddr 필드가 없으므로,
-> 서버가 등록된 MAC으로 인증값을 재계산하는 방식. MAC 미등록 시 인증 절대 불가.
-> 수정 전(MAC 없음)과 수정 후(MAC 있음) 모두 동일한 에러 → MAC이 서버에 없을 가능성 높음.
-> **식약처 테스트 페이지에서 동일 파라미터로 인증 성공했으므로, 파라미터 문제는 완전히 배제됨.**
+식약처 API 응답 필드명이 직관적이지 않으므로 주의 필요:
 
-### ⏳ 다음 조치 (우선순위)
+| API | 예상했던 필드명 | **실제 필드명** | 비고 |
+|-----|---------------|----------------|------|
+| `selectListDept` | deptCode, deptName | **codeNo, codeName** | 부서 목록 |
+| `selectListEmp` | empCode, empName | **codeNo, codeName** | 직원 목록, `deptCode` 필수 파라미터 |
+| `selectListPrdlstLclas` | - | **codeNo, codeName** | `jobRealmCode` 필수 파라미터 |
+| `selectListCmmnCode` | - | **codeNo, codeName** | 공통코드 |
 
-**1순위 — 식약처 MAC/인증서 등록 확인 요청 (차단 해결):**
-- 연락처: 통합LIMS 운영·관리 담당자 **jhk0821@korea.kr** / 정보화도움터 **043-234-3100**
-- 확인 요청 내용:
-  - MAC 주소 `00:24:54:91:d8:12` (또는 `00-24-54-91-D8-12`)가 **O000170** 테스트 기관에 등록되어 있는지
-  - 공인IP `14.7.14.31`에 대한 등록 여부도 함께 확인
-  - O000170.jks / O000026.jks 인증서가 현재 유효한 최신 버전인지
-  - 등록 시점 및 활성화 여부
-- 식약처 안내 메일의 "개발테스트 신청양식"을 작성하여 회신했는지 재확인 필요
-- **참고**: 식약처 테스트 페이지에서는 동일 파라미터(apitest34/O000170/IM36)로 인증 성공했으므로, 파라미터/계정 문제가 아님을 설명할 것
+> **규칙**: 대부분의 조회 API가 `codeNo` / `codeName` 형태로 응답함.
+> 서비스별 필수 파라미터가 다르므로, 호출 전 반드시 서비스별 가이드 PDF 확인 필요.
+> 존재하지 않는 서비스명(예: `selectListUser`)은 빈 응답(HTTP 200, body 없음)을 반환하므로 주의.
 
-**2순위 — 테스트 페이지 직접 확인 (✅ 완료):**
-- https://wslims.mfds.go.kr/ApiClient/ 에서 apitest34로 `selectListCmmnCode` 호출 → **인증 성공 확인**
-- `selectUnityTest`, `selectUnityTestSenario` → **공개 엔드포인트로 인증 없이 호출 가능** 확인
+### 완료된 작업 ✅ (2026-02-26 전체)
 
-**3순위 — MAC 등록 확인 대기 중 병행 작업 (✅ 2026-02-26 완료):**
-- ✅ nginx 프록시 설정 (`/mfds/` → Tomcat 8080 LMS_CLIENT_API) — `sudo nginx -t && systemctl reload` 완료
-- ✅ BFL LIMS 프론트엔드 식약처 API 호출 JS 모듈 구현 (`js/mfds-api.js`)
-  - `MFDS.callApi(serviceName, params)` → nginx `/mfds/selectUnitTest` → Tomcat → 식약처 API
-  - JSON 형식 요청 확인 완료: `{type:"rest", url:"...", param:"..."}`
-  - 래퍼 함수: 의뢰(01xx), 시험(02xx), 성적서(03xx), 진행상황(04xx), 기관(06xx), 공통(08xx)
-  - Firestore 캐시 기능 (`mfds_cache` 컬렉션)
-- ✅ nginx → Tomcat → 식약처 API 전체 파이프라인 연결 확인 (인증 실패 응답 정상 수신)
-- ⬜ 코드매핑 데이터 Firestore 업로드 준비
+**인프라:**
+1. ✅ Java 17 설치 확인
+2. ✅ Tomcat 9.0.98 설치 (`/home/biofl/tomcat`)
+3. ✅ LMS_CLIENT_API.war 배포 (Spring MVC 정상 로드)
+4. ✅ 인증서 배치 (`/home/biofl/mfds_certs/`)
+5. ✅ application.properties 설정 (테스트 환경, 2개 파일 모두)
+6. ✅ `javax.activation-1.2.0.jar` 추가 (Java 17 호환성 해결)
+7. ✅ setenv.sh 환경변수 설정
+8. ✅ MAC 주소 감지 문제 해결 (clientEthName=enp4s0 설정)
+9. ✅ WebApiController 수정 — 5파라미터 생성자로 MAC 명시적 전달
+10. ✅ MAC 주소 재등록 (`-` 구분자로 수정, 이누리 대리 확인)
+11. ✅ `webApi: "Y"` 필수 파라미터 추가
+12. ✅ UTF-8 인코딩 수정 (StringHttpMessageConverter)
+13. ✅ nginx 프록시 설정 (`/mfds/` → Tomcat 8080 LMS_CLIENT_API)
 
-**4순위 — 인증 해결 후:**
-- ⬜ 31단계 테스트 시나리오 순서대로 실행
-- ⬜ 의뢰→시료→결과→결재→성적서 전체 흐름 테스트
+**프론트엔드 JS 모듈:**
+14. ✅ `js/mfds-api.js` — 식약처 API 호출 모듈
+    - `MFDS.callApi(serviceName, params)` → nginx → Tomcat → 식약처 API
+    - 래퍼 함수: 의뢰(01xx), 시험(02xx), 성적서(03xx), 진행상황(04xx), 기관(06xx), 공통(08xx)
+    - Firestore 캐시 기능 (`mfds_cache` 컬렉션)
+    - `selectListEmp`에 `deptCode` 필수 검증 추가
+15. ✅ `js/mfds-codes.js` — 코드매핑 데이터 로딩/캐싱/검색 공통 모듈 (522줄)
+    - 품목코드 8,404건 / 시험항목 2,940건 / 단위 106건 / 공통코드 383건 Firestore 로드
+    - 품목코드 3단 계층 트리 (대분류→중분류→소분류) 빌드
+    - 캐스케이딩 드롭다운 + 텍스트 검색 렌더링 (`renderProductPicker`)
+    - BFL↔식약처 항목 매핑 CRUD (`mfds_item_mappings` 컬렉션)
+
+**페이지 연동:**
+16. ✅ `sampleReceipt.html` — 식약처 품목코드 선택 UI 추가
+    - 시료정보 섹션에 3단 캐스케이딩 드롭다운 + 검색 필드
+    - 연한 파란색 배경으로 식약처 영역 구분
+    - 멀티 시료 전환 시 선택값 복원, 접수 저장 시 `mfdsProductCode`/`mfdsProductName` 포함
+    - 접수 이력 불러오기에서 품목코드 복원
+17. ✅ `inspectionMgmt.html` — 시험항목 브라우저 + 매핑 모달 추가
+    - Panel 3: 시험항목 2,940건 검색/테이블/페이지네이션 (50건/페이지)
+    - 매핑 모달: 식약처 시험항목 ↔ BFL 항목명 연결 + 단위코드 선택
+    - Panel 4: 항목그룹 4개 렌더링 위치 모두에 매핑 뱃지(✅/⚠) + 🔗 버튼
+    - Excel 매핑 내보내기 기능
+18. ✅ `mfdsTest.html` — 식약처 API 연결 테스트 페이지
+    - 연결 테스트 (5항목 체크리스트) + 전체 API 테스트 (5개 API)
+19. ✅ Firestore 코드매핑 데이터 업로드 완료
+    - `mfds_common_codes` 383건, `mfds_product_codes` 8,404건
+    - `mfds_test_items` 2,940건, `mfds_units` 106건
+
+### ⏳ 다음 작업 (우선순위)
+
+**1순위 — 31단계 테스트 시나리오 실행:**
+- 식약처 테스트 시나리오 엑셀(`통합LIMS_WEB_API_테스트시나리오.xls`) 기반
+- 순서: 의뢰등록 → 시료등록 → 시료배정 → 시험일지 → 검사결과 → 결재상신 → 성적서 발급
+- 이누리 대리에게 테스트 시나리오 정보 회신 필요 (다음 번에)
+- **주의**: O000170 테스트 기관은 여러 기관 공유이므로 다른 기관 데이터 수정 금지
+
+**2순위 — 접수등록 ↔ 식약처 의뢰 연동:**
+- `sampleReceipt.html`에서 접수 저장 시 식약처 `saveInspctReqest` API 동시 호출
+- 의뢰번호(`sploreReqestNo`) 발급받아 Firestore `receipts`에 저장
+- 시료 정보도 `saveReqestSplore` API로 동시 전송
+- 오류 시 식약처 연동만 실패하고 BFL 접수는 정상 저장되도록 독립 처리
+
+**3순위 — 검사결과 입력 ↔ 식약처 연동:**
+- 시험일지 등록 (`insertExprDiary`)
+- 검사결과 입력 (`saveSploreInspctResult`)
+- 결재상신 (`saveSploreSanctnRecom`)
+- BFL 항목명 → 식약처 시험항목코드 매핑 활용 (`mfds_item_mappings`)
+
+**4순위 — 성적서 발급 연동:**
+- 성적서 발급 (`saveGrdcrtIssu`)
+- 성적서 이력 조회 (`selectListGrdcrtIssuHist`)
+- PDF 다운로드 연동
+
+**5순위 — 운영 환경 전환:**
+- 테스트(O000170) → 운영(O000026) 인증서/기관코드 전환
+- `mfds-api.js`의 `DEFAULT_USER` 설정 변경
+- application.properties 인증서 경로 변경
+- 운영 MAC 등록 요청 (식약처)
+
+### 식약처 연동 담당자 정보
+| 구분 | 이름 | 연락처 | 비고 |
+|------|------|--------|------|
+| 통합LIMS 담당 | 이누리 대리 | - | MAC 재등록, webApi:Y 안내 |
+| 운영·관리 | jhk0821@korea.kr | 043-234-3100 | 정보화도움터 |
 
 ### 트러블슈팅 기록
 | 문제 | 원인 | 해결 | 상태 |
@@ -2059,7 +2140,12 @@ keyStore.clientEthName=enp4s0
 | WAR에 JSP 없음 | 중간모듈 전용 빌드 | 정상 — API 호출만 제공 | ✅ |
 | MAC 미감지 (`data`에 MAC 없음) | `/etc/hosts`가 hostname→127.0.1.1 매핑, `getLocalHost()`→loopback→NI null | `clientEthName=enp4s0` 설정 + WebApiController 5파라미터 생성자 | ✅ |
 | `classes/` vs `config/` 혼동 | ResourceBundle은 `classes/`에서 읽음, Spring은 `config/`에서 읽음 | 두 파일 모두 설정 통일 | ✅ |
-| **유효하지 않는 인증정보** | MAC/인증서 미등록 확정적 (식약처 테스트페이지에서는 동일 파라미터로 인증 성공, REST/SOAP 모두 실패, O000170/O000026 모두 실패) | **식약처 MAC 등록 확인 요청 필요 (jhk0821@korea.kr)** | 🔧 |
+| **유효하지 않는 인증정보** | MAC 등록 형식 오류(`:` → `-`) + `webApi:"Y"` 미전송 | 이누리 대리 MAC 재등록 + `mfds-api.js`에 `webApi:"Y"` 추가 | ✅ |
+| **한글 깨짐 (API 응답)** | Spring MVC 기본 인코딩이 ISO-8859-1 | `servlet-context.xml`에 `StringHttpMessageConverter` UTF-8 추가 | ✅ |
+| **Test 3 부서목록 `-` 표시** | 필드명 불일치 (`deptCode`→`codeNo`, `deptName`→`codeName`) | `mfdsTest.html` 필드명 수정 | ✅ |
+| **Test 4 직원목록 실패** | 서비스명 오류(`selectListUser`→`selectListEmp`) + `deptCode` 필수 누락 | 서비스명/파라미터 수정 | ✅ |
+| **Test 5 품목분류 실패** | `jobRealmCode` 필수 파라미터 누락 | `jobRealmCode: 'IM36000001'` 추가 | ✅ |
+| **Tomcat 재시작 실패** | shutdown.sh 후 기존 프로세스가 남아 8080 포트 점유 | 프로세스 완전 종료 대기 후 startup.sh | ✅ |
 
 ### 포트 사용 현황
 | 포트 | 서비스 | 비고 |
