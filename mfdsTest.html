@@ -221,26 +221,54 @@ async function runFullTest() {
   // 테스트 3: 부서 목록 조회
   log('');
   log('[테스트 3] 부서 목록 조회 (selectListDept)...');
+  var bflDeptCode = '';
   try {
     var res3 = await MFDS.callApi('selectListDept', {});
     var cnt3 = res3.resultData ? res3.resultData.length : 0;
     log('  → 성공! ' + cnt3 + '건');
     if (res3.resultData) {
       res3.resultData.forEach(function(d) {
-        log('    ' + (d.deptCode || '') + ' - ' + (d.deptName || ''));
+        log('    ' + (d.codeNo || '') + ' - ' + (d.codeName || ''));
+        // 바이오푸드랩 부서코드 저장 (테스트 4에서 사용)
+        if (d.codeName && d.codeName.indexOf('바이오푸드랩') >= 0) {
+          bflDeptCode = d.codeNo;
+        }
       });
     }
   } catch(e) {
     log('  → 실패: ' + (e.message || JSON.stringify(e)));
   }
 
-  // 테스트 4: 사용자 목록 조회
+  // 테스트 4: 직원 목록 조회 (부서코드 필수)
   log('');
-  log('[테스트 4] 사용자 목록 조회 (selectListUser)...');
+  var deptForTest = bflDeptCode || 'D003194';
+  log('[테스트 4] 직원 목록 조회 (selectListEmp, 부서: ' + deptForTest + ')...');
   try {
-    var res4 = await MFDS.callApi('selectListUser', {});
+    var res4 = await MFDS.callApi('selectListEmp', { deptCode: deptForTest });
     var cnt4 = res4.resultData ? res4.resultData.length : 0;
     log('  → 성공! ' + cnt4 + '건');
+    if (res4.resultData) {
+      res4.resultData.forEach(function(u) {
+        log('    ' + (u.codeNo || '') + ' - ' + (u.codeName || ''));
+      });
+    }
+  } catch(e) {
+    log('  → 실패: ' + (e.message || JSON.stringify(e)));
+  }
+
+  // 테스트 5: 품목분류 대분류 조회
+  log('');
+  log('[테스트 5] 품목분류 대분류 조회 (selectListPrdlstLclas)...');
+  try {
+    var res5 = await MFDS.callApi('selectListPrdlstLclas', {});
+    var cnt5 = res5.resultData ? res5.resultData.length : 0;
+    log('  → 성공! ' + cnt5 + '건');
+    if (res5.resultData) {
+      res5.resultData.slice(0, 5).forEach(function(item) {
+        log('    ' + (item.codeNo || item.prdlstLclasCode || '') + ' - ' + (item.codeName || item.prdlstLclasNm || ''));
+      });
+      if (cnt5 > 5) log('    ... 외 ' + (cnt5 - 5) + '건');
+    }
   } catch(e) {
     log('  → 실패: ' + (e.message || JSON.stringify(e)));
   }

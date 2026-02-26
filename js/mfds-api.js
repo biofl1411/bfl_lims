@@ -309,11 +309,15 @@ MFDS.selectListDept = function(params) {
 
 /**
  * 직원 목록 조회
- * @param {Object} [params] - 검색 조건
+ * @param {Object} params - 검색 조건
+ * @param {string} params.deptCode - 부서코드 (필수)
  * @returns {Promise<Object>}
  */
 MFDS.selectListEmp = function(params) {
-  return MFDS.callApi('selectListEmp', params || {});
+  if (!params || !params.deptCode) {
+    return Promise.reject({ type: 'PARAM_ERROR', message: 'deptCode는 필수 파라미터입니다' });
+  }
+  return MFDS.callApi('selectListEmp', params);
 };
 
 // ============================================================
