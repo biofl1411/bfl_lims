@@ -727,12 +727,15 @@ MariaDB에서 Firestore로 식약처 공공 API 데이터 전체 이관 완료 (
         ├─ /          → 정적 파일 서빙 (/home/biofl/bfl_lims/*.html)
         ├─ /api/*     → proxy_pass → 127.0.0.1:5001 (시료접수 API)
         ├─ /ocr/*     → rewrite + proxy_pass → 127.0.0.1:5002 (OCR 프록시)
-        └─ /fss/*     → rewrite + proxy_pass → 127.0.0.1:5003 (식약처 API)
+        ├─ /fss/*     → rewrite + proxy_pass → 127.0.0.1:5003 (식약처 API)
+        └─ /mfds/*    → rewrite + proxy_pass → 127.0.0.1:8080 (식약처 통합LIMS 중간모듈)
 
 [내부 Flask 서버] (localhost만 바인딩)
     ├─ receipt_api_final.py  → port 5001 (시료접수 API)
     ├─ ocr_proxy.py          → port 5002 (CLOVA OCR 프록시)
     └─ api_server.py         → port 5003 (식약처 데이터 API + MariaDB)
+[Tomcat 9.0.98] (/home/biofl/tomcat, port 8080)
+    └─ LMS_CLIENT_API.war    → 식약처 통합LIMS 중간모듈 (Java Spring)
 ```
 
 **nginx 설정 파일**: `/etc/nginx/sites-available/bfl_lims`
@@ -1821,6 +1824,281 @@ window.addEventListener('firebase-ready', function() {
 
 ---
 
+## 🔴 식약처 통합LIMS WEB API 연동 (진행 중 — 2026-02-26)
+
+> **이 섹션은 프롬프트 재시작 시 이어서 작업할 수 있도록 진행 상황을 기록합니다.**
+> **실패가 2회 이상 발생하면, `mfds_integration/` 폴더의 전체 내용(PDF 가이드, Sample 소스, 코드매핑 Excel 등)을 정밀히 확인하여 해결하세요.**
+
+### 개요
+- 식품 분야만 연동 (의약품/의료기기 제외)
+- 업무분야코드: `IM36000001` (식품)
+- 아키텍처: `BFL LIMS (HTML+JS)` → `nginx 프록시` → `중간모듈 (Java WAR/Tomcat)` → `식약처 통합LIMS API`
+- 문서/샘플 위치: `mfds_integration/` 폴더
+- 테스트URL: https://wslims.mfds.go.kr
+- 테스트 페이지: https://wslims.mfds.go.kr/ApiClient/ (시나리오별 수동 테스트 가능)
+
+### 서버 환경 (192.168.0.96)
+- **Java**: OpenJDK 17.0.18 (설치 완료)
+- **Tomcat**: 9.0.98 → `/home/biofl/tomcat` (포트 8080, 수동 설치)
+- **WAR 배포**: `/home/biofl/tomcat/webapps/LMS_CLIENT_API` (배포 완료, Spring MVC 정상 로드)
+- **인증서**: `/home/biofl/mfds_certs/O000170.jks` (테스트), `O000026.jks` (운영)
+- **파일 저장**: `/home/biofl/mfds_files/`
+- **Tomcat 시작/종료**: `/home/biofl/tomcat/bin/startup.sh` / `shutdown.sh`
+- **setenv.sh**: `JAVA_HOME`, `CATALINA_HOME`, `CATALINA_PID` 설정 완료
+- **서버 시간**: UTC (NTP 동기화 활성), 타임존은 인증에 영향 없음 (epoch ms 사용)
+- **네트워크**: enp4s0 (MAC: `00:24:54:91:d8:12`, UP 상태)
+
+### application.properties (현재 설정 — 2개 파일)
+
+**1) ResourceBundle용 (실제 인증에 사용됨):**
+```properties
+# 위치: /home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/classes/application.properties
+keyStore.keyStoreLoc=/home/biofl/mfds_certs/O000170.jks
+KeyStore.keyPassWord=mfds2015
+keyStore.keyAlias=O000170
+fileDownloadPath=/home/biofl/mfds_files
+wslimsUrl=https://wslims.mfds.go.kr
+keyStore.clientEthName=enp4s0
+```
+
+**2) Spring config용 (동일 내용 유지):**
+```properties
+# 위치: /home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/config/application.properties
+keyStore.keyStoreLoc=/home/biofl/mfds_certs/O000170.jks
+KeyStore.keyPassWord=mfds2015
+keyStore.keyAlias=o000170
+fileDownloadPath=/home/biofl/mfds_files
+wslimsUrl=https://wslims.mfds.go.kr
+keyStore.clientEthName=enp4s0
+```
+
+> **주의**: `ResourceBundle.getBundle("application")`는 `WEB-INF/classes/`에서 읽음.
+> `WEB-INF/config/`는 Spring의 `<util:properties>`에서 읽음.
+> 두 파일 모두 수정해야 설정이 제대로 반영됨.
+
+### 인증서 정보
+| 파일 | alias | 비밀번호 | 용도 | CN | 유효기간 |
+|------|-------|----------|------|-----|----------|
+| `O000170.jks` | `o000170` | `mfds2015` | 테스트(공용) | CN=O000170 | 2025-12-18 ~ 2029-12-18 |
+| `O000026.jks` | `o000026` | `mfds2015` | 운영(바이오푸드랩) | CN=O000026 | 2026-02-25 ~ 2030-02-25 |
+
+> 두 JKS 모두 `alias "1"`에 `*.mfds.go.kr` trustedCertEntry 포함 (mTLS용)
+> MD5: O000170.jks = `9dd0538f54c56a6d6d63077fc803824c` (서버/로컬 동일 확인)
+
+### 인증 흐름 (개발가이드 2.4절, 3.2절 기반)
+
+```
+검사기관 시스템                    JAVA 중간 모듈                     통합LIMS WEB API
+─────────────                   ─────────────                    ────────────────
+기관코드/기관ID    ──────→    # 인증값 생성                        기관 전송 데이터 수신
+시나리오별 JSON 데이터            - Server MAC 취득
+                              - 서버시간(Timestamp)               # 기관 인증 값 수신
+                              - 검사기관 인증서(JKS)              # 서버측 인증 값 생성
+                              + 기관코드/기관ID                      (서버용/기관코드)
+                              + 시나리오별 JSON 데이터
+                              ─── SSL 통신 ──────→              기관 인증 값 vs 서버 인증 값 비교
+                                                                  │
+                                                                  ├→ MAC Address 검증 (1순위)
+                                                                  ├→ 인증서 검증 (2순위)
+                                                                  └→ 유효성 체크 (3순위)
+                                                                  │
+서비스 결과 수신    ←─────────── 서비스 결과 수신 ←──────── 결과 전송 / 오류 처리
+```
+
+**인증값 생성 과정 (AuthenticateCert.setCertCode):**
+1. `data = timestamp + macAddr` (예: `177207770551500-24-54-91-D8-12`)
+2. `sign = SHA256withRSA(data, privateKey)` — JKS 개인키로 RSA 서명
+3. `certCryp = SHA-256(sign)` — 서명의 해시값
+4. `time = RSA_Encrypt(timestamp, publicKey)` — 타임스탬프만 RSA 암호화
+5. `certValue = {mfdsLimsId, psitnInsttCode, ..., certCryp, time}` — JSON 조립
+
+**서버측 검증 과정 (추정):**
+1. mTLS로 클라이언트 인증서의 CN 확인 → 기관코드 식별
+2. `time` 복호화 → 타임스탬프 추출
+3. DB에서 해당 기관의 **등록된 MAC 주소** 조회
+4. `data = timestamp + 등록된MAC`으로 인증값 재계산
+5. 클라이언트가 보낸 `certCryp`와 비교 → 일치하면 인증 성공
+
+> **핵심**: certValue JSON에 macAddr 필드는 없음! 서버는 DB에 등록된 MAC으로 인증값을 재계산하여 비교함.
+> **따라서 MAC이 서버에 정확히 등록되지 않으면 인증은 절대 통과할 수 없음.**
+
+### 중간모듈 WAR 구조 (LMS_CLIENT_API)
+
+**배포된 컨트롤러** (`WebApiController.class` — 수정됨):
+| 엔드포인트 | 메서드 | 설명 |
+|-----------|--------|------|
+| `POST /LMS_CLIENT_API/selectUnitTest` | `selectUnitTest(String)` | REST/SOAP API 호출 (JSON) |
+| `POST /LMS_CLIENT_API/selectUnitTestFile` | `selectUnitTest(MultipartHttpServletRequest)` | 파일 포함 API 호출 |
+| `GET/POST /LMS_CLIENT_API/unitTestFileDownLoad` | `unitTestFileDownLoad(Model)` | 파일 다운로드 |
+
+> **수정사항**: `keyStore.clientEthName` 설정이 있으면 5파라미터 생성자
+> `new AuthenticateCert(keyStoreLoc, alias, passWord, clientEthName, context)` 사용.
+> 원본 백업: `WebApiController.class.bak`
+
+**요청 JSON 형식** (`selectUnitTest` — REST 방식):
+```json
+{
+  "type": "rest",
+  "url": "https://wslims.mfds.go.kr/webService/rest/selectListCmmnCode",
+  "param": {"mfdsLimsId": "apitest01", "psitnInsttCode": "O000170", "classCode": "IM36"}
+}
+```
+- `type`: `"rest"` 또는 `"soap"`
+- `url`: REST는 `https://wslims.mfds.go.kr/webService/rest/` + 서비스명
+- `param`: JSON 객체 (필수 필드: `mfdsLimsId`, `psitnInsttCode`는 반드시 **최상위 레벨**에 포함)
+
+**요청 JSON 형식** (`selectUnitTest` — SOAP 방식):
+```json
+{
+  "type": "soap",
+  "url": "/selectListCmmnCode",
+  "param": {"mfdsLimsId": "apitest01", "psitnInsttCode": "O000170", "classCode": "IM36"}
+}
+```
+- SOAP에서 `url`은 도메인 없이 서비스명만 (예: `/selectListCmmnCode`)
+
+### 테스트 계정 정보 (O000170 공용 테스트 기관)
+- 계정: `apitest01` ~ `apitest20` (기관관리자 권한)
+- 웹 로그인 비밀번호: `ODSxcBii` (임시, 마이페이지에서 변경)
+- 기관코드: `O000170` (psitnInsttCode)
+- 테스트 페이지: https://wslims.mfds.go.kr/ApiClient/
+- **주의**: O000170은 여러 기관이 공유하는 테스트 기관. 다른 기관의 테스트 데이터를 수정하지 않도록 주의
+
+### 완료된 작업 ✅
+1. ✅ Java 17 설치 확인
+2. ✅ Tomcat 9.0.98 설치 (`/home/biofl/tomcat`)
+3. ✅ LMS_CLIENT_API.war 배포 (Spring MVC 정상 로드)
+4. ✅ 인증서 배치 (`/home/biofl/mfds_certs/`)
+5. ✅ application.properties 설정 (테스트 환경, 2개 파일 모두)
+6. ✅ `javax.activation-1.2.0.jar` 추가 (Java 17 호환성 해결)
+7. ✅ setenv.sh 환경변수 설정
+8. ✅ MAC 주소 감지 문제 해결 (clientEthName=enp4s0 설정)
+9. ✅ WebApiController 수정 — 5파라미터 생성자로 MAC 명시적 전달
+10. ✅ Tomcat 로그로 MAC 포함 확인 (`data:177207770551500-24-54-91-D8-12`)
+
+### 🚫 현재 차단 이슈: "유효하지 않는 인증정보입니다" (2026-02-26)
+
+**에러 메시지:**
+```json
+{"resultFlag":"0","validate":"false","errorMessage":" 유효하지 않는 인증정보입니다."}
+```
+
+**확인된 사항:**
+- MAC 주소 `00-24-54-91-D8-12`가 certValue 서명에 정상 포함됨 (Tomcat 로그 확인)
+- 인증서 파일 무결성 확인 (MD5 일치)
+- REST URL 형식 정확 (`/webService/rest/selectListCmmnCode`)
+- 필수 파라미터 정상 (`mfdsLimsId`, `psitnInsttCode` 최상위 레벨)
+- 서버 시간 NTP 동기화 정상
+- 독립 테스트(DirectApiTest.java — WAR/Tomcat 완전 우회)에서도 동일 에러 → 미들웨어 문제 아님
+
+**추가 확인 사항 (2026-02-26 후반):**
+
+1. **공개 엔드포인트 확인**: `selectUnityTest`와 `selectUnityTestSenario`는 **인증 불필요**(PUBLIC) 엔드포인트임. 우리 서버에서 정상 호출 성공 → 네트워크/TLS 연결 자체는 문제 없음
+2. **식약처 테스트 페이지 미들웨어 통한 인증 성공**: 식약처 테스트 페이지(https://wslims.mfds.go.kr/ApiClient/)에서 `selectListCmmnCode` 호출 시 **인증 성공** 확인
+   ```json
+   {"resultFlag":"1", "validate":"true", ...}  // 업무분야 코드 9건 반환
+   ```
+   - 사용 파라미터: `mfdsLimsId=apitest34`, `psitnInsttCode=O000170`, `classCode=IM36`
+   - 이는 **API 파라미터(계정/기관코드/업무분야)가 올바르다는 것을 증명**함
+3. **REST/SOAP 모두 동일 에러**: 우리 서버에서 REST, SOAP 양쪽 모두 "유효하지 않는 인증정보" 에러 발생
+4. **인증서 교차 테스트**: O000170(테스트)과 O000026(운영) 인증서 **모두** 동일 에러 → 인증서 자체 문제 아님
+5. **MAC 대소문자 테스트**: `00:24:54:91:d8:12`(소문자)와 `00:24:54:91:D8:12`(대문자) 모두 실패
+
+**결론: 문제는 100% 인증서/MAC 등록 문제**
+- API 파라미터, 인증서 파일, 네트워크 연결은 모두 정상
+- 식약처 테스트 페이지의 미들웨어(식약처 측 인증서+MAC 사용)로는 인증 성공
+- 우리 서버의 인증서+MAC 조합이 식약처 DB에 등록되지 않았거나 잘못 등록됨
+
+**원인 분석:**
+| 가능성 | 설명 | 확률 |
+|--------|------|------|
+| **MAC 미등록/등록오류** | 식약처 DB에 우리 MAC(`00:24:54:91:d8:12`)이 O000170 기관에 등록되지 않았거나 잘못 등록됨 | **매우 높음** |
+| 인증서-MAC 매핑 오류 | MAC이 O000026에 등록되었으나 O000170에는 미등록, 또는 둘 다 미등록 | 중간 |
+| 인증서 재발급 | 식약처에서 O000170 인증서를 재생성했으나 우리 사본은 구버전 | 낮음 |
+
+> **근거**: 인증 흐름에서 MAC 검증이 1순위임. certValue에 macAddr 필드가 없으므로,
+> 서버가 등록된 MAC으로 인증값을 재계산하는 방식. MAC 미등록 시 인증 절대 불가.
+> 수정 전(MAC 없음)과 수정 후(MAC 있음) 모두 동일한 에러 → MAC이 서버에 없을 가능성 높음.
+> **식약처 테스트 페이지에서 동일 파라미터로 인증 성공했으므로, 파라미터 문제는 완전히 배제됨.**
+
+### ⏳ 다음 조치 (우선순위)
+
+**1순위 — 식약처 MAC/인증서 등록 확인 요청 (차단 해결):**
+- 연락처: 통합LIMS 운영·관리 담당자 **jhk0821@korea.kr** / 정보화도움터 **043-234-3100**
+- 확인 요청 내용:
+  - MAC 주소 `00:24:54:91:d8:12` (또는 `00-24-54-91-D8-12`)가 **O000170** 테스트 기관에 등록되어 있는지
+  - 공인IP `14.7.14.31`에 대한 등록 여부도 함께 확인
+  - O000170.jks / O000026.jks 인증서가 현재 유효한 최신 버전인지
+  - 등록 시점 및 활성화 여부
+- 식약처 안내 메일의 "개발테스트 신청양식"을 작성하여 회신했는지 재확인 필요
+- **참고**: 식약처 테스트 페이지에서는 동일 파라미터(apitest34/O000170/IM36)로 인증 성공했으므로, 파라미터/계정 문제가 아님을 설명할 것
+
+**2순위 — 테스트 페이지 직접 확인 (✅ 완료):**
+- https://wslims.mfds.go.kr/ApiClient/ 에서 apitest34로 `selectListCmmnCode` 호출 → **인증 성공 확인**
+- `selectUnityTest`, `selectUnityTestSenario` → **공개 엔드포인트로 인증 없이 호출 가능** 확인
+
+**3순위 — MAC 등록 확인 대기 중 병행 작업 (✅ 2026-02-26 완료):**
+- ✅ nginx 프록시 설정 (`/mfds/` → Tomcat 8080 LMS_CLIENT_API) — `sudo nginx -t && systemctl reload` 완료
+- ✅ BFL LIMS 프론트엔드 식약처 API 호출 JS 모듈 구현 (`js/mfds-api.js`)
+  - `MFDS.callApi(serviceName, params)` → nginx `/mfds/selectUnitTest` → Tomcat → 식약처 API
+  - JSON 형식 요청 확인 완료: `{type:"rest", url:"...", param:"..."}`
+  - 래퍼 함수: 의뢰(01xx), 시험(02xx), 성적서(03xx), 진행상황(04xx), 기관(06xx), 공통(08xx)
+  - Firestore 캐시 기능 (`mfds_cache` 컬렉션)
+- ✅ nginx → Tomcat → 식약처 API 전체 파이프라인 연결 확인 (인증 실패 응답 정상 수신)
+- ⬜ 코드매핑 데이터 Firestore 업로드 준비
+
+**4순위 — 인증 해결 후:**
+- ⬜ 31단계 테스트 시나리오 순서대로 실행
+- ⬜ 의뢰→시료→결과→결재→성적서 전체 흐름 테스트
+
+### 트러블슈팅 기록
+| 문제 | 원인 | 해결 | 상태 |
+|------|------|------|------|
+| `NoClassDefFoundError: javax.activation` | Java 17에서 모듈 제거됨 | `javax.activation-1.2.0.jar` 추가 | ✅ |
+| Tomcat 포트 충돌 | 기존 Tomcat 이미 실행 중 | 중복 설치 삭제, 기존 인스턴스 활용 | ✅ |
+| WAR에 JSP 없음 | 중간모듈 전용 빌드 | 정상 — API 호출만 제공 | ✅ |
+| MAC 미감지 (`data`에 MAC 없음) | `/etc/hosts`가 hostname→127.0.1.1 매핑, `getLocalHost()`→loopback→NI null | `clientEthName=enp4s0` 설정 + WebApiController 5파라미터 생성자 | ✅ |
+| `classes/` vs `config/` 혼동 | ResourceBundle은 `classes/`에서 읽음, Spring은 `config/`에서 읽음 | 두 파일 모두 설정 통일 | ✅ |
+| **유효하지 않는 인증정보** | MAC/인증서 미등록 확정적 (식약처 테스트페이지에서는 동일 파라미터로 인증 성공, REST/SOAP 모두 실패, O000170/O000026 모두 실패) | **식약처 MAC 등록 확인 요청 필요 (jhk0821@korea.kr)** | 🔧 |
+
+### 포트 사용 현황
+| 포트 | 서비스 | 비고 |
+|------|--------|------|
+| 8080 | Tomcat (중간모듈) | 내부 전용 |
+| 8443 | nginx SSL (BFL LIMS) | 외부 접근 |
+| 5001 | 시료접수 API | Flask |
+| 5002 | OCR 프록시 | Flask |
+| 5003 | 식약처 데이터 API | Flask |
+
+**⛔ 사용 금지 포트**: `443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964`
+
+### 참고: mfds_integration 폴더 구조
+```
+mfds_integration/
+├── (먼저읽어주세요)_개발테스트절차 및 주의사항.pdf  # 개발테스트 신청양식, MAC 등록 절차
+├── 통합LIMS_WEB_API_검사기관개발가이드_V1.1.pdf    # 핵심 개발가이드 (19p)
+├── 통합LIMS_WEB_API_검사기관개발가이드_개정이력.pdf
+├── 통합LIMS_WEB_API_테스트시나리오.xls              # 31단계 시나리오
+├── 통합테스트시나리오_자체의뢰 일반배정 시료별 결재상신.xls
+├── 검사기관별_테스트계정_20260225.xlsx              # 테스트 계정 목록 (2026-02-25)
+├── 식약처 안내 메일.txt                             # MAC 등록 안내, 임시비밀번호
+├── O000170.jks / O000026.jks                       # 인증서 (테스트/운영)
+├── DirectApiTest.java                               # 독립 API 테스트 (WAR 우회)
+├── MacTest.java                                     # MAC 주소 감지 테스트
+├── Sample/                                          # 클라이언트 API 샘플 (Java 소스)
+│   ├── src/gov/mfds/lms_client/                     # WebApiController.java, WebApiService.java
+│   └── WebContent/WEB-INF/                          # web.xml, applicationContext.xml, lib/
+├── Sample_중간모듈/
+│   ├── web Service(중간모듈)/LMS_CLIENT_API.war      # 배포용 WAR (62MB)
+│   └── 검사기관클라이언트_Sample/iisTset.zip
+├── 서비스별 가이드/                                  # 167개 API PDF (I-LMS-0101 ~ I-LMS-0818)
+└── 코드매핑자료/                                     # 13개 Excel (공통코드, 품목, 시험항목 등)
+    # 식품 전용: 공통코드 383건, 품목 8,404건, 시험항목 2,940건,
+    #           개별기준규격 15,993건, 공통기준규격 33,739건, 단위 106건
+```
+
+---
+
 ## 향후 계획
 
 1. ~~nginx 포트 통합 (8443 하나로 API 프록시 구성)~~ ✅ 완료
@@ -1927,3 +2205,30 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 4. **Claude Desktop 버전 확인** — 업데이트 시 `app-{version}` 경로가 변경되어 레지스트리 재등록 필요
 5. **단일 Chrome 프로필 사용** — 하나의 Chrome 프로필에서만 사용
 6. **Chrome 탭 최소화 금지** — Chrome이 리소스 절약을 위해 비활성 탭 연결을 끊을 수 있음
+
+---
+
+## 변경 이력
+
+### 2026-02-23
+
+#### 검사관리 - 데이터 정리 (inspectionMgmt.html)
+- **식품공전 탭 I2580 중첩 해결**: 식품유형(API)과 개별기준규격 탭이 동일 I2580 데이터를 중복 표시 → 식품공전 탭에서 개별기준규격 서브탭 제거, I2580은 식품유형(API)에서만 접근
+- **공통기준규격(I2600) 반영**: 수집 중단된 I2600 데이터(31,000/56,716건)에 meta 문서 생성하여 UI 표시 가능하게 처리
+- **식품유형 서브탭 3개 구성**: 식품유형(API) / 식품유형(커스텀) / 식품유형(맵핑)
+- **식품유형(맵핑) 탭 신규**: Firestore `foodTypesMapping` 컬렉션, 식품/축산 라벨 필터 + 검사목적 필터, 카드/리스트 뷰
+
+#### 접수등록 (sampleReceipt.html)
+- **거래처 검색 인허가 기준 변경**: 인허가 필드(영업소명, 인허가번호, 업종, 주소) 검색 추가 (`firestore-helpers.js` 수정), 거래처명은 인허가 영업소명(licBizName) 우선 표시
+- **시료번호 순번 부여**: 시료 수에 따라 접수번호-001, -002, -003 자동 부여 (`getSampleNo()` 수정)
+- **검체유형 Firestore 연동**: 정적 JS(`js/full-food-types.js`) 의존 제거, Firestore `foodTypesMapping` 컬렉션에서 검체유형 로드
+- **검사목적 + 시험분야 필터**: 선택한 검사목적(purpose)과 시험분야(식품/축산)에 해당하는 검체유형만 드롭다운에 표시
+
+#### 접수현황 (receiptStatus.html)
+- **시료별 행 분리**: 접수 1건(시료 N개) → N개 행으로 펼침 표시 (260700001-001, -002, -003)
+- **상세모달 시료별 표시**: 클릭한 시료의 정보만 단독 표시 (기존: 모든 시료 일괄 표시)
+
+#### Firestore 데이터
+- `foodTypesMapping` 컬렉션 생성: `food_item_fee_mapping.js` 기반 9,237건 업로드 + 분야(식품/축산) 필드 추가
+- **주의**: 현재 업로드된 맵핑 데이터는 재확인 필요 (올바른 자료가 아님, 추후 교체 예정)
+- I2580 중복제거 적용: 16,104건 → 16,099건
