@@ -430,6 +430,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
+<script src="js/mfds-fee-mapping.js"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="js/sidebar.js?v=3"></script>
@@ -785,6 +786,13 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 
   <!-- ═══ 패널 6: 수수료 ═══ -->
   <div class="panel" id="panel-5">
+    <!-- 서브탭: 수수료 목록 / 식약처 매핑 -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <button class="filter-chip active" id="fee-sub-list" onclick="switchFeeSubtab('list')">💰 수수료 목록</button>
+      <button class="filter-chip" id="fee-sub-mfds" onclick="switchFeeSubtab('mfds')">🔗 식약처 매핑</button>
+    </div>
+    <!-- 서브탭 A: 기존 수수료 목록 -->
+    <div id="fee-subtab-list">
     <div class="fee-layout">
       <!-- 좌측: 검사목적 메뉴 -->
       <div class="fee-purpose-menu">
@@ -852,6 +860,44 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <div class="accordion-container" id="fee-accordion" style="display:none;"></div>
       </div>
     </div>
+    </div><!-- /fee-subtab-list -->
+
+    <!-- 서브탭 B: 식약처 수수료 매핑 -->
+    <div id="fee-subtab-mfds" style="display:none;">
+      <div class="page-desc" style="margin-bottom:12px;font-size:13px;color:var(--sub)">
+        🔗 식약처 시험항목코드 ↔ 자가품질위탁검사용 수수료 매핑 (72개 항목)
+      </div>
+      <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="search-box" style="flex:1;min-width:200px;">
+          <span>🔍</span>
+          <input type="text" id="mfds-fee-search" placeholder="시험항목코드, 항목명 검색..." oninput="renderMfdsFeeTable()">
+        </div>
+        <span id="mfds-fee-count" style="font-size:13px;color:var(--sub);white-space:nowrap;"></span>
+        <button class="btn btn-primary" onclick="saveMfdsFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:var(--bg);border-bottom:2px solid var(--bdr);">
+              <th style="padding:8px 10px;text-align:left;width:40px">No</th>
+              <th style="padding:8px 10px;text-align:left;width:90px">시험항목코드</th>
+              <th style="padding:8px 10px;text-align:left;">시험항목명</th>
+              <th style="padding:8px 10px;text-align:right;width:120px">수수료(원)</th>
+              <th style="padding:8px 10px;text-align:center;width:80px">매칭유형</th>
+            </tr>
+          </thead>
+          <tbody id="mfds-fee-tbody"></tbody>
+          <tfoot>
+            <tr style="background:var(--bg);border-top:2px solid var(--bdr);">
+              <td colspan="3" style="padding:8px 10px;font-weight:700;text-align:right;">합계</td>
+              <td id="mfds-fee-total" style="padding:8px 10px;font-weight:700;text-align:right;color:var(--primary);"></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div><!-- /fee-subtab-mfds -->
+
   </div>
 
   </div><!-- /content -->
@@ -30944,6 +30990,111 @@ function addNew(type) {
 
   document.getElementById('detail-panel').classList.add('active');
   document.getElementById('overlay').classList.add('active');
+}
+
+// ══ 수수료 탭: 서브탭 전환 ══
+var _feeSubtab = 'list';
+var _mfdsFeeData = null; // Firestore에서 로드한 매핑 데이터
+
+function switchFeeSubtab(tab) {
+  _feeSubtab = tab;
+  document.getElementById('fee-sub-list').classList.toggle('active', tab === 'list');
+  document.getElementById('fee-sub-mfds').classList.toggle('active', tab === 'mfds');
+  document.getElementById('fee-subtab-list').style.display = tab === 'list' ? '' : 'none';
+  document.getElementById('fee-subtab-mfds').style.display = tab === 'mfds' ? '' : 'none';
+  if (tab === 'mfds') loadAndRenderMfdsFee();
+}
+
+// ══ 식약처 수수료 매핑: Firestore 로드 → 렌더링 ══
+async function loadAndRenderMfdsFee() {
+  if (!_mfdsFeeData) {
+    // Firestore에서 로드 시도
+    try {
+      var doc = await db.collection('settings').doc('mfdsFeeMapping').get();
+      if (doc.exists && doc.data().items) {
+        _mfdsFeeData = doc.data().items;
+        console.log('[수수료] Firestore에서 식약처 매핑 로드:', _mfdsFeeData.length + '건');
+      }
+    } catch(e) {
+      console.warn('[수수료] Firestore 로드 실패:', e.message);
+    }
+    // Firestore 없으면 정적 JS에서 로드
+    if (!_mfdsFeeData && typeof MFDS_FEE_MAPPING !== 'undefined') {
+      _mfdsFeeData = JSON.parse(JSON.stringify(MFDS_FEE_MAPPING));
+      console.log('[수수료] 정적 JS에서 식약처 매핑 로드:', _mfdsFeeData.length + '건');
+    }
+    if (!_mfdsFeeData) _mfdsFeeData = [];
+  }
+  renderMfdsFeeTable();
+}
+
+function renderMfdsFeeTable() {
+  var tbody = document.getElementById('mfds-fee-tbody');
+  var countEl = document.getElementById('mfds-fee-count');
+  var totalEl = document.getElementById('mfds-fee-total');
+  if (!tbody || !_mfdsFeeData) return;
+
+  var query = (document.getElementById('mfds-fee-search').value || '').trim().toLowerCase();
+  var filtered = _mfdsFeeData;
+  if (query) {
+    filtered = _mfdsFeeData.filter(function(m) {
+      return (m.mfdsCode || '').toLowerCase().indexOf(query) >= 0 ||
+             (m.itemName || '').toLowerCase().indexOf(query) >= 0;
+    });
+  }
+
+  var html = '';
+  var total = 0;
+  filtered.forEach(function(m, idx) {
+    var fee = m.fee || 0;
+    total += fee;
+    html += '<tr style="border-bottom:1px solid var(--bdr);">';
+    html += '<td style="padding:7px 10px;color:var(--sub)">' + (idx + 1) + '</td>';
+    html += '<td style="padding:7px 10px;font-family:monospace;color:var(--primary);font-weight:600">' + (m.mfdsCode || '') + '</td>';
+    html += '<td style="padding:7px 10px;color:var(--txt)">' + (m.itemName || '') + '</td>';
+    html += '<td style="padding:7px 10px;text-align:right">';
+    html += '<input type="number" value="' + fee + '" data-code="' + (m.mfdsCode || '') + '" ';
+    html += 'onchange="updateMfdsFee(this)" ';
+    html += 'style="width:100px;text-align:right;padding:4px 8px;border:1px solid var(--bdr);border-radius:4px;font-size:13px;">';
+    html += '</td>';
+    html += '<td style="padding:7px 10px;text-align:center;font-size:11px;color:var(--sub)">' + (m.matchType || '') + '</td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+  countEl.textContent = filtered.length + '개 / ' + _mfdsFeeData.length + '개';
+  totalEl.textContent = total.toLocaleString() + '원';
+}
+
+function updateMfdsFee(input) {
+  var code = input.getAttribute('data-code');
+  var newFee = parseInt(input.value) || 0;
+  if (_mfdsFeeData) {
+    var item = _mfdsFeeData.find(function(m) { return m.mfdsCode === code; });
+    if (item) item.fee = newFee;
+  }
+  // 합계 재계산
+  var total = 0;
+  _mfdsFeeData.forEach(function(m) { total += m.fee || 0; });
+  document.getElementById('mfds-fee-total').textContent = total.toLocaleString() + '원';
+}
+
+async function saveMfdsFeesToFirestore() {
+  if (!_mfdsFeeData || _mfdsFeeData.length === 0) {
+    showToast('저장할 데이터가 없습니다', 'warning');
+    return;
+  }
+  try {
+    await db.collection('settings').doc('mfdsFeeMapping').set({
+      items: _mfdsFeeData,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      totalItems: _mfdsFeeData.length
+    });
+    showToast('식약처 수수료 매핑 ' + _mfdsFeeData.length + '건 저장 완료', 'success');
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+    console.error('[수수료] Firestore 저장 오류:', e);
+  }
 }
 
 // ══ 수수료 탭: 검사목적 메뉴 ══
