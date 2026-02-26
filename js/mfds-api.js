@@ -80,8 +80,8 @@ MFDS.callApi = function(serviceName, params, options) {
   options = options || {};
   var method = options.method || 'rest';
 
-  // 기본 파라미터 병합 (mfdsLimsId, psitnInsttCode, classCode)
-  var fullParams = Object.assign({}, MFDS.DEFAULT_USER, params || {});
+  // 기본 파라미터 병합 (mfdsLimsId, psitnInsttCode, classCode, webApi)
+  var fullParams = Object.assign({}, MFDS.DEFAULT_USER, { webApi: 'Y' }, params || {});
 
   // REST URL 생성
   var restUrl = MFDS.WSLIMS_URL + '/webService/rest/' + serviceName;
@@ -421,6 +421,7 @@ MFDS.testConnection = function() {
       mfdsLimsId: MFDS.DEFAULT_USER.mfdsLimsId,
       psitnInsttCode: MFDS.DEFAULT_USER.psitnInsttCode,
       classCode: MFDS.DEFAULT_USER.classCode,
+      webApi: 'Y',
       cmmnCodeClList: [{ cmmnCodeClCode: 'IM01' }]
     })
   };
