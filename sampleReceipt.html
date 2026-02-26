@@ -436,9 +436,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         </div>
                         <div id="product-history-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-top:4px;max-height:300px;overflow-y:auto"></div>
                     </div>
-                    <div class="form-group autocomplete-input">
+                    <div class="form-group autocomplete-input" id="food-type-group" style="display:none">
                         <label>검체유형 <span class="required">*</span></label>
-                        <input type="text" id="food-type-input" placeholder="검색 또는 클릭..." oninput="searchFoodType(this.value)" onfocus="searchFoodType('')" required autocomplete="off">
+                        <input type="text" id="food-type-input" placeholder="검색 또는 클릭..." oninput="searchFoodType(this.value)" onfocus="searchFoodType('')" autocomplete="off">
                         <input type="hidden" id="food-type-value">
                         <div class="autocomplete-list" id="food-type-list"></div>
                         <small class="field-help">시험분야 + 검사목적에 따라 표시됩니다</small>
@@ -447,8 +447,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <button type="button" disabled class="btn-receipt secondary" style="padding:9px 16px;font-size:13px;opacity:0.6;cursor:not-allowed" title="3월 구현 예정">🔍 API조회 <span style="font-size:10px;color:#999">(3월)</span></button>
                     </div>
                 </div>
-                <!-- 식약처 품목코드 선택 (식약처 통합LIMS 연동용) -->
-                <div id="mfds-product-picker-container" style="margin:12px 0"></div>
+                <!-- 식약처 품목코드 선택 (자가품질위탁검사용 선택 시 표시) -->
+                <div id="mfds-product-picker-container" style="display:none;margin:12px 0"></div>
                 <!-- 식약처 기준규격 시험항목 (품목코드 선택 시 표시) -->
                 <div id="mfds-std-section" style="display:none;margin:12px 0;padding:16px;background:#f0f7ff;border-radius:10px;border:1px solid #b3d4fc">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -1393,6 +1393,8 @@ function onTestPurposeChange() {
     document.getElementById('food-type-input').value = '';
     document.getElementById('food-type-value').value = '';
     clearInspectionItems();
+    clearMfdsStandardItems();
+    window._mfdsFeeTotal = 0;
 
     // 고정된 경우 값 업데이트
     updatePinnedValue('test-purpose');
@@ -1401,6 +1403,9 @@ function onTestPurposeChange() {
     const testField = document.querySelector('input[name="test-field"]:checked')?.value;
     const helpEl = document.getElementById('test-purpose-help');
 
+    // ★ 검사목적에 따라 UI 모드 전환
+    updateInspectionMode(testPurpose);
+
     if (testPurpose) {
         // Firestore P 배열에서 선택된 검사목적의 접수번호 형식 라벨 표시
         const purposeObj = firestorePurposes.find(p => p.n === testPurpose);
@@ -1408,9 +1413,11 @@ function onTestPurposeChange() {
             helpEl.innerHTML = `📋 접수번호 형식: <strong>${purposeObj.rcpt}</strong>` +
                 (purposeObj.rcptDesc ? ` <span style="color:#888">(${purposeObj.rcptDesc})</span>` : '');
         } else {
-            helpEl.textContent = '검체유형을 선택하세요';
+            var isLims = (testPurpose === '자가품질위탁검사용');
+            helpEl.textContent = isLims ? '식약처 품목코드를 선택하세요' : '검체유형을 선택하세요';
         }
-        showToast(`검사목적 선택: ${testPurpose}. 검체유형을 선택하세요.`, 'info');
+        var modeLabel = (testPurpose === '자가품질위탁검사용') ? ' (식약처 연동)' : '';
+        showToast(`검사목적 선택: ${testPurpose}${modeLabel}`, 'info');
 
         // 이전 접수번호 자동 조회 (Firestore receipts에서 최근 내역)
         if (firestoreReady && testField) {
@@ -1419,6 +1426,39 @@ function onTestPurposeChange() {
     } else {
         helpEl.textContent = '시험분야 선택 시 자동으로 표시됩니다';
         document.getElementById('prev-receipt-no').value = '';
+    }
+}
+
+// ============================================================================
+// 검사목적에 따른 UI 모드 전환 (식약처 연동 vs 기존 방식)
+// ============================================================================
+function updateInspectionMode(testPurpose) {
+    var isLims = (testPurpose === '자가품질위탁검사용');
+
+    // 식약처 연동 섹션 (품목코드 피커 + 기준규격 테이블)
+    var mfdsPickerEl = document.getElementById('mfds-product-picker-container');
+    var mfdsStdEl = document.getElementById('mfds-std-section');
+
+    // 기존 방식 섹션 (검체유형 + 시험항목)
+    var foodTypeGroup = document.getElementById('food-type-group');
+    var inspectionItemsEl = document.getElementById('inspection-items-section');
+
+    if (isLims) {
+        // 식약처 연동 모드: 품목코드 피커 표시, 검체유형 숨김
+        if (mfdsPickerEl) mfdsPickerEl.style.display = '';
+        if (foodTypeGroup) foodTypeGroup.style.display = 'none';
+        if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
+    } else if (testPurpose) {
+        // 기존 모드: 검체유형 표시, 식약처 섹션 숨김
+        if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
+        if (mfdsStdEl) mfdsStdEl.style.display = 'none';
+        if (foodTypeGroup) foodTypeGroup.style.display = '';
+    } else {
+        // 미선택: 둘 다 숨김
+        if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
+        if (mfdsStdEl) mfdsStdEl.style.display = 'none';
+        if (foodTypeGroup) foodTypeGroup.style.display = 'none';
+        if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
     }
 }
 
@@ -1734,6 +1774,10 @@ async function loadMfdsStandardItems(productCode, productName) {
 
         summary.textContent = unique.length + '개 시험항목' + (feeCount > 0 ? ' / ' + totalFee.toLocaleString() + '원' : '');
 
+        // ★ 수수료 전역 저장 + 수수료정보 섹션 자동 갱신
+        window._mfdsFeeTotal = totalFee;
+        updateFeeSummary();
+
     } catch(e) {
         tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#e53e3e">로드 실패: ' + e.message + '</td></tr>';
         console.error('[기준규격] 로드 오류:', e);
@@ -1966,24 +2010,31 @@ function restoreMfdsProductDisplay() {
 // ============================================================================
 async function updateFeeSummary() {
     var grandTotal = 0;
-    var allData = await loadFoodTypesFromFirestore();
     var currentPurpose = document.getElementById('test-purpose').value || '';
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
-    // 모든 시료의 검체유형으로 수수료 합산
-    _sampleData.forEach(function(s) {
-        var ft = s['food-type-value'] || '';
-        if (ft && allData.length > 0) {
-            var items = allData.filter(function(item) {
-                return item.foodType === ft && item.purpose === currentPurpose &&
-                       (!currentField || item['분야'] === currentField);
-            });
-            var seen = {};
-            items.forEach(function(item) {
-                var key = (item.item || '') + '||' + (item.bracket || '');
-                if (!seen[key]) { seen[key] = true; grandTotal += (item.fee || 0); }
-            });
-        }
-    });
+
+    if (currentPurpose === '자가품질위탁검사용') {
+        // 식약처 연동 모드: MFDS 기준규격 수수료 사용
+        grandTotal = window._mfdsFeeTotal || 0;
+    } else {
+        // 기존 모드: foodTypesMapping에서 수수료 합산
+        var allData = await loadFoodTypesFromFirestore();
+        _sampleData.forEach(function(s) {
+            var ft = s['food-type-value'] || '';
+            if (ft && allData.length > 0) {
+                var items = allData.filter(function(item) {
+                    return item.foodType === ft && item.purpose === currentPurpose &&
+                           (!currentField || item['분야'] === currentField);
+                });
+                var seen = {};
+                items.forEach(function(item) {
+                    var key = (item.item || '') + '||' + (item.bracket || '');
+                    if (!seen[key]) { seen[key] = true; grandTotal += (item.fee || 0); }
+                });
+            }
+        });
+    }
+
     var supply = Math.round(grandTotal / 1.1);
     var vat = grandTotal - supply;
     document.getElementById('fee-supply').textContent = supply.toLocaleString() + '원';
