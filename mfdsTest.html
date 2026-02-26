@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>식약처 API 연결 테스트</title>
+<style>
+  body { font-family: -apple-system, 'Noto Sans KR', sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+  .container { max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 22px; color: #1a1a2e; margin-bottom: 8px; }
+  .sub { color: #667085; font-size: 14px; margin-bottom: 24px; }
+  .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #344054; }
+  .status { display: flex; align-items: center; gap: 10px; padding: 16px; border-radius: 8px; font-size: 15px; font-weight: 600; }
+  .status.waiting { background: #f8f9fa; color: #667085; }
+  .status.testing { background: #fff3cd; color: #856404; }
+  .status.success { background: #d4edda; color: #155724; }
+  .status.fail { background: #f8d7da; color: #721c24; }
+  .status .icon { font-size: 24px; }
+  .btn { padding: 14px 28px; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .btn-primary { background: #1565c0; color: #fff; }
+  .btn-primary:hover { background: #0d47a1; transform: translateY(-1px); }
+  .btn-primary:disabled { background: #90caf9; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: #e3f2fd; color: #1565c0; margin-left: 8px; }
+  .result-box { background: #1a1a2e; color: #0f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-top: 16px; display: none; }
+  .info-row { display: flex; gap: 12px; margin-bottom: 8px; font-size: 13px; }
+  .info-label { color: #667085; min-width: 100px; }
+  .info-value { color: #344054; font-weight: 600; font-family: monospace; }
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding: 8px 0; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .checklist li:last-child { border-bottom: none; }
+  .check { font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🏛️ 식약처 통합LIMS API 연결 테스트</h1>
+  <p class="sub">서버 → 중간모듈(Tomcat) → 식약처 API 전체 파이프라인 테스트</p>
+
+  <!-- 연결 상태 -->
+  <div class="card">
+    <div class="card-title">연결 상태</div>
+    <div id="status" class="status waiting">
+      <span class="icon">⏳</span>
+      <span>아직 테스트하지 않았습니다</span>
+    </div>
+    <div style="margin-top: 16px;">
+      <button class="btn btn-primary" id="btnTest" onclick="runTest()">🔌 연결 테스트 시작</button>
+      <button class="btn btn-secondary" onclick="runFullTest()">📋 전체 API 테스트</button>
+    </div>
+    <div id="resultBox" class="result-box"></div>
+  </div>
+
+  <!-- 설정 정보 -->
+  <div class="card">
+    <div class="card-title">현재 설정</div>
+    <div class="info-row">
+      <span class="info-label">프록시 경로</span>
+      <span class="info-value" id="cfgProxy">/mfds</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">식약처 서버</span>
+      <span class="info-value" id="cfgUrl">https://wslims.mfds.go.kr</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">테스트 계정</span>
+      <span class="info-value" id="cfgUser">apitest34</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">기관코드</span>
+      <span class="info-value" id="cfgInst">O000170</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">업무분야</span>
+      <span class="info-value" id="cfgClass">IM36 (식품)</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">webApi</span>
+      <span class="info-value" style="color:#e65100;">Y (필수 — 가이드 미수록 파라미터)</span>
+    </div>
+  </div>
+
+  <!-- 체크리스트 -->
+  <div class="card">
+    <div class="card-title">체크 항목</div>
+    <ul class="checklist" id="checklist">
+      <li><span class="check" id="chk1">⬜</span> nginx 프록시 (/mfds → Tomcat 8080)</li>
+      <li><span class="check" id="chk2">⬜</span> 중간모듈 (selectUnitTest 엔드포인트)</li>
+      <li><span class="check" id="chk3">⬜</span> MAC 주소 인증 (O000170 기관)</li>
+      <li><span class="check" id="chk4">⬜</span> 인증서 검증 (O000170.jks)</li>
+      <li><span class="check" id="chk5">⬜</span> API 데이터 응답 (resultFlag=1)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Firebase + MFDS API -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/mfds-api.js"></script>
+
+<script>
+function setStatus(type, icon, text) {
+  var el = document.getElementById('status');
+  el.className = 'status ' + type;
+  el.innerHTML = '<span class="icon">' + icon + '</span><span>' + text + '</span>';
+}
+
+function setCheck(num, pass) {
+  document.getElementById('chk' + num).textContent = pass ? '✅' : '❌';
+}
+
+function log(msg) {
+  var box = document.getElementById('resultBox');
+  box.style.display = 'block';
+  var time = new Date().toLocaleTimeString('ko-KR');
+  box.textContent += '[' + time + '] ' + msg + '\n';
+  box.scrollTop = box.scrollHeight;
+}
+
+async function runTest() {
+  var btn = document.getElementById('btnTest');
+  btn.disabled = true;
+  document.getElementById('resultBox').textContent = '';
+
+  setStatus('testing', '🔄', '테스트 중...');
+  log('=== 식약처 API 연결 테스트 시작 ===');
+  log('프록시: ' + MFDS.PROXY_BASE);
+  log('서버: ' + MFDS.WSLIMS_URL);
+  log('계정: ' + MFDS.DEFAULT_USER.mfdsLimsId);
+  log('webApi: Y');
+  log('');
+
+  // 1단계: 프록시 연결 확인
+  log('[1/3] nginx 프록시 연결 확인...');
+  try {
+    var result = await MFDS.testConnection();
+    setCheck(1, true); // nginx OK
+    setCheck(2, true); // 중간모듈 OK
+    log('  → 프록시 연결: OK');
+    log('  → 중간모듈 응답: OK');
+
+    if (result.authenticated) {
+      setCheck(3, true); // MAC OK
+      setCheck(4, true); // 인증서 OK
+      setCheck(5, true); // 데이터 OK
+      log('');
+      log('[2/3] 인증 결과: ✅ 성공!');
+      log('  → MAC 인증: 통과');
+      log('  → 인증서 검증: 통과');
+      log('  → resultFlag: 1, validate: true');
+
+      if (result.data && result.data.resultData) {
+        log('');
+        log('[3/3] 응답 데이터: ' + result.data.resultData.length + '건');
+        result.data.resultData.forEach(function(item) {
+          log('  ' + item.codeNo + ' - ' + (item.codeName || '') + ' (' + (item.codeEngName || '') + ')');
+        });
+      }
+
+      setStatus('success', '🎉', 'API 연결 성공! 모든 인증 통과');
+      log('');
+      log('=== 테스트 완료: 성공 ===');
+    } else {
+      setCheck(3, false);
+      log('');
+      log('[2/3] 인증 결과: ❌ 실패');
+      log('  → 오류: ' + (result.error || '알 수 없음'));
+      setStatus('fail', '❌', '인증 실패: ' + (result.error || ''));
+      log('');
+      log('=== 테스트 완료: 인증 실패 ===');
+    }
+  } catch (err) {
+    if (!err.connected) {
+      setCheck(1, false);
+      log('  → 프록시 연결 실패: ' + (err.error || err.message || ''));
+      setStatus('fail', '❌', '서버 연결 실패 — nginx/Tomcat 확인 필요');
+    } else {
+      setCheck(1, true);
+      log('  → 오류: ' + (err.message || JSON.stringify(err)));
+      setStatus('fail', '❌', '오류 발생');
+    }
+    log('');
+    log('=== 테스트 완료: 실패 ===');
+  }
+
+  btn.disabled = false;
+}
+
+async function runFullTest() {
+  document.getElementById('resultBox').textContent = '';
+  document.getElementById('resultBox').style.display = 'block';
+
+  log('=== 전체 API 기능 테스트 ===');
+
+  // 테스트 1: 공통코드 조회
+  log('');
+  log('[테스트 1] 공통코드 조회 (selectListCmmnCode)...');
+  try {
+    var res1 = await MFDS.selectListCmmnCode();
+    log('  → 성공! ' + (res1.resultData ? res1.resultData.length + '건' : 'OK'));
+  } catch(e) {
+    log('  → 실패: ' + (e.message || JSON.stringify(e)));
+  }
+
+  // 테스트 2: 의뢰 목록 조회
+  log('');
+  log('[테스트 2] 의뢰 목록 조회 (selectListInspctReqest)...');
+  try {
+    var res2 = await MFDS.selectListInspctReqest({
+      reqestDeStart: '20260101',
+      reqestDeEnd: '20260226'
+    });
+    var cnt = res2.resultData ? res2.resultData.length : 0;
+    log('  → 성공! ' + cnt + '건');
+  } catch(e) {
+    log('  → 실패: ' + (e.message || JSON.stringify(e)));
+  }
+
+  // 테스트 3: 부서 목록 조회
+  log('');
+  log('[테스트 3] 부서 목록 조회 (selectListDept)...');
+  try {
+    var res3 = await MFDS.callApi('selectListDept', {});
+    var cnt3 = res3.resultData ? res3.resultData.length : 0;
+    log('  → 성공! ' + cnt3 + '건');
+    if (res3.resultData) {
+      res3.resultData.forEach(function(d) {
+        log('    ' + (d.deptCode || '') + ' - ' + (d.deptName || ''));
+      });
+    }
+  } catch(e) {
+    log('  → 실패: ' + (e.message || JSON.stringify(e)));
+  }
+
+  // 테스트 4: 사용자 목록 조회
+  log('');
+  log('[테스트 4] 사용자 목록 조회 (selectListUser)...');
+  try {
+    var res4 = await MFDS.callApi('selectListUser', {});
+    var cnt4 = res4.resultData ? res4.resultData.length : 0;
+    log('  → 성공! ' + cnt4 + '건');
+  } catch(e) {
+    log('  → 실패: ' + (e.message || JSON.stringify(e)));
+  }
+
+  log('');
+  log('=== 전체 API 테스트 완료 ===');
+}
+</script>
+</body>
+</html>
