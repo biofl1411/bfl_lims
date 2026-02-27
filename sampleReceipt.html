@@ -2281,6 +2281,32 @@ function toggleMfdsPickerSection() {
 // 참고용(기준규격외) — 시험항목 검색 (MFDS 시험항목 2,940건)
 // ============================================================================
 
+// 시험항목코드 → {fee, unit, standard} 매핑 캐시 (mfdsTemplates 기반)
+var _refFeeMap = null;
+
+/**
+ * mfdsTemplates에서 시험항목코드별 수수료/단위 맵 빌드 (1회만)
+ */
+async function buildRefFeeMap() {
+    if (_refFeeMap) return _refFeeMap;
+    _refFeeMap = {};
+    var templates = await loadMfdsTemplates();
+    templates.forEach(function(t) {
+        (t.testItems || []).forEach(function(ti) {
+            var code = ti.testItemCode;
+            if (code && !_refFeeMap[code]) {
+                _refFeeMap[code] = {
+                    fee: ti.fee || 0,
+                    unit: ti.unit || '',
+                    standard: ti.standard || ''
+                };
+            }
+        });
+    });
+    console.log('[참고용] 수수료 맵 빌드:', Object.keys(_refFeeMap).length + '건');
+    return _refFeeMap;
+}
+
 /**
  * 참고용(기준규격외) 모드에서 시험항목 검색
  * MFDS_CODES.searchTestItems()를 사용하여 시험항목 목록을 표시
@@ -2304,6 +2330,9 @@ async function searchRefTestItems(query) {
             return;
         }
     }
+
+    // 수수료 맵 빌드 (최초 1회)
+    await buildRefFeeMap();
 
     // 검색 실행
     var results = MFDS_CODES.searchTestItems(query, _refTestItemsCache);
@@ -2344,9 +2373,15 @@ async function searchRefTestItems(query) {
         }
 
         var addedBadge = isAdded ? ' <span style="font-size:10px;color:#999;background:#f0f0f0;padding:1px 5px;border-radius:3px;">추가됨</span>' : '';
+        // 수수료 매핑 정보
+        var feeInfo = _refFeeMap[code];
+        var feeHtml = feeInfo && feeInfo.fee > 0
+            ? ' <span style="font-size:11px;color:#6941C6;font-weight:600;margin-left:auto">' + feeInfo.fee.toLocaleString() + '원</span>'
+            : '';
         var subInfo = [];
         if (eng) subInfo.push(eng);
         if (alias) subInfo.push('별칭: ' + alias);
+        if (feeInfo && feeInfo.unit) subInfo.push('단위: ' + feeInfo.unit);
         var subHtml = subInfo.length > 0 ? '<div style="font-size:11px;color:#999;margin-top:2px">' + subInfo.join(' | ') + '</div>' : '';
 
         html += '<div class="autocomplete-item" style="padding:8px 12px;' + (isAdded ? 'opacity:0.5;' : '') + '" onclick="' + (isAdded ? '' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')') + '">';
@@ -2354,6 +2389,7 @@ async function searchRefTestItems(query) {
         html += '<span style="font-family:monospace;font-size:11px;color:#1565c0;background:#e3f2fd;padding:1px 6px;border-radius:3px">' + displayCode + '</span>';
         html += '<span style="font-weight:500">' + displayName + '</span>';
         html += addedBadge;
+        html += feeHtml;
         html += '</div>';
         html += subHtml;
         html += '</div>';
@@ -2406,20 +2442,30 @@ function selectRefTestItem(testItemCode) {
     var code = item['시험항목코드'] || '';
     var eng = item['영문명'] || '';
 
+    // ★ 수수료/단위 매칭 (_refFeeMap 캐시 사용, mfdsTemplates 기반)
+    var fee = 0;
+    var unit = '';
+    var standard = '-';
+    if (_refFeeMap && _refFeeMap[code]) {
+        fee = _refFeeMap[code].fee || 0;
+        unit = _refFeeMap[code].unit || '';
+        standard = _refFeeMap[code].standard || '-';
+    }
+
     // 새 행 추가
     var tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid #eee';
     tr.setAttribute('data-item-key', name);
-    tr.setAttribute('data-fee', '0');
+    tr.setAttribute('data-fee', fee);
     tr.setAttribute('data-test-code', code);
-    tr.setAttribute('data-unit', '');
+    tr.setAttribute('data-unit', unit);
     tr.innerHTML = '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + (idx - 1) + '" onchange="onInspectionCheckChange()"></td>'
         + '<td style="padding:8px 12px;color:#667085">' + idx + '</td>'
         + '<td style="padding:8px 12px;color:#344054;font-weight:500">' + name + (eng ? ' <span style="font-size:11px;color:#999">(' + eng + ')</span>' : '') + '</td>'
         + '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + code + '</td>'
-        + '<td style="padding:8px 12px;color:#344054;font-size:12px">-</td>'
-        + '<td style="padding:8px 12px;color:#667085;font-size:12px">-</td>'
-        + '<td style="padding:8px 12px;text-align:right;color:#344054">0원</td>';
+        + '<td style="padding:8px 12px;color:#344054;font-size:12px">' + standard + '</td>'
+        + '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (unit || '-') + '</td>'
+        + '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
     tbody.appendChild(tr);
 
     // 합계 표시/업데이트
