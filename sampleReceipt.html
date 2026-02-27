@@ -991,7 +991,18 @@ async function runReceiptOCR() {
         }
 
         var result = await resp.json();
-        fillFormFromOcrResult(result);
+
+        try {
+            fillFormFromOcrResult(result);
+        } catch (fillErr) {
+            console.error('[OCR] 폼 자동입력 중 오류:', fillErr);
+            status.textContent = '⚠️ 인식은 성공했으나 일부 필드 입력 실패: ' + fillErr.message;
+            status.style.color = '#e65100';
+            btn.textContent = '🤖 의뢰서 OCR';
+            btn.disabled = false;
+            toast('⚠️ OCR 인식 완료 — 일부 필드 수동 확인 필요');
+            return;
+        }
 
         status.textContent = '✅ 의뢰서 인식 완료! 초록색 표시된 필드를 확인하세요.';
         status.style.color = '#2e7d32';
@@ -1062,49 +1073,56 @@ function highlightOcrFields(fieldIds) {
 // 핵심: OCR 결과 → 폼 자동입력
 function fillFormFromOcrResult(result) {
     var filledFields = [];
+    console.log('[OCR] 인식 결과:', JSON.stringify(result, null, 2));
 
     // ① 검사목적 매칭
-    if (result.testPurpose) {
-        var matched = matchTestPurpose(result.testPurpose);
-        if (matched) {
-            var sel = document.getElementById('test-purpose');
-            if (sel) {
-                sel.value = matched;
-                syncCustomSelect('test-purpose', matched);
-                onTestPurposeChange();
-                filledFields.push('test-purpose');
+    try {
+        if (result.testPurpose) {
+            var matched = matchTestPurpose(result.testPurpose);
+            console.log('[OCR] 검사목적 매칭:', result.testPurpose, '→', matched);
+            if (matched) {
+                var sel = document.getElementById('test-purpose');
+                if (sel) {
+                    sel.value = matched;
+                    syncCustomSelect('test-purpose', matched);
+                    onTestPurposeChange();
+                    filledFields.push('test-purpose');
+                }
             }
         }
-    }
+    } catch(e) { console.warn('[OCR] 검사목적 설정 오류:', e.message); }
 
     // ② 업체 검색 (Firestore 매칭)
-    if (result.companyName) {
-        var compEl = document.getElementById('company-search');
-        if (compEl) {
-            compEl.value = result.companyName;
-            compEl.readOnly = false;
-            searchCompany(result.companyName);
-            filledFields.push('company-search');
+    try {
+        if (result.companyName) {
+            var compEl = document.getElementById('company-search');
+            if (compEl) {
+                compEl.value = result.companyName;
+                compEl.readOnly = false;
+                searchCompany(result.companyName);
+                filledFields.push('company-search');
+            }
         }
-    }
+    } catch(e) { console.warn('[OCR] 업체검색 오류:', e.message); }
 
     // ③ 성적서 발송 방법
-    if (result.reportSend && result.reportSend.length) {
-        // 기존 체크 해제
-        document.querySelectorAll('input[name="report-send"]').forEach(function(cb) { cb.checked = false; });
-        result.reportSend.forEach(function(method) {
-            document.querySelectorAll('input[name="report-send"]').forEach(function(chip) {
-                if (chip.value.indexOf(method) !== -1 || method.indexOf(chip.value) !== -1 ||
-                    (method === '우편' && chip.value === '우편') ||
-                    (method === '팩스' && chip.value.indexOf('팩스') !== -1) ||
-                    (method === '메일' && chip.value.indexOf('메일') !== -1) ||
-                    (method === '선발송' && chip.value === '선발송')) {
-                    chip.checked = true;
-                }
+    try {
+        if (result.reportSend && result.reportSend.length) {
+            document.querySelectorAll('input[name="report-send"]').forEach(function(cb) { cb.checked = false; });
+            result.reportSend.forEach(function(method) {
+                document.querySelectorAll('input[name="report-send"]').forEach(function(chip) {
+                    if (chip.value.indexOf(method) !== -1 || method.indexOf(chip.value) !== -1 ||
+                        (method === '우편' && chip.value === '우편') ||
+                        (method === '팩스' && chip.value.indexOf('팩스') !== -1) ||
+                        (method === '메일' && chip.value.indexOf('메일') !== -1) ||
+                        (method === '선발송' && chip.value === '선발송')) {
+                        chip.checked = true;
+                    }
+                });
             });
-        });
-        if (typeof toggleReportSendOption === 'function') toggleReportSendOption();
-    }
+            if (typeof toggleReportSendOption === 'function') toggleReportSendOption();
+        }
+    } catch(e) { console.warn('[OCR] 성적서 발송 설정 오류:', e.message); }
 
     // 팩스/이메일 수령 정보
     if (result.reportSendFax) {
@@ -1117,62 +1135,64 @@ function fillFormFromOcrResult(result) {
     }
 
     // ④ 시료 정보 (복수 시료 지원)
-    if (result.samples && result.samples.length) {
-        var sampleCount = result.samples.length;
-        var countEl = document.getElementById('sample-total-count');
-        if (countEl) {
-            countEl.value = sampleCount;
-            updateSampleCount(sampleCount);
-        }
+    try {
+        if (result.samples && result.samples.length) {
+            var sampleCount = result.samples.length;
+            var countEl = document.getElementById('sample-total-count');
+            if (countEl) {
+                countEl.value = sampleCount;
+                updateSampleCount(sampleCount);
+            }
 
-        result.samples.forEach(function(sample, idx) {
-            _currentSampleIdx = idx;
-            loadSampleFromArray(idx);
+            result.samples.forEach(function(sample, idx) {
+                _currentSampleIdx = idx;
+                loadSampleFromArray(idx);
 
-            if (sample.productName) {
-                var pn = document.getElementById('product-name');
-                if (pn) { pn.value = sample.productName; filledFields.push('product-name'); }
-            }
-            if (sample.manufactureNo) {
-                var mn = document.getElementById('manufacture-no');
-                if (mn) { mn.value = sample.manufactureNo; filledFields.push('manufacture-no'); }
-            }
-            if (sample.manufactureDate) {
-                var md = document.getElementById('manufacture-date');
-                if (md) { md.value = sample.manufactureDate; filledFields.push('manufacture-date'); }
-            }
-            if (sample.expiryDate) {
-                var ed = document.getElementById('expiry-date');
-                if (ed) { ed.value = sample.expiryDate; filledFields.push('expiry-date'); }
-            }
-            if (sample.sampleAmount) {
-                var sa = document.getElementById('sample-amount');
-                if (sa) { sa.value = sample.sampleAmount; filledFields.push('sample-amount'); }
-            }
-            if (sample.sampleAmountUnit) {
-                var unitEl = document.getElementById('sample-amount-unit');
-                if (unitEl) {
-                    var unitMap = { 'g': 'g', 'kg': 'kg', 'ml': 'ml', 'mL': 'ml', 'L': 'L', 'l': 'L' };
-                    unitEl.value = unitMap[sample.sampleAmountUnit] || 'g';
+                if (sample.productName) {
+                    var pn = document.getElementById('product-name');
+                    if (pn) { pn.value = sample.productName; filledFields.push('product-name'); }
                 }
-            }
-            if (sample.sampleCount) {
-                var sc = document.getElementById('sample-count');
-                if (sc) { sc.value = sample.sampleCount; filledFields.push('sample-count'); }
-            }
-            if (sample.packageUnit) {
-                var pu = document.getElementById('package-unit');
-                if (pu) { pu.value = sample.packageUnit; filledFields.push('package-unit'); }
-            }
+                if (sample.manufactureNo) {
+                    var mn = document.getElementById('manufacture-no');
+                    if (mn) { mn.value = sample.manufactureNo; filledFields.push('manufacture-no'); }
+                }
+                if (sample.manufactureDate) {
+                    var md = document.getElementById('manufacture-date');
+                    if (md) { md.value = sample.manufactureDate; filledFields.push('manufacture-date'); }
+                }
+                if (sample.expiryDate) {
+                    var ed = document.getElementById('expiry-date');
+                    if (ed) { ed.value = sample.expiryDate; filledFields.push('expiry-date'); }
+                }
+                if (sample.sampleAmount) {
+                    var sa = document.getElementById('sample-amount');
+                    if (sa) { sa.value = sample.sampleAmount; filledFields.push('sample-amount'); }
+                }
+                if (sample.sampleAmountUnit) {
+                    var unitEl = document.getElementById('sample-amount-unit');
+                    if (unitEl) {
+                        var unitMap = { 'g': 'g', 'kg': 'kg', 'ml': 'ml', 'mL': 'ml', 'L': 'L', 'l': 'L' };
+                        unitEl.value = unitMap[sample.sampleAmountUnit] || 'g';
+                    }
+                }
+                if (sample.sampleCount) {
+                    var sc = document.getElementById('sample-count');
+                    if (sc) { sc.value = sample.sampleCount; filledFields.push('sample-count'); }
+                }
+                if (sample.packageUnit) {
+                    var pu = document.getElementById('package-unit');
+                    if (pu) { pu.value = sample.packageUnit; filledFields.push('package-unit'); }
+                }
 
-            saveSampleToArray();
-        });
+                saveSampleToArray();
+            });
 
-        // 첫 번째 시료로 돌아가기
-        _currentSampleIdx = 0;
-        loadSampleFromArray(0);
-        renderSampleNav();
-    }
+            // 첫 번째 시료로 돌아가기
+            _currentSampleIdx = 0;
+            loadSampleFromArray(0);
+            renderSampleNav();
+        }
+    } catch(e) { console.warn('[OCR] 시료정보 설정 오류:', e.message); }
 
     // ⑤ 비고
     if (result.remarks) {
@@ -1182,6 +1202,7 @@ function fillFormFromOcrResult(result) {
 
     // ⑥ 하이라이트
     highlightOcrFields(filledFields);
+    console.log('[OCR] 자동입력 완료. 채워진 필드:', filledFields);
 }
 let firestorePurposes = [];  // Firestore에서 로드한 검사목적 P 배열
 let firestoreFields = [];    // Firestore에서 로드한 검사 분야 정보 [{code,name,color}]
@@ -1761,12 +1782,14 @@ function onTestPurposeChange() {
     if (testPurpose) {
         // Firestore P 배열에서 선택된 검사목적의 접수번호 형식 라벨 표시
         const purposeObj = firestorePurposes.find(p => p.n === testPurpose);
-        if (purposeObj && purposeObj.rcpt) {
-            helpEl.innerHTML = `📋 접수번호 형식: <strong>${purposeObj.rcpt}</strong>` +
-                (purposeObj.rcptDesc ? ` <span style="color:#888">(${purposeObj.rcptDesc})</span>` : '');
-        } else {
-            var isLims = (testPurpose === '자가품질위탁검사용');
-            helpEl.textContent = isLims ? '식약처 품목코드를 선택하세요' : '검체유형을 선택하세요';
+        if (helpEl) {
+            if (purposeObj && purposeObj.rcpt) {
+                helpEl.innerHTML = `📋 접수번호 형식: <strong>${purposeObj.rcpt}</strong>` +
+                    (purposeObj.rcptDesc ? ` <span style="color:#888">(${purposeObj.rcptDesc})</span>` : '');
+            } else {
+                var isLims = (testPurpose === '자가품질위탁검사용');
+                helpEl.textContent = isLims ? '식약처 품목코드를 선택하세요' : '검체유형을 선택하세요';
+            }
         }
         var modeLabel = (testPurpose === '자가품질위탁검사용') ? ' (식약처 연동)' : '';
         showToast(`검사목적 선택: ${testPurpose}${modeLabel}`, 'info');
@@ -1776,7 +1799,7 @@ function onTestPurposeChange() {
             fetchLatestReceiptNo(testField, testPurpose);
         }
     } else {
-        helpEl.textContent = '시험분야 선택 시 자동으로 표시됩니다';
+        if (helpEl) helpEl.textContent = '시험분야 선택 시 자동으로 표시됩니다';
         document.getElementById('prev-receipt-no').value = '';
     }
 }
