@@ -30256,15 +30256,14 @@ function renderItemGroups() {
   if (currentView[0] === 'card') {
     document.getElementById('item-group-cards').style.display = 'grid';
     document.getElementById('item-group-accordion').style.display = 'none';
-    
-    const grouped = {};
+
+    // 칩이 검사목적을 이미 필터하므로 → 바로 검체유형별 그룹
+    const typeGrouped = {};
     filtered.forEach(item => {
-      if (!grouped[item.검사목적]) {
-        grouped[item.검사목적] = [];
-      }
-      grouped[item.검사목적].push(item);
+      if (!typeGrouped[item.검체유형]) typeGrouped[item.검체유형] = [];
+      typeGrouped[item.검체유형].push(item);
     });
-    
+
     // 수수료 빠른 조회용 Map
     const igFeeMap = new Map();
     feeData.forEach(f => {
@@ -30273,15 +30272,14 @@ function renderItemGroups() {
     });
 
     const esc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const cardsHtml = Object.entries(grouped).map(([purpose, items]) => {
-      const purposeTotalFee = items.reduce((s, it) => s + (igFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
-      const isGrouped = GROUPED_PURPOSES.includes(purpose);
+    const cardsHtml = Object.entries(typeGrouped).map(([type, items]) => {
+      const typeTotalFee = items.reduce((s, it) => s + (igFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
+      const purpose = items[0]?.검사목적 || '';
 
-      // 카드 헤더 (공통) — 수정/삭제 아이콘 포함
       const headerHtml = `
         <div class="card-header" style="cursor:pointer;">
           <div onclick="openDetailItem('항목그룹', ${itemGroupData.indexOf(items[0])})" style="flex:1;">
-            <div class="card-title">${purpose}</div>
+            <div class="card-title">${type}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <div class="card-actions">
@@ -30289,81 +30287,44 @@ function renderItemGroups() {
               <button onclick="event.stopPropagation();deleteItemGroupPurpose('${esc(purpose)}')" title="카테고리 삭제">🗑️</button>
             </div>
             <div class="card-badge">${items.length}개</div>
-            ${purposeTotalFee > 0 ? `<div class="fee-badge" style="margin-top:0;">💰 ${purposeTotalFee.toLocaleString()}원</div>` : ''}
+            ${typeTotalFee > 0 ? `<div class="fee-badge" style="margin-top:0;">💰 ${typeTotalFee.toLocaleString()}원</div>` : ''}
           </div>
         </div>`;
 
-      if (isGrouped) {
-        // ── 그룹형: 검체유형별 서브그룹 ──
-        const typeGrouped = {};
-        items.forEach(item => {
-          if (!typeGrouped[item.검체유형]) typeGrouped[item.검체유형] = [];
-          typeGrouped[item.검체유형].push(item);
-        });
-        const itemListHtml = Object.entries(typeGrouped).map(([type, typeItems]) => `
-          <div style="padding:4px 0;">
-            <div style="font-size:12px;font-weight:700;color:var(--sub);padding:6px 20px 2px;background:var(--bg);border-bottom:1px solid var(--bdr);">${type} <span style="font-size:11px;font-weight:400;">(${typeItems.length}건)</span></div>
-            ${typeItems.map(item => {
-              const idx = itemGroupData.indexOf(item);
-              const itemFee = igFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
-              return `
-              <div class="item-list-item" onclick="openDetailItem('항목그룹', ${idx})" style="cursor:pointer;">
-                <div class="item-list-name">${item.항목명}</div>
-                <div class="item-list-spec">${item.규격 || '-'}</div>
-                ${item.항목단위 ? `<span class="item-list-unit">${item.항목단위}</span>` : ''}
-                ${getMfdsMappingBadge(item.항목명)}
-                <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
-                <div class="item-actions">
-                  <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
-                  <button onclick="event.stopPropagation();openDetailItem('항목그룹',${idx})" title="수정">✏️</button>
-                  <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
-                </div>
-              </div>`;
-            }).join('')}
+      const itemListHtml = items.map(item => {
+        const idx = itemGroupData.indexOf(item);
+        const itemFee = igFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
+        return `
+        <div class="item-list-item" onclick="openDetailItem('항목그룹', ${idx})" style="cursor:pointer;">
+          <div class="item-list-name">${item.항목명}</div>
+          <div class="item-list-spec">${item.규격 || '-'}</div>
+          ${item.항목단위 ? `<span class="item-list-unit">${item.항목단위}</span>` : ''}
+          ${getMfdsMappingBadge(item.항목명)}
+          <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
+          <div class="item-actions">
+            <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${esc(item.항목명)}','${esc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
+            <button onclick="event.stopPropagation();openDetailItem('항목그룹',${idx})" title="수정">✏️</button>
+            <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
           </div>
-        `).join('');
-        return `<div class="food-type-card">${headerHtml}<div class="item-list">${itemListHtml}</div>
-          ${purposeTotalFee > 0 ? `<div class="fee-total-row"><span>합계</span><span>💰 ${purposeTotalFee.toLocaleString()}원</span></div>` : ''}</div>`;
-      } else {
-        // ── flat형: 검체유형 서브그룹 없이 항목만 ──
-        const itemListHtml = items.map(item => {
-          const idx = itemGroupData.indexOf(item);
-          const itemFee = igFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
-          return `
-          <div class="item-list-item" onclick="openDetailItem('항목그룹', ${idx})" style="cursor:pointer;">
-            <div class="item-list-name">${item.항목명}
-              <small style="color:var(--sub);margin-left:4px;">(${item.검체유형})</small>
-            </div>
-            <div class="item-list-spec">${item.규격 || '-'}</div>
-            ${item.항목단위 ? `<span class="item-list-unit">${item.항목단위}</span>` : ''}
-            ${getMfdsMappingBadge(item.항목명)}
-            <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
-            <div class="item-actions">
-              <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${esc(item.항목명)}','${esc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
-              <button onclick="event.stopPropagation();openDetailItem('항목그룹',${idx})" title="수정">✏️</button>
-              <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
-            </div>
-          </div>`;
-        }).join('');
-        return `<div class="food-type-card">${headerHtml}<div class="item-list">${itemListHtml}</div>
-          ${purposeTotalFee > 0 ? `<div class="fee-total-row"><span>합계</span><span>💰 ${purposeTotalFee.toLocaleString()}원</span></div>` : ''}</div>`;
-      }
+        </div>`;
+      }).join('');
+      return `<div class="food-type-card">${headerHtml}<div class="item-list">${itemListHtml}</div>
+        ${typeTotalFee > 0 ? `<div class="fee-total-row"><span>합계</span><span>💰 ${typeTotalFee.toLocaleString()}원</span></div>` : ''}</div>`;
     }).join('');
-    
+
     document.getElementById('item-group-cards').innerHTML = cardsHtml || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
     
   } else {
     document.getElementById('item-group-cards').style.display = 'none';
     document.getElementById('item-group-accordion').style.display = 'block';
-    
-    const purposeGrouped = {};
+
+    // 칩이 검사목적을 이미 필터하므로 → 바로 검체유형별 아코디언
+    const typeGroupedAcc = {};
     filtered.forEach(item => {
-      if (!purposeGrouped[item.검사목적]) {
-        purposeGrouped[item.검사목적] = [];
-      }
-      purposeGrouped[item.검사목적].push(item);
+      if (!typeGroupedAcc[item.검체유형]) typeGroupedAcc[item.검체유형] = [];
+      typeGroupedAcc[item.검체유형].push(item);
     });
-    
+
     // 수수료 빠른 조회용 Map
     const igAccFeeMap = new Map();
     feeData.forEach(f => {
@@ -30372,105 +30333,51 @@ function renderItemGroups() {
     });
 
     const escAcc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const accordionHtml = Object.entries(purposeGrouped).map(([purpose, purposeItems]) => {
-      const purposeTotalFee = purposeItems.reduce((s, it) => s + (igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
-      const isGrouped = GROUPED_PURPOSES.includes(purpose);
+    const accordionHtml = Object.entries(typeGroupedAcc).map(([type, typeItems]) => {
+      const typeTotalFee = typeItems.reduce((s, it) => s + (igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
+      const purpose = typeItems[0]?.검사목적 || '';
 
-      // Level1 헤더 (공통) — 수정/삭제 아이콘 포함
-      const level1Header = `
+      const typeHeader = `
         <div class="accordion-header-level1" onclick="toggleAccordionLevel1(this)">
           <div class="accordion-title">
             <span class="accordion-icon">▶</span>
-            <span class="accordion-name">${purpose}</span>
+            <span class="accordion-name">${type}</span>
           </div>
           <div class="accordion-info" style="display:flex;gap:12px;align-items:center;">
             <div class="card-actions">
               <button onclick="event.stopPropagation();editItemGroupPurpose('${escAcc(purpose)}')" title="카테고리 수정">✏️</button>
               <button onclick="event.stopPropagation();deleteItemGroupPurpose('${escAcc(purpose)}')" title="카테고리 삭제">🗑️</button>
             </div>
-            ${purposeTotalFee > 0 ? `<span class="fee-badge">💰 ${purposeTotalFee.toLocaleString()}원</span>` : ''}
-            <span class="accordion-count">${purposeItems.length}개</span>
+            ${typeTotalFee > 0 ? `<span class="fee-badge">💰 ${typeTotalFee.toLocaleString()}원</span>` : ''}
+            <span class="accordion-count">${typeItems.length}개</span>
           </div>
         </div>`;
 
-      if (isGrouped) {
-        // ── 그룹형: 검체유형별 2단 아코디언 유지 ──
-        const typeGrouped = {};
-        purposeItems.forEach(item => {
-          if (!typeGrouped[item.검체유형]) typeGrouped[item.검체유형] = [];
-          typeGrouped[item.검체유형].push(item);
-        });
-        const level2Html = Object.entries(typeGrouped).map(([type, typeItems]) => {
-          const typeTotalFee = typeItems.reduce((s, it) => s + (igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
-          return `
-          <div class="accordion-group-level2">
-            <div class="accordion-header-level2" onclick="event.stopPropagation(); toggleAccordionLevel2(this)">
-              <div class="accordion-title">
-                <span class="accordion-icon-level2">▶</span>
-                <span class="accordion-name-level2">${type}</span>
-              </div>
-              <div class="accordion-info" style="display:flex;gap:12px;align-items:center;">
-                ${typeTotalFee > 0 ? `<span class="fee-badge" style="font-size:11px;">💰 ${typeTotalFee.toLocaleString()}원</span>` : ''}
-                <span class="accordion-count-level2">${typeItems.length}개</span>
-              </div>
-            </div>
-            <div class="accordion-content-level2">
-              <div class="accordion-items">
-                ${typeItems.map(item => {
-                  const idx = itemGroupData.indexOf(item);
-                  const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
-                  return `
-                  <div class="accordion-item" onclick="event.stopPropagation(); openDetailItem('항목그룹', ${idx})">
-                    <div class="item-col item-col-name">${item.항목명}</div>
-                    <div class="item-col item-col-spec">${item.규격 || '-'}</div>
-                    <div class="item-col item-col-unit">
-                      ${item.항목단위 ? `<span class="badge badge-success">${item.항목단위}</span>` : '-'}
-                    </div>
-                    <div class="item-col" style="min-width:80px;">${getMfdsMappingBadge(item.항목명)}</div>
-                    <div class="item-col" style="min-width:80px;text-align:right;">
-                      <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
-                    </div>
-                    <div class="item-actions">
-                      <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
-                      <button onclick="event.stopPropagation();openDetailItem('항목그룹',${idx})" title="수정">✏️</button>
-                      <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
-                    </div>
-                  </div>`;
-                }).join('')}
-              </div>
-            </div>
-          </div>`;
-        }).join('');
-        return `<div class="accordion-group-level1">${level1Header}<div class="accordion-content-level1">${level2Html}</div></div>`;
-      } else {
-        // ── flat형: 검체유형 서브그룹 없이 항목만 ──
-        const flatItemsHtml = purposeItems.map(item => {
-          const idx = itemGroupData.indexOf(item);
-          const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
-          return `
-          <div class="accordion-item" onclick="event.stopPropagation(); openDetailItem('항목그룹', ${idx})">
-            <div class="item-col item-col-name">${item.항목명}
-              <small style="color:var(--sub);margin-left:4px;">(${item.검체유형})</small>
-            </div>
-            <div class="item-col item-col-spec">${item.규격 || '-'}</div>
-            <div class="item-col item-col-unit">
-              ${item.항목단위 ? `<span class="badge badge-success">${item.항목단위}</span>` : '-'}
-            </div>
-            <div class="item-col" style="min-width:80px;">${getMfdsMappingBadge(item.항목명)}</div>
-            <div class="item-col" style="min-width:80px;text-align:right;">
-              <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
-            </div>
-            <div class="item-actions">
-              <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
-              <button onclick="event.stopPropagation();openDetailItem('항목그룹',${idx})" title="수정">✏️</button>
-              <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
-            </div>
-          </div>`;
-        }).join('');
-        return `<div class="accordion-group-level1">${level1Header}<div class="accordion-content-level1"><div class="accordion-items">${flatItemsHtml}</div></div></div>`;
-      }
+      const itemsHtml = typeItems.map(item => {
+        const idx = itemGroupData.indexOf(item);
+        const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
+        return `
+        <div class="accordion-item" onclick="event.stopPropagation(); openDetailItem('항목그룹', ${idx})">
+          <div class="item-col item-col-name">${item.항목명}</div>
+          <div class="item-col item-col-spec">${item.규격 || '-'}</div>
+          <div class="item-col item-col-unit">
+            ${item.항목단위 ? `<span class="badge badge-success">${item.항목단위}</span>` : '-'}
+          </div>
+          <div class="item-col" style="min-width:80px;">${getMfdsMappingBadge(item.항목명)}</div>
+          <div class="item-col" style="min-width:80px;text-align:right;">
+            <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
+          </div>
+          <div class="item-actions">
+            <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
+            <button onclick="event.stopPropagation();openDetailItem('항목그룹',${idx})" title="수정">✏️</button>
+            <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      return `<div class="accordion-group-level1">${typeHeader}<div class="accordion-content-level1"><div class="accordion-items">${itemsHtml}</div></div></div>`;
     }).join('');
-    
+
     document.getElementById('item-group-accordion').innerHTML = accordionHtml || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
   }
 }
