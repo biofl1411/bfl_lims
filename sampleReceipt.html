@@ -147,6 +147,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
 <script src="js/mfds-fee-mapping.js"></script>
+<script src="js/mfds_templates.js?v=20260227"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -531,23 +532,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                                     <th style="padding:10px 6px;width:30px;text-align:center"><input type="checkbox" id="inspection-check-all" onchange="toggleAllInspectionChecks(this)" title="전체 선택"></th>
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:40px">No</th>
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">시험항목</th>
-                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:60px">실적</th>
-                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:100px">검사목적</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:90px">시험항목코드</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">기준규격</th>
+                                    <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:70px">단위</th>
                                     <th style="padding:10px 12px;text-align:right;font-weight:600;color:#344054;width:100px">수수료</th>
                                 </tr>
                             </thead>
                             <tbody id="inspection-items-tbody"></tbody>
                             <tfoot id="inspection-items-tfoot" style="display:none">
                                 <tr style="background:#f0f4ff;border-top:2px solid #d0d5dd">
-                                    <td colspan="5" style="padding:10px 12px;font-weight:700;color:#344054;text-align:right">합계</td>
+                                    <td colspan="6" style="padding:10px 12px;font-weight:700;color:#344054;text-align:right">합계</td>
                                     <td id="inspection-items-total" style="padding:10px 12px;font-weight:700;color:#6941C6;text-align:right"></td>
                                 </tr>
                                 <tr style="background:#f0f4ff">
-                                    <td colspan="5" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right">공급가액</td>
+                                    <td colspan="6" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right">공급가액</td>
                                     <td id="inspection-items-supply" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right"></td>
                                 </tr>
                                 <tr style="background:#f0f4ff">
-                                    <td colspan="5" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right">세액 (VAT 10%)</td>
+                                    <td colspan="6" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right">세액 (VAT 10%)</td>
                                     <td id="inspection-items-vat" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right"></td>
                                 </tr>
                             </tfoot>
@@ -2230,6 +2232,31 @@ async function loadFoodTypesFromFirestore() {
     return _foodTypeCache;
 }
 
+// 식품유형(mfdsTemplates) 데이터 로드 — Firestore 우선, JS 폴백
+let _tmplCache = null;
+let _tmplCacheTime = 0;
+async function loadMfdsTemplates() {
+    var now = Date.now();
+    if (_tmplCache && (now - _tmplCacheTime < 300000)) return _tmplCache;
+    try {
+        var snap = await db.collection('mfdsTemplates').get();
+        if (snap.size > 0) {
+            _tmplCache = snap.docs.map(function(d) { return d.data(); });
+            console.log('[Firestore] 식품유형 로드:', _tmplCache.length + '건');
+        } else if (typeof MFDS_TEMPLATES !== 'undefined') {
+            _tmplCache = MFDS_TEMPLATES;
+            console.log('[JS] 식품유형 기본값:', _tmplCache.length + '건');
+        } else {
+            _tmplCache = [];
+        }
+        _tmplCacheTime = now;
+    } catch (e) {
+        console.warn('[Firestore] 식품유형 로드 실패:', e.message);
+        _tmplCache = (typeof MFDS_TEMPLATES !== 'undefined') ? MFDS_TEMPLATES : [];
+    }
+    return _tmplCache;
+}
+
 // ============================================================================
 // 검체유형 검색 (Firestore foodTypes 기반)
 // ============================================================================
@@ -2243,21 +2270,23 @@ async function searchFoodType(query) {
         return;
     }
 
-    // Firestore에서 식품유형(맵핑) 데이터 로드
+    // 1) 기존 foodTypesMapping에서 검체유형 목록
     var foodTypes = await loadFoodTypesFromFirestore();
-
-    // 검사목적 + 시험분야(식품/축산) 기준 필터링
     var filtered = foodTypes.filter(function(item) {
         return item.purpose === testPurpose && item['분야'] === testField;
     });
-
-    // 고유한 검체유형(foodType) 목록 추출
     var typeSet = new Set();
     filtered.forEach(function(item) {
         if (item.foodType) typeSet.add(item.foodType);
     });
-    var allTypes = Array.from(typeSet).sort();
 
+    // 2) mfdsTemplates에서 식품유형(templateName) 목록 추가
+    var templates = await loadMfdsTemplates();
+    templates.forEach(function(t) {
+        if (t.templateName) typeSet.add(t.templateName);
+    });
+
+    var allTypes = Array.from(typeSet).sort();
     const filteredTypes = query ? allTypes.filter(t => t.toLowerCase().includes(query.toLowerCase())) : allTypes;
 
     const list = document.getElementById('food-type-list');
@@ -2267,13 +2296,16 @@ async function searchFoodType(query) {
         return;
     }
 
+    // mfdsTemplates에 있는 식품유형은 태그 표시
+    var tmplSet = new Set(templates.map(function(t) { return t.templateName; }));
     list.innerHTML = filteredTypes.map(type => {
         let display = type;
         if (query) {
             const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
             display = type.replace(regex, '<mark>$1</mark>');
         }
-        return `<div class="autocomplete-item" onclick="selectFoodType('${type.replace(/'/g, "\\'")}')">${display}</div>`;
+        var tag = tmplSet.has(type) ? ' <span style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:1px 5px;border-radius:3px;">식약처</span>' : '';
+        return `<div class="autocomplete-item" onclick="selectFoodType('${type.replace(/'/g, "\\'")}')">${display}${tag}</div>`;
     }).join('');
 
     list.classList.add('active');
@@ -2305,7 +2337,45 @@ async function loadInspectionItems(foodType) {
         return;
     }
 
-    // Firestore 맵핑에서 검사목적 + 검체유형 + 분야 필터
+    // 1) mfdsTemplates에서 매칭되는 식품유형 찾기
+    var templates = await loadMfdsTemplates();
+    var tmpl = templates.find(function(t) { return t.templateName === foodType; });
+
+    if (tmpl && tmpl.testItems && tmpl.testItems.length > 0) {
+        // ★ 식품유형 데이터 기반 로드 (시험항목코드 + 기준규격 + 단위 포함)
+        var total = 0;
+        var html = '';
+        tmpl.testItems.forEach(function(ti, idx) {
+            var fee = ti.fee || 0;
+            total += fee;
+            var itemName = ti.testItemName + (ti.proviso ? ' (' + ti.proviso + ')' : '');
+            var itemKey = (ti.testItemName || '') + '||' + (ti.proviso || '');
+            html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + itemKey + '" data-fee="' + fee + '" data-test-code="' + (ti.testItemCode || '') + '" data-unit="' + (ti.unit || '') + '">';
+            html += '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionCheckChange()"></td>';
+            html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
+            html += '<td style="padding:8px 12px;color:#344054;font-weight:500">' + itemName + '</td>';
+            html += '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + (ti.testItemCode || '') + '</td>';
+            html += '<td style="padding:8px 12px;color:#344054;font-size:12px">' + (ti.standard || '-') + '</td>';
+            html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (ti.unit || '-') + '</td>';
+            html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
+            html += '</tr>';
+        });
+
+        tbody.innerHTML = html;
+        tfoot.style.display = '';
+        totalEl.textContent = total.toLocaleString() + '원';
+        var supply = Math.round(total / 1.1);
+        var vat = total - supply;
+        document.getElementById('inspection-items-supply').textContent = supply.toLocaleString() + '원';
+        document.getElementById('inspection-items-vat').textContent = vat.toLocaleString() + '원';
+        summary.textContent = tmpl.testItems.length + '개 시험항목 / ' + tmpl.foodTypeCode + ' / 합계 ' + total.toLocaleString() + '원';
+        section.style.display = 'block';
+        saveSampleToArray();
+        updateFeeSummary();
+        return;
+    }
+
+    // 2) 기존 foodTypesMapping 기반 폴백
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
     var currentPurpose = document.getElementById('test-purpose').value || '';
     var allData = await loadFoodTypesFromFirestore();
@@ -2327,25 +2397,34 @@ async function loadInspectionItems(foodType) {
 
     if (unique.length === 0) {
         section.style.display = 'block';
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#999;font-size:13px">해당 검체유형에 등록된 시험항목이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#999;font-size:13px">해당 검체유형에 등록된 시험항목이 없습니다.</td></tr>';
         tfoot.style.display = 'none';
         summary.textContent = '';
         return;
     }
 
-    // 테이블 행 렌더링
+    // 기존 데이터에도 mfdsTemplates에서 시험항목코드/단위 교차 참조
+    var tmplByName = {};
+    templates.forEach(function(t) {
+        (t.testItems || []).forEach(function(ti) {
+            if (!tmplByName[ti.testItemName]) tmplByName[ti.testItemName] = ti;
+        });
+    });
+
     var total = 0;
     var html = '';
     unique.forEach(function(item, idx) {
         var fee = item.fee || 0;
         total += fee;
         var itemKey = (item.item || '') + '||' + (item.bracket || '');
-        html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + itemKey + '" data-fee="' + fee + '">';
+        var ref = tmplByName[item.item] || {};
+        html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + itemKey + '" data-fee="' + fee + '" data-test-code="' + (ref.testItemCode || '') + '" data-unit="' + (ref.unit || '') + '">';
         html += '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionCheckChange()"></td>';
         html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
         html += '<td style="padding:8px 12px;color:#344054">' + (item.item || '') + (item.bracket ? ' (' + item.bracket + ')' : '') + '</td>';
-        html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (item.count || 0) + '건</td>';
-        html += '<td style="padding:8px 12px;color:#344054">' + (item.purpose || '') + '</td>';
+        html += '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + (ref.testItemCode || '') + '</td>';
+        html += '<td style="padding:8px 12px;color:#344054;font-size:12px">' + (ref.standard || '-') + '</td>';
+        html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (ref.unit || '-') + '</td>';
         html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
         html += '</tr>';
     });
@@ -2359,7 +2438,6 @@ async function loadInspectionItems(foodType) {
     document.getElementById('inspection-items-vat').textContent = vat.toLocaleString() + '원';
     summary.textContent = unique.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
     section.style.display = 'block';
-    // 현재 시료 저장 후 수수료 총합 업데이트
     saveSampleToArray();
     updateFeeSummary();
 }
