@@ -790,6 +790,8 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
       <button class="filter-chip active" id="fee-sub-list" onclick="switchFeeSubtab('list')">💰 수수료 목록</button>
       <button class="filter-chip" id="fee-sub-mfds" onclick="switchFeeSubtab('mfds')">🔗 식약처 매핑</button>
+      <span style="flex:1"></span>
+      <button onclick="importMfdsTemplatesToFirestore()" style="padding:6px 14px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;" title="XLS 탬플릿 데이터를 Firestore에 임포트">📥 탬플릿 임포트</button>
     </div>
     <!-- 서브탭 A: 기존 수수료 목록 -->
     <div id="fee-subtab-list">
@@ -1142,6 +1144,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 </div>
 
 <script src="js/food_item_fee_mapping.js?v=20260218"></script>
+<script src="js/mfds_templates.js?v=20260227"></script>
 <script src="js/ref_nonstandard_data.js?v=20260218"></script>
 <script>
 
@@ -29582,6 +29585,53 @@ async function saveFeesToFirestore() {
   } catch(e) { console.warn('수수료 저장 실패:', e); }
 }
 
+/** 식약처 탬플릿 데이터 Firestore 임포트 */
+var mfdsTemplateData = []; // 런타임 데이터
+
+async function importMfdsTemplatesToFirestore() {
+  if (typeof MFDS_TEMPLATES === 'undefined' || !MFDS_TEMPLATES.length) {
+    showToast('MFDS_TEMPLATES 데이터가 없습니다.', 'error');
+    return;
+  }
+  if (!confirm('식약처 탬플릿 ' + MFDS_TEMPLATES.length + '개를 Firestore에 임포트합니다.\n기존 데이터는 삭제됩니다. 계속할까요?')) return;
+
+  try {
+    showToast('⏳ 임포트 시작... (' + MFDS_TEMPLATES.length + '개 탬플릿)', 'info');
+    var BATCH_SIZE = 400;
+
+    // 1) 기존 삭제
+    var existing = await db.collection('mfdsTemplates').get();
+    if (existing.size > 0) {
+      for (var bi = 0; bi < existing.docs.length; bi += BATCH_SIZE) {
+        var batch = db.batch();
+        existing.docs.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
+        await batch.commit();
+      }
+      console.log('[임포트] 기존 ' + existing.size + '건 삭제 완료');
+    }
+
+    // 2) 새 데이터 저장 (탬플릿 1개 = 문서 1개)
+    for (var bi = 0; bi < MFDS_TEMPLATES.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      MFDS_TEMPLATES.slice(bi, bi + BATCH_SIZE).forEach(function(tmpl, j) {
+        var docId = 'tmpl_' + String(bi + j).padStart(4, '0');
+        batch.set(db.collection('mfdsTemplates').doc(docId), tmpl);
+      });
+      await batch.commit();
+      console.log('[임포트] ' + Math.min(bi + BATCH_SIZE, MFDS_TEMPLATES.length) + '/' + MFDS_TEMPLATES.length + ' 완료');
+    }
+
+    // 3) 런타임 데이터 업데이트
+    mfdsTemplateData = MFDS_TEMPLATES.slice();
+    showToast('✅ 식약처 탬플릿 ' + MFDS_TEMPLATES.length + '개 임포트 완료!', 'success');
+    console.log('[임포트] 총 ' + MFDS_TEMPLATES.length + '개 탬플릿, ' +
+      MFDS_TEMPLATES.reduce(function(s, t) { return s + t.testItems.length; }, 0) + '건 시험항목 저장됨');
+  } catch(e) {
+    showToast('임포트 실패: ' + e.message, 'error');
+    console.error('[임포트 실패]', e);
+  }
+}
+
 var _inspectionDataLoaded = { foodType: false, itemGroup: false, fee: false };
 
 async function loadInspectionConfig() {
@@ -29613,6 +29663,17 @@ async function loadInspectionConfig() {
       feeData = [];
       feeSnap.docs.forEach(function(d) { feeData.push(d.data()); });
       _inspectionDataLoaded.fee = true;
+    }
+
+    // 식약처 탬플릿 데이터 로드
+    var tmplSnap = await db.collection('mfdsTemplates').get();
+    if (tmplSnap.size > 0) {
+      mfdsTemplateData = [];
+      tmplSnap.docs.forEach(function(d) { mfdsTemplateData.push(d.data()); });
+      console.log('[데이터] 식약처 탬플릿 ' + mfdsTemplateData.length + '개 로드됨');
+    } else if (typeof MFDS_TEMPLATES !== 'undefined') {
+      mfdsTemplateData = MFDS_TEMPLATES.slice();
+      console.log('[데이터] 식약처 탬플릿 JS 기본값 사용: ' + mfdsTemplateData.length + '개');
     }
   } catch(e) {
     console.warn('Firestore 검사설정 로드 실패, 기본값 사용:', e.message);
