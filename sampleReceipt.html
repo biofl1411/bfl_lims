@@ -2285,7 +2285,8 @@ function toggleMfdsPickerSection() {
 var _refFeeMap = null;
 
 /**
- * mfdsTemplates에서 시험항목코드별 수수료/단위 맵 빌드 (1회만)
+ * mfdsTemplates에서 시험항목코드별 수수료 맵 빌드 (1회만)
+ * 참고용(기준규격외)는 기준규격/단위 해당 없음 — 수수료만 매칭
  */
 async function buildRefFeeMap() {
     if (_refFeeMap) return _refFeeMap;
@@ -2295,11 +2296,7 @@ async function buildRefFeeMap() {
         (t.testItems || []).forEach(function(ti) {
             var code = ti.testItemCode;
             if (code && !_refFeeMap[code]) {
-                _refFeeMap[code] = {
-                    fee: ti.fee || 0,
-                    unit: ti.unit || '',
-                    standard: ti.standard || ''
-                };
+                _refFeeMap[code] = { fee: ti.fee || 0 };
             }
         });
     });
@@ -2381,7 +2378,6 @@ async function searchRefTestItems(query) {
         var subInfo = [];
         if (eng) subInfo.push(eng);
         if (alias) subInfo.push('별칭: ' + alias);
-        if (feeInfo && feeInfo.unit) subInfo.push('단위: ' + feeInfo.unit);
         var subHtml = subInfo.length > 0 ? '<div style="font-size:11px;color:#999;margin-top:2px">' + subInfo.join(' | ') + '</div>' : '';
 
         html += '<div class="autocomplete-item" style="padding:8px 12px;' + (isAdded ? 'opacity:0.5;' : '') + '" onclick="' + (isAdded ? '' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')') + '">';
@@ -2442,14 +2438,10 @@ function selectRefTestItem(testItemCode) {
     var code = item['시험항목코드'] || '';
     var eng = item['영문명'] || '';
 
-    // ★ 수수료/단위 매칭 (_refFeeMap 캐시 사용, mfdsTemplates 기반)
+    // ★ 수수료만 매칭 (참고용은 기준규격외이므로 기준규격/단위는 해당 없음)
     var fee = 0;
-    var unit = '';
-    var standard = '-';
     if (_refFeeMap && _refFeeMap[code]) {
         fee = _refFeeMap[code].fee || 0;
-        unit = _refFeeMap[code].unit || '';
-        standard = _refFeeMap[code].standard || '-';
     }
 
     // 새 행 추가
@@ -2458,13 +2450,13 @@ function selectRefTestItem(testItemCode) {
     tr.setAttribute('data-item-key', name);
     tr.setAttribute('data-fee', fee);
     tr.setAttribute('data-test-code', code);
-    tr.setAttribute('data-unit', unit);
+    tr.setAttribute('data-unit', '');
     tr.innerHTML = '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + (idx - 1) + '" onchange="onInspectionCheckChange()"></td>'
         + '<td style="padding:8px 12px;color:#667085">' + idx + '</td>'
         + '<td style="padding:8px 12px;color:#344054;font-weight:500">' + name + (eng ? ' <span style="font-size:11px;color:#999">(' + eng + ')</span>' : '') + '</td>'
         + '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + code + '</td>'
-        + '<td style="padding:8px 12px;color:#344054;font-size:12px">' + standard + '</td>'
-        + '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (unit || '-') + '</td>'
+        + '<td style="padding:8px 12px;color:#999;font-size:12px">-</td>'
+        + '<td style="padding:8px 12px;color:#999;font-size:12px">-</td>'
         + '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
     tbody.appendChild(tr);
 
