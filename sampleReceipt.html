@@ -2458,24 +2458,24 @@ function parseSampleAmountInfo(sample) {
     var rawUnit = sample.sampleAmountUnit || 'g';
     var rawPackage = sample.packageUnit || '';
     var rawCount = sample.sampleCount || '';
-    // 포장단위 = 단일 포장의 중량 (예: "20g"), 수량이 아님
-    // 패턴1: "20gx10" → 포장단위=20g, 검체량=20, 단위=g, 검체수=10
+    // 포장단위 = 단일 포장의 중량 (예: "20g"), 검체량 = 총 중량
+    // 패턴1: "20gx10" → 포장단위=20g, 검체량=200(총), 단위=g, 검체수=10
     var parseTarget = rawPackage || rawAmount;
     var multiMatch = parseTarget.match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|mL|L)\s*[x*×]\s*(\d+)/i);
     if (multiMatch) {
         var single = parseFloat(multiMatch[1]);
         var unit = multiMatch[2].toLowerCase() === 'ml' ? 'ml' : multiMatch[2];
         var count = parseInt(multiMatch[3]);
-        return { amount: single, unit: unit, packageUnit: multiMatch[1] + unit, sampleCount: count };
+        return { amount: single * count, unit: unit, packageUnit: multiMatch[1] + unit, sampleCount: count };
     }
-    // 패턴2: sampleAmount에 "x" 포함 (예: "20*10") → 검체량=20, 검체수=10
+    // 패턴2: sampleAmount에 "x" 포함 (예: "20*10") → 검체량=200(총), 검체수=10
     if (rawAmount.match(/[*x×]/i)) {
         var parts = rawAmount.split(/[*x×]/i);
         if (parts.length === 2) {
             var a = parseFloat(parts[0].replace(/[^0-9.]/g, ''));
             var b = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
             if (!isNaN(a) && !isNaN(b)) {
-                return { amount: a, unit: rawUnit, packageUnit: a + rawUnit, sampleCount: b };
+                return { amount: a * b, unit: rawUnit, packageUnit: a + rawUnit, sampleCount: b };
             }
         }
     }
