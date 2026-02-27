@@ -66,7 +66,13 @@ CLOVA_NAME_CARD_URL = os.environ.get(
 # ============================================================
 # Claude Vision API 설정 (시험·검사 의뢰서 OCR)
 # ============================================================
+# 환경변수 우선, 없으면 ~/.claude_api_key 파일에서 읽기
 CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY', '')
+if not CLAUDE_API_KEY:
+    _key_file_path = os.path.expanduser('~/.claude_api_key')
+    if os.path.exists(_key_file_path):
+        with open(_key_file_path, 'r') as f:
+            CLAUDE_API_KEY = f.read().strip()
 
 INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰서입니다.
 아래 JSON 형식으로 추출하세요. 값이 없으면 빈 문자열("").
@@ -335,7 +341,7 @@ if __name__ == '__main__':
         print(f'  SSL cert: {cert_file}')
         print(f'  Claude API Key: {claude_status}')
         app.run(host='0.0.0.0', port=port, debug=is_debug,
-                ssl_context=(cert_file, key_file))
+                use_reloader=False, ssl_context=(cert_file, key_file))
     else:
         print(f'[WARNING] SSL 인증서 없음 - HTTP 모드로 실행')
         print(f'  인증서 생성: openssl req -x509 -newkey rsa:2048 -keyout ocr_proxy_key.pem -out ocr_proxy_cert.pem -days 365 -nodes')
@@ -346,4 +352,4 @@ if __name__ == '__main__':
         print(f'  inspection-form OCR: POST http://localhost:{port}/api/ocr/inspection-form')
         print(f'  health check:        GET  http://localhost:{port}/api/ocr/health')
         print(f'  Claude API Key: {claude_status}')
-        app.run(host='0.0.0.0', port=port, debug=is_debug)
+        app.run(host='0.0.0.0', port=port, debug=is_debug, use_reloader=False)
