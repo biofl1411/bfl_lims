@@ -1442,13 +1442,12 @@ function fillFormFromOcrResult(result) {
         }
     } catch(e) { console.warn('[OCR] 비고 설정 오류:', e.message); }
 
-    // ⑨ 검사항목 OCR 필터링 (1.5초 딜레이 후 실행)
+    // ⑨ 검사항목 OCR 필터링 — 미매칭 항목 자동 체크 (삭제 버튼만 누르면 됨)
     try {
         var ocrItemNames = [];
         if (result.samples && result.samples.length) {
             result.samples.forEach(function(sample) {
                 if (sample.inspectionItems) {
-                    // 쉼표/슬래시/줄바꿈 등으로 분리
                     var items = sample.inspectionItems.split(/[,\/\n]+/).map(function(s) { return s.trim(); }).filter(Boolean);
                     items.forEach(function(item) {
                         var cleaned = cleanInspectionItemName(item);
@@ -1459,43 +1458,29 @@ function fillFormFromOcrResult(result) {
         }
         if (ocrItemNames.length > 0) {
             setTimeout(function() {
-                // 현재 테이블 항목 가져오기
                 var tableRows = document.querySelectorAll('#inspection-items-table tbody tr');
                 if (tableRows.length === 0) return;
 
-                var tableItemNames = [];
+                var checkedCount = 0;
                 tableRows.forEach(function(row) {
-                    var nameCell = row.querySelector('td:nth-child(3)'); // 체크박스 열 추가로 3번째
-                    if (nameCell) tableItemNames.push(cleanInspectionItemName(nameCell.textContent.trim()));
-                });
-
-                // OCR 항목과 테이블 항목 비교
-                var matchedItems = [];
-                var unmatchedTableItems = [];
-                tableItemNames.forEach(function(tName, idx) {
+                    var nameCell = row.querySelector('td:nth-child(3)');
+                    var checkbox = row.querySelector('td:first-child input[type="checkbox"]');
+                    if (!nameCell || !checkbox) return;
+                    var tName = cleanInspectionItemName(nameCell.textContent.trim());
                     var found = ocrItemNames.some(function(ocrName) {
                         return tName.indexOf(ocrName) !== -1 || ocrName.indexOf(tName) !== -1;
                     });
-                    if (found) matchedItems.push(tName);
-                    else unmatchedTableItems.push({ name: tName, rowIdx: idx });
+                    if (!found) {
+                        // OCR에 없는 항목 → 자동 체크
+                        checkbox.checked = true;
+                        checkedCount++;
+                    }
                 });
 
-                if (unmatchedTableItems.length > 0 && matchedItems.length > 0) {
-                    var msg = '📋 OCR 의뢰서에 기재된 검사항목:\n' + ocrItemNames.join(', ') +
-                        '\n\n현재 테이블에서 매칭되지 않는 항목 ' + unmatchedTableItems.length + '건:\n' +
-                        unmatchedTableItems.map(function(u) { return '  - ' + u.name; }).join('\n') +
-                        '\n\n기재된 항목만 남기시겠습니까?';
-                    if (confirm(msg)) {
-                        // 미매칭 행 역순 삭제
-                        var tbody = document.querySelector('#inspection-items-table tbody');
-                        var allRows = Array.from(tbody.querySelectorAll('tr'));
-                        unmatchedTableItems.sort(function(a, b) { return b.rowIdx - a.rowIdx; });
-                        unmatchedTableItems.forEach(function(u) {
-                            if (allRows[u.rowIdx]) tbody.removeChild(allRows[u.rowIdx]);
-                        });
-                        recalcInspectionTable();
-                        showToast('🗑 미매칭 ' + unmatchedTableItems.length + '개 항목 삭제됨');
-                    }
+                if (checkedCount > 0) {
+                    // 삭제 버튼 표시
+                    if (typeof onInspectionCheckChange === 'function') onInspectionCheckChange();
+                    showToast('📋 의뢰서에 없는 ' + checkedCount + '개 항목 선택됨 — [선택 삭제] 버튼으로 제거하세요', 'info');
                 }
             }, 1500);
         }
