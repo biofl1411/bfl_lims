@@ -30235,7 +30235,11 @@ function buildItemGroupChips() {
     return b[1] - a[1];
   });
   const esc = s => s.replace(/'/g, "\\'");
-  let html = `<button class="filter-chip ${currentFilter.purpose === '전체' ? 'active' : ''}" onclick="filterByPurpose('전체')">전체 (${itemGroupData.length})</button>`;
+  // "전체" 칩 제거 — 첫 번째 검사목적이 기본 선택됨
+  if (currentFilter.purpose === '전체' && sorted.length > 0) {
+    currentFilter.purpose = sorted[0][0];
+  }
+  let html = '';
   sorted.forEach(([p, cnt]) => {
     const active = currentFilter.purpose === p ? 'active' : '';
     const label = p.length > 12 ? p.substring(0, 12) + '…' : p;
@@ -30930,9 +30934,10 @@ function deleteItemGroupPurpose(purpose) {
 
   itemGroupData = itemGroupData.filter(d => d.검사목적 !== purpose);
 
-  // 현재 필터가 삭제 대상이면 '전체'로 리셋
+  // 현재 필터가 삭제 대상이면 첫 번째 검사목적으로 리셋
   if (currentFilter.purpose === purpose) {
-    currentFilter.purpose = '전체';
+    var remaining = [...new Set(itemGroupData.map(d => d.검사목적))];
+    currentFilter.purpose = remaining.length > 0 ? remaining[0] : '';
   }
 
   showToast(`'${purpose}' 카테고리 삭제 (${count}건)`, 'info');
