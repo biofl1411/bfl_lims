@@ -881,6 +881,133 @@ cd ~/bfl_lims && git pull
 
 ---
 
+## 완료된 작업 (2026-02-27)
+
+### 식품유형 데이터 임포트 + 검사관리 탭 추가
+
+**수정 파일**: `inspectionMgmt.html`, `js/sidebar.js`, `js/mfds_templates.js` (신규)
+**커밋**: `e2ad0ed`, `f742e67`, `605ce48`
+
+#### 1. 식약처 식품유형 데이터 (XLS → JS → Firestore)
+- **원본**: `mfds_integration/(통계) 바이오푸드랩 탬플릿 관리 전체내역_20260227.xls` (922KB)
+- **변환**: `js/mfds_templates.js` (2.1MB) — 646개 식품유형, 2,657건 시험항목
+- **구조**: `MFDS_TEMPLATES = [{templateName, foodTypeCode, foodTypeName, testItems: [{testItemName, testItemCode, standard, unit, fee, ...}]}]`
+- **Firestore**: `mfdsTemplates` 컬렉션 (646 docs) — 임포트 완료
+
+#### 2. 검사관리 식품유형 탭 추가
+- 품목코드와 시험항목 사이에 새 탭 추가 (8탭 구조로 확장)
+- 아코디언 형태 식품유형 목록 (검색 + 시험항목 테이블)
+- Firestore 일괄 임포트 버튼 (400건씩 배치)
+
+#### 3. 시험항목 매핑 자동 채움
+- 식약처 한글명 → BFL 항목명 자동 매칭
+- BFL 단위 → 식약처 단위코드 자동 매칭
+- **커밋**: `8ab40cb`, `9a041cf`, `e6bdc12`
+
+---
+
+### 접수등록: 검사목적별 데이터 소스 분기
+
+**수정 파일**: `sampleReceipt.html`
+**커밋**: `aa28c1d`, `6e5d6ed`, `6f49bb6`, `006f1d3`, `eb03839`, `ad6f02b`, `46fb461`
+
+#### 검사목적별 데이터 소스 아키텍처
+
+| 검사목적 | 데이터 소스 | 시험항목 로드 방식 |
+|---------|-----------|------------------|
+| **자가품질위탁검사용** | `mfdsTemplates` (고시항목 646건) | 식품유형 검색 → 해당 유형의 전체 항목 로드 |
+| **참고용(기준규격외)** | `mfds_test_items` (시험항목 2,940건) | 개별 시험항목 검색 → 하나씩 추가 |
+| **기타** | `foodTypesMapping` (9,237건) | 검체유형 선택 → 매칭 항목 로드 |
+
+#### 자가품질위탁검사용 모드 (`aa28c1d`, `6e5d6ed`)
+- `loadMfdsTemplates()`: Firestore 우선, JS 폴백 (5분 캐시)
+- `searchFoodType()`: mfdsTemplates + foodTypesMapping 병합 검색
+- `loadInspectionItems()`: mfdsTemplates 우선 → foodTypesMapping 폴백
+- 테이블 7열: 체크/No/시험항목/**시험항목코드**/**기준규격**/**단위**/수수료
+- 검체유형 input 활성화 + 공전규격 추가 검사 접기 토글
+
+#### 참고용(기준규격외) 모드 (`6f49bb6`, `006f1d3`, `eb03839`)
+- `searchRefTestItems()`: MFDS 시험항목 2,940건 검색 (코드/한글명/영문명/별칭)
+- `selectRefTestItem()`: 선택한 항목을 테이블에 개별 추가 (중복 방지)
+- `buildRefFeeMap()`: mfdsTemplates에서 시험항목코드별 수수료 맵 빌드
+- 기준규격/단위는 "-" 표시 (기준규격외이므로 해당 없음)
+- `saveSampleToArray()` / `loadSampleFromArray()`: `_refTestItems` 배열로 저장/복원
+
+#### 수수료 계산 개선 (`ad6f02b`)
+- `updateFeeSummary()`: 자가품질위탁검사용/참고용(기준규격외) → 테이블 `data-fee` 직접 합산
+- `window._feeTotal` 정확히 저장 → 접수현황 수수료 표시
+
+#### 수수료 할인 기능 (`46fb461`)
+- 할인 UI: 수수료 총합 아래 할인율(%) / 할인금액(원) 입력란
+- `onDiscountRateChange()`: % 입력 → 할인금액 자동 계산
+- `onDiscountAmountChange()`: 금액 입력 → 할인율 자동 역계산
+- `applyDiscount()`: 할인 적용가 표시 + `window._feeTotal` 갱신
+- Firestore 저장: `feeOriginal`, `discountRate`, `discountAmount`, `feeTotal`
+
+---
+
+### 식약처 폴더 (`mfds_integration/`) 파일 목록
+
+```
+mfds_integration/
+├── (먼저읽어주세요)_개발테스트절차 및 주의사항.pdf
+├── (통계) 바이오푸드랩 탬플릿 관리 전체내역_20260227.xls  ← 식품유형 원본 XLS
+├── DirectApiTest.java              # API 직접 호출 테스트
+├── MacTest.java                    # MAC 주소 확인 테스트
+├── O000026.jks                     # 운영 인증서 (바이오푸드랩)
+├── O000170.jks                     # 테스트 인증서
+├── convert_standards.py            # 표준규격 변환 스크립트
+├── 식약처 안내 메일.txt
+├── Sample/                         # Java 중간모듈 샘플 소스
+│   └── src/gov/mfds/lms_client/
+│       ├── Controller/WebApiController.java
+│       └── WebApiService.java
+├── Sample_중간모듈/                # 중간모듈 추가 샘플
+├── 서비스별 가이드/                # API 서비스별 가이드 PDF
+├── 코드매핑자료/                   # 13개 Excel 파일
+│   ├── 공통코드.xlsx              (383건, IM01~IM42)
+│   ├── 품목코드.xlsx              (8,404건, 식품만)
+│   ├── 시험항목.xlsx              (2,940건, 식품만)
+│   ├── 기준_개별기준규격.xlsx      (15,993건)
+│   ├── 기준_공통기준규격.xlsx      (33,739건)
+│   ├── 단위.xlsx                  (106건)
+│   ├── 부서_사용자목록.xlsx        (5부서, 16사용자)
+│   └── 기타...
+├── 통합LIMS_WEB_API_검사기관개발가이드_V1.1.pdf
+├── 통합LIMS_WEB_API_검사기관개발가이드_개정이력.pdf
+├── 통합LIMS_WEB_API_테스트시나리오.xls
+└── 통합테스트시나리오_자체의뢰 일반배정 시료별 결재상신.xls
+```
+
+---
+
+### Firestore 컬렉션 추가/변경
+
+| 컬렉션 | 건수 | 설명 |
+|--------|------|------|
+| `mfdsTemplates` | 646건 | 식품유형별 시험항목 (고시항목 기준) — **신규** |
+| `mfds_test_items` | 2,940건 | 식약처 시험항목 코드 (기존) |
+| `foodTypesMapping` | 9,237건 | 수수료 매핑 (기존, 향후 통합 예정) |
+
+---
+
+### 다음 작업 예정
+
+#### 항목그룹 칩 정리 + 추가 (inspectionMgmt.html)
+
+**대상**: 접수관리 > 검사목적관리 > 항목그룹 탭
+
+| 작업 | 설명 |
+|------|------|
+| **칩 내 항목 정리** | 기존 칩(검체유형)에 묶인 시험항목 중 불필요 항목 제거/이동 |
+| **칩 추가** | 새로운 검체유형(칩) 생성하여 시험항목 묶기 |
+| **수수료 매핑** | 항목그룹 내 시험항목에 수수료 매핑 연동 필수 |
+| **Firestore 연동** | `itemGroups` 컬렉션 (5,467건) 업데이트 |
+
+**목표**: 항목그룹의 항목명/단위가 식약처 시험항목 코드와 1:1 매칭되도록 정리하여 통계 분석 시 표준 코드 기준 집계 가능하게 함.
+
+---
+
 ## 완료된 작업 (2026-02-23)
 
 ### inspectionMgmt.html — 식품유형 탭 API 기반 전면 개편
