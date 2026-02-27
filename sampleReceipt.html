@@ -3274,8 +3274,23 @@ async function updateFeeSummary() {
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
 
     if (currentPurpose === '자가품질위탁검사용') {
-        // 식약처 연동 모드: MFDS 기준규격 수수료 사용
-        grandTotal = window._mfdsFeeTotal || 0;
+        // 식약처 연동 모드: 시험항목 테이블에서 직접 합산
+        var tbody = document.getElementById('inspection-items-tbody');
+        if (tbody) {
+            tbody.querySelectorAll('tr[data-fee]').forEach(function(tr) {
+                grandTotal += parseInt(tr.getAttribute('data-fee') || '0', 10);
+            });
+        }
+        // MFDS 기준규격 수수료도 합산 (공전규격 추가 항목)
+        grandTotal += (window._mfdsFeeTotal || 0);
+    } else if (currentPurpose === '참고용(기준규격외)') {
+        // 참고용 모드: 시험항목 테이블에서 직접 합산 (개별 추가된 항목)
+        var refTbody = document.getElementById('inspection-items-tbody');
+        if (refTbody) {
+            refTbody.querySelectorAll('tr[data-fee]').forEach(function(tr) {
+                grandTotal += parseInt(tr.getAttribute('data-fee') || '0', 10);
+            });
+        }
     } else {
         // 기존 모드: foodTypesMapping에서 수수료 합산
         var allData = await loadFoodTypesFromFirestore();
