@@ -656,6 +656,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                             <div id="fee-total" style="font-size:20px;font-weight:800;color:#6941C6">0원</div>
                         </div>
                     </div>
+                    <!-- 할인 영역 -->
+                    <div id="discount-section" style="margin-top:10px;padding:10px 14px;background:#fff8f0;border-radius:8px;border:1px solid #fed7aa;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                        <span style="font-size:13px;font-weight:600;color:#c2410c;white-space:nowrap">🏷️ 할인</span>
+                        <div style="display:flex;align-items:center;gap:4px">
+                            <input type="number" id="discount-rate" min="0" max="100" step="1" placeholder="0"
+                                   oninput="onDiscountRateChange()"
+                                   style="width:55px;padding:6px 8px;border:1px solid #fed7aa;border-radius:6px;font-size:13px;text-align:right;background:#fff">
+                            <span style="font-size:13px;color:#c2410c;font-weight:600">%</span>
+                        </div>
+                        <span style="color:#ccc;font-size:12px">또는</span>
+                        <div style="display:flex;align-items:center;gap:4px">
+                            <input type="number" id="discount-amount" min="0" step="1000" placeholder="0"
+                                   oninput="onDiscountAmountChange()"
+                                   style="width:100px;padding:6px 8px;border:1px solid #fed7aa;border-radius:6px;font-size:13px;text-align:right;background:#fff">
+                            <span style="font-size:13px;color:#c2410c">원</span>
+                        </div>
+                        <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+                            <span style="font-size:12px;color:#667085">할인 적용가</span>
+                            <span id="discount-final" style="font-size:18px;font-weight:800;color:#c2410c">0원</span>
+                        </div>
+                    </div>
                 </div>
                 <!-- 결제방법 -->
                 <div style="margin-bottom:16px">
@@ -3310,12 +3331,80 @@ async function updateFeeSummary() {
         });
     }
 
+    // 원가 보존 (할인 계산 기준)
+    window._feeGrandTotal = grandTotal;
+
+    // 공급가액/세액/총계 표시 (할인 전 원가 기준)
     var supply = Math.round(grandTotal / 1.1);
     var vat = grandTotal - supply;
     document.getElementById('fee-supply').textContent = supply.toLocaleString() + '원';
     document.getElementById('fee-vat').textContent = vat.toLocaleString() + '원';
     document.getElementById('fee-total').textContent = grandTotal.toLocaleString() + '원';
-    window._feeTotal = grandTotal;
+
+    // 할인 적용 → window._feeTotal 설정 + 할인가 표시
+    applyDiscount();
+}
+
+// ============================================================================
+// 할인 기능 (% ↔ 금액 양방향 연동)
+// ============================================================================
+
+/**
+ * 할인율(%) 입력 → 할인금액 자동 계산
+ */
+function onDiscountRateChange() {
+    var rate = parseFloat(document.getElementById('discount-rate').value) || 0;
+    if (rate < 0) rate = 0;
+    if (rate > 100) rate = 100;
+    var original = window._feeGrandTotal || 0;
+    var discountAmt = Math.round(original * rate / 100);
+    document.getElementById('discount-amount').value = discountAmt || '';
+    applyDiscount();
+}
+
+/**
+ * 할인금액 입력 → 할인율 자동 계산
+ */
+function onDiscountAmountChange() {
+    var amt = parseInt(document.getElementById('discount-amount').value) || 0;
+    if (amt < 0) amt = 0;
+    var original = window._feeGrandTotal || 0;
+    var rate = original > 0 ? (amt / original * 100) : 0;
+    // 소수점 1자리 반올림 (예: 11.1%)
+    document.getElementById('discount-rate').value = rate > 0 ? Math.round(rate * 10) / 10 : '';
+    applyDiscount();
+}
+
+/**
+ * 할인 적용 → 최종가 계산 + 표시 + window._feeTotal 갱신
+ */
+function applyDiscount() {
+    var original = window._feeGrandTotal || 0;
+    var discountAmt = parseInt(document.getElementById('discount-amount')?.value) || 0;
+    if (discountAmt < 0) discountAmt = 0;
+    if (discountAmt > original) discountAmt = original;
+
+    var finalTotal = original - discountAmt;
+    window._feeTotal = finalTotal;
+
+    // 할인 적용가 표시
+    var finalEl = document.getElementById('discount-final');
+    if (finalEl) {
+        finalEl.textContent = finalTotal.toLocaleString() + '원';
+    }
+
+    // 할인 있을 때 시각적 강조
+    var section = document.getElementById('discount-section');
+    if (section) {
+        if (discountAmt > 0) {
+            section.style.background = '#fff2e0';
+            section.style.borderColor = '#f59e0b';
+        } else {
+            section.style.background = '#fff8f0';
+            section.style.borderColor = '#fed7aa';
+        }
+    }
+
     updatePaymentSummary();
 }
 
@@ -3843,6 +3932,9 @@ function collectReceiptData() {
         // 처리기한
         processingDeadline: document.getElementById('processing-deadline')?.value || '',
         // 수수료/결제 정보
+        feeOriginal: window._feeGrandTotal || 0,
+        discountRate: parseFloat(document.getElementById('discount-rate')?.value) || 0,
+        discountAmount: parseInt(document.getElementById('discount-amount')?.value) || 0,
         feeTotal: window._feeTotal || 0,
         payMethod: document.querySelector('input[name="pay-method"]:checked')?.value || '',
         payCardDate: document.getElementById('pay-card-date')?.value || '',
