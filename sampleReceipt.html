@@ -1103,22 +1103,69 @@ function highlightOcrFields(fieldIds) {
     });
 }
 
+// 업체 미매칭 시 OCR 연락처를 폼에 직접 입력
+function _fillCompanyContactFromOcr(result) {
+    try {
+        if (result.phone) {
+            var el = document.getElementById('company-phone');
+            if (el) { el.value = result.phone; el.style.background = '#e8f5e9'; }
+        }
+        if (result.fax) {
+            var el2 = document.getElementById('company-fax');
+            if (el2) { el2.value = result.fax; el2.style.background = '#e8f5e9'; }
+        }
+        if (result.mobile) {
+            var el3 = document.getElementById('company-mobile');
+            if (el3) { el3.value = result.mobile; el3.style.background = '#e8f5e9'; }
+        }
+        if (result.address) {
+            var el4 = document.getElementById('company-address');
+            if (el4) { el4.value = result.address; el4.style.background = '#e8f5e9'; }
+        }
+        console.log('[OCR] 업체 연락처 직접 입력:', result.phone, result.fax, result.address);
+    } catch(e) { console.warn('[OCR] 연락처 직접 입력 오류:', e.message); }
+}
+
 // 핵심: OCR 결과 → 폼 자동입력
 function fillFormFromOcrResult(result) {
     var filledFields = [];
     var skippedFields = [];  // PIN 잠금으로 건너뛴 필드명
     console.log('[OCR] 인식 결과:', JSON.stringify(result, null, 2));
 
-    // [0] PIN 잠금 체크 — 잠금된 필드는 OCR로 덮어쓰지 않음
+    // [0] PIN 잠금 체크 — 잠금 시 해제 여부를 사용자에게 확인
     var pinTestField = document.getElementById('pin-test-field');
     var isTestFieldLocked = pinTestField && pinTestField.checked;
+    // 잠금 상태이고 OCR 값이 있으면 해제 여부 확인
+    if (isTestFieldLocked && (result.testField || result.testPurpose)) {
+        var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
+        var ocrField = (result.testField || '').trim();
+        var ocrPurpose = result.testPurpose || '';
+        var msg = '🔒 시험분야/검사목적이 잠금 상태입니다.\n\n';
+        if (ocrField) msg += '현재 시험분야: ' + currentField + ' → OCR 인식: ' + ocrField + '\n';
+        if (ocrPurpose) msg += 'OCR 검사목적: ' + ocrPurpose + '\n';
+        msg += '\n잠금을 해제하고 OCR 값으로 변경하시겠습니까?';
+        if (confirm(msg)) {
+            isTestFieldLocked = false;
+            // PIN 체크박스 해제 + UI 업데이트
+            pinTestField.checked = false;
+            var pinLabel = pinTestField.closest('.pin-check');
+            if (pinLabel) { pinLabel.classList.remove('active'); var ico = pinLabel.querySelector('.pin-icon'); if (ico) ico.textContent = '🔓'; }
+            // localStorage에서도 제거
+            var pins = getPinnedFields();
+            delete pins['test-field'];
+            delete pins['_test-field-via-purpose'];
+            delete pins['test-purpose'];
+            localStorage.setItem('bfl_pinned_fields', JSON.stringify(pins));
+            console.log('[OCR] 시험분야 PIN 잠금 해제됨 (사용자 확인)');
+        }
+    }
 
-    // ① 시험분야 설정 (PIN 잠금 시 건너뜀)
+    // ① 시험분야 설정
     try {
         if (result.testField) {
             if (isTestFieldLocked) {
                 skippedFields.push('시험분야');
-                console.log('[OCR] 시험분야 PIN 잠금 → 건너뜀');
+                console.log('[OCR] 시험분야 PIN 잠금 유지 → 건너뜀');
             } else {
                 var fieldVal = result.testField.trim();
                 var radios = document.querySelectorAll('input[name="test-field"]');
@@ -1133,12 +1180,12 @@ function fillFormFromOcrResult(result) {
         }
     } catch(e) { console.warn('[OCR] 시험분야 설정 오류:', e.message); }
 
-    // ② 검사목적 매칭 (시험분야 잠금 시 검사목적도 건너뜀)
+    // ② 검사목적 매칭
     try {
         if (result.testPurpose) {
             if (isTestFieldLocked) {
                 skippedFields.push('검사목적');
-                console.log('[OCR] 검사목적 PIN 잠금(시험분야 연동) → 건너뜀');
+                console.log('[OCR] 검사목적 PIN 잠금 유지 → 건너뜀');
             } else {
                 var matched = matchTestPurpose(result.testPurpose);
                 console.log('[OCR] 검사목적 매칭:', result.testPurpose, '→', matched);
@@ -1155,7 +1202,7 @@ function fillFormFromOcrResult(result) {
         }
     } catch(e) { console.warn('[OCR] 검사목적 설정 오류:', e.message); }
 
-    // ③ 업체 검색 (Firestore 매칭 + 미매칭 시 토스트)
+    // ③ 업체 검색 (Firestore 매칭 + 미매칭 시 연락처 직접 입력)
     try {
         if (result.companyName) {
             var compEl = document.getElementById('company-search');
@@ -1164,10 +1211,17 @@ function fillFormFromOcrResult(result) {
                 compEl.readOnly = false;
                 searchCompany(result.companyName, function(found) {
                     if (!found) {
-                        showToast('⚠️ 매칭 업체 없음: "' + result.companyName + '"', 'warning');
+                        showToast('⚠️ 매칭 업체 없음: "' + result.companyName + '" — 연락처 직접 입력', 'warning');
+                        // 업체 미매칭 시 OCR 연락처를 폼에 직접 입력
+                        _fillCompanyContactFromOcr(result);
                     }
                 });
                 filledFields.push('company-search');
+            }
+        } else {
+            // 업체명 비어있어도 연락처 정보가 있으면 직접 입력
+            if (result.phone || result.fax || result.address) {
+                _fillCompanyContactFromOcr(result);
             }
         }
     } catch(e) { console.warn('[OCR] 업체검색 오류:', e.message); }
@@ -1177,12 +1231,13 @@ function fillFormFromOcrResult(result) {
         if (result.reportSend && result.reportSend.length) {
             document.querySelectorAll('input[name="report-send"]').forEach(function(cb) { cb.checked = false; });
             result.reportSend.forEach(function(method) {
+                var m = method.replace(/\s/g, '');  // 공백 제거
                 document.querySelectorAll('input[name="report-send"]').forEach(function(chip) {
-                    if (chip.value.indexOf(method) !== -1 || method.indexOf(chip.value) !== -1 ||
-                        (method === '우편' && chip.value === '우편') ||
-                        (method === '팩스' && chip.value.indexOf('팩스') !== -1) ||
-                        (method === '메일' && chip.value.indexOf('메일') !== -1) ||
-                        (method === '선발송' && chip.value === '선발송')) {
+                    if (chip.value.indexOf(m) !== -1 || m.indexOf(chip.value) !== -1 ||
+                        (m.indexOf('우편') !== -1 && chip.value === '우편') ||
+                        (m.indexOf('팩스') !== -1 && chip.value.indexOf('팩스') !== -1) ||
+                        (m.indexOf('메일') !== -1 && chip.value.indexOf('메일') !== -1) ||
+                        (m.indexOf('선발송') !== -1 && chip.value === '선발송')) {
                         chip.checked = true;
                     }
                 });
