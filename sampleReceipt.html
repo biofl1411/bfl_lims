@@ -1375,6 +1375,11 @@ function fillFormFromOcrResult(result) {
                         var puEl = document.getElementById('package-unit');
                         if (puEl) { puEl.value = parsed.packageUnit; filledFields.push('package-unit'); }
                     }
+                    // parseSampleAmountInfo에서 검체수도 파싱된 경우 반영
+                    if (parsed.sampleCount) {
+                        var scParsed = document.getElementById('sample-count');
+                        if (scParsed) { scParsed.value = parsed.sampleCount; filledFields.push('sample-count'); }
+                    }
                 } else {
                     // parseSampleAmountInfo 미사용 시 기존 방식 유지
                     if (sample.sampleAmount) {
@@ -1394,9 +1399,9 @@ function fillFormFromOcrResult(result) {
                     }
                 }
 
-                // 검체수 (기본값 1)
+                // 검체수 (파싱 안 된 경우만 기본값 1)
                 var scEl = document.getElementById('sample-count');
-                if (scEl) {
+                if (scEl && !scEl.value) {
                     scEl.value = sample.sampleCount || '1';
                     filledFields.push('sample-count');
                 }
@@ -2452,23 +2457,25 @@ function parseSampleAmountInfo(sample) {
     var rawAmount = String(sample.sampleAmount || '');
     var rawUnit = sample.sampleAmountUnit || 'g';
     var rawPackage = sample.packageUnit || '';
-    // 패턴1: packageUnit에서 "20gx10", "20g*10" 파싱
+    var rawCount = sample.sampleCount || '';
+    // 포장단위 = 단일 포장의 중량 (예: "20g"), 수량이 아님
+    // 패턴1: "20gx10" → 포장단위=20g, 검체량=20, 단위=g, 검체수=10
     var parseTarget = rawPackage || rawAmount;
     var multiMatch = parseTarget.match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|mL|L)\s*[x*×]\s*(\d+)/i);
     if (multiMatch) {
         var single = parseFloat(multiMatch[1]);
         var unit = multiMatch[2].toLowerCase() === 'ml' ? 'ml' : multiMatch[2];
-        var mult = parseInt(multiMatch[3]);
-        return { amount: single * mult, unit: unit, packageUnit: multiMatch[1] + unit + 'x' + mult };
+        var count = parseInt(multiMatch[3]);
+        return { amount: single, unit: unit, packageUnit: multiMatch[1] + unit, sampleCount: count };
     }
-    // 패턴2: sampleAmount에 "*" 또는 "x" 포함 (예: "20*10")
+    // 패턴2: sampleAmount에 "x" 포함 (예: "20*10") → 검체량=20, 검체수=10
     if (rawAmount.match(/[*x×]/i)) {
         var parts = rawAmount.split(/[*x×]/i);
         if (parts.length === 2) {
             var a = parseFloat(parts[0].replace(/[^0-9.]/g, ''));
             var b = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
             if (!isNaN(a) && !isNaN(b)) {
-                return { amount: a * b, unit: rawUnit, packageUnit: rawAmount.replace(/[*×]/g, 'x') };
+                return { amount: a, unit: rawUnit, packageUnit: a + rawUnit, sampleCount: b };
             }
         }
     }
@@ -2476,7 +2483,8 @@ function parseSampleAmountInfo(sample) {
     return {
         amount: rawAmount.replace(/[^0-9.]/g, '') || rawAmount,
         unit: rawUnit,
-        packageUnit: rawPackage
+        packageUnit: rawPackage || (rawAmount ? rawAmount.replace(/[^0-9.]/g, '') + rawUnit : ''),
+        sampleCount: rawCount
     };
 }
 
