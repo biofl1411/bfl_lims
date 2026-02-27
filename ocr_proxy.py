@@ -316,6 +316,7 @@ if __name__ == '__main__':
     import sys
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     port = int(os.environ.get('OCR_PROXY_PORT', 5002))
+    is_debug = os.environ.get('FLASK_DEBUG', '0') == '1'
 
     # SSL 인증서 경로 (스크립트와 같은 디렉터리)
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -333,7 +334,7 @@ if __name__ == '__main__':
         print(f'  health check:        GET  https://localhost:{port}/api/ocr/health')
         print(f'  SSL cert: {cert_file}')
         print(f'  Claude API Key: {claude_status}')
-        app.run(host='0.0.0.0', port=port, debug=True,
+        app.run(host='0.0.0.0', port=port, debug=is_debug,
                 ssl_context=(cert_file, key_file))
     else:
         print(f'[WARNING] SSL 인증서 없음 - HTTP 모드로 실행')
@@ -345,4 +346,4 @@ if __name__ == '__main__':
         print(f'  inspection-form OCR: POST http://localhost:{port}/api/ocr/inspection-form')
         print(f'  health check:        GET  http://localhost:{port}/api/ocr/health')
         print(f'  Claude API Key: {claude_status}')
-        app.run(host='0.0.0.0', port=port, debug=True)
+        app.run(host='0.0.0.0', port=port, debug=is_debug)
