@@ -117,6 +117,10 @@ INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰
       "transportStatus": "운반상태 (냉장/냉동/실온/상온 중 하나)"
     }
   ],
+  "billingInfo": {
+    "billingDateType": "계산서 발행일 관련 기재 내용 (접수일/월말/특정 날짜. 없으면 빈 문자열)",
+    "billingDate": "특정 날짜인 경우 YYYY-MM-DD (없으면 빈 문자열)"
+  },
   "remarks": "비고 또는 특이사항"
 }
 
