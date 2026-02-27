@@ -149,6 +149,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <script src="js/mfds-fee-mapping.js"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 <div class="app-layout">
@@ -169,6 +171,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <main class="main-content">
 <div class="form-container">
     <form id="receipt-form">
+
+        <!-- 0. 의뢰서 OCR 자동입력 -->
+        <div id="ocr-upload-section" style="margin-bottom:16px;padding:14px 18px;border:2px dashed #c8e6c9;border-radius:10px;background:#f9fdf9">
+            <div style="display:flex;align-items:center;gap:10px">
+                <div id="receiptOcrFileArea" style="flex:1;padding:12px;border:2px dashed #c8e6c9;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;color:#666;transition:all 0.2s"
+                    onclick="document.getElementById('receiptOcrFileInput').click()"
+                    ondragover="event.preventDefault();this.style.borderColor='#43a047';this.style.background='#e8f5e9'"
+                    ondragleave="this.style.borderColor='#c8e6c9';this.style.background='transparent'"
+                    ondrop="event.preventDefault();this.style.borderColor='#c8e6c9';this.style.background='transparent';handleReceiptOcrFile(event.dataTransfer.files[0])">
+                    <input type="file" id="receiptOcrFileInput" accept="image/*,.pdf" style="display:none" onchange="handleReceiptOcrFile(this.files[0])">
+                    <span id="receiptOcrFileName">📋 시험·검사 의뢰서 파일 선택 또는 드래그 (JPG, PNG, PDF) → 접수 양식 자동입력</span>
+                </div>
+                <button type="button" class="btn btn-success btn-sm" id="receiptOcrBtn" onclick="runReceiptOCR()" disabled style="white-space:nowrap;padding:12px 16px">🤖 의뢰서 OCR</button>
+            </div>
+            <div id="receiptOcrStatus" style="font-size:12px;margin-top:6px;color:#666"></div>
+        </div>
 
         <!-- 1. 접수 기본정보 -->
         <div class="section">
@@ -866,6 +884,305 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 // ============================================================================
 const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://127.0.0.1:5001' : '';
 let apiOnline = false;
+
+// ============================================================================
+// OCR 프록시 설정 (의뢰서 OCR)
+// ============================================================================
+var OCR_PROXY_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+    ? 'https://127.0.0.1:5002'
+    : '/ocr';
+var _receiptOcrFile = null;
+
+// PDF→JPEG 변환 (PDF.js 사용)
+function convertPdfToJpegBase64(file) {
+    return new Promise(function(resolve, reject) {
+        var ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'pdf') {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var base64 = e.target.result.split(',')[1];
+                if (ext === 'jpg' || ext === 'jpeg') ext = 'jpg';
+                else if (ext === 'png') ext = 'png';
+                else ext = 'jpg';
+                resolve({ base64: base64, format: ext });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+            return;
+        }
+        if (!window.pdfjsLib) { reject(new Error('PDF.js 라이브러리 로드 실패')); return; }
+        var reader2 = new FileReader();
+        reader2.onload = function(e) {
+            var typedArray = new Uint8Array(e.target.result);
+            pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
+                pdf.getPage(1).then(function(page) {
+                    var scale = 2.0;
+                    var viewport = page.getViewport({ scale: scale });
+                    var canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    var ctx = canvas.getContext('2d');
+                    page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function() {
+                        var jpegBase64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+                        resolve({ base64: jpegBase64, format: 'jpg' });
+                    }).catch(reject);
+                }).catch(reject);
+            }).catch(reject);
+        };
+        reader2.onerror = reject;
+        reader2.readAsArrayBuffer(file);
+    });
+}
+
+// OCR fetch 에러 처리 (SSL 인증서 문제 등)
+function handleOcrFetchError(err, statusEl, btnEl) {
+    if (btnEl) { btnEl.textContent = '🤖 의뢰서 OCR'; btnEl.disabled = false; }
+    if (err.message === 'Failed to fetch') {
+        var healthUrl = OCR_PROXY_BASE + '/api/ocr/health';
+        if (statusEl) {
+            statusEl.innerHTML = '❌ OCR 서버 연결 실패. <a href="' + healthUrl + '" target="_blank" style="color:#1565c0;text-decoration:underline;">여기를 클릭</a>하여 인증서를 수락한 후 다시 시도하세요.';
+            statusEl.style.color = '#c62828';
+        }
+        toast('❌ OCR 서버 연결 실패 — 인증서 수락이 필요합니다');
+        window.open(healthUrl, '_blank');
+    } else {
+        if (statusEl) {
+            statusEl.textContent = '❌ OCR 오류: ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
+        toast('❌ OCR 실패: ' + err.message);
+    }
+}
+
+// 의뢰서 파일 선택 핸들러
+function handleReceiptOcrFile(file) {
+    if (!file) return;
+    _receiptOcrFile = file;
+    document.getElementById('receiptOcrFileName').textContent = '📋 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + 'KB)';
+    document.getElementById('receiptOcrBtn').disabled = false;
+    document.getElementById('receiptOcrStatus').textContent = '';
+}
+
+// 의뢰서 OCR 실행
+async function runReceiptOCR() {
+    if (!_receiptOcrFile) return;
+    var btn = document.getElementById('receiptOcrBtn');
+    var status = document.getElementById('receiptOcrStatus');
+    btn.disabled = true;
+    btn.textContent = '⏳ 분석 중...';
+    status.textContent = 'Claude Vision으로 의뢰서 분석 중... (5~10초 소요)';
+    status.style.color = '#1565c0';
+
+    try {
+        var imgData = await convertPdfToJpegBase64(_receiptOcrFile);
+        var payload = {
+            images: [{ format: imgData.format, name: _receiptOcrFile.name, data: imgData.base64 }]
+        };
+
+        var resp = await fetch(OCR_PROXY_BASE + '/api/ocr/inspection-form', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) {
+            var errBody = await resp.json().catch(function() { return {}; });
+            throw new Error(errBody.error || '서버 응답 오류: ' + resp.status);
+        }
+
+        var result = await resp.json();
+        fillFormFromOcrResult(result);
+
+        status.textContent = '✅ 의뢰서 인식 완료! 초록색 표시된 필드를 확인하세요.';
+        status.style.color = '#2e7d32';
+        btn.textContent = '🤖 의뢰서 OCR';
+        btn.disabled = false;
+        toast('✅ 의뢰서 OCR 완료 — 자동입력된 내용을 확인하세요');
+    } catch (err) {
+        handleOcrFetchError(err, status, btn);
+        btn.textContent = '🤖 의뢰서 OCR';
+    }
+}
+
+// 검사목적 부분매칭
+function matchTestPurpose(ocrText) {
+    if (!ocrText) return null;
+    var purposeMap = {
+        '자가품질': '자가품질위탁검사용',
+        '품질검사': '품질검사(의뢰)',
+        '수입식품': '수입식품검사',
+        '위생검사': '위생검사',
+        '유통식품': '유통식품검사',
+        '수거검사': '수거검사',
+        '재검사': '재검사',
+        '이의신청': '이의신청검사',
+        '잔류농약': '잔류농약(참고용)',
+        '영양성분': '참고용(영양성분)',
+        '소비기한': '참고용(소비기한설정)',
+        '기준규격외': '참고용(기준규격외)',
+        'Allergen': 'Allergen(RT-PCR)',
+        '연구용역': '연구용역',
+        '항생물질': '항생물질(참고용)'
+    };
+    for (var key in purposeMap) {
+        if (ocrText.indexOf(key) !== -1) return purposeMap[key];
+    }
+    // 정확히 일치하는 option이 있는지 확인
+    var sel = document.getElementById('test-purpose');
+    if (sel) {
+        var opts = sel.querySelectorAll('option');
+        for (var i = 0; i < opts.length; i++) {
+            if (opts[i].value && opts[i].value === ocrText) return ocrText;
+        }
+    }
+    return null;
+}
+
+// custom-select UI 동기화
+function syncCustomSelect(selectId, value) {
+    var textSpan = document.querySelector('#' + selectId + '-display .custom-select-text');
+    if (textSpan) textSpan.textContent = value;
+    document.querySelectorAll('.custom-select-option').forEach(function(o) {
+        o.classList.toggle('selected', o.dataset.value === value);
+    });
+}
+
+// OCR 입력 필드 하이라이트
+function highlightOcrFields(fieldIds) {
+    fieldIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.style.background = '#e8f5e9';
+            el.style.borderColor = '#66bb6a';
+            setTimeout(function() { el.style.background = ''; el.style.borderColor = ''; }, 8000);
+        }
+    });
+}
+
+// 핵심: OCR 결과 → 폼 자동입력
+function fillFormFromOcrResult(result) {
+    var filledFields = [];
+
+    // ① 검사목적 매칭
+    if (result.testPurpose) {
+        var matched = matchTestPurpose(result.testPurpose);
+        if (matched) {
+            var sel = document.getElementById('test-purpose');
+            if (sel) {
+                sel.value = matched;
+                syncCustomSelect('test-purpose', matched);
+                onTestPurposeChange();
+                filledFields.push('test-purpose');
+            }
+        }
+    }
+
+    // ② 업체 검색 (Firestore 매칭)
+    if (result.companyName) {
+        var compEl = document.getElementById('company-search');
+        if (compEl) {
+            compEl.value = result.companyName;
+            compEl.readOnly = false;
+            searchCompany(result.companyName);
+            filledFields.push('company-search');
+        }
+    }
+
+    // ③ 성적서 발송 방법
+    if (result.reportSend && result.reportSend.length) {
+        // 기존 체크 해제
+        document.querySelectorAll('input[name="report-send"]').forEach(function(cb) { cb.checked = false; });
+        result.reportSend.forEach(function(method) {
+            document.querySelectorAll('input[name="report-send"]').forEach(function(chip) {
+                if (chip.value.indexOf(method) !== -1 || method.indexOf(chip.value) !== -1 ||
+                    (method === '우편' && chip.value === '우편') ||
+                    (method === '팩스' && chip.value.indexOf('팩스') !== -1) ||
+                    (method === '메일' && chip.value.indexOf('메일') !== -1) ||
+                    (method === '선발송' && chip.value === '선발송')) {
+                    chip.checked = true;
+                }
+            });
+        });
+        if (typeof toggleReportSendOption === 'function') toggleReportSendOption();
+    }
+
+    // 팩스/이메일 수령 정보
+    if (result.reportSendFax) {
+        var faxInput = document.getElementById('report-fax-number');
+        if (faxInput) { faxInput.value = result.reportSendFax; filledFields.push('report-fax-number'); }
+    }
+    if (result.reportSendEmail) {
+        var emailInput = document.getElementById('report-email-address');
+        if (emailInput) { emailInput.value = result.reportSendEmail; filledFields.push('report-email-address'); }
+    }
+
+    // ④ 시료 정보 (복수 시료 지원)
+    if (result.samples && result.samples.length) {
+        var sampleCount = result.samples.length;
+        var countEl = document.getElementById('sample-total-count');
+        if (countEl) {
+            countEl.value = sampleCount;
+            updateSampleCount(sampleCount);
+        }
+
+        result.samples.forEach(function(sample, idx) {
+            _currentSampleIdx = idx;
+            loadSampleFromArray(idx);
+
+            if (sample.productName) {
+                var pn = document.getElementById('product-name');
+                if (pn) { pn.value = sample.productName; filledFields.push('product-name'); }
+            }
+            if (sample.manufactureNo) {
+                var mn = document.getElementById('manufacture-no');
+                if (mn) { mn.value = sample.manufactureNo; filledFields.push('manufacture-no'); }
+            }
+            if (sample.manufactureDate) {
+                var md = document.getElementById('manufacture-date');
+                if (md) { md.value = sample.manufactureDate; filledFields.push('manufacture-date'); }
+            }
+            if (sample.expiryDate) {
+                var ed = document.getElementById('expiry-date');
+                if (ed) { ed.value = sample.expiryDate; filledFields.push('expiry-date'); }
+            }
+            if (sample.sampleAmount) {
+                var sa = document.getElementById('sample-amount');
+                if (sa) { sa.value = sample.sampleAmount; filledFields.push('sample-amount'); }
+            }
+            if (sample.sampleAmountUnit) {
+                var unitEl = document.getElementById('sample-amount-unit');
+                if (unitEl) {
+                    var unitMap = { 'g': 'g', 'kg': 'kg', 'ml': 'ml', 'mL': 'ml', 'L': 'L', 'l': 'L' };
+                    unitEl.value = unitMap[sample.sampleAmountUnit] || 'g';
+                }
+            }
+            if (sample.sampleCount) {
+                var sc = document.getElementById('sample-count');
+                if (sc) { sc.value = sample.sampleCount; filledFields.push('sample-count'); }
+            }
+            if (sample.packageUnit) {
+                var pu = document.getElementById('package-unit');
+                if (pu) { pu.value = sample.packageUnit; filledFields.push('package-unit'); }
+            }
+
+            saveSampleToArray();
+        });
+
+        // 첫 번째 시료로 돌아가기
+        _currentSampleIdx = 0;
+        loadSampleFromArray(0);
+        renderSampleNav();
+    }
+
+    // ⑤ 비고
+    if (result.remarks) {
+        var remarksEl = document.getElementById('remarks');
+        if (remarksEl) { remarksEl.value = result.remarks; filledFields.push('remarks'); }
+    }
+
+    // ⑥ 하이라이트
+    highlightOcrFields(filledFields);
+}
 let firestorePurposes = [];  // Firestore에서 로드한 검사목적 P 배열
 let firestoreFields = [];    // Firestore에서 로드한 검사 분야 정보 [{code,name,color}]
 let firestoreReady = false;  // Firebase 준비 상태
