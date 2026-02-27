@@ -74,15 +74,22 @@ if not CLAUDE_API_KEY:
         with open(_key_file_path, 'r') as f:
             CLAUDE_API_KEY = f.read().strip()
 
-INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰서입니다.
+INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰서(시험의뢰서)입니다.
+
+★ 중요 지시사항:
+- 이미지의 텍스트를 한 글자씩 정확하게 읽으세요. 추측하지 마세요.
+- 한글 제품명은 붙어있는 글자를 정확히 읽으세요 (예: "썬데이츠어니언맛"을 "썬데이 초 아이 인간"처럼 잘못 읽지 마세요).
+- 손글씨, 도장, 체크표시(✓,V,○)도 꼼꼼히 확인하세요.
+- 표(테이블) 안의 값은 열(컬럼) 헤더를 기준으로 정확히 매칭하세요.
+- 날짜 형식이 "2026. 02. 10" 또는 "2026.02.10"이면 "2026-02-10"으로 변환하세요.
+
 아래 JSON 형식으로 추출하세요. 값이 없으면 빈 문자열("").
-배열이 비어있으면 빈 배열([]).
-날짜는 YYYY-MM-DD 형식.
+배열이 비어있으면 빈 배열([]). 날짜는 YYYY-MM-DD 형식.
 
 {
   "testPurpose": "검사목적 (자가품질위탁검사용/품질검사(의뢰)/수입식품검사/위생검사/유통식품검사/수거검사/재검사/이의신청검사/Allergen(RT-PCR)/잔류농약(참고용)/참고용(영양성분)/참고용(소비기한설정)/참고용(기준규격외)/연구용역/항생물질(참고용) 중 가장 가까운 것)",
-  "testField": "시험분야 (식품/축산 중 하나. 의뢰서에 표시된 분야. 없으면 식품)",
-  "companyName": "업체명 또는 영업소명",
+  "testField": "시험분야 (식품/축산 중 하나. 없으면 식품)",
+  "companyName": "업체명 또는 영업소명 (정확한 상호명)",
   "representativeName": "대표자 또는 성명",
   "bizNo": "사업자등록번호 (000-00-00000 형식)",
   "licNo": "인허가번호 또는 허가번호",
@@ -90,22 +97,23 @@ INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰
   "fax": "팩스번호",
   "mobile": "휴대전화",
   "address": "소재지 또는 주소",
-  "reportSend": ["성적서 수령방법 배열. 체크된 항목만. 우편/선발송/팩스(선)/메일(사본) 중"],
-  "reportSendFax": "팩스 수령 번호 (있으면)",
-  "reportSendEmail": "이메일 수령 주소 (있으면)",
+  "reportSend": ["성적서 수령방법 배열. 체크(✓,V,○)된 항목만. 우편/선발송/팩스(선)/메일(사본) 중"],
+  "reportSendFax": "팩스 수령 번호",
+  "reportSendEmail": "이메일 수령 주소",
   "samples": [
     {
-      "productName": "제품명 또는 시료명",
-      "foodType": "식품유형 또는 검체유형 (예: 과자, 빵류, 김치, 소스, 음료류, 기타가공품 등. 의뢰서에 기재된 품목유형/식품유형)",
-      "inspectionItems": "검사항목 또는 시험항목 (예: 대장균군, 일반세균수, 납, 카드뮴 등. 쉼표 구분 문자열. 의뢰서에 기재된 검사할 항목들)",
-      "manufactureNo": "제조번호 또는 LOT번호 또는 배치번호",
-      "manufactureDate": "제조일자",
-      "expiryDate": "유통기한 또는 소비기한 (날짜)",
-      "expiryDays": "소비기한 일수 (제조일로부터 몇 일. 숫자만. 날짜가 아닌 일수로 기재된 경우)",
-      "sampleAmount": "검체량 (숫자만)",
+      "productName": "제품명 또는 시료명 (정확한 글자 그대로. 붙어있는 한글은 띄어쓰기 없이)",
+      "foodType": "식품유형 컬럼의 값 (기타가공품, 과자, 빵류, 김치류, 소스류, 음료류, 건강기능식품 등 정확히 기재된 그대로)",
+      "inspectionItems": "시험의뢰항목 또는 검사항목 컬럼의 값 (쉼표 구분. 예: 대장균군(정량,n=5), 일반세균수)",
+      "inspectionStandard": "단시조항 또는 시험법 컬럼의 값 (비살균/그대로섭취 등 기재된 그대로)",
+      "manufactureNo": "접수번호 또는 제조번호 또는 LOT번호",
+      "manufactureDate": "제조일자 (YYYY-MM-DD)",
+      "expiryDate": "소비기한 또는 유통기한 (YYYY-MM-DD)",
+      "expiryDays": "소비기한이 일수로 기재된 경우만 (숫자만)",
+      "sampleAmount": "검체량 (숫자만. 예: 20)",
       "sampleAmountUnit": "검체량 단위 (g/kg/ml/L 중 하나)",
-      "sampleCount": "검체수 (숫자)",
-      "packageUnit": "포장단위",
+      "sampleCount": "검체수 (숫자. 없으면 1)",
+      "packageUnit": "포장단위 (예: 20gx10)",
       "transportStatus": "운반상태 (냉장/냉동/실온/상온 중 하나)"
     }
   ],
@@ -242,8 +250,8 @@ def ocr_inspection_form():
         # Claude Vision API 호출
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         message = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=2000,
+            model='claude-sonnet-4-20250514',
+            max_tokens=3000,
             messages=[{
                 'role': 'user',
                 'content': [
