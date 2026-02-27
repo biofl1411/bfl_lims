@@ -762,6 +762,40 @@ var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.
 cd ~/bfl_lims && git pull
 ```
 
+### 다른 PC에서 작업하기 (집/사무실 간 전환)
+
+Claude Code 대화 기록은 **각 PC 로컬에만 저장**되며 클라우드 동기화 안 됨.
+코드 파일은 **Git을 통해 수동 동기화** (자동 아님).
+
+#### 최초 세팅 (한 번만)
+```bash
+git clone https://github.com/biofl1411/bfl_lims.git
+cd bfl_lims
+claude    # Claude Code 실행
+```
+
+#### 매일 작업 시작 시
+```bash
+cd bfl_lims
+git pull origin main    # 최신 코드 받기
+claude                  # Claude Code 실행
+```
+
+#### 작업 끝나고 퇴근 전
+```bash
+# deploy.ps1 실행 또는 수동으로:
+git add . && git commit -m "작업 내용" && git push origin main
+```
+
+#### 동기화 흐름
+```
+사무실 PC → git push → GitHub → git pull → 집 PC
+집 PC    → git push → GitHub → git pull → 사무실 PC
+```
+
+> **참고**: `MEMORY.md`는 `.claude/` 폴더 안에 있어 git에 포함 안 됨.
+> 새 PC에서는 Claude Code가 `README.md`를 참고하여 프로젝트 맥락을 파악함.
+
 ---
 
 ## 공통 모듈: 통합 사이드바 (`js/sidebar.js`)
