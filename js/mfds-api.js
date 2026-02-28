@@ -243,6 +243,15 @@ MFDS.insertExprDiary = function(params) {
 };
 
 /**
+ * 시험방법 목록조회 (I-LMS-0241)
+ * @param {Object} params - { exprIemCode: '시험항목코드' }
+ * @returns {Promise<Object>} resultData: [{ codeName, codeNo }]
+ */
+MFDS.selectListExprMth = function(params) {
+  return MFDS.callApi('selectListExprMth', params);
+};
+
+/**
  * 시험일지시료 목록조회 (I-LMS-0201)
  * @param {Object} params - { sploreReqestNo }
  * @returns {Promise<Object>}
@@ -262,8 +271,8 @@ MFDS.selectListExprDiaryExprIem = function(params) {
 
 /**
  * 시험일지양식 목록조회 (I-LMS-0242)
- * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn }
- * @returns {Promise<Object>}
+ * @param {Object} params - { exprMthSn: '시험방법순번(0241에서 획득)', useScopeCode: '사용범위코드(SY05)' }
+ * @returns {Promise<Object>} resultData: [{ codename2: '양식내용', codename: '코드명', codeno: '코드' }]
  */
 MFDS.selectListExprDiaryForm = function(params) {
   return MFDS.callApi('selectListExprDiaryForm', params);
