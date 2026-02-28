@@ -387,6 +387,30 @@ async function fsGetReceipts(opts) {
 }
 
 /**
+ * 접수 삭제
+ */
+async function fsDeleteReceipt(id) {
+  await db.collection('receipts').doc(id).delete();
+}
+
+/**
+ * 접수번호에 연결된 testResults 일괄 삭제
+ */
+async function fsDeleteTestResultsByReceiptNo(receiptNo) {
+  var snap = await db.collection('testResults')
+    .where('receiptNo', '==', receiptNo)
+    .get();
+  var batch = db.batch();
+  snap.docs.forEach(function(doc) {
+    batch.delete(doc.ref);
+  });
+  if (snap.docs.length > 0) {
+    await batch.commit();
+  }
+  return snap.docs.length;
+}
+
+/**
  * 접수 저장
  */
 async function fsSaveReceipt(data) {

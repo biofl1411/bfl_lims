@@ -107,6 +107,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 <div class="right">
                     <span id="total-count" style="font-size:12px;color:#5f6b7a"></span>
                     <button class="btn btn-secondary btn-sm" onclick="loadReceipts()">🔄 새로고침</button>
+                    <button class="btn btn-secondary btn-sm" id="select-mode-btn" onclick="toggleSelectMode()">☑️ 선택</button>
+                    <div id="select-bar" style="display:none;align-items:center;gap:8px">
+                        <span id="select-count" style="font-size:12px;color:#5f6b7a">0개 선택</span>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll()">전체선택</button>
+                        <button class="btn btn-sm" style="background:#ef4444;color:#fff;border:none" onclick="deleteSelectedReceipts()">🗑️ 선택 삭제</button>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleSelectMode()">취소</button>
+                    </div>
                     <div class="col-settings-wrap">
                         <button class="btn btn-secondary btn-sm" onclick="toggleColSettings()" id="col-settings-btn">⚙️ 컬럼</button>
                         <div class="col-settings-panel" id="col-settings-panel"></div>
@@ -406,6 +413,8 @@ var _sortKey = 'receiptDate';
 var _sortDir = 'desc';
 var _page = 1;
 var _pageSize = 30;
+var _selectMode = false;
+var _selectedReceipts = new Set();
 
 // ============================================================================
 // 데이터 로드
@@ -584,6 +593,9 @@ function renderTable() {
     // 헤더
     var thead = document.getElementById('receipt-thead');
     var hhtml = '<tr>';
+    if (_selectMode) {
+        hhtml += '<th style="width:40px;text-align:center">선택</th>';
+    }
     visibleCols.forEach(function(col) {
         var cls = '';
         var icon = '↕';
@@ -604,7 +616,8 @@ function renderTable() {
     document.getElementById('loading').style.display = 'none';
 
     if (pageData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="' + visibleCols.length + '" style="text-align:center;padding:40px;color:#999">접수 데이터가 없습니다.</td></tr>';
+        var colSpan = visibleCols.length + (_selectMode ? 1 : 0);
+        tbody.innerHTML = '<tr><td colspan="' + colSpan + '" style="text-align:center;padding:40px;color:#999">접수 데이터가 없습니다.</td></tr>';
         document.getElementById('total-count').textContent = '';
         document.getElementById('pagination').innerHTML = '';
         return;
@@ -614,7 +627,12 @@ function renderTable() {
 
     var bhtml = '';
     pageData.forEach(function(r) {
+        var baseNo = r._baseReceiptNo || r.receiptNo || '';
         bhtml += '<tr onclick="openDetailModal(\'' + r.id + '\',' + r._sampleIdx + ')">';
+        if (_selectMode) {
+            var checked = _selectedReceipts.has(baseNo) ? 'checked' : '';
+            bhtml += '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleReceiptSelect(\'' + baseNo + '\',\'' + r.id + '\')"></td>';
+        }
         visibleCols.forEach(function(col) {
             var val = r[col.key];
             if (val === undefined || val === null) val = '';
@@ -680,6 +698,77 @@ function renderPagination() {
     document.getElementById('pagination').innerHTML = html;
 }
 function goPage(p) { _page = p; renderTable(); }
+
+// ============================================================================
+// 선택 삭제
+// ============================================================================
+function toggleSelectMode() {
+    _selectMode = !_selectMode;
+    _selectedReceipts.clear();
+    document.getElementById('select-bar').style.display = _selectMode ? 'flex' : 'none';
+    document.getElementById('select-mode-btn').style.display = _selectMode ? 'none' : '';
+    updateSelectCount();
+    renderTable();
+}
+
+function toggleReceiptSelect(baseNo, docId) {
+    if (_selectedReceipts.has(baseNo)) {
+        _selectedReceipts.delete(baseNo);
+    } else {
+        _selectedReceipts.add(baseNo);
+    }
+    updateSelectCount();
+    renderTable();
+}
+
+function toggleSelectAll() {
+    // 현재 필터된 목록의 고유 접수번호 추출
+    var allBaseNos = [];
+    _filteredReceipts.forEach(function(r) {
+        var bno = r._baseReceiptNo || r.receiptNo || '';
+        if (bno && allBaseNos.indexOf(bno) === -1) allBaseNos.push(bno);
+    });
+    if (_selectedReceipts.size === allBaseNos.length) {
+        _selectedReceipts.clear();
+    } else {
+        allBaseNos.forEach(function(bno) { _selectedReceipts.add(bno); });
+    }
+    updateSelectCount();
+    renderTable();
+}
+
+function updateSelectCount() {
+    var el = document.getElementById('select-count');
+    if (el) el.textContent = _selectedReceipts.size + '개 선택';
+}
+
+async function deleteSelectedReceipts() {
+    if (_selectedReceipts.size === 0) {
+        showToast('삭제할 접수건을 선택하세요', 'warning');
+        return;
+    }
+    var names = Array.from(_selectedReceipts);
+    if (!confirm(names.length + '개 접수건을 삭제하시겠습니까?\n\n' + names.join(', ') + '\n\n⚠️ 관련 검사결과도 함께 삭제됩니다.')) return;
+
+    try {
+        for (var i = 0; i < names.length; i++) {
+            var receiptNo = names[i];
+            // receipts 컬렉션에서 해당 receiptNo의 문서 찾기
+            var snap = await db.collection('receipts').where('receiptNo', '==', receiptNo).get();
+            for (var j = 0; j < snap.docs.length; j++) {
+                await fsDeleteReceipt(snap.docs[j].id);
+            }
+            // 관련 testResults 삭제
+            await fsDeleteTestResultsByReceiptNo(receiptNo);
+        }
+        showToast(names.length + '개 접수건이 삭제되었습니다', 'success');
+        toggleSelectMode();
+        loadReceipts();
+    } catch(e) {
+        console.error('삭제 오류:', e);
+        showToast('삭제 실패: ' + (e.message || e), 'error');
+    }
+}
 
 // ============================================================================
 // 컬럼 설정

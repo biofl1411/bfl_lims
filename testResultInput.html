@@ -11,6 +11,7 @@
 <script src="js/firestore-helpers.js"></script>
 <script src="js/mfds-api.js"></script>
 <script src="js/mfds_templates.js"></script>
+<script src="js/mfds_result_rules.js"></script>
 <style>
 :root{--primary:#2563eb;--primary-light:#dbeafe;--success:#10b981;--success-light:#d1fae5;--warning:#f59e0b;--warning-light:#fef3c7;--danger:#ef4444;--danger-light:#fee2e2;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-600:#4b5563;--gray-700:#374151;--gray-900:#111827;--accent:#667eea;--accent2:#764ba2}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -106,13 +107,13 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .badge-gray{background:var(--gray-100);color:var(--gray-600)}
 
 /* Accordion sections */
-.section{border:1px solid var(--gray-200);border-radius:10px;overflow:hidden;background:white}
-.section-header{padding:14px 20px;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;color:var(--gray-600);background:white;border-left:4px solid var(--gray-300);transition:all 0.2s}
-.section-header:hover{background:var(--gray-50);color:var(--gray-800)}
-.section-header.active{color:white;border-left-color:transparent;background:var(--accent)}
-.section-content{max-height:0;overflow:hidden;padding:0;transition:max-height 0.3s ease,padding 0.3s ease}
-.section-content.active{max-height:2000px;padding:20px;overflow:visible}
-.toggle-icon{font-size:12px;transition:transform 0.2s;color:var(--gray-400)}
+.section{border:1px solid var(--gray-200);border-radius:10px;overflow:hidden;background:white;flex-shrink:0}
+.section-header{padding:14px 20px;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;color:#999;background:white;border-left:4px solid var(--gray-300);transition:all 0.2s}
+.section-header:hover{background:var(--gray-50);color:var(--gray-700)}
+.section-header.active{color:white;border-left-color:#1e40af;background:#1e40af}
+.section-content{display:none;padding:20px}
+.section-content.active{display:block}
+.toggle-icon{font-size:12px;transition:transform 0.2s;color:#ccc}
 .section-header.active .toggle-icon{transform:rotate(180deg);color:white}
 
 /* Form */
@@ -639,7 +640,7 @@ function renderRightPanel() {
   // 결과 테이블
   html += '<div class="result-table-wrap"><table class="result-table"><thead><tr>';
   html += '<th style="width:40px">No</th><th>시험항목</th><th>항목코드</th><th>기준규격</th><th>단위</th>';
-  html += '<th style="width:140px">측정값</th><th style="width:90px">판정</th><th style="width:60px">수동</th><th>비고</th>';
+  html += '<th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th><th style="width:60px">수동</th><th>비고</th>';
   html += '</tr></thead><tbody id="result-tbody"></tbody></table></div>';
 
   // 종합 판정
@@ -688,7 +689,7 @@ function loadAndRenderItems() {
   if (!tbody) return;
 
   if (!currentTestItems.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#999">시험항목을 찾을 수 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:#999">시험항목을 찾을 수 없습니다</td></tr>';
     return;
   }
 
@@ -718,6 +719,11 @@ function loadAndRenderItems() {
       overrideHtml += '</select>';
     }
 
+    var savedMarkValue = saved.markValue || '';
+    if (!savedMarkValue && mv) {
+      savedMarkValue = (typeof MFDS_RULES !== 'undefined') ? MFDS_RULES.generateMarkValue(mv, item) : mv;
+    }
+
     return '<tr>' +
       '<td style="text-align:center">' + (idx+1) + '</td>' +
       '<td>' + (item.testItemName || '-') + '</td>' +
@@ -725,6 +731,7 @@ function loadAndRenderItems() {
       '<td style="font-size:12px">' + (item.standard || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.unit || '-') + '</td>' +
       '<td><input type="text" class="result-input ' + inputClass + '" data-idx="' + idx + '" value="' + mv + '" placeholder="입력" oninput="onResultInput(' + idx + ',this)">' + quickBtns + '</td>' +
+      '<td id="mark-' + idx + '" style="font-size:12px;color:#2563eb;font-weight:500">' + savedMarkValue + '</td>' +
       '<td id="judge-' + idx + '">' + judgeBadge + '</td>' +
       '<td>' + overrideHtml + '</td>' +
       '<td><input type="text" class="remark-input" data-idx="' + idx + '" value="' + rm + '" placeholder="비고" oninput="markModified()"></td>' +
@@ -838,6 +845,24 @@ function onResultInput(idx, inputEl) {
   markModified();
   var item = currentTestItems[idx];
   var value = inputEl.value.trim();
+
+  // 표기값 실시간 업데이트 (유효자리수 + 정량한계 적용)
+  var markCell = document.getElementById('mark-' + idx);
+  if (markCell && typeof MFDS_RULES !== 'undefined') {
+    var mv = MFDS_RULES.generateMarkValue(value, item);
+    markCell.textContent = mv;
+    // 정량한계 미만 시 시각적 표시
+    if (item.fdqntLimitValue && item.fdqntLimitValue !== '' && value !== '') {
+      var numV = Number(value);
+      if (!isNaN(numV) && numV < parseFloat(item.fdqntLimitValue)) {
+        markCell.style.color = '#f59e0b';
+        markCell.title = '정량한계(' + item.fdqntLimitValue + ') 미만';
+      } else {
+        markCell.style.color = '#2563eb';
+        markCell.title = '';
+      }
+    }
+  }
 
   // 수동 수정 모드면 자동 판정 스킵
   var overrideCheckbox = inputEl.closest('tr').querySelector('input[type="checkbox"]');
@@ -1025,6 +1050,12 @@ function collectCurrentResults() {
     var jr = judgeCell ? judgeCell.textContent.trim() : '';
     if (jr === '-') jr = '';
 
+    // MFDS 결과값 처리 규칙 적용
+    var processed = {};
+    if (typeof MFDS_RULES !== 'undefined' && mv) {
+      processed = MFDS_RULES.processResultValue(mv, item, jr);
+    }
+
     items.push({
       testItemCode: item.testItemCode || '',
       testItemName: item.testItemName || '',
@@ -1035,11 +1066,22 @@ function collectCurrentResults() {
       maxValueCode: item.maxValueCode || '',
       minValue: item.minValue || '',
       minValueCode: item.minValueCode || '',
+      precision: item.precision || '',
       measuredValue: mv,
       judgmentResult: jr,
       autoJudgment: (overrideCb && overrideCb.checked) ? '' : jr,
       manualOverride: overrideCb ? overrideCb.checked : false,
-      remarks: remarkInput ? remarkInput.value.trim() : ''
+      remarks: remarkInput ? remarkInput.value.trim() : '',
+      // MFDS 결과값 처리 필드
+      markValue: processed.markValue || mv,
+      validCphr: processed.validCphr || item.precision || '',
+      fdqntLimitApplcAt: processed.fdqntLimitApplcAt || 'N',
+      fdqntLimitValue: processed.fdqntLimitValue || item.fdqntLimitValue || '',
+      fdqntLimitBeloValue: processed.fdqntLimitBeloValue || item.fdqntLimitBeloValue || '',
+      jdgmntFomCode: processed.jdgmntFomCode || '',
+      jdgmntWordCode: processed.jdgmntWordCode || '',
+      mxmmValueSeCode: processed.mxmmValueSeCode || '',
+      mummValueSeCode: processed.mummValueSeCode || ''
     });
   });
 
@@ -1209,8 +1251,20 @@ async function confirmMfdsSubmit() {
           testItmCode: it.testItemCode,
           testItmNm: it.testItemName,
           inspctRsltValue: it.measuredValue,
-          sstfcYn: it.judgmentResult === '적합' ? 'Y' : 'N',
-          fdqntLimitApplcAt: 'N'
+          markValue: it.markValue || it.measuredValue,
+          validCphr: it.validCphr || '',
+          jdgmntFomCode: it.jdgmntFomCode || '',
+          jdgmntWordCode: it.jdgmntWordCode || '',
+          sstfcYn: it.judgmentResult === '적합' ? 'Y' : (it.judgmentResult === '부적합' ? 'N' : ''),
+          fdqntLimitApplcAt: it.fdqntLimitApplcAt || 'N',
+          fdqntLimitValue: it.fdqntLimitValue || '',
+          fdqntLimitBeloValue: it.fdqntLimitBeloValue || '',
+          mxmmValue: it.maxValue || '',
+          mxmmValueSeCode: it.mxmmValueSeCode || '',
+          mummValue: it.minValue || '',
+          mummValueSeCode: it.mummValueSeCode || '',
+          unitCode: it.unit || '',
+          stndrdValue: it.standard || ''
         };
       })
     };
