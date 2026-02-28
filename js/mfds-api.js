@@ -243,6 +243,87 @@ MFDS.insertExprDiary = function(params) {
 };
 
 /**
+ * 시험일지시료 목록조회 (I-LMS-0201)
+ * @param {Object} params - { sploreReqestNo }
+ * @returns {Promise<Object>}
+ */
+MFDS.selectListExprDiarySplore = function(params) {
+  return MFDS.callApi('selectListExprDiarySplore', params);
+};
+
+/**
+ * 시험일지시험항목 목록조회 (I-LMS-0202)
+ * @param {Object} params - { sploreReqestNo, sploreSn }
+ * @returns {Promise<Object>}
+ */
+MFDS.selectListExprDiaryExprIem = function(params) {
+  return MFDS.callApi('selectListExprDiaryExprIem', params);
+};
+
+/**
+ * 시험일지양식 목록조회 (I-LMS-0242)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn }
+ * @returns {Promise<Object>}
+ */
+MFDS.selectListExprDiaryForm = function(params) {
+  return MFDS.callApi('selectListExprDiaryForm', params);
+};
+
+/**
+ * 시험일지상세조회 (I-LMS-0243)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn, exprDiarySn }
+ * @returns {Promise<Object>}
+ */
+MFDS.selectExprDiary = function(params) {
+  return MFDS.callApi('selectExprDiary', params);
+};
+
+/**
+ * 시험일지신규 등록 (I-LMS-0209)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprDiaryCn, ... }
+ * @returns {Promise<Object>}
+ */
+MFDS.insertExprDiaryNew = function(params) {
+  return MFDS.callApi('insertExprDiaryNew', params);
+};
+
+/**
+ * 시험일지계산식결과 등록 (I-LMS-0210)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn, exprDiarySn, nomfrmResultValue }
+ * @returns {Promise<Object>}
+ */
+MFDS.insertExprDiaryCalcFrmlaResult = function(params) {
+  return MFDS.callApi('insertExprDiaryCalcFrmlaResult', params);
+};
+
+/**
+ * 시험일지첨부파일 등록 (I-LMS-0206)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn, exprDiarySn, atchmnflList }
+ * @returns {Promise<Object>}
+ */
+MFDS.insertExprDiaryAtchmnfl = function(params) {
+  return MFDS.callApi('insertExprDiaryAtchmnfl', params);
+};
+
+/**
+ * 시험일지 삭제 (I-LMS-0211)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn, exprDiarySn }
+ * @returns {Promise<Object>}
+ */
+MFDS.deleteExprDiary = function(params) {
+  return MFDS.callApi('deleteExprDiary', params);
+};
+
+/**
+ * 시험일지복사 저장 (I-LMS-0212)
+ * @param {Object} params - { sploreReqestNo, sploreSn, exprIemSn, exprDiarySn }
+ * @returns {Promise<Object>}
+ */
+MFDS.saveExprDiaryCopy = function(params) {
+  return MFDS.callApi('saveExprDiaryCopy', params);
+};
+
+/**
  * 검사결과 입력 (시료별)
  * @param {Object} params - 검사결과 데이터
  * @returns {Promise<Object>}
