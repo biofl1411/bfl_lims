@@ -149,8 +149,8 @@ def parse_address(addr):
 
 _quota_exceeded = False
 
-def fetch_api(service_id, start, end, chng_dt=None):
-    """식약처 API 호출 → JSON 파싱"""
+def fetch_api(service_id, start, end, chng_dt=None, max_retries=3):
+    """식약처 API 호출 → JSON 파싱 (실패 시 최대 max_retries회 재시도)"""
     global _quota_exceeded
 
     if _quota_exceeded:
@@ -160,53 +160,68 @@ def fetch_api(service_id, start, end, chng_dt=None):
     if chng_dt:
         url += f'/CHNG_DT={chng_dt}'
 
-    try:
-        req = Request(url, headers={'User-Agent': 'BioFoodLab-Collector/1.0'})
-        with urlopen(req, timeout=30) as resp:
-            raw = resp.read()
+    for attempt in range(1, max_retries + 1):
+        try:
+            req = Request(url, headers={'User-Agent': 'BioFoodLab-Collector/1.0'})
+            with urlopen(req, timeout=30) as resp:
+                raw = resp.read()
 
-        if not raw or len(raw) == 0:
-            logger.warning(f'  빈 응답 ({service_id} {start}-{end}), url={url}')
-            return 0, [], 'error'
-
-        text = raw.decode('utf-8', errors='replace')
-        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
-
-        data = json.loads(text)
-        key = list(data.keys())[0]
-        result = data[key]
-
-        if 'RESULT' in result:
-            code = result['RESULT'].get('CODE', '')
-            msg = result['RESULT'].get('MSG', '')
-
-            if code == 'INFO-300':
-                logger.warning(f'  API 호출 한도 초과! ({msg})')
-                _quota_exceeded = True
-                return 0, [], 'quota_exceeded'
-
-            if code == 'INFO-200':
-                return 0, [], 'empty'
-
-            if code.startswith('ERROR'):
-                logger.warning(f'  API 오류 ({service_id}): [{code}] {msg}')
+            if not raw or len(raw) == 0:
+                if attempt < max_retries:
+                    logger.info(f'  빈 응답 ({service_id} {start}-{end}), {attempt}/{max_retries}회 재시도...')
+                    time.sleep(1 * attempt)
+                    continue
+                logger.warning(f'  빈 응답 ({service_id} {start}-{end}), {max_retries}회 실패')
                 return 0, [], 'error'
 
-        tc = result.get('total_count', 0)
-        total = int(tc) if tc != '' and tc is not None else 0
+            text = raw.decode('utf-8', errors='replace')
+            text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
 
-        rows = result.get('row', [])
-        return total, rows, 'ok'
+            data = json.loads(text)
+            key = list(data.keys())[0]
+            result = data[key]
 
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.warning(f'  JSON 파싱 오류 ({service_id} {start}-{end}): {e}')
-        return 0, [], 'error'
-    except (URLError, HTTPError, TimeoutError) as e:
-        logger.warning(f'  네트워크 오류 ({service_id} {start}-{end}): {e}')
-        return 0, [], 'error'
-    except Exception as e:
-        logger.error(f'  예상치 못한 오류 ({service_id} {start}-{end}): {e}')
-        return 0, [], 'error'
+            if 'RESULT' in result:
+                code = result['RESULT'].get('CODE', '')
+                msg = result['RESULT'].get('MSG', '')
+
+                if code == 'INFO-300':
+                    logger.warning(f'  API 호출 한도 초과! ({msg})')
+                    _quota_exceeded = True
+                    return 0, [], 'quota_exceeded'
+
+                if code == 'INFO-200':
+                    return 0, [], 'empty'
+
+                if code.startswith('ERROR'):
+                    logger.warning(f'  API 오류 ({service_id}): [{code}] {msg}')
+                    return 0, [], 'error'
+
+            tc = result.get('total_count', 0)
+            total = int(tc) if tc != '' and tc is not None else 0
+
+            rows = result.get('row', [])
+            return total, rows, 'ok'
+
+        except (json.JSONDecodeError, KeyError) as e:
+            if attempt < max_retries:
+                logger.info(f'  JSON 파싱 오류 ({service_id} {start}-{end}): {e}, {attempt}/{max_retries}회 재시도...')
+                time.sleep(1 * attempt)
+                continue
+            logger.warning(f'  JSON 파싱 오류 ({service_id} {start}-{end}): {e}, {max_retries}회 실패')
+            return 0, [], 'error'
+        except (URLError, HTTPError, TimeoutError) as e:
+            if attempt < max_retries:
+                logger.info(f'  네트워크 오류 ({service_id} {start}-{end}): {e}, {attempt}/{max_retries}회 재시도...')
+                time.sleep(2 * attempt)
+                continue
+            logger.warning(f'  네트워크 오류 ({service_id} {start}-{end}): {e}, {max_retries}회 실패')
+            return 0, [], 'error'
+        except Exception as e:
+            logger.error(f'  예상치 못한 오류 ({service_id} {start}-{end}): {e}')
+            return 0, [], 'error'
+
+    return 0, [], 'error'
 
 # ============================================================
 # Firestore 저장
@@ -409,16 +424,23 @@ def update_data_counts():
         counts = {}
         totals = {}
         for col_name in ['fss_businesses', 'fss_products', 'fss_materials', 'fss_changes']:
-            docs = fdb.collection(col_name).stream()
-            api_counts = {}
-            total = 0
-            for doc in docs:
-                total += 1
-                data = doc.to_dict()
-                src = data.get('api_source', 'unknown')
-                api_counts[src] = api_counts.get(src, 0) + 1
-            totals[col_name] = total
-            counts.update(api_counts)
+            # 컬렉션 전체 건수: count() 집계 사용
+            try:
+                count_query = fdb.collection(col_name).count()
+                results = count_query.get()
+                totals[col_name] = results[0][0].value if results else 0
+            except Exception:
+                totals[col_name] = 0
+
+            # API별 건수: 각 API에 대해 count() 집계
+            for sid, info in ALL_APIS.items():
+                if info['collection'] == col_name:
+                    try:
+                        q = fdb.collection(col_name).where('api_source', '==', sid).count()
+                        r = q.get()
+                        counts[sid] = r[0][0].value if r else 0
+                    except Exception:
+                        counts[sid] = counts.get(sid, 0)
 
         fdb.collection('fss_config').document('data_counts').set({
             'counts': counts,

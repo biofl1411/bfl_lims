@@ -2605,21 +2605,25 @@ async function searchFoodType(query) {
         return;
     }
 
-    // 1) 기존 foodTypesMapping에서 검체유형 목록
-    var foodTypes = await loadFoodTypesFromFirestore();
-    var filtered = foodTypes.filter(function(item) {
-        return item.purpose === testPurpose && item['분야'] === testField;
-    });
     var typeSet = new Set();
-    filtered.forEach(function(item) {
-        if (item.foodType) typeSet.add(item.foodType);
-    });
+    var isLims = (testPurpose === '자가품질위탁검사용');
 
-    // 2) mfdsTemplates에서 식품유형(templateName) 목록 추가
-    var templates = await loadMfdsTemplates();
-    templates.forEach(function(t) {
-        if (t.templateName) typeSet.add(t.templateName);
-    });
+    if (isLims) {
+        // 자가품질위탁검사용: 식약처 mfdsTemplates 기준만 사용
+        var templates = await loadMfdsTemplates();
+        templates.forEach(function(t) {
+            if (t.templateName) typeSet.add(t.templateName);
+        });
+    } else {
+        // 기타 검사목적: 기존 foodTypesMapping 기반
+        var foodTypes = await loadFoodTypesFromFirestore();
+        var filtered = foodTypes.filter(function(item) {
+            return item.purpose === testPurpose && item['분야'] === testField;
+        });
+        filtered.forEach(function(item) {
+            if (item.foodType) typeSet.add(item.foodType);
+        });
+    }
 
     var allTypes = Array.from(typeSet).sort();
     const filteredTypes = query ? allTypes.filter(t => t.toLowerCase().includes(query.toLowerCase())) : allTypes;
@@ -2631,16 +2635,13 @@ async function searchFoodType(query) {
         return;
     }
 
-    // mfdsTemplates에 있는 식품유형은 태그 표시
-    var tmplSet = new Set(templates.map(function(t) { return t.templateName; }));
     list.innerHTML = filteredTypes.map(type => {
         let display = type;
         if (query) {
             const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
             display = type.replace(regex, '<mark>$1</mark>');
         }
-        var tag = tmplSet.has(type) ? ' <span style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:1px 5px;border-radius:3px;">식약처</span>' : '';
-        return `<div class="autocomplete-item" onclick="selectFoodType('${type.replace(/'/g, "\\'")}')">${display}${tag}</div>`;
+        return `<div class="autocomplete-item" onclick="selectFoodType('${type.replace(/'/g, "\\'")}')">${display}</div>`;
     }).join('');
 
     list.classList.add('active');

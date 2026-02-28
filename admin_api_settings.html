@@ -1196,14 +1196,14 @@ async function loadStatus() {
       });
       if (latest) {
         var lastDt = latest.started_at || '';
-        document.getElementById('statLastCollect').textContent = lastDt ? lastDt.substring(5, 16) : '-';
+        document.getElementById('statLastCollect').textContent = toKST(lastDt);
       }
       return;
     }
     if (!logSnap.empty) {
       var lastLog = logSnap.docs[0].data();
       var lastDt = lastLog.started_at || '';
-      document.getElementById('statLastCollect').textContent = lastDt ? lastDt.substring(5, 16) : '-';
+      document.getElementById('statLastCollect').textContent = toKST(lastDt);
     } else {
       document.getElementById('statLastCollect').textContent = '-';
     }
@@ -1241,7 +1241,7 @@ async function loadLogs() {
       var l = doc.data();
       var statusClass = (l.error_count || 0) > 0 ? 'warn' : 'ok';
       html += '<tr>';
-      html += '<td>' + (l.started_at || '').substring(0, 16) + '</td>';
+      html += '<td>' + toKST(l.started_at) + '</td>';
       html += '<td><span class="status-dot ' + statusClass + '"></span>' + (l.api_source || '') + ' ' + (l.api_name || '') + '</td>';
       html += '<td>' + (l.collect_type || '') + '</td>';
       html += '<td>' + numberFormat(l.total_count) + '</td>';
@@ -1356,6 +1356,18 @@ function doManualCollect() {
 // ============================================================
 // 유틸
 // ============================================================
+function toKST(isoStr) {
+  if (!isoStr || isoStr === 'None') return '-';
+  var d = new Date(isoStr.endsWith('Z') || isoStr.includes('+') ? isoStr : isoStr + 'Z');
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  });
+}
+
 function numberFormat(n) {
   if (n === null || n === undefined) return '-';
   return Number(n).toLocaleString();
