@@ -626,8 +626,8 @@ function renderRightPanel() {
   html += '<div class="form-group" style="flex:1"><label>양식 내용</label><div id="diary-form-preview" style="font-size:12px; color:#666; max-height:60px; overflow-y:auto;">양식을 선택하면 내용이 표시됩니다</div></div>';
   html += '</div>';
 
-  // 시험항목별 일지 목록 테이블
-  html += '<div id="diary-expr-items-area" style="display:none; margin-top:8px;">';
+  // 시험항목별 일지 목록 테이블 (항상 표시, 자동 로드)
+  html += '<div id="diary-expr-items-area" style="margin-top:8px;">';
   html += '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
   html += '<thead><tr style="background:#e8edf5;">';
   html += '<th style="padding:6px; border:1px solid #d0d8f0; width:40px;">순번</th>';
@@ -700,6 +700,9 @@ function renderRightPanel() {
 
   // 시험항목 로드 후 테이블 렌더링
   loadAndRenderItems();
+
+  // 식약처 시험일지 항목별 데이터 자동 로드
+  autoLoadDiaryData();
 }
 
 function formGroupRO(label, value) {
@@ -1390,7 +1393,46 @@ var _diaryExprItems = [];
 // 현재 선택된 양식
 var _selectedDiaryForm = null;
 
-// 시험항목별 일지 상태 조회 (I-LMS-0202)
+// 접수건 선택 시 자동 로드 (로컬 항목 기반 + 식약처 API 조회)
+async function autoLoadDiaryData() {
+  if (!currentReceipt) return;
+
+  // 1단계: 로컬 시험항목으로 먼저 테이블 렌더링 (즉시 표시)
+  var localItems = (currentTestItems || []).map(function(it, i) {
+    return {
+      exprIemSn: String(i + 1),
+      exprIemNm: it.testItemName || it.name || '-',
+      exprDiaryCo: 0,
+      _local: true
+    };
+  });
+  if (localItems.length > 0) {
+    _diaryExprItems = localItems;
+    renderDiaryExprItems(localItems);
+  }
+
+  // 2단계: 식약처 API에서 항목별 일지 상태 조회 (비동기)
+  if (typeof MFDS !== 'undefined' && currentReceipt.sploreReqestNo) {
+    try {
+      var params = {
+        sploreReqestNo: currentReceipt.sploreReqestNo,
+        sploreSn: String(currentSampleIdx + 1)
+      };
+      var res = await MFDS.selectListExprDiaryExprIem(params);
+      if (res && res.resultData) {
+        var apiItems = Array.isArray(res.resultData) ? res.resultData : [res.resultData];
+        if (apiItems.length > 0) {
+          _diaryExprItems = apiItems;
+          renderDiaryExprItems(apiItems);
+        }
+      }
+    } catch(e) {
+      console.warn('식약처 항목별 일지 조회 실패 (로컬 데이터 사용):', e.message || e);
+    }
+  }
+}
+
+// 시험항목별 일지 상태 조회 (I-LMS-0202) — 수동 새로고침
 async function loadDiaryExprItems() {
   if (!currentReceipt) { showToast('접수건을 선택하세요', 'error'); return; }
   if (typeof MFDS === 'undefined') { showToast('식약처 API 모듈이 로드되지 않았습니다', 'error'); return; }
@@ -1407,7 +1449,6 @@ async function loadDiaryExprItems() {
     }
     _diaryExprItems = items;
     renderDiaryExprItems(items);
-    document.getElementById('diary-expr-items-area').style.display = 'block';
     showToast('시험항목 ' + items.length + '건 조회 완료', 'success');
   } catch(e) {
     console.error('시험항목 조회 오류:', e);
@@ -1419,7 +1460,7 @@ function renderDiaryExprItems(items) {
   var tbody = document.getElementById('diary-expr-items-tbody');
   if (!tbody) return;
   if (!items || items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="padding:10px; text-align:center; color:#999; border:1px solid #d0d8f0;">등록된 시험항목이 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:10px; text-align:center; color:#999; border:1px solid #d0d8f0;">시험항목을 불러오는 중...</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(function(it, i) {
