@@ -415,6 +415,7 @@ var _page = 1;
 var _pageSize = 30;
 var _selectMode = false;
 var _selectedReceipts = new Set();
+var _selectedDocIds = {};  // baseNo → [docId, ...] 매핑
 
 // ============================================================================
 // 데이터 로드
@@ -705,6 +706,7 @@ function goPage(p) { _page = p; renderTable(); }
 function toggleSelectMode() {
     _selectMode = !_selectMode;
     _selectedReceipts.clear();
+    _selectedDocIds = {};
     document.getElementById('select-bar').style.display = _selectMode ? 'flex' : 'none';
     document.getElementById('select-mode-btn').style.display = _selectMode ? 'none' : '';
     updateSelectCount();
@@ -714,8 +716,14 @@ function toggleSelectMode() {
 function toggleReceiptSelect(baseNo, docId) {
     if (_selectedReceipts.has(baseNo)) {
         _selectedReceipts.delete(baseNo);
+        delete _selectedDocIds[baseNo];
     } else {
         _selectedReceipts.add(baseNo);
+        // 같은 baseNo의 모든 docId 수집
+        _selectedDocIds[baseNo] = _filteredReceipts
+            .filter(function(r) { return (r._baseReceiptNo || r.receiptNo || '') === baseNo; })
+            .map(function(r) { return r.id; })
+            .filter(function(id, i, arr) { return arr.indexOf(id) === i; });
     }
     updateSelectCount();
     renderTable();
@@ -730,8 +738,15 @@ function toggleSelectAll() {
     });
     if (_selectedReceipts.size === allBaseNos.length) {
         _selectedReceipts.clear();
+        _selectedDocIds = {};
     } else {
-        allBaseNos.forEach(function(bno) { _selectedReceipts.add(bno); });
+        allBaseNos.forEach(function(bno) {
+            _selectedReceipts.add(bno);
+            _selectedDocIds[bno] = _filteredReceipts
+                .filter(function(r) { return (r._baseReceiptNo || r.receiptNo || '') === bno; })
+                .map(function(r) { return r.id; })
+                .filter(function(id, i, arr) { return arr.indexOf(id) === i; });
+        });
     }
     updateSelectCount();
     renderTable();
@@ -753,10 +768,18 @@ async function deleteSelectedReceipts() {
     try {
         for (var i = 0; i < names.length; i++) {
             var receiptNo = names[i];
-            // receipts 컬렉션에서 해당 receiptNo의 문서 찾기
-            var snap = await db.collection('receipts').where('receiptNo', '==', receiptNo).get();
-            for (var j = 0; j < snap.docs.length; j++) {
-                await fsDeleteReceipt(snap.docs[j].id);
+            // 방법1: 추적된 docId로 직접 삭제 (확실)
+            var docIds = _selectedDocIds[receiptNo] || [];
+            if (docIds.length > 0) {
+                for (var j = 0; j < docIds.length; j++) {
+                    await db.collection('receipts').doc(docIds[j]).delete();
+                }
+            } else {
+                // 방법2: 쿼리 기반 폴백
+                var snap = await db.collection('receipts').where('receiptNo', '==', receiptNo).get();
+                for (var k = 0; k < snap.docs.length; k++) {
+                    await snap.docs[k].ref.delete();
+                }
             }
             // 관련 testResults 삭제
             await fsDeleteTestResultsByReceiptNo(receiptNo);
