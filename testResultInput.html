@@ -12,7 +12,6 @@
 <script src="js/mfds-api.js"></script>
 <script src="js/mfds_templates.js"></script>
 <script src="js/mfds_result_rules.js"></script>
-<script src="js/calc_formulas.js"></script>
 <style>
 :root{--primary:#2563eb;--primary-light:#dbeafe;--success:#10b981;--success-light:#d1fae5;--warning:#f59e0b;--warning-light:#fef3c7;--danger:#ef4444;--danger-light:#fee2e2;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-600:#4b5563;--gray-700:#374151;--gray-900:#111827;--accent:#667eea;--accent2:#764ba2}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -143,14 +142,6 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .quick-btns{display:flex;gap:3px;margin-top:3px}
 .quick-btn{padding:2px 7px;font-size:10px;border-radius:4px;cursor:pointer;border:1px solid var(--gray-300);background:white;color:var(--gray-600);transition:all 0.15s}
 .quick-btn:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
-.calc-btn{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin-left:4px;vertical-align:middle;letter-spacing:0.5px}
-.calc-btn:hover{background:#7c3aed}
-.calc-var-row{display:flex;gap:8px;align-items:center;margin-bottom:10px}
-.calc-var-label{min-width:180px;font-size:13px;font-weight:500;color:var(--gray-700)}
-.calc-var-input{flex:1;padding:8px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;text-align:right}
-.calc-var-input:focus{outline:none;border-color:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,0.15)}
-.calc-result-preview{margin-top:14px;padding:12px 16px;background:#f5f3ff;border-radius:8px;font-size:15px;font-weight:600;color:#6d28d9;text-align:center;border:1px solid #e9d5ff}
-.calc-formula-display{font-size:12px;color:#6b7280;text-align:center;margin-bottom:12px;font-family:'Courier New',monospace;padding:8px;background:#f9fafb;border-radius:6px}
 .override-select{padding:4px 6px;border:1px solid var(--warning);border-radius:6px;font-size:11px;background:var(--warning-light)}
 
 /* Sample tabs */
@@ -347,21 +338,6 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
   </div>
 </div>
 
-<!-- 계산식 입력 모달 -->
-<div class="modal-overlay" id="calc-modal">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-header">
-      <span id="calc-modal-title">계산식 입력</span>
-      <button class="modal-close" onclick="closeCalcModal()">&times;</button>
-    </div>
-    <div class="modal-body" id="calc-modal-body"></div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeCalcModal()">취소</button>
-      <button class="btn btn-primary" onclick="applyCalcResult()" style="background:#8b5cf6;border-color:#8b5cf6">적용</button>
-    </div>
-  </div>
-</div>
-
 <script src="js/sidebar.js?v=3"></script>
 <script>
 /* ============================================================
@@ -374,7 +350,6 @@ var currentSampleIdx = 0;       // 현재 시료 인덱스 (0-based)
 var currentTestItems = [];      // 현재 시료의 시험항목 배열
 var currentResults = {};        // sampleIdx별 결과 {0: [{...}], 1: [{...}]}
 var currentDiary = {};          // 시험일지 데이터
-var currentCalcData = {};       // 계산식 변수 데이터 { sampleIdx: { itemIdx: {x1:val,...} } }
 var savedTestResults = {};      // Firestore에서 로드한 기존 결과
 var isModified = false;
 var MFDS_ENABLED = false;       // 기본: 비활성화 (안전)
@@ -751,14 +726,6 @@ function loadAndRenderItems() {
   // 기존 저장된 결과 복원
   var savedItems = currentResults[currentSampleIdx] || [];
 
-  // 저장된 계산식 데이터 복원
-  if (savedItems.length > 0) {
-    if (!currentCalcData[currentSampleIdx]) currentCalcData[currentSampleIdx] = {};
-    savedItems.forEach(function(si, idx) {
-      if (si.calcData) currentCalcData[currentSampleIdx][idx] = si.calcData;
-    });
-  }
-
   var tbody = document.getElementById('result-tbody');
   if (!tbody) return;
 
@@ -804,7 +771,7 @@ function loadAndRenderItems() {
       '<td style="font-size:11px;color:#888">' + (item.testItemCode || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.standard || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.unit || '-') + '</td>' +
-      '<td><input type="text" class="result-input ' + inputClass + '" data-idx="' + idx + '" value="' + mv + '" placeholder="입력" oninput="onResultInput(' + idx + ',this)">' + quickBtns + getCalcButton(item, idx) + '</td>' +
+      '<td><input type="text" class="result-input ' + inputClass + '" data-idx="' + idx + '" value="' + mv + '" placeholder="입력" oninput="onResultInput(' + idx + ',this)">' + quickBtns + '</td>' +
       '<td id="mark-' + idx + '" style="font-size:12px;color:#2563eb;font-weight:500">' + savedMarkValue + '</td>' +
       '<td id="judge-' + idx + '">' + judgeBadge + '</td>' +
       '<td>' + overrideHtml + '</td>' +
@@ -1155,11 +1122,7 @@ function collectCurrentResults() {
       jdgmntFomCode: processed.jdgmntFomCode || '',
       jdgmntWordCode: processed.jdgmntWordCode || '',
       mxmmValueSeCode: processed.mxmmValueSeCode || '',
-      mummValueSeCode: processed.mummValueSeCode || '',
-      // 계산식 데이터
-      calcData: (currentCalcData[currentSampleIdx] || {})[idx] || null,
-      nomfrmCn: (typeof CALC_FORMULAS !== 'undefined' && CALC_FORMULAS.hasFormula(item.testItemCode))
-        ? CALC_FORMULAS.getFormula(item.testItemCode).nomfrmCn : ''
+      mummValueSeCode: processed.mummValueSeCode || ''
     });
   });
 
@@ -1264,10 +1227,9 @@ function openMfdsModal() {
 
   var body = document.getElementById('mfds-modal-body');
   body.innerHTML = '<div class="alert alert-warning">식약처에 전송하면 <strong>취소/삭제가 불가능</strong>합니다. 신중하게 확인해주세요.</div>' +
-    '<table class="result-table" style="font-size:12px"><thead><tr><th>시험항목</th><th>측정값</th><th>판정</th><th style="width:50px">계산식</th></tr></thead><tbody>' +
-    items.map(function(it, i) {
-      var hasCalc = (currentCalcData[currentSampleIdx] || {})[i] ? '<span style="color:#8b5cf6;font-weight:600">fx</span>' : '';
-      return '<tr><td>' + it.testItemName + '</td><td>' + it.measuredValue + '</td><td>' + getJudgeBadge(it.judgmentResult) + '</td><td style="text-align:center">' + hasCalc + '</td></tr>';
+    '<table class="result-table" style="font-size:12px"><thead><tr><th>시험항목</th><th>측정값</th><th>판정</th></tr></thead><tbody>' +
+    items.map(function(it) {
+      return '<tr><td>' + it.testItemName + '</td><td>' + it.measuredValue + '</td><td>' + getJudgeBadge(it.judgmentResult) + '</td></tr>';
     }).join('') +
     '</tbody></table>';
 
@@ -1371,43 +1333,6 @@ async function confirmMfdsSubmit() {
       showToast('식약처 검사결과 전송 완료!', 'success');
     } else {
       showToast('검사결과 전송 실패: ' + (resultRes.errorMessage || ''), 'error');
-    }
-
-    // Step 3: 계산식 결과 전송 (I-LMS-0210)
-    if (typeof CALC_FORMULAS !== 'undefined') {
-      var calcItems = currentResults[currentSampleIdx] || [];
-      var calcCount = 0;
-      for (var ci = 0; ci < calcItems.length; ci++) {
-        var cItem = calcItems[ci];
-        var cCalcData = (currentCalcData[currentSampleIdx] || {})[ci];
-        if (!cCalcData || !cItem.nomfrmCn) continue;
-
-        var calcParams = CALC_FORMULAS.buildCalcApiParams(
-          currentReceipt, currentSampleIdx,
-          ci + 1,                    // exprIemSn (1-based)
-          cItem.testItemCode, cCalcData,
-          cItem.measuredValue, exprDiarySn
-        );
-        if (calcParams && calcParams.value) {
-          calcParams.value.validCphr = cItem.validCphr || cItem.precision || '';
-        }
-
-        try {
-          var calcRes = await MFDS.insertExprDiaryCalcFrmlaResult(calcParams);
-          if (calcRes && calcRes.resultFlag === '1') {
-            calcCount++;
-          } else {
-            console.warn('계산식 전송 실패 (항목 ' + (ci + 1) + '):', calcRes.errorMessage || '');
-          }
-        } catch (calcErr) {
-          console.warn('계산식 전송 오류 (항목 ' + (ci + 1) + '):', calcErr);
-        }
-      }
-      if (calcCount > 0) {
-        showToast('계산식 ' + calcCount + '건 전송 완료', 'success');
-        var docId3 = currentReceipt.receiptNo + '_S' + currentSampleIdx;
-        await db.collection('testResults').doc(docId3).update({ mfdsCalcSaved: true });
-      }
     }
 
   } catch(e) {
@@ -1753,136 +1678,6 @@ function showDiaryDetailModal(data) {
 function closeDiaryDetailModal() {
   var modal = document.getElementById('diary-detail-modal');
   if (modal) modal.classList.remove('active');
-}
-
-/* ============================================================
-   계산식 모달 (Calculation Formula)
-   ============================================================ */
-var _calcModalIdx = null;
-
-function getCalcButton(item, idx) {
-  if (typeof CALC_FORMULAS !== 'undefined' && CALC_FORMULAS.hasFormula(item.testItemCode)) {
-    return '<button class="calc-btn" onclick="openCalcModal(' + idx + ')" title="계산식 입력">fx</button>';
-  }
-  return '';
-}
-
-function openCalcModal(idx) {
-  var item = currentTestItems[idx];
-  if (!item) return;
-  var formula = CALC_FORMULAS.getFormula(item.testItemCode);
-  if (!formula) { showToast('이 항목에 정의된 계산식이 없습니다', 'warning'); return; }
-
-  _calcModalIdx = idx;
-
-  // 이전에 입력한 값 복원
-  var savedVars = (currentCalcData[currentSampleIdx] || {})[idx] || {};
-
-  document.getElementById('calc-modal-title').textContent = '계산식: ' + (formula.name || item.testItemName);
-
-  var body = document.getElementById('calc-modal-body');
-  var html = '<div class="calc-formula-display">수식: ' + formula.nomfrmCn + '</div>';
-  html += '<div style="margin-top:12px">';
-
-  formula.variables.forEach(function(v) {
-    var savedVal = savedVars[v.key] || '';
-    html += '<div class="calc-var-row">';
-    html += '<span class="calc-var-label">' + v.label + (v.required ? ' <span style="color:#ef4444">*</span>' : '') + '</span>';
-    html += '<input type="number" step="any" class="calc-var-input" id="calc-' + v.key + '" value="' + savedVal + '" oninput="previewCalcResult()" placeholder="0">';
-    html += '</div>';
-  });
-
-  html += '</div>';
-  html += '<div class="calc-result-preview" id="calc-preview">결과: -</div>';
-
-  body.innerHTML = html;
-  document.getElementById('calc-modal').classList.add('active');
-
-  // 저장된 값이 있으면 미리보기 계산
-  if (Object.keys(savedVars).length > 0) previewCalcResult();
-}
-
-function closeCalcModal() {
-  document.getElementById('calc-modal').classList.remove('active');
-  _calcModalIdx = null;
-}
-
-function collectCalcVars() {
-  if (_calcModalIdx === null) return {};
-  var item = currentTestItems[_calcModalIdx];
-  if (!item) return {};
-  var formula = CALC_FORMULAS.getFormula(item.testItemCode);
-  if (!formula) return {};
-  var vars = {};
-  formula.variables.forEach(function(v) {
-    var el = document.getElementById('calc-' + v.key);
-    vars[v.key] = el ? el.value.trim() : '';
-  });
-  return vars;
-}
-
-function previewCalcResult() {
-  if (_calcModalIdx === null) return;
-  var item = currentTestItems[_calcModalIdx];
-  if (!item) return;
-  var vars = collectCalcVars();
-  var result = CALC_FORMULAS.evaluate(item.testItemCode, vars);
-  var preview = document.getElementById('calc-preview');
-  if (result === null || isNaN(result)) {
-    preview.textContent = '결과: -';
-    return;
-  }
-  var precision = item.precision;
-  var display = (precision !== '' && precision != null && !isNaN(parseInt(precision)))
-    ? Number(result).toFixed(parseInt(precision))
-    : String(Math.round(result * 10000) / 10000);
-  preview.textContent = '결과: ' + display + ' ' + (item.unit || '');
-}
-
-function applyCalcResult() {
-  var idx = _calcModalIdx;
-  if (idx === null) return;
-  var item = currentTestItems[idx];
-  if (!item) return;
-  var vars = collectCalcVars();
-
-  // 필수 변수 검증
-  var formula = CALC_FORMULAS.getFormula(item.testItemCode);
-  var missing = [];
-  formula.variables.forEach(function(v) {
-    if (v.required && (!vars[v.key] || vars[v.key] === '')) missing.push(v.label);
-  });
-  if (missing.length > 0) {
-    showToast('필수 입력: ' + missing.join(', '), 'warning');
-    return;
-  }
-
-  var result = CALC_FORMULAS.evaluate(item.testItemCode, vars);
-  if (result === null || isNaN(result)) {
-    showToast('계산 결과를 구할 수 없습니다', 'error');
-    return;
-  }
-
-  // 정밀도 적용
-  var precision = item.precision;
-  var finalValue = (precision !== '' && precision != null && !isNaN(parseInt(precision)))
-    ? Number(result).toFixed(parseInt(precision))
-    : String(Math.round(result * 10000) / 10000);
-
-  // 계산 변수 데이터 저장
-  if (!currentCalcData[currentSampleIdx]) currentCalcData[currentSampleIdx] = {};
-  currentCalcData[currentSampleIdx][idx] = vars;
-
-  // 측정값 input에 결과 채우기
-  var input = document.querySelector('.result-input[data-idx="' + idx + '"]');
-  if (input) {
-    input.value = finalValue;
-    onResultInput(idx, input);  // 자동판정 + 표기값 업데이트
-  }
-
-  closeCalcModal();
-  markModified();
-  showToast('계산 결과 적용: ' + finalValue + ' ' + (item.unit || ''), 'success');
 }
 
 // 시험일지 신규 등록 모달 (I-LMS-0209)
