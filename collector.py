@@ -41,7 +41,7 @@ SERVICE_ACCOUNT_KEY = os.path.join(
 
 API_KEY = os.environ.get('FSS_API_KEY', 'e5a1d9f07d6c4424a757')
 BASE_URL = 'https://openapi.foodsafetykorea.go.kr/api'
-BATCH_SIZE = 100  # API 1회 요청당 최대 건수
+BATCH_SIZE = 1000  # API 1회 요청당 최대 건수 (식약처 API 최대 1000건)
 REQUEST_DELAY = 0.3  # API 요청 간격(초) - 서버 부하 방지
 
 # Firestore 무료 티어 쓰기 제한
