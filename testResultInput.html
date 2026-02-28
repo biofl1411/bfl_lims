@@ -12,6 +12,7 @@
 <script src="js/mfds-api.js"></script>
 <script src="js/mfds_templates.js"></script>
 <script src="js/mfds_result_rules.js"></script>
+<script src="js/mfds_diary_form.js"></script>
 <style>
 :root{--primary:#2563eb;--primary-light:#dbeafe;--success:#10b981;--success-light:#d1fae5;--warning:#f59e0b;--warning-light:#fef3c7;--danger:#ef4444;--danger-light:#fee2e2;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-600:#4b5563;--gray-700:#374151;--gray-900:#111827;--accent:#667eea;--accent2:#764ba2}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -215,6 +216,22 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
   .stats-row{grid-template-columns:1fr}
   .toolbar-row{flex-direction:column;align-items:stretch}
 }
+
+/* ── 시험일지 양식 뷰어 ── */
+.form-view-btn{background:none;border:1px solid #c7d2fe;border-radius:4px;cursor:pointer;font-size:11px;padding:1px 5px;color:#4f46e5;margin-left:4px;vertical-align:middle}
+.form-view-btn:hover{background:#eef2ff;border-color:#818cf8}
+#form-viewer-modal .modal{max-width:900px;width:95%}
+#form-viewer-modal .modal-body{max-height:70vh;overflow-y:auto;padding:16px}
+#form-viewer-body{line-height:1.6}
+#form-viewer-body table{border-collapse:collapse;width:100%;margin:8px 0}
+#form-viewer-body td,#form-viewer-body th{border:1px solid #bbb;padding:5px 8px;font-size:13px}
+#form-viewer-body th{background:#e8ecf4;font-weight:600;text-align:center}
+#form-viewer-body .df-editable{background:#fffde7;outline:none;min-height:20px;cursor:text}
+#form-viewer-body .df-editable:focus{background:#fff9c4;box-shadow:inset 0 0 0 2px #fbc02d}
+#form-viewer-body .df-editable:empty::before{content:'입력';color:#ccc;font-style:italic}
+.form-method-select{padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:white}
+.form-viewer-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.form-viewer-info{font-size:12px;color:#666;margin-left:auto}
 </style>
 </head>
 <body>
@@ -338,6 +355,31 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
   </div>
 </div>
 
+<!-- Form Viewer Modal -->
+<div class="modal-overlay" id="form-viewer-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="form-viewer-title">시험일지 양식</span>
+      <button class="modal-close" onclick="closeFormViewer()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-viewer-toolbar">
+        <select id="form-viewer-select" class="form-method-select" onchange="onFormViewerSelect(this.value)">
+          <option value="">양식을 조회하는 중...</option>
+        </select>
+        <span class="form-viewer-info" id="form-viewer-info"></span>
+      </div>
+      <div id="form-viewer-body" style="min-height:100px;">
+        <div style="text-align:center;padding:40px;color:#999;">양식을 불러오는 중...</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeFormViewer()">닫기</button>
+      <button class="btn btn-primary" onclick="applyFormToNewDiary()">시험일지에 적용</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/sidebar.js?v=3"></script>
 <script>
 /* ============================================================
@@ -361,6 +403,11 @@ var searchTimer = null;
 // MFDS Templates 캐시
 var _mfdsTemplatesCache = null;
 var _mfdsTemplatesLoaded = false;
+
+// 폼 뷰어 상태
+var _formViewerIdx = null;        // 현재 폼 뷰어에 열린 시험항목 인덱스
+var _formViewerForms = [];        // 조회된 양식 목록
+var _formViewerCurrentIdx = -1;   // 현재 선택된 양식 인덱스
 
 /* ============================================================
    초기화
@@ -765,9 +812,11 @@ function loadAndRenderItems() {
       savedMarkValue = (typeof MFDS_RULES !== 'undefined') ? MFDS_RULES.generateMarkValue(mv, item) : mv;
     }
 
+    var formBtn = item.testItemCode ? '<button class="form-view-btn" onclick="openFormViewer(' + idx + ')" title="시험일지 양식 보기">양식</button>' : '';
+
     return '<tr>' +
       '<td style="text-align:center">' + (idx+1) + '</td>' +
-      '<td>' + (item.testItemName || '-') + '</td>' +
+      '<td>' + (item.testItemName || '-') + formBtn + '</td>' +
       '<td style="font-size:11px;color:#888">' + (item.testItemCode || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.standard || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.unit || '-') + '</td>' +
@@ -1812,6 +1861,120 @@ async function deleteDiary() {
     console.error('일지 삭제 오류:', e);
     showToast('삭제 실패: ' + (e.message || e), 'error');
   }
+}
+
+/* ============================================================
+   시험일지 양식 뷰어 (API 0241→0242 체인)
+   ============================================================ */
+async function openFormViewer(idx) {
+  var item = currentTestItems[idx];
+  if (!item || !item.testItemCode) {
+    showToast('시험항목 코드가 없습니다', 'warning');
+    return;
+  }
+  if (typeof DIARY_FORM === 'undefined') {
+    showToast('양식 모듈이 로드되지 않았습니다', 'error');
+    return;
+  }
+
+  _formViewerIdx = idx;
+  _formViewerForms = [];
+  _formViewerCurrentIdx = -1;
+
+  // 모달 열기
+  var modal = document.getElementById('form-viewer-modal');
+  document.getElementById('form-viewer-title').textContent = '양식: ' + (item.testItemName || item.testItemCode);
+  document.getElementById('form-viewer-body').innerHTML = '<div style="text-align:center;padding:40px;color:#999;">양식을 조회하는 중...</div>';
+  document.getElementById('form-viewer-select').innerHTML = '<option value="">조회 중...</option>';
+  document.getElementById('form-viewer-info').textContent = '항목코드: ' + item.testItemCode;
+  modal.classList.add('active');
+
+  try {
+    var result = await DIARY_FORM.fetchFormsForItem(item.testItemCode);
+    _formViewerForms = result.forms || [];
+
+    var sel = document.getElementById('form-viewer-select');
+    if (_formViewerForms.length === 0) {
+      sel.innerHTML = '<option value="">양식 없음 (시험방법: ' + (result.methods.length) + '건)</option>';
+      var methodInfo = result.methods.map(function(m) { return (m.codeName || m.codename || '-'); }).join(', ');
+      document.getElementById('form-viewer-body').innerHTML =
+        '<div style="text-align:center;padding:30px;color:#888;">' +
+        '<div style="font-size:16px;margin-bottom:12px;">이 시험항목에 등록된 양식이 없습니다</div>' +
+        '<div style="font-size:13px;">시험방법: ' + (methodInfo || '없음') + '</div>' +
+        '<div style="font-size:12px;color:#aaa;margin-top:8px;">식약처 통합LIMS에서 양식을 먼저 등록해주세요</div>' +
+        '</div>';
+      return;
+    }
+
+    // 드롭다운 채우기
+    sel.innerHTML = _formViewerForms.map(function(f, i) {
+      var label = (f.codename || '양식 ' + (i + 1));
+      label += ' [' + f.useScopeLabel + ']';
+      if (f.methodName) label += ' - ' + f.methodName;
+      return '<option value="' + i + '">' + label + '</option>';
+    }).join('');
+
+    // 첫 번째 양식 자동 표시
+    onFormViewerSelect(0);
+
+  } catch(e) {
+    console.error('양식 조회 오류:', e);
+    document.getElementById('form-viewer-body').innerHTML =
+      '<div style="text-align:center;padding:30px;color:#ef4444;">' +
+      '<div style="font-size:16px;margin-bottom:8px;">양식 조회 실패</div>' +
+      '<div style="font-size:13px;">' + (e.message || e) + '</div></div>';
+    document.getElementById('form-viewer-select').innerHTML = '<option value="">조회 실패</option>';
+  }
+}
+
+function onFormViewerSelect(idx) {
+  idx = parseInt(idx);
+  if (isNaN(idx) || idx < 0 || idx >= _formViewerForms.length) return;
+
+  _formViewerCurrentIdx = idx;
+  var form = _formViewerForms[idx];
+  var body = document.getElementById('form-viewer-body');
+
+  if (!form.codename2) {
+    body.innerHTML = '<div style="text-align:center;padding:30px;color:#999;">양식 내용이 비어있습니다</div>';
+    return;
+  }
+
+  // 인터랙티브 렌더링
+  DIARY_FORM.renderInteractive(form.codename2, body);
+
+  // 정보 업데이트
+  var info = '시험방법SN: ' + (form.exprMthSn || '-') + ' | 범위: ' + form.useScopeLabel;
+  document.getElementById('form-viewer-info').textContent = info;
+}
+
+function closeFormViewer() {
+  document.getElementById('form-viewer-modal').classList.remove('active');
+  _formViewerIdx = null;
+}
+
+function applyFormToNewDiary() {
+  if (_formViewerCurrentIdx < 0 || _formViewerCurrentIdx >= _formViewerForms.length) {
+    showToast('선택된 양식이 없습니다', 'warning');
+    return;
+  }
+
+  var form = _formViewerForms[_formViewerCurrentIdx];
+  // 편집된 HTML 수집
+  var editedHtml = DIARY_FORM.collectFormHtml('form-viewer-body');
+
+  // 양식을 일지 양식으로 설정
+  _selectedDiaryForm = {
+    codename: form.codename || '양식',
+    codename2: editedHtml || form.codename2,
+    exprMthSn: form.exprMthSn,
+    useScopeCode: form.useScopeCode
+  };
+
+  // 신규 일지 모달 열기
+  closeFormViewer();
+  openNewDiaryModal();
+  showToast('양식이 시험일지에 적용되었습니다', 'success');
 }
 
 // 시험일지 복사 (I-LMS-0212)
