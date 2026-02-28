@@ -759,3 +759,69 @@ async function fsMigrateFromLocalStorage() {
   console.log('[Migration] 완료:', migrated);
   return migrated;
 }
+
+
+// ============================================================
+// 8. 검사결과 (testResults)
+// ============================================================
+
+/**
+ * 접수번호로 검사결과 목록 조회
+ * @param {string} receiptNo - 접수번호 (예: "260228FQ001-001")
+ * @returns {Promise<Array>} testResults 문서 배열
+ */
+async function fsGetTestResults(receiptNo) {
+  var snap = await db.collection('testResults')
+    .where('receiptNo', '==', receiptNo)
+    .orderBy('sampleIdx', 'asc')
+    .get();
+  return snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+}
+
+/**
+ * 검사결과 저장 (upsert — 문서 ID: {receiptNo}_S{sampleIdx})
+ * @param {Object} data - 저장할 데이터 (receiptNo, sampleIdx 필수)
+ * @returns {Promise<string>} 문서 ID
+ */
+async function fsSaveTestResult(data) {
+  var now = firebase.firestore.FieldValue.serverTimestamp();
+  var docId = data.receiptNo + '_S' + data.sampleIdx;
+  var existing = await db.collection('testResults').doc(docId).get();
+  if (existing.exists) {
+    data.updatedAt = now;
+    delete data.id;
+    await db.collection('testResults').doc(docId).update(data);
+  } else {
+    data.createdAt = now;
+    data.updatedAt = now;
+    delete data.id;
+    await db.collection('testResults').doc(docId).set(data);
+  }
+  return docId;
+}
+
+/**
+ * 접수 상태 업데이트
+ * @param {string} receiptId - Firestore 문서 ID
+ * @param {string} status - 변경할 상태 (시험중/결과입력완료 등)
+ */
+async function fsUpdateReceiptStatus(receiptId, status) {
+  await db.collection('receipts').doc(receiptId).update({
+    status: status,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * 해당 접수번호의 모든 시료가 결과입력 완료인지 확인
+ * @param {string} receiptNo - 접수번호
+ * @param {number} totalSamples - 총 시료 수
+ * @returns {Promise<boolean>} 전체 완료 여부
+ */
+async function fsCheckAllSamplesComplete(receiptNo, totalSamples) {
+  var snap = await db.collection('testResults')
+    .where('receiptNo', '==', receiptNo)
+    .where('status', '==', '결과입력완료')
+    .get();
+  return snap.size >= totalSamples;
+}

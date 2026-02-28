@@ -147,7 +147,7 @@ const SIDEBAR_MENU = [
     sub: [
       { label: '항목배정',          href: 'itemAssign.html',  page: 'testing-assignment' },
       { label: '시험 진행 현황',    disabled: true },
-      { label: '결과 입력',         disabled: true },
+      { label: '결과 입력',         href: 'testResultInput.html',  page: 'testing-result' },
       { label: '결재 승인',         disabled: true },
       { label: '시험 이력 조회',    disabled: true },
       { label: '일정관리',          disabled: true },
