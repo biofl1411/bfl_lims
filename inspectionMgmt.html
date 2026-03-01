@@ -919,6 +919,8 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <div class="page-desc" style="margin-bottom:12px;font-size:13px;color:var(--sub)">
         📋 참고용(기준규격외) 시험항목별 수수료 매핑 — 접수 등록에서 참고용 시험항목 추가 시 이 수수료가 적용됩니다.
       </div>
+      <!-- 분류 필터 칩 -->
+      <div id="ref-fee-category-chips" style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px;"></div>
       <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div class="search-box" style="flex:1;min-width:200px;">
           <span>🔍</span>
@@ -928,13 +930,15 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <input type="checkbox" id="ref-fee-only-set" onchange="renderRefFeeTable()"> 수수료 설정된 항목만
         </label>
         <span id="ref-fee-count" style="font-size:13px;color:var(--sub);white-space:nowrap;"></span>
+        <button class="btn" onclick="openRefFeeAddModal()" style="padding:6px 14px;font-size:13px;background:#43a047;color:#fff;border:none;border-radius:6px;cursor:pointer;">+ 코드 추가</button>
         <button class="btn btn-primary" onclick="saveRefFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
       </div>
-      <div style="overflow-x:auto;max-height:calc(100vh - 260px);overflow-y:auto;">
+      <div style="overflow-x:auto;max-height:calc(100vh - 300px);overflow-y:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead style="position:sticky;top:0;z-index:1;">
             <tr style="background:var(--bg);border-bottom:2px solid var(--bdr);">
               <th style="padding:8px 10px;text-align:left;width:40px">No</th>
+              <th style="padding:8px 10px;text-align:left;width:60px">분류</th>
               <th style="padding:8px 10px;text-align:left;width:100px">시험항목코드</th>
               <th style="padding:8px 10px;text-align:left;">시험항목명</th>
               <th style="padding:8px 10px;text-align:right;width:120px">수수료(원)</th>
@@ -944,7 +948,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <tbody id="ref-fee-tbody"></tbody>
           <tfoot>
             <tr style="background:var(--bg);border-top:2px solid var(--bdr);">
-              <td colspan="2" style="padding:8px 10px;font-weight:700;text-align:right;">합계</td>
+              <td colspan="3" style="padding:8px 10px;font-weight:700;text-align:right;">합계</td>
               <td id="ref-fee-set-count" style="padding:8px 10px;font-size:12px;color:var(--sub);"></td>
               <td id="ref-fee-total" style="padding:8px 10px;font-weight:700;text-align:right;color:var(--primary);"></td>
               <td></td>
@@ -953,6 +957,41 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </table>
       </div>
     </div><!-- /fee-subtab-ref -->
+
+    <!-- 코드 추가 모달 -->
+    <div id="refFeeAddModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:12px;padding:24px;width:460px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <h3 style="margin:0;font-size:16px;">+ 시험항목 코드 추가</h3>
+          <button onclick="closeRefFeeAddModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--sub);">&times;</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">시험항목코드 *</label>
+            <input type="text" id="ref-add-code" placeholder="예: A10099" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;font-family:monospace;" oninput="checkRefCodeDuplicate()">
+            <div id="ref-add-code-msg" style="font-size:12px;margin-top:4px;min-height:18px;"></div>
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">시험항목명(한글) *</label>
+            <input type="text" id="ref-add-name" placeholder="예: 총질소" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">수수료(원)</label>
+              <input type="number" id="ref-add-fee" value="0" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;text-align:right;">
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">비고</label>
+              <input type="text" id="ref-add-note" placeholder="" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+          <button onclick="closeRefFeeAddModal()" style="padding:8px 20px;border:1px solid var(--bdr);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">취소</button>
+          <button id="ref-add-submit-btn" onclick="submitRefFeeAdd()" style="padding:8px 20px;border:none;border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600;">추가</button>
+        </div>
+      </div>
+    </div>
 
   </div>
 
@@ -31229,9 +31268,38 @@ async function saveMfdsFeesToFirestore() {
 
 // ══ 참고용(기준규격외) 수수료 매핑 ══
 var _refFeeData = null;
+var _refFeeCategory = 'all'; // 현재 선택된 분류 필터
+
+// 시험항목코드 접두어 분류 체계 (식약처 통합LIMS 대분류)
+var REF_CODE_CATEGORIES = {
+  A: { name: '이화학', color: '#4361ee', majorNo: '2014001001' },
+  B: { name: '중금속/유해물질', color: '#e53935', majorNo: '2014001002' },
+  C: { name: '미생물', color: '#43a047', majorNo: '2014001003' },
+  D: { name: '기생충', color: '#8d6e63', majorNo: '2014001004' },
+  E: { name: '잔류농약', color: '#ff9800', majorNo: '2014001005' },
+  F: { name: '동물용의약품', color: '#ab47bc', majorNo: '2014001006' },
+  G: { name: 'GMO', color: '#00897b', majorNo: '2014001007' },
+  H: { name: '이물/곰팡이', color: '#78909c', majorNo: '2014001008' },
+  I: { name: '질병검사', color: '#5c6bc0', majorNo: '2014001009' },
+  X: { name: '기타/알레르기', color: '#f4511e', majorNo: '2014001010' }
+};
+
+function getRefCodeCategory(code) {
+  var prefix = (code || '').charAt(0).toUpperCase();
+  return REF_CODE_CATEGORIES[prefix] || { name: '미분류', color: '#999' };
+}
+
+function getRefCodeCategoryBadge(code) {
+  var cat = getRefCodeCategory(code);
+  return '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:' + cat.color + ';white-space:nowrap;">' + cat.name + '</span>';
+}
 
 async function loadAndRenderRefFee() {
   if (!_refFeeData) {
+    // 로딩 표시
+    var tbody = document.getElementById('ref-fee-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--sub);">데이터 로딩중...</td></tr>';
+
     // 1순위: Firestore settings/refFeeMapping
     try {
       var doc = await db.collection('settings').doc('refFeeMapping').get();
@@ -31265,7 +31333,49 @@ async function loadAndRenderRefFee() {
       _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
       console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건 (수수료 미설정)');
     }
+
+    // 분류 인덱스 빌드 (빠른 검색용)
+    _refFeeCategoryIndex = {};
+    _refFeeData.forEach(function(m) {
+      var prefix = (m.testItemCode || '').charAt(0).toUpperCase();
+      if (!_refFeeCategoryIndex[prefix]) _refFeeCategoryIndex[prefix] = 0;
+      _refFeeCategoryIndex[prefix]++;
+    });
   }
+  renderRefFeeCategoryChips();
+  renderRefFeeTable();
+}
+
+var _refFeeCategoryIndex = {};
+
+function renderRefFeeCategoryChips() {
+  var container = document.getElementById('ref-fee-category-chips');
+  if (!container || !_refFeeData) return;
+
+  var totalCount = _refFeeData.length;
+  var html = '<button onclick="setRefFeeCategory(\'all\')" style="padding:5px 12px;border-radius:14px;border:1px solid ' +
+    (_refFeeCategory === 'all' ? 'var(--primary)' : 'var(--bdr)') + ';background:' +
+    (_refFeeCategory === 'all' ? 'var(--primary)' : '#fff') + ';color:' +
+    (_refFeeCategory === 'all' ? '#fff' : 'var(--txt)') + ';font-size:12px;font-weight:600;cursor:pointer;">전체 <span style="opacity:.7;">' + totalCount + '</span></button>';
+
+  var prefixes = Object.keys(REF_CODE_CATEGORIES);
+  prefixes.forEach(function(p) {
+    var cat = REF_CODE_CATEGORIES[p];
+    var cnt = _refFeeCategoryIndex[p] || 0;
+    if (cnt === 0) return;
+    var isActive = _refFeeCategory === p;
+    html += '<button onclick="setRefFeeCategory(\'' + p + '\')" style="padding:5px 12px;border-radius:14px;border:1px solid ' +
+      (isActive ? cat.color : 'var(--bdr)') + ';background:' +
+      (isActive ? cat.color : '#fff') + ';color:' +
+      (isActive ? '#fff' : cat.color) + ';font-size:12px;font-weight:600;cursor:pointer;">' +
+      p + ' ' + cat.name + ' <span style="opacity:.7;">' + cnt + '</span></button>';
+  });
+  container.innerHTML = html;
+}
+
+function setRefFeeCategory(cat) {
+  _refFeeCategory = cat;
+  renderRefFeeCategoryChips();
   renderRefFeeTable();
 }
 
@@ -31280,6 +31390,14 @@ function renderRefFeeTable() {
   var onlySet = document.getElementById('ref-fee-only-set') && document.getElementById('ref-fee-only-set').checked;
 
   var filtered = _refFeeData;
+
+  // 분류 필터
+  if (_refFeeCategory !== 'all') {
+    filtered = filtered.filter(function(m) {
+      return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
+    });
+  }
+
   if (query) {
     filtered = filtered.filter(function(m) {
       return (m.testItemCode || '').toLowerCase().indexOf(query) >= 0 ||
@@ -31290,15 +31408,26 @@ function renderRefFeeTable() {
     filtered = filtered.filter(function(m) { return (m.fee || 0) > 0; });
   }
 
+  // 가상 스크롤: 최대 500건만 DOM에 렌더링 (성능 최적화)
+  var RENDER_LIMIT = 500;
+  var hasMore = filtered.length > RENDER_LIMIT;
+  var renderItems = hasMore ? filtered.slice(0, RENDER_LIMIT) : filtered;
+
   var html = '';
   var total = 0;
   var setCount = 0;
-  filtered.forEach(function(m, idx) {
+  // 전체 합계 (필터된 전체 기준)
+  filtered.forEach(function(m) {
     var fee = m.fee || 0;
     total += fee;
     if (fee > 0) setCount++;
+  });
+
+  renderItems.forEach(function(m, idx) {
+    var fee = m.fee || 0;
     html += '<tr style="border-bottom:1px solid var(--bdr);">';
     html += '<td style="padding:7px 10px;color:var(--sub)">' + (idx + 1) + '</td>';
+    html += '<td style="padding:7px 10px;">' + getRefCodeCategoryBadge(m.testItemCode) + '</td>';
     html += '<td style="padding:7px 10px;font-family:monospace;color:var(--primary);font-weight:600">' + (m.testItemCode || '') + '</td>';
     html += '<td style="padding:7px 10px;color:var(--txt)">' + (m.itemName || '') + '</td>';
     html += '<td style="padding:7px 10px;text-align:right">';
@@ -31313,6 +31442,12 @@ function renderRefFeeTable() {
     html += '</td>';
     html += '</tr>';
   });
+
+  if (hasMore) {
+    html += '<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--sub);font-size:13px;background:#fffbe6;">';
+    html += '⚠ ' + filtered.length + '건 중 ' + RENDER_LIMIT + '건만 표시중 — 검색 또는 분류 필터를 사용하세요';
+    html += '</td></tr>';
+  }
 
   tbody.innerHTML = html;
   if (countEl) countEl.textContent = filtered.length + '개 / ' + _refFeeData.length + '개';
@@ -31365,6 +31500,95 @@ async function saveRefFeesToFirestore() {
     showToast('저장 실패: ' + e.message, 'error');
     console.error('[참고용수수료] Firestore 저장 오류:', e);
   }
+}
+
+// ── 코드 추가 모달 ──
+function openRefFeeAddModal() {
+  document.getElementById('refFeeAddModal').style.display = 'flex';
+  document.getElementById('ref-add-code').value = '';
+  document.getElementById('ref-add-name').value = '';
+  document.getElementById('ref-add-fee').value = '0';
+  document.getElementById('ref-add-note').value = '';
+  document.getElementById('ref-add-code-msg').innerHTML = '';
+  document.getElementById('ref-add-submit-btn').disabled = false;
+  document.getElementById('ref-add-code').focus();
+}
+
+function closeRefFeeAddModal() {
+  document.getElementById('refFeeAddModal').style.display = 'none';
+}
+
+function checkRefCodeDuplicate() {
+  var codeInput = document.getElementById('ref-add-code');
+  var msgEl = document.getElementById('ref-add-code-msg');
+  var submitBtn = document.getElementById('ref-add-submit-btn');
+  var code = (codeInput.value || '').trim().toUpperCase();
+
+  if (!code) {
+    msgEl.innerHTML = '';
+    submitBtn.disabled = false;
+    return;
+  }
+
+  // 접두어 유효성 검사
+  var prefix = code.charAt(0);
+  var cat = REF_CODE_CATEGORIES[prefix];
+  if (cat) {
+    var catBadge = '<span style="color:' + cat.color + ';font-weight:600;">' + prefix + ' — ' + cat.name + '</span>';
+    // 중복 검사
+    if (_refFeeData) {
+      var exists = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code; });
+      if (exists) {
+        msgEl.innerHTML = '❌ 이미 존재하는 코드입니다: <b>' + exists.itemName + '</b> (분류: ' + catBadge + ')';
+        msgEl.style.color = '#e53935';
+        submitBtn.disabled = true;
+        return;
+      }
+    }
+    msgEl.innerHTML = '✅ 사용 가능 — 분류: ' + catBadge;
+    msgEl.style.color = '#43a047';
+    submitBtn.disabled = false;
+  } else {
+    msgEl.innerHTML = '⚠ 알 수 없는 접두어 "' + prefix + '" — 유효한 접두어: A, B, C, D, E, F, G, H, I, X';
+    msgEl.style.color = '#ff9800';
+    submitBtn.disabled = false; // 경고만, 추가는 허용
+  }
+}
+
+function submitRefFeeAdd() {
+  var code = (document.getElementById('ref-add-code').value || '').trim().toUpperCase();
+  var name = (document.getElementById('ref-add-name').value || '').trim();
+  var fee = parseInt(document.getElementById('ref-add-fee').value) || 0;
+  var note = (document.getElementById('ref-add-note').value || '').trim();
+
+  if (!code) { showToast('시험항목코드를 입력하세요', 'warning'); return; }
+  if (!name) { showToast('시험항목명을 입력하세요', 'warning'); return; }
+
+  // 최종 중복 검사
+  if (_refFeeData) {
+    var exists = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code; });
+    if (exists) {
+      showToast('이미 존재하는 코드입니다: ' + code + ' (' + exists.itemName + ')', 'warning');
+      return;
+    }
+  }
+
+  // 추가
+  var newItem = { testItemCode: code, itemName: name, fee: fee, note: note };
+  if (!_refFeeData) _refFeeData = [];
+  _refFeeData.push(newItem);
+  // 코드순 재정렬
+  _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
+
+  // 분류 인덱스 업데이트
+  var prefix = code.charAt(0).toUpperCase();
+  if (!_refFeeCategoryIndex[prefix]) _refFeeCategoryIndex[prefix] = 0;
+  _refFeeCategoryIndex[prefix]++;
+
+  closeRefFeeAddModal();
+  renderRefFeeCategoryChips();
+  renderRefFeeTable();
+  showToast('코드 추가됨: ' + code + ' (' + name + ') — Firestore 저장을 눌러주세요', 'success');
 }
 
 // ══ 수수료 탭: 검사목적 메뉴 ══
