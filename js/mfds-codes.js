@@ -194,6 +194,18 @@ MFDS_CODES.renderProductPicker = function(containerId, onSelect) {
       cat1.appendChild(opt);
     });
 
+    // 피커 상태 저장 (외부 접근용: lockCategories 등)
+    MFDS_CODES._pickerTree = tree;
+    MFDS_CODES._pickerAllCodes = allCodes;
+    MFDS_CODES._pickerOnSelect = onSelect;
+
+    // 대기중인 카테고리 고정 적용
+    if (MFDS_CODES._pendingLock) {
+      var pl = MFDS_CODES._pendingLock;
+      MFDS_CODES._pendingLock = null;
+      setTimeout(function() { MFDS_CODES._applyLock(pl.cat1, pl.cat2); }, 50);
+    }
+
     // 대분류 변경 → 중분류 채우기
     cat1.addEventListener('change', function() {
       cat2.innerHTML = '<option value="">중분류 선택</option>';
@@ -252,6 +264,12 @@ MFDS_CODES.renderProductPicker = function(containerId, onSelect) {
       }
       searchTimer = setTimeout(function() {
         var results = MFDS_CODES.searchProductCodes(q, allCodes);
+        // 카테고리 고정 시 해당 분류 내에서만 필터링
+        if (MFDS_CODES._lockedDescendants) {
+          results = results.filter(function(item) {
+            return MFDS_CODES._lockedDescendants.has(item['품목 코드']);
+          });
+        }
         if (results.length === 0) {
           searchResults.innerHTML = '<div style="padding:8px;color:#999;font-size:12px;">검색 결과 없음</div>';
         } else {
@@ -259,10 +277,12 @@ MFDS_CODES.renderProductPicker = function(containerId, onSelect) {
             var lvl = item['수준'] || '';
             var indent = lvl > 1 ? '&nbsp;'.repeat((lvl - 1) * 2) : '';
             return '<div class="mfds-search-item" data-code="' + item['품목 코드'] + '" ' +
-              'style="padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0;" ' +
+              'style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0;" ' +
               'onmouseover="this.style.background=\'#e3f2fd\'" onmouseout="this.style.background=\'#fff\'">' +
-              indent + '<strong>' + (item['한글 명'] || '') + '</strong> ' +
-              '<span style="color:#999;font-size:11px;">(' + item['품목 코드'] + ')</span>' +
+              '<span>' + indent + '<strong>' + (item['한글 명'] || '') + '</strong> ' +
+              '<span style="color:#999;font-size:11px;">(' + item['품목 코드'] + ')</span></span>' +
+              '<button data-code="' + item['품목 코드'] + '" ' +
+              'style="flex-shrink:0;padding:3px 12px;background:#1565c0;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap;margin-left:8px;">선택</button>' +
               '</div>';
           }).join('');
         }
@@ -324,6 +344,95 @@ MFDS_CODES._clearProductSelection = function(containerId) {
   document.getElementById('mfds-cat3').disabled = true;
   // 기준규격 섹션도 숨기기
   if (typeof clearMfdsStandardItems === 'function') clearMfdsStandardItems();
+};
+
+// ============================================================
+// 카테고리 고정/해제 (자가품질위탁검사용 등 특정 분류 고정)
+// ============================================================
+
+/** 대기중인 카테고리 고정 요청 */
+MFDS_CODES._pendingLock = null;
+
+/** 고정된 분류 하위 품목코드 셋 (검색 필터링용) */
+MFDS_CODES._lockedDescendants = null;
+
+/**
+ * 대분류/중분류를 이름으로 고정하고 소분류(품목명)만 선택 가능하게 함
+ * @param {string} cat1Name - 대분류 한글명 (예: '가공식품')
+ * @param {string} cat2Name - 중분류 한글명 (예: '가공식품(전부개정)')
+ */
+MFDS_CODES.lockCategories = function(cat1Name, cat2Name) {
+  if (!MFDS_CODES._pickerTree) {
+    MFDS_CODES._pendingLock = { cat1: cat1Name, cat2: cat2Name };
+    return;
+  }
+  MFDS_CODES._applyLock(cat1Name, cat2Name);
+};
+
+/**
+ * 카테고리 고정 실행 (내부용)
+ */
+MFDS_CODES._applyLock = function(cat1Name, cat2Name) {
+  var tree = MFDS_CODES._pickerTree;
+  var cat1El = document.getElementById('mfds-cat1');
+  var cat2El = document.getElementById('mfds-cat2');
+  var searchInput = document.getElementById('mfds-product-search');
+  if (!cat1El || !tree) return;
+
+  // 대분류 찾기 + 선택
+  var cat1Item = tree.level1.find(function(item) { return item['한글 명'] === cat1Name; });
+  if (!cat1Item) { console.warn('[MFDS] 대분류 찾기 실패:', cat1Name); return; }
+
+  cat1El.value = cat1Item['품목 코드'];
+  cat1El.dispatchEvent(new Event('change'));
+  cat1El.disabled = true;
+  cat1El.style.background = '#e8e8e8';
+
+  // 중분류 찾기 + 선택
+  var cat2Children = tree.byParent[cat1Item['품목 코드']] || [];
+  var cat2Item = cat2Children.find(function(item) { return item['한글 명'] === cat2Name; });
+  if (cat2Item) {
+    cat2El.value = cat2Item['품목 코드'];
+    cat2El.dispatchEvent(new Event('change'));
+    cat2El.disabled = true;
+    cat2El.style.background = '#e8e8e8';
+
+    // 하위 품목코드 셋 구축 (검색 필터링용)
+    var descendants = new Set();
+    var addDesc = function(parentCode) {
+      var ch = tree.byParent[parentCode] || [];
+      ch.forEach(function(c) {
+        descendants.add(c['품목 코드']);
+        addDesc(c['품목 코드']);
+      });
+    };
+    addDesc(cat2Item['품목 코드']);
+    MFDS_CODES._lockedDescendants = descendants;
+    console.log('[MFDS] 카테고리 고정:', cat1Name, '>', cat2Name, '(하위', descendants.size, '건)');
+  } else {
+    console.warn('[MFDS] 중분류 찾기 실패:', cat2Name);
+  }
+
+  // 검색 placeholder 업데이트
+  if (searchInput) {
+    searchInput.placeholder = '품목명 검색 (' + cat2Name + ' 내)...';
+  }
+};
+
+/**
+ * 카테고리 고정 해제 (드롭다운 활성화, 필터 해제)
+ */
+MFDS_CODES.unlockCategories = function() {
+  MFDS_CODES._pendingLock = null;
+  MFDS_CODES._lockedDescendants = null;
+  var cat1El = document.getElementById('mfds-cat1');
+  var cat2El = document.getElementById('mfds-cat2');
+  var cat3El = document.getElementById('mfds-cat3');
+  var searchInput = document.getElementById('mfds-product-search');
+  if (cat1El) { cat1El.disabled = false; cat1El.style.background = ''; }
+  if (cat2El) { cat2El.disabled = false; cat2El.style.background = ''; }
+  if (cat3El) { cat3El.disabled = false; cat3El.style.background = ''; }
+  if (searchInput) { searchInput.placeholder = '또는 품목명으로 검색...'; }
 };
 
 // ============================================================

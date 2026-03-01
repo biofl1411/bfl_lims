@@ -1663,7 +1663,14 @@ window.addEventListener('firebase-ready', async function() {
     if (typeof MFDS_CODES !== 'undefined') {
         MFDS_CODES.renderProductPicker('mfds-product-picker-container', function(item) {
             console.log('[식약처] 품목코드 선택:', item['품목 코드'], item['한글 명']);
-            loadMfdsStandardItems(item['품목 코드'], item['한글 명']);
+            loadMfdsStandardItems(item['품목 코드'], item['한글 명']).then(function() {
+                setTimeout(function() {
+                    var stdSection = document.getElementById('mfds-std-section');
+                    if (stdSection && stdSection.style.display !== 'none') {
+                        stdSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 100);
+            });
         });
         console.log('[MFDS] 품목코드 피커 초기화 완료');
     }
@@ -2149,6 +2156,11 @@ function updateInspectionMode(testPurpose) {
     var foodTypeInput = document.getElementById('food-type-input');
     var foodTypeLabel = foodTypeGroup ? foodTypeGroup.querySelector('label') : null;
 
+    // 자가품질위탁검사용이 아닌 경우 카테고리 고정 해제
+    if (!isLims && typeof MFDS_CODES !== 'undefined' && MFDS_CODES.unlockCategories) {
+        MFDS_CODES.unlockCategories();
+    }
+
     if (isRef) {
         // ★ 참고용(기준규격외) 모드: 시험항목 직접 검색/추가
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
@@ -2216,6 +2228,11 @@ function updateInspectionMode(testPurpose) {
             if (oldToggle) oldToggle.remove();
             var content = document.getElementById('mfds-picker-content');
             if (content) content.style.display = '';
+        }
+
+        // 대분류/중분류 고정: 가공식품 > 가공식품(전부개정)
+        if (typeof MFDS_CODES !== 'undefined' && MFDS_CODES.lockCategories) {
+            MFDS_CODES.lockCategories('가공식품', '가공식품(전부개정)');
         }
     } else if (testPurpose) {
         // 기존 모드: 검체유형 활성화, 식약처 섹션 숨김
