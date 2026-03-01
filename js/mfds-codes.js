@@ -385,8 +385,6 @@ MFDS_CODES._applyLock = function(cat1Name, cat2Name) {
 
   cat1El.value = cat1Item['품목 코드'];
   cat1El.dispatchEvent(new Event('change'));
-  cat1El.disabled = true;
-  cat1El.style.background = '#e8e8e8';
 
   // 중분류 찾기 + 선택
   var cat2Children = tree.byParent[cat1Item['품목 코드']] || [];
@@ -394,8 +392,6 @@ MFDS_CODES._applyLock = function(cat1Name, cat2Name) {
   if (cat2Item) {
     cat2El.value = cat2Item['품목 코드'];
     cat2El.dispatchEvent(new Event('change'));
-    cat2El.disabled = true;
-    cat2El.style.background = '#e8e8e8';
 
     // 하위 품목코드 셋 구축 (검색 필터링용)
     var descendants = new Set();
