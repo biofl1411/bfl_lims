@@ -1666,6 +1666,9 @@ window.addEventListener('firebase-ready', async function() {
         console.warn('[Firestore] 로드 실패, 기존 방식 사용:', e.message);
     }
 
+    // 수수료 Firestore 맵 로드 (자가품질위탁검사용)
+    await loadFirestoreFeeMap();
+
     // 식약처 품목코드 캐스케이딩 드롭다운 초기화
     if (typeof MFDS_CODES !== 'undefined') {
         MFDS_CODES.renderProductPicker('mfds-product-picker-container', function(item) {
@@ -2305,16 +2308,60 @@ function toggleMfdsPickerSection() {
 // 참고용(기준규격외) — 시험항목 검색 (MFDS 시험항목 2,940건)
 // ============================================================================
 
-// 시험항목코드 → {fee, unit, standard} 매핑 캐시 (mfdsTemplates 기반)
+// ═══ Firestore 수수료 맵 (자가품질위탁검사용) ═══
+var _firestoreFeeMap = null;
+
+async function loadFirestoreFeeMap() {
+    if (_firestoreFeeMap) return;
+    try {
+        var doc = await db.collection('settings').doc('mfdsFeeMapping').get();
+        if (doc.exists && doc.data().items) {
+            _firestoreFeeMap = {};
+            doc.data().items.forEach(function(m) {
+                _firestoreFeeMap[m.mfdsCode] = m;
+            });
+            console.log('[수수료] Firestore에서 로드:', Object.keys(_firestoreFeeMap).length + '건');
+        }
+    } catch(e) {
+        console.warn('[수수료] Firestore 로드 실패, JS 폴백 사용:', e.message);
+    }
+}
+
+function getFeeByCode(testCode) {
+    if (_firestoreFeeMap && _firestoreFeeMap[testCode]) {
+        return _firestoreFeeMap[testCode].fee || 0;
+    }
+    if (typeof MFDS_FEE_MAP !== 'undefined' && MFDS_FEE_MAP[testCode]) {
+        return MFDS_FEE_MAP[testCode].fee || 0;
+    }
+    return 0;
+}
+
+// ═══ 참고용 수수료 맵 ═══
 var _refFeeMap = null;
 
 /**
- * mfdsTemplates에서 시험항목코드별 수수료 맵 빌드 (1회만)
- * 참고용(기준규격외)는 기준규격/단위 해당 없음 — 수수료만 매칭
+ * 참고용(기준규격외) 수수료 맵 빌드
+ * 1순위: Firestore settings/refFeeMapping
+ * 2순위: mfdsTemplates 폴백
  */
 async function buildRefFeeMap() {
     if (_refFeeMap) return _refFeeMap;
     _refFeeMap = {};
+    // 1순위: Firestore settings/refFeeMapping
+    try {
+        var doc = await db.collection('settings').doc('refFeeMapping').get();
+        if (doc.exists && doc.data().items && doc.data().items.length > 0) {
+            doc.data().items.forEach(function(m) {
+                _refFeeMap[m.testItemCode] = { fee: m.fee || 0 };
+            });
+            console.log('[참고용] Firestore에서 수수료 로드:', Object.keys(_refFeeMap).length + '건');
+            return _refFeeMap;
+        }
+    } catch(e) {
+        console.warn('[참고용] Firestore 로드 실패:', e.message);
+    }
+    // 2순위: mfdsTemplates 폴백
     var templates = await loadMfdsTemplates();
     templates.forEach(function(t) {
         (t.testItems || []).forEach(function(ti) {
@@ -2324,7 +2371,7 @@ async function buildRefFeeMap() {
             }
         });
     });
-    console.log('[참고용] 수수료 맵 빌드:', Object.keys(_refFeeMap).length + '건');
+    console.log('[참고용] mfdsTemplates 폴백 수수료:', Object.keys(_refFeeMap).length + '건');
     return _refFeeMap;
 }
 
@@ -2955,7 +3002,6 @@ async function loadMfdsStandardItems(productCode, productName) {
         var unique = Object.values(seenItems);
 
         // 테이블 렌더링 (수수료 포함)
-        var hasFeeMap = typeof MFDS_FEE_MAP !== 'undefined';
         var html = '';
         var totalFee = 0;
         var feeCount = 0;
@@ -2969,12 +3015,10 @@ async function loadMfdsStandardItems(productCode, productName) {
             var unitCode = s['단위코드'] || '';
             var unit = (_mfdsUnitMap && _mfdsUnitMap[unitCode]) || unitCode;
 
-            // 수수료 조회
-            var fee = 0;
-            var feeText = '-';
-            if (hasFeeMap && MFDS_FEE_MAP[testCode]) {
-                fee = MFDS_FEE_MAP[testCode].fee || 0;
-                feeText = fee.toLocaleString() + '원';
+            // 수수료 조회 (Firestore 우선, JS 폴백)
+            var fee = getFeeByCode(testCode);
+            var feeText = fee > 0 ? fee.toLocaleString() + '원' : '-';
+            if (fee > 0) {
                 totalFee += fee;
                 feeCount++;
             }

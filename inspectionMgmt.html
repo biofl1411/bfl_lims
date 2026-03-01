@@ -805,6 +805,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
       <button class="filter-chip active" id="fee-sub-list" onclick="switchFeeSubtab('list')">💰 수수료 목록</button>
       <button class="filter-chip" id="fee-sub-mfds" onclick="switchFeeSubtab('mfds')">🔗 식약처 매핑</button>
+      <button class="filter-chip" id="fee-sub-ref" onclick="switchFeeSubtab('ref')">📋 참고용 매핑</button>
     </div>
     <!-- 서브탭 A: 기존 수수료 목록 -->
     <div id="fee-subtab-list">
@@ -912,6 +913,44 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </table>
       </div>
     </div><!-- /fee-subtab-mfds -->
+
+    <!-- 서브탭 C: 참고용(기준규격외) 수수료 매핑 -->
+    <div id="fee-subtab-ref" style="display:none;">
+      <div class="page-desc" style="margin-bottom:12px;font-size:13px;color:var(--sub)">
+        📋 참고용(기준규격외) 시험항목별 수수료 매핑 — 접수 등록에서 참고용 시험항목 추가 시 이 수수료가 적용됩니다.
+      </div>
+      <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="search-box" style="flex:1;min-width:200px;">
+          <span>🔍</span>
+          <input type="text" id="ref-fee-search" placeholder="시험항목코드, 항목명 검색..." oninput="renderRefFeeTable()">
+        </div>
+        <label style="font-size:12px;color:var(--sub);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="ref-fee-only-set" onchange="renderRefFeeTable()"> 수수료 설정된 항목만
+        </label>
+        <span id="ref-fee-count" style="font-size:13px;color:var(--sub);white-space:nowrap;"></span>
+        <button class="btn btn-primary" onclick="saveRefFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
+      </div>
+      <div style="overflow-x:auto;max-height:calc(100vh - 260px);overflow-y:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="position:sticky;top:0;z-index:1;">
+            <tr style="background:var(--bg);border-bottom:2px solid var(--bdr);">
+              <th style="padding:8px 10px;text-align:left;width:40px">No</th>
+              <th style="padding:8px 10px;text-align:left;width:100px">시험항목코드</th>
+              <th style="padding:8px 10px;text-align:left;">시험항목명</th>
+              <th style="padding:8px 10px;text-align:right;width:120px">수수료(원)</th>
+            </tr>
+          </thead>
+          <tbody id="ref-fee-tbody"></tbody>
+          <tfoot>
+            <tr style="background:var(--bg);border-top:2px solid var(--bdr);">
+              <td colspan="2" style="padding:8px 10px;font-weight:700;text-align:right;">합계</td>
+              <td id="ref-fee-set-count" style="padding:8px 10px;font-size:12px;color:var(--sub);"></td>
+              <td id="ref-fee-total" style="padding:8px 10px;font-weight:700;text-align:right;color:var(--primary);"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div><!-- /fee-subtab-ref -->
 
   </div>
 
@@ -31084,11 +31123,14 @@ var _mfdsFeeData = null; // Firestore에서 로드한 매핑 데이터
 
 function switchFeeSubtab(tab) {
   _feeSubtab = tab;
-  document.getElementById('fee-sub-list').classList.toggle('active', tab === 'list');
-  document.getElementById('fee-sub-mfds').classList.toggle('active', tab === 'mfds');
-  document.getElementById('fee-subtab-list').style.display = tab === 'list' ? '' : 'none';
-  document.getElementById('fee-subtab-mfds').style.display = tab === 'mfds' ? '' : 'none';
+  ['list', 'mfds', 'ref'].forEach(function(t) {
+    var btn = document.getElementById('fee-sub-' + t);
+    var panel = document.getElementById('fee-subtab-' + t);
+    if (btn) btn.classList.toggle('active', tab === t);
+    if (panel) panel.style.display = tab === t ? '' : 'none';
+  });
   if (tab === 'mfds') loadAndRenderMfdsFee();
+  if (tab === 'ref') loadAndRenderRefFee();
 }
 
 // ══ 식약처 수수료 매핑: Firestore 로드 → 렌더링 ══
@@ -31180,6 +31222,148 @@ async function saveMfdsFeesToFirestore() {
   } catch(e) {
     showToast('저장 실패: ' + e.message, 'error');
     console.error('[수수료] Firestore 저장 오류:', e);
+  }
+}
+
+// ══ 참고용(기준규격외) 수수료 매핑 ══
+var _refFeeData = null;
+
+async function loadAndRenderRefFee() {
+  if (!_refFeeData) {
+    // 1순위: Firestore settings/refFeeMapping
+    try {
+      var doc = await db.collection('settings').doc('refFeeMapping').get();
+      if (doc.exists && doc.data().items && doc.data().items.length > 0) {
+        _refFeeData = doc.data().items;
+        console.log('[참고용수수료] Firestore에서 로드:', _refFeeData.length + '건');
+      }
+    } catch(e) {
+      console.warn('[참고용수수료] Firestore 로드 실패:', e.message);
+    }
+
+    // 2순위: mfds_test_items + 기존 식약처 매핑 fee로 초기 구성
+    if (!_refFeeData) {
+      var testItems = [];
+      try {
+        testItems = await MFDS_CODES.loadTestItems();
+      } catch(e) {
+        console.warn('[참고용수수료] 시험항목 로드 실패:', e.message);
+      }
+
+      // 기존 식약처 매핑에서 fee 가져오기
+      var templateFees = {};
+      if (_mfdsFeeData) {
+        _mfdsFeeData.forEach(function(m) { templateFees[m.mfdsCode] = m.fee || 0; });
+      } else {
+        try {
+          var tDoc = await db.collection('settings').doc('mfdsFeeMapping').get();
+          if (tDoc.exists && tDoc.data().items) {
+            tDoc.data().items.forEach(function(m) { templateFees[m.mfdsCode] = m.fee || 0; });
+          }
+        } catch(e) {}
+        // JS 폴백
+        if (Object.keys(templateFees).length === 0 && typeof MFDS_FEE_MAPPING !== 'undefined') {
+          MFDS_FEE_MAPPING.forEach(function(m) { templateFees[m.mfdsCode] = m.fee || 0; });
+        }
+      }
+
+      _refFeeData = testItems.map(function(ti) {
+        var code = ti['시험항목코드'] || '';
+        return {
+          testItemCode: code,
+          itemName: ti['한글명'] || '',
+          fee: templateFees[code] || 0
+        };
+      });
+      // 코드순 정렬
+      _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
+      console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건');
+    }
+  }
+  renderRefFeeTable();
+}
+
+function renderRefFeeTable() {
+  var tbody = document.getElementById('ref-fee-tbody');
+  var countEl = document.getElementById('ref-fee-count');
+  var totalEl = document.getElementById('ref-fee-total');
+  var setCountEl = document.getElementById('ref-fee-set-count');
+  if (!tbody || !_refFeeData) return;
+
+  var query = (document.getElementById('ref-fee-search').value || '').trim().toLowerCase();
+  var onlySet = document.getElementById('ref-fee-only-set') && document.getElementById('ref-fee-only-set').checked;
+
+  var filtered = _refFeeData;
+  if (query) {
+    filtered = filtered.filter(function(m) {
+      return (m.testItemCode || '').toLowerCase().indexOf(query) >= 0 ||
+             (m.itemName || '').toLowerCase().indexOf(query) >= 0;
+    });
+  }
+  if (onlySet) {
+    filtered = filtered.filter(function(m) { return (m.fee || 0) > 0; });
+  }
+
+  var html = '';
+  var total = 0;
+  var setCount = 0;
+  filtered.forEach(function(m, idx) {
+    var fee = m.fee || 0;
+    total += fee;
+    if (fee > 0) setCount++;
+    html += '<tr style="border-bottom:1px solid var(--bdr);">';
+    html += '<td style="padding:7px 10px;color:var(--sub)">' + (idx + 1) + '</td>';
+    html += '<td style="padding:7px 10px;font-family:monospace;color:var(--primary);font-weight:600">' + (m.testItemCode || '') + '</td>';
+    html += '<td style="padding:7px 10px;color:var(--txt)">' + (m.itemName || '') + '</td>';
+    html += '<td style="padding:7px 10px;text-align:right">';
+    html += '<input type="number" value="' + fee + '" data-code="' + (m.testItemCode || '') + '" ';
+    html += 'onchange="updateRefFee(this)" ';
+    html += 'style="width:100px;text-align:right;padding:4px 8px;border:1px solid var(--bdr);border-radius:4px;font-size:13px;">';
+    html += '</td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+  if (countEl) countEl.textContent = filtered.length + '개 / ' + _refFeeData.length + '개';
+  if (totalEl) totalEl.textContent = total.toLocaleString() + '원';
+  if (setCountEl) setCountEl.textContent = '수수료 설정: ' + setCount + '개';
+}
+
+function updateRefFee(input) {
+  var code = input.getAttribute('data-code');
+  var newFee = parseInt(input.value) || 0;
+  if (_refFeeData) {
+    var item = _refFeeData.find(function(m) { return m.testItemCode === code; });
+    if (item) item.fee = newFee;
+  }
+  // 합계 재계산
+  var total = 0;
+  var setCount = 0;
+  _refFeeData.forEach(function(m) {
+    total += m.fee || 0;
+    if ((m.fee || 0) > 0) setCount++;
+  });
+  var totalEl = document.getElementById('ref-fee-total');
+  var setCountEl = document.getElementById('ref-fee-set-count');
+  if (totalEl) totalEl.textContent = total.toLocaleString() + '원';
+  if (setCountEl) setCountEl.textContent = '수수료 설정: ' + setCount + '개';
+}
+
+async function saveRefFeesToFirestore() {
+  if (!_refFeeData || _refFeeData.length === 0) {
+    showToast('저장할 데이터가 없습니다', 'warning');
+    return;
+  }
+  try {
+    await db.collection('settings').doc('refFeeMapping').set({
+      items: _refFeeData,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      totalItems: _refFeeData.length
+    });
+    showToast('참고용 수수료 매핑 ' + _refFeeData.length + '건 저장 완료', 'success');
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+    console.error('[참고용수수료] Firestore 저장 오류:', e);
   }
 }
 
