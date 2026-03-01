@@ -31243,7 +31243,7 @@ async function loadAndRenderRefFee() {
       console.warn('[참고용수수료] Firestore 로드 실패:', e.message);
     }
 
-    // 2순위: mfds_test_items + 기존 식약처 매핑 fee로 초기 구성
+    // 2순위: mfds_test_items에서 시험항목 목록만 가져오기 (수수료는 0 — 별도 설정 필요)
     if (!_refFeeData) {
       var testItems = [];
       try {
@@ -31252,34 +31252,18 @@ async function loadAndRenderRefFee() {
         console.warn('[참고용수수료] 시험항목 로드 실패:', e.message);
       }
 
-      // 기존 식약처 매핑에서 fee 가져오기
-      var templateFees = {};
-      if (_mfdsFeeData) {
-        _mfdsFeeData.forEach(function(m) { templateFees[m.mfdsCode] = m.fee || 0; });
-      } else {
-        try {
-          var tDoc = await db.collection('settings').doc('mfdsFeeMapping').get();
-          if (tDoc.exists && tDoc.data().items) {
-            tDoc.data().items.forEach(function(m) { templateFees[m.mfdsCode] = m.fee || 0; });
-          }
-        } catch(e) {}
-        // JS 폴백
-        if (Object.keys(templateFees).length === 0 && typeof MFDS_FEE_MAPPING !== 'undefined') {
-          MFDS_FEE_MAPPING.forEach(function(m) { templateFees[m.mfdsCode] = m.fee || 0; });
-        }
-      }
-
       _refFeeData = testItems.map(function(ti) {
         var code = ti['시험항목코드'] || '';
         return {
           testItemCode: code,
           itemName: ti['한글명'] || '',
-          fee: templateFees[code] || 0
+          fee: 0,
+          note: ''
         };
       });
       // 코드순 정렬
       _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
-      console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건');
+      console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건 (수수료 미설정)');
     }
   }
   renderRefFeeTable();
