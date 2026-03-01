@@ -7,6 +7,69 @@
 
 ---
 
+## 절대 규칙: 식약처 통합LIMS 데이터 원칙
+
+> **인터넷 검색으로 수집한 정보를 프로그램에 절대 적용하지 마세요.**
+
+식약처 연동 기능을 구현할 때 반드시 아래 원칙을 따라야 합니다:
+
+1. **식약처 통합LIMS API에서 제공하는 데이터만 사용** — 계산식(nomfrmCn), 양식(codename2), 시험방법, 코드값 등 모든 정보는 반드시 식약처 API 응답에서 가져와야 합니다
+2. **인터넷 검색/식품공전/외부 자료로 수식이나 양식을 직접 작성하지 마세요** — 식약처 LIMS가 관리하는 데이터를 우리가 임의로 만들면 안 됩니다
+3. **API에서 제공하지 않는 정보는 구현하지 마세요** — API로 조회되지 않는 계산식이나 양식은 식약처 LIMS 웹에서 먼저 등록한 후 API로 가져와야 합니다
+4. **프로젝트 내 문서(`mfds_integration/서비스별 가이드/*.pdf`)가 1차 참고 자료** — API 스펙, 파라미터, 호출 방식은 이 PDF 문서를 기준으로 합니다
+
+### 올바른 데이터 흐름
+```
+식약처 통합LIMS API 조회 → 응답 데이터 → BFL LIMS UI에 표시/사용
+```
+
+### 금지되는 흐름
+```
+인터넷 검색 → 식품공전/논문/블로그 → 수식/양식 직접 코딩 ← 절대 금지
+```
+
+---
+
+## 식약처 결과값 처리 규칙 (필수 적용)
+
+모든 검사 결과 입력 UI에서 반드시 `MFDS_RULES` (js/mfds_result_rules.js) 유틸리티를 사용해야 합니다.
+
+### 핵심 규칙
+1. **유효자리수 (validCphr)**: 시험항목별 `precision` 필드에 따라 `toFixed(precision)` 반올림 적용
+2. **정량한계 (fdqntLimit)**: 측정값 < 정량한계값 → 표기값을 미만표기값(예: "불검출")으로 대체, `fdqntLimitApplcAt: 'Y'`
+3. **표기값 (markValue)**: 유효자리수/정량한계 적용된 최종 표시 값 (원본 측정값과 별도)
+4. **판정형식 코드 (IM15)**: `최대/최소→01`, `적/부텍스트→02`, `3군법→03`, `2군법→04`, `기준없음→05`
+5. **판정용어 코드 (IM35)**: `적합→IM35000001`, `부적합→IM35000002`, `상기실험확인함→IM35000003`
+6. **최대값 구분 (IM16)**: `이하→01`, `미만→02`
+7. **최소값 구분 (IM17)**: `이상→01`, `초과→02`
+
+### 사용법
+```javascript
+var processed = MFDS_RULES.processResultValue(rawValue, item, judgmentResult);
+MFDS_RULES.applyValidCphr(value, precision)     // 유효자리수 적용
+MFDS_RULES.generateMarkValue(value, item)        // 표기값 생성
+MFDS_RULES.mapJdgmntFomCode(judgmentType)        // IM15 코드 매핑
+MFDS_RULES.mapJdgmntWordCode(judgmentResult)     // IM35 코드 매핑
+```
+
+### 데이터 소스
+- 시험항목 템플릿: `js/mfds_templates.js` (precision, maxValue, maxValueCode, minValue, minValueCode 등)
+- 공통코드: `data/mfds/common_codes.json` (IM15, IM16, IM17, IM35, IM43)
+- API 스펙: `mfds_integration/서비스별 가이드/I-LMS-0216_시료검사결과+저장.pdf`
+
+---
+
+## 주요 규칙
+
+- 데이터는 반드시 Firebase Firestore에 저장 (localStorage는 보조/레거시)
+- 사이드바 메뉴 변경 시 js/sidebar.js의 SIDEBAR_MENU만 수정
+- firebase-ready 이벤트 이후 Firestore 접근
+- 포트 사용 금지: 443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964
+- BFL 내부 Flask 포트: 5001(시료접수), 5002(OCR), 5003(식약처)
+- 커밋 시 한글 커밋 메시지 사용
+
+---
+
 ## 기술 스택
 
 | 구분 | 기술 |

@@ -1,4 +1,4 @@
-# CLAUDE.md — BFL LIMS 프로젝트 설정
+# CLAUDE.md — BFL LIMS 권한 및 배포 규칙
 
 ## 허용된 작업 (Allowed Operations)
 
@@ -58,49 +58,20 @@
 
 ---
 
-## 프로젝트 개요
+## 배포 정보
 
-- **프로젝트**: BioFoodLab LIMS (식품 시험 검사 기관 실험실 정보 관리 시스템)
-- **기술 스택**: Vanilla HTML/CSS/JS, Tailwind CSS, Firebase Firestore, Flask (Python)
-- **배포**: GitHub Pages + Ubuntu 서버 (nginx 8443)
-- **주요 문서**: README.md (전체 프로젝트 문서, 2,543줄)
+- **GitHub**: `git push origin main`
+- **서버 SSH**: paramiko로 `14.7.14.31:2222` 접속 (user: biofl, pw: bphsk*1411**)
+- **서버 배포**: `cd /home/biofl/bfl_lims && git pull origin main`
+- **Preview 서버**: port 8897 (`.claude/launch.json` → static-server)
+- **포트 사용 금지**: 443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964
+- **BFL Flask 포트**: 5001(시료접수), 5002(OCR), 5003(식약처)
+- **커밋 규칙**: 한글 커밋 메시지 사용
 
-## 주요 규칙
+---
 
-- 데이터는 반드시 Firebase Firestore에 저장 (localStorage는 보조/레거시)
-- 사이드바 메뉴 변경 시 js/sidebar.js의 SIDEBAR_MENU만 수정
-- firebase-ready 이벤트 이후 Firestore 접근
-- 포트 사용 금지: 443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964
-- BFL 내부 Flask 포트: 5001(시료접수), 5002(OCR), 5003(식약처)
-- 커밋 시 한글 커밋 메시지 사용
+## 프로젝트 문서 참조
 
-## 식약처 결과값 처리 규칙 (필수 적용)
-
-모든 검사 결과 입력 UI에서 반드시 `MFDS_RULES` (js/mfds_result_rules.js) 유틸리티를 사용해야 합니다.
-
-### 핵심 규칙
-1. **유효자리수 (validCphr)**: 시험항목별 `precision` 필드에 따라 `toFixed(precision)` 반올림 적용
-2. **정량한계 (fdqntLimit)**: 측정값 < 정량한계값 → 표기값을 미만표기값(예: "불검출")으로 대체, `fdqntLimitApplcAt: 'Y'`
-3. **표기값 (markValue)**: 유효자리수/정량한계 적용된 최종 표시 값 (원본 측정값과 별도)
-4. **판정형식 코드 (IM15)**: `최대/최소→01`, `적/부텍스트→02`, `3군법→03`, `2군법→04`, `기준없음→05`
-5. **판정용어 코드 (IM35)**: `적합→IM35000001`, `부적합→IM35000002`, `상기실험확인함→IM35000003`
-6. **최대값 구분 (IM16)**: `이하→01`, `미만→02`
-7. **최소값 구분 (IM17)**: `이상→01`, `초과→02`
-
-### 사용법
-```javascript
-// 결과값 전체 처리
-var processed = MFDS_RULES.processResultValue(rawValue, item, judgmentResult);
-// → { resultValue, markValue, validCphr, fdqntLimitApplcAt, jdgmntFomCode, jdgmntWordCode, ... }
-
-// 개별 함수
-MFDS_RULES.applyValidCphr(value, precision)     // 유효자리수 적용
-MFDS_RULES.generateMarkValue(value, item)        // 표기값 생성
-MFDS_RULES.mapJdgmntFomCode(judgmentType)        // IM15 코드 매핑
-MFDS_RULES.mapJdgmntWordCode(judgmentResult)     // IM35 코드 매핑
-```
-
-### 데이터 소스
-- 시험항목 템플릿: `js/mfds_templates.js` (precision, maxValue, maxValueCode, minValue, minValueCode 등)
-- 공통코드: `data/mfds/common_codes.json` (IM15, IM16, IM17, IM35, IM43)
-- API 스펙: `mfds_integration/서비스별 가이드/I-LMS-0216_시료검사결과+저장.pdf`
+- **README.md**: 전체 프로젝트 문서 (기술 스택, 식약처 데이터 원칙, 결과값 처리 규칙, Firestore 구조, 커밋 이력 등)
+- **NEXT_SESSION.md**: 새 대화 시작 시 읽어야 할 파일 가이드
+- **WORK_LOG_*.md**: 작업 일지
