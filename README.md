@@ -299,7 +299,7 @@ Flask HTTPS 서버 (port 5002) — CLOVA OCR API 프록시
 | `/api/ocr/health` | GET | 서버 상태 확인 |
 
 ### 검사관리 (`inspectionMgmt.html`)
-- **6탭 구조**: 검사분야, 검사목적, 식품유형, 검사항목, 항목그룹, 수수료
+- **8탭 구조**: 검사분야, 검사목적, 품목코드, 식품유형, 시험항목, 기준규격, 참고용, 수수료
 - **데이터 저장**: Firebase Firestore 영구 저장 (6탭 모두)
 - **검사목적 탭**: 카드 목록 + 상세 패널, 접수번호 세그먼트 구성, 선택 삭제 기능
 - **접수번호 세그먼트 시스템**: 구분 수(1~8), 구분자(하이픈/없음), 7가지 타입 지원
@@ -313,7 +313,10 @@ Flask HTTPS 서버 (port 5002) — CLOVA OCR API 프록시
   - 카드뷰 + 리스트뷰, 대분류 필터 칩 + 중분류 드롭다운
   - `classifyFoodType()` 키워드 자동 분류: 식품 24개 식품군 + 축산물/수산물/농산물 원재료
   - 엑셀 다운로드 (SheetJS `aoa_to_sheet`, 60,255건 대용량 처리)
-- **수수료 탭**: 7,481건 Firestore 로드 + 로딩 상태 표시 + 폴링 자동 렌더링
+- **수수료 탭 — 3개 서브탭**:
+  - **수수료 목록**: 7,481건 Firestore 로드, 카드/리스트뷰, 검사목적별 필터, 변경감지+저장
+  - **식약처 매핑**: 시험항목코드 ↔ 자가품질위탁검사용 수수료 (166건), Firestore `settings/mfdsFeeMapping`
+  - **참고용 매핑**: 참고용(기준규격외) 시험항목별 수수료 (2,171건, 102건 설정), Firestore `settings/refFeeMapping`, 비고 컬럼 지원
 - **외부 JS**: `food_item_fee_mapping.js` (9,237건, 16개 검사목적, purpose 태그 포함), `ref_nonstandard_data.js` (참고용(기준규격외) 3,374건)
 - **상세 패널**: 항목 수정, 라벨 태그 관리, 좌우 항목 이동 (◀ ▶), 제목에 검체유형 표시
 - **카드 기능**: 선택 삭제, 8가지 정렬 (기본/항목명/검체유형/담당자/수수료↑↓/항목수↑↓)
@@ -324,6 +327,8 @@ Flask HTTPS 서버 (port 5002) — CLOVA OCR API 프록시
 - **폴백 모드**: API 서버 미실행 시에도 내장 폴백 데이터로 동작
 - **서버 상태 표시**: 헤더에 연결 상태 인디케이터 (🟢 연결됨 / 🔴 오프라인)
 - **6개 아코디언 섹션**: 접수 기본정보, 업체정보, 시료정보, 검사정보, 계산서 정보, 팀별 메모
+- **수수료 Firestore 연동**: `getFeeByCode()` — Firestore `settings/mfdsFeeMapping` 우선 조회, `MFDS_FEE_MAP` JS 폴백
+- **참고용 수수료**: `buildRefFeeMap()` — Firestore `settings/refFeeMapping` 우선 조회, mfdsTemplates 폴백
 - **API 연동 기능**: 검사목적 로드, 검체유형 검색, 접수번호 할당(스레드 안전), 업체 검색
 - **팀별 메모 권한**: 현재 로그인 팀만 편집, 나머지 읽기 전용
 - **임시저장/불러오기**: localStorage 기반
@@ -624,6 +629,8 @@ Firebase 프로젝트: `bfl-lims` / SDK: Firebase compat v10.14.1
 | `foodTypes/{docId}` | 식품유형 데이터 (894카드) | `inspectionMgmt.html` | 컬렉션 (배치) |
 | `itemGroups/{docId}` | 항목그룹 데이터 (5,695건) | `inspectionMgmt.html` | 컬렉션 (배치) |
 | `inspectionFees/{docId}` | 수수료 데이터 (7,481건) | `inspectionMgmt.html` | 컬렉션 (배치) |
+| `settings/mfdsFeeMapping` | 자가품질위탁검사용 수수료 매핑 (166건) | `inspectionMgmt.html`, `sampleReceipt.html` | 단일 문서 |
+| `settings/refFeeMapping` | 참고용(기준규격외) 수수료 매핑 (2,171건) | `inspectionMgmt.html`, `sampleReceipt.html` | 단일 문서 |
 | `fss_businesses/{lcns_no}` | 식약처 업소 데이터 (~11,200건) | `salesMgmt.html` | 컬렉션 (인허가번호 키) |
 | `fss_products/{auto_id}` | 식약처 품목 데이터 (~661,000건) | `salesMgmt.html` | 컬렉션 |
 | `fss_changes/{auto_id}` | 식약처 인허가 변경이력 | `salesMgmt.html` | 컬렉션 |
@@ -1994,7 +2001,7 @@ window.addEventListener('firebase-ready', function() {
 
 ---
 
-## 🔴 식약처 통합LIMS WEB API 연동 (진행 중 — 2026-02-26)
+## 🔴 식약처 통합LIMS WEB API 연동 (진행 중 — 2026-03-01 갱신)
 
 > **이 섹션은 프롬프트 재시작 시 이어서 작업할 수 있도록 진행 상황을 기록합니다.**
 > **실패가 2회 이상 발생하면, `mfds_integration/` 폴더의 전체 내용(PDF 가이드, Sample 소스, 코드매핑 Excel 등)을 정밀히 확인하여 해결하세요.**
@@ -2256,6 +2263,50 @@ keyStore.clientEthName=enp4s0
     - `mfds_common_codes` 383건, `mfds_product_codes` 8,404건
     - `mfds_test_items` 2,940건, `mfds_units` 106건
 
+**추가 완료 (2026-02-27~28):**
+
+20. ✅ `js/mfds_templates.js` — 식약처 시험항목 템플릿 데이터 (74,903줄)
+    - 식약처 코드매핑 `mfdsTemplates` XLS → JS 변환 (646 템플릿, 2,657개 시험항목)
+    - Firestore `mfdsTemplates` 컬렉션 임포트 기능
+    - 접수등록에서 식품유형 선택 시 시험항목 자동 로드에 활용
+21. ✅ `js/mfds_result_rules.js` — 식약처 결과값 처리 규칙 모듈 (157줄)
+    - `applyValidCphr(value, precision)` — 유효자리수 반올림
+    - `applyFdqntLimit(value, item)` — 정량한계 미만 시 불검출 처리
+    - `generateMarkValue(value, item)` — 표기값 생성 (유효자리수 + 정량한계 통합)
+    - `mapJdgmntFomCode(type)` — IM15 판정형식 코드 매핑 (최대/최소→01, 적/부→02 등)
+    - `mapJdgmntWordCode(result)` — IM35 판정용어 코드 매핑 (적합→IM35000001 등)
+    - `mapMaxValueSeCode/mapMinValueSeCode` — IM16/IM17 이하/미만/이상/초과 구분
+    - `processResultValue(raw, item, judgment)` — 전체 처리 통합 함수
+22. ✅ `js/mfds-fee-mapping.js` — 수수료 매핑 데이터 (178줄)
+    - 식약처 수수료 체계 기반 검사목적별 수수료 매핑
+23. ✅ `js/food_types_qc.js` — 식품유형 품질관리 모듈 (1,031줄)
+    - 식품유형 데이터 무결성 검증, 중복 체크
+24. ✅ `testResultInput.html` — 검사결과 입력 페이지 전면 신규 구현 (2,010줄)
+    - 접수현황에서 접수건 선택 → 시료별 시험항목 렌더링
+    - 측정값 입력 → MFDS_RULES 자동 적용 (유효자리수, 정량한계, 표기값)
+    - 자동판정 (적합/부적합/검출/불검출) — 최대값/최소값 기준 비교
+    - Firestore 저장/복원 (`testResults` 컬렉션)
+    - 식약처 전송 기능: 시험일지 등록(0209) + 결과 전송(0216) 2단계
+    - 전송 전 확인 모달 (항목별 측정값/표기값/판정 테이블 미리보기)
+25. ✅ `js/mfds_diary_form.js` — 시험일지 양식 뷰어 모듈 (198줄)
+    - API 체인: exprIemCode → 0241(selectListExprMth) → exprMthSn → 0242(selectListExprDiaryForm) → codename2(HTML)
+    - 사용범위코드 3단계 조회: 개인(SY05000003) → 부서(SY05000002) → 기관(SY05000001)
+    - `renderInteractive(html, container)` — 빈 `<td>` 셀을 contenteditable로 변환
+    - `collectFormHtml(container)` — 편집된 HTML 수집 (clean)
+    - 결과 캐시 지원 (API 재호출 방지)
+    - testResultInput.html에 [양식] 버튼으로 연동 — 항목별 시험일지 양식 조회/표시
+    - **운영 서버 검증 완료**: 납(B10001) → 중금속_납_일지 [개인] 양식 정상 조회 확인
+
+**페이지 연동 (2026-02-27~28):**
+
+26. ✅ `sampleReceipt.html` — 식약처 연동 확장
+    - 검사목적별 UI 분기: 자가품질위탁검사용 → 식약처 연동 모드 활성화
+    - 식품유형(mfdsTemplates) 선택 시 시험항목 자동 로드
+    - 참고용(기준규격외) MFDS 시험항목 2,940건 검색/추가 기능
+    - 수수료 계산: 참고용 + 자가품질위탁검사용 테이블 직접 합산
+27. ✅ `inspectionMgmt.html` — 수수료 식약처 코드 매핑 서브탭 추가
+28. ✅ `itemAssign.html` — 시험일지 관련 API 9개 래퍼 추가 + 일지 관리 UI 구현
+
 ### ✅ 31단계 테스트 시나리오 전체 통과 (2026-02-26)
 
 식약처 테스트 시나리오 엑셀 기반, **의뢰→시료→결과→결재→성적서** 전체 흐름 검증 완료.
@@ -2296,26 +2347,38 @@ keyStore.clientEthName=enp4s0
 - **해결**: `WebApiController.java`에 `buildRestUrl()` 메서드 추가, `url`이 `http`로 시작하지 않으면 자동으로 `wslimsUrl + "/webService/rest/"` 프리픽스 추가
 - **파일**: `/home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/classes/gov/mfds/lms_client/Controller/WebApiController.class` (Java 17 컴파일)
 
-### ⏳ 다음 작업 (우선순위)
+### ⏳ 다음 작업 (우선순위, 2026-03-01 갱신)
 
-**1순위 — 접수등록 ↔ 식약처 의뢰 연동 (31단계 테스트 완료, 실제 연동 구현):**
+**1순위 — 관리자 > API 수집 검증:**
+- `admin_api_settings.html` — API 수집 설정 페이지 검증
+- `admin_collect_status.html` — 수집 현황 페이지 검증
+- `api_server.py` (Flask port 5003) — 데이터 수집 서버 검증
+- `collector.py` — 식약처 데이터 수집기 검증
+
+**2순위 — 시험일지 양식 검토 (차주 예정):**
+- 시험일지 양식 뷰어 (API 0241→0242) 실무 활용 검토
+- 양식 편집 → 시험일지 등록(0209) 연동 완성
+- 계산식(nomfrmCn) 구현: API에서 제공하는 계산식 데이터만 사용 (인터넷 검색 금지)
+
+**3순위 — 접수등록 ↔ 식약처 의뢰 연동:**
 - `sampleReceipt.html`에서 접수 저장 시 식약처 `saveInspctReqest` API 동시 호출
 - 의뢰번호(`sploreReqestNo`) 발급받아 Firestore `receipts`에 저장
 - 시료 정보도 `saveReqestSplore` API로 동시 전송
 - 오류 시 식약처 연동만 실패하고 BFL 접수는 정상 저장되도록 독립 처리
 
-**3순위 — 검사결과 입력 ↔ 식약처 연동:**
-- 시험일지 등록 (`insertExprDiary`)
-- 검사결과 입력 (`saveSploreInspctResult`)
-- 결재상신 (`saveSploreSanctnRecom`)
+**4순위 — 검사결과 입력 ↔ 식약처 연동 보강:**
+- ✅ 시험일지 등록 (`insertExprDiary`) — 기본 구현 완료
+- ✅ 검사결과 전송 (`saveSploreInspctResult`) — 기본 구현 완료
+- ⏳ 계산식 결과 등록 (`insertExprDiaryCalcFrmlaResult`) — API 0210, 래퍼만 존재
+- ⏳ 결재상신 (`saveSploreSanctnRecom`) — 미구현
 - BFL 항목명 → 식약처 시험항목코드 매핑 활용 (`mfds_item_mappings`)
 
-**4순위 — 성적서 발급 연동:**
+**5순위 — 성적서 발급 연동:**
 - 성적서 발급 (`saveGrdcrtIssu`)
 - 성적서 이력 조회 (`selectListGrdcrtIssuHist`)
 - PDF 다운로드 연동
 
-**5순위 — 운영 환경 전환:**
+**6순위 — 운영 환경 전환:**
 - 테스트(O000170) → 운영(O000026) 인증서/기관코드 전환
 - `mfds-api.js`의 `DEFAULT_USER` 설정 변경
 - application.properties 인증서 경로 변경
@@ -2344,6 +2407,91 @@ keyStore.clientEthName=enp4s0
 | **API 호출 빈 응답 (Content-Length:0)** | `selectUnitTest`가 서비스명만 전달 → `HttpPost("saveXxx")` 호스트 없음 | `WebApiController.buildRestUrl()` 추가, `wslimsUrl + "/webService/rest/"` 자동 프리픽스 | ✅ |
 | **Step 3 시료등록 품목코드 오류** | 2018년 테스트코드(`C0113010000000`) 무효 | `A0100100000000` (쌀) 사용 | ✅ |
 | **Step 10 접수배정 사용자ID 오류** | `codeNo`(L0330159) 대신 `mfdsLimsId`(apitest34) 사용해야 함 | ID 형식 변경 | ✅ |
+
+### 식약처 연동 구현 현황 상세 (2026-03-01 기준)
+
+#### JS 모듈 구성
+
+| # | 파일 | 줄수 | 역할 | 의존성 |
+|---|------|------|------|--------|
+| 1 | `js/mfds-api.js` | 634 | API 호출 코어 (26개 래퍼 함수) | Firebase, nginx |
+| 2 | `js/mfds-codes.js` | 652 | 코드매핑 로딩/캐싱/검색 | Firebase |
+| 3 | `js/mfds_result_rules.js` | 157 | 결과값 처리 규칙 (유효자리수/정량한계/판정코드) | — |
+| 4 | `js/mfds_templates.js` | 74,903 | 식약처 시험항목 템플릿 데이터 (646템플릿) | — |
+| 5 | `js/mfds_diary_form.js` | 198 | 시험일지 양식 뷰어 (API 0241→0242) | mfds-api.js |
+| 6 | `js/mfds-fee-mapping.js` | 178 | 수수료 매핑 데이터 | — |
+| 7 | `js/food_types_qc.js` | 1,031 | 식품유형 품질관리 | — |
+| 8 | `js/food_item_fee_mapping.js` | 9,261 | 식품항목-수수료 매핑 (9,237건) | — |
+
+#### API 래퍼 함수 현황 (`mfds-api.js`)
+
+| 분류 | 서비스ID | 래퍼 함수 | 실제 호출 여부 |
+|------|---------|----------|:---:|
+| **의뢰관리** | 0101 | `selectListInspctReqest` | ✅ |
+| | 0104 | `saveInspctReqest` | ✅ (31단계 테스트) |
+| | 0105 | `saveInspctReqestRequst` | ✅ (31단계 테스트) |
+| | 0106 | `selectListReqestSplore` | ✅ (31단계 테스트) |
+| | 0107 | `saveReqestSplore` | ✅ (31단계 테스트) |
+| | 0108 | `selectListReqestSploreExprIem` | ✅ (31단계 테스트) |
+| | 0109 | `saveReqestSploreFee` | ✅ (31단계 테스트) |
+| | 0115 | `saveSploreChargerAsign` | ✅ (31단계 테스트) |
+| **시험/결과** | 0202 | `selectListExprDiaryByExprIemSn` | ⏳ 래퍼만 |
+| | 0206 | `selectListExprDiary` | ⏳ 래퍼만 |
+| | 0207 | `selectExprDiaryDtl` | ⏳ 래퍼만 |
+| | 0208 | `deleteExprDiary` | ⏳ 래퍼만 |
+| | 0209 | `insertExprDiaryNew` | ✅ (testResultInput) |
+| | 0210 | `insertExprDiaryCalcFrmlaResult` | ⏳ 래퍼만 |
+| | 0216 | `saveSploreInspctResult` | ✅ (testResultInput) |
+| | 0219 | `saveSploreSanctnRecom` | ⏳ 래퍼만 |
+| | 0221 | `saveSploreSanctn` | ✅ (31단계 테스트) |
+| | 0241 | `selectListExprMth` | ✅ (양식뷰어) |
+| | 0242 | `selectListExprDiaryForm` | ✅ (양식뷰어) |
+| **성적서** | 0309 | `saveGrdcrtIssu` | ✅ (31단계 테스트) |
+| | 0310 | `selectListGrdcrtIssuHist` | ⏳ 래퍼만 |
+| | 0311 | `selectGrdcrtDmOutpt` | ✅ (31단계 테스트) |
+| | 0312 | `selectGrdcrtPdfOutpt` | ✅ (31단계 테스트) |
+| **기관/사용자** | 0601 | `selectListDept` | ✅ |
+| | 0602 | `selectListEmp` | ✅ |
+| **공통** | 0801 | `selectListCmmnCode` | ✅ |
+| | 0818 | `selectListPrdlstLclas` | ✅ |
+
+> **26개 래퍼 중 19개 실제 호출 확인**, 7개는 래퍼만 존재 (향후 UI 연동 예정)
+
+#### Firestore 컬렉션 (식약처 관련)
+
+| 컬렉션 | 건수 | 용도 | 출처 |
+|--------|------|------|------|
+| `mfds_common_codes` | 383 | 공통코드 (IM15, IM16, IM17, IM35, IM43 등) | 코드매핑 Excel |
+| `mfds_product_codes` | 8,404 | 품목코드 3단 계층 (대→중→소분류) | 코드매핑 Excel |
+| `mfds_test_items` | 2,940 | 시험항목 코드/명칭/단위 | 코드매핑 Excel |
+| `mfds_units` | 106 | 단위코드 (mg/kg, g/100g 등) | 코드매핑 Excel |
+| `mfds_item_mappings` | 가변 | BFL↔식약처 항목 매핑 | 사용자 설정 |
+| `mfds_cache` | 가변 | API 응답 캐시 (24시간 TTL) | API 자동생성 |
+| `mfdsTemplates` | 2,657 | 식품유형별 시험항목 템플릿 | 코드매핑 XLS |
+| `testResults` | 가변 | 검사결과 데이터 (calcData 포함) | 사용자 입력 |
+
+#### 데이터 흐름도
+
+```
+[접수등록 sampleReceipt.html]
+  ├→ 식약처 품목코드 선택 (mfds_product_codes 3단 드롭다운)
+  ├→ 식품유형 선택 → mfdsTemplates에서 시험항목 자동 로드
+  ├→ BFL↔식약처 항목 매핑 (mfds_item_mappings)
+  └→ Firestore receipts 저장 (mfdsProductCode 포함)
+
+[검사결과 입력 testResultInput.html]
+  ├→ receipts 로드 → 시료별 시험항목 렌더링
+  ├→ 측정값 입력 → MFDS_RULES 자동 적용
+  │   ├→ 유효자리수 (validCphr, precision별 toFixed)
+  │   ├→ 정량한계 (fdqntLimit, 미만시 불검출)
+  │   └→ 표기값 (markValue) 생성
+  ├→ 자동판정 (적합/부적합, maxValue/minValue 기준)
+  ├→ Firestore testResults 저장
+  ├→ [양식] 버튼 → API 0241→0242 체인 → 시험일지 HTML 양식 표시
+  └→ 식약처 전송
+      ├→ Step 1: insertExprDiaryNew (0209) → exprDiarySn 발급
+      └→ Step 2: saveSploreInspctResult (0216) → 결과 전송
+```
 
 ### 포트 사용 현황
 | 포트 | 서비스 | 비고 |
@@ -2517,6 +2665,43 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 ---
 
 ## 변경 이력
+
+### 2026-02-27~28 (식약처 결과입력 구현)
+
+#### 검사결과 입력 (`testResultInput.html`) — 전면 신규 구현
+- **커밋**: `20367e4` ~ `99ff5ce` (8개 커밋)
+- 접수현황에서 접수건 선택 → 시료별 시험항목 테이블 렌더링
+- 측정값 입력 → `MFDS_RULES` 자동 적용 (유효자리수, 정량한계, 표기값)
+- 자동판정: 최대값/최소값 기준 비교 (적합/부적합/검출/불검출)
+- Firestore `testResults` 저장/복원
+- 식약처 전송: 시험일지 등록(0209) + 결과 전송(0216) 2단계
+- 시험일지 양식 뷰어: [양식] 버튼 → API 0241→0242 체인 → HTML 양식 표시
+- **운영 서버 검증**: 납(B10001) 양식 "중금속_납_일지 [개인]" 정상 조회 확인
+
+#### 식약처 결과값 처리 규칙 (`js/mfds_result_rules.js`)
+- **커밋**: `a9e2c7e`
+- 유효자리수(validCphr), 정량한계(fdqntLimit), 표기값(markValue) 자동 처리
+- 판정형식(IM15), 판정용어(IM35), 최대값구분(IM16), 최소값구분(IM17) 코드 매핑
+
+#### 시험일지 API 9개 래퍼 추가 (`js/mfds-api.js`)
+- **커밋**: `5f602cb`
+- 일지 조회(0202,0206,0207), 삭제(0208), 등록(0209), 계산식(0210), 결과전송(0216), 결재(0219,0221)
+
+#### 시험일지 양식 뷰어 (`js/mfds_diary_form.js`)
+- **커밋**: `99ff5ce`
+- API 0241(시험방법) → 0242(양식조회) 체인
+- 사용범위코드 3단계: 개인→부서→기관 우선순위 조회
+- 빈 셀 contenteditable 변환, 편집 HTML 수집 기능
+
+#### UI 개선
+- **커밋**: `75d1724`, `4c01eba`, `74116f1`
+- 사이드바 반응형 개선, 아코디언 섹션 디자인 통일
+- 접수현황 선택 삭제 기능 수정 (`dc12c0c`)
+
+#### 계산식(nomfrmCn) 구현 → Revert
+- **커밋**: `b30c334` → **Revert**: `b4c6218`
+- 인터넷 검색 기반 수식 직접 코딩 → 식약처 데이터 원칙 위반으로 전면 취소
+- **교훈**: 계산식은 반드시 식약처 API(0210)에서 제공하는 데이터만 사용해야 함
 
 ### 2026-02-23
 
