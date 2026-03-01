@@ -490,6 +490,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <table style="width:100%;border-collapse:collapse;font-size:13px">
                             <thead>
                                 <tr style="background:#e3f2fd;border-bottom:2px solid #90caf9">
+                                    <th style="padding:8px 6px;width:30px;text-align:center"><input type="checkbox" id="mfds-std-check-all" onchange="toggleAllMfdsStdChecks(this)" title="전체 선택"></th>
                                     <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1565c0;width:36px">No</th>
                                     <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1565c0">시험항목</th>
                                     <th style="padding:8px 10px;text-align:left;font-weight:600;color:#1565c0;width:180px">기준규격값</th>
@@ -501,19 +502,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                             <tbody id="mfds-std-tbody"></tbody>
                             <tfoot id="mfds-std-tfoot" style="display:none">
                                 <tr style="background:#e3f2fd;border-top:2px solid #90caf9">
-                                    <td colspan="5" style="padding:8px 10px;font-weight:700;color:#1565c0;text-align:right">합계</td>
+                                    <td colspan="6" style="padding:8px 10px;font-weight:700;color:#1565c0;text-align:right">합계</td>
                                     <td id="mfds-std-fee-total" style="padding:8px 10px;font-weight:700;color:#1565c0;text-align:right"></td>
                                 </tr>
                                 <tr style="background:#e3f2fd">
-                                    <td colspan="5" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right">공급가액</td>
+                                    <td colspan="6" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right">공급가액</td>
                                     <td id="mfds-std-fee-supply" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right"></td>
                                 </tr>
                                 <tr style="background:#e3f2fd">
-                                    <td colspan="5" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right">세액 (VAT 10%)</td>
+                                    <td colspan="6" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right">세액 (VAT 10%)</td>
                                     <td id="mfds-std-fee-vat" style="padding:4px 10px;font-size:12px;color:#667085;text-align:right"></td>
                                 </tr>
                             </tfoot>
                         </table>
+                    </div>
+                    <div id="mfds-std-add-bar" style="display:none;margin-top:10px;text-align:center">
+                        <button type="button" onclick="addStdItemsToInspection()" style="padding:8px 24px;background:#1565c0;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">
+                            ↓ 선택 항목을 시험항목에 추가
+                        </button>
+                        <span id="mfds-std-check-count" style="margin-left:10px;font-size:12px;color:#667085"></span>
                     </div>
                 </div>
                 <!-- 시험항목 테이블 -->
@@ -2912,7 +2919,7 @@ async function loadMfdsStandardItems(productCode, productName) {
 
     // 로딩 표시
     section.style.display = 'block';
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#667085">기준규격 로딩중...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#667085">기준규격 로딩중...</td></tr>';
     info.textContent = '선택: ' + productCode + ' — ' + (productName || '');
     summary.textContent = '';
 
@@ -2932,7 +2939,7 @@ async function loadMfdsStandardItems(productCode, productName) {
         });
 
         if (matched.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#999;font-size:13px">이 품목코드에 등록된 기준규격이 없습니다.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#999;font-size:13px">이 품목코드에 등록된 기준규격이 없습니다.</td></tr>';
             summary.textContent = '0건';
             return;
         }
@@ -2972,7 +2979,8 @@ async function loadMfdsStandardItems(productCode, productName) {
                 feeCount++;
             }
 
-            html += '<tr style="border-bottom:1px solid #d4e5f7;">';
+            html += '<tr style="border-bottom:1px solid #d4e5f7;" data-test-code="' + testCode + '" data-test-name="' + testName.replace(/"/g, '&quot;') + '" data-standard="' + stdVal.replace(/"/g, '&quot;') + '" data-unit="' + unit.replace(/"/g, '&quot;') + '" data-fee="' + fee + '" data-min="' + min + '" data-max="' + max + '">';
+            html += '<td style="padding:7px 6px;text-align:center"><input type="checkbox" class="mfds-std-check" value="' + idx + '" onchange="updateMfdsStdCheckCount()"></td>';
             html += '<td style="padding:7px 10px;color:#667085">' + (idx + 1) + '</td>';
             html += '<td style="padding:7px 10px;color:#344054">' + testName;
             if (testCode !== testName) html += ' <span style="color:#999;font-size:11px;">(' + testCode + ')</span>';
@@ -3005,8 +3013,17 @@ async function loadMfdsStandardItems(productCode, productName) {
         window._mfdsFeeTotal = totalFee;
         updateFeeSummary();
 
+        // 시험항목 추가 버튼 바 표시
+        var addBar = document.getElementById('mfds-std-add-bar');
+        if (addBar && unique.length > 0) {
+            addBar.style.display = '';
+            var allCheck = document.getElementById('mfds-std-check-all');
+            if (allCheck) allCheck.checked = false;
+            updateMfdsStdCheckCount();
+        }
+
     } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#e53e3e">로드 실패: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#e53e3e">로드 실패: ' + e.message + '</td></tr>';
         console.error('[기준규격] 로드 오류:', e);
     }
 }
@@ -3018,6 +3035,116 @@ function clearMfdsStandardItems() {
         document.getElementById('mfds-std-tbody').innerHTML = '';
         document.getElementById('mfds-std-summary').textContent = '';
         document.getElementById('mfds-std-info').textContent = '';
+    }
+    var addBar = document.getElementById('mfds-std-add-bar');
+    if (addBar) addBar.style.display = 'none';
+}
+
+// ============================================================================
+// 기준규격 → 시험항목 선택 이동
+// ============================================================================
+
+/** 기준규격 전체 선택/해제 */
+function toggleAllMfdsStdChecks(masterCb) {
+    var checks = document.querySelectorAll('.mfds-std-check');
+    checks.forEach(function(cb) { cb.checked = masterCb.checked; });
+    updateMfdsStdCheckCount();
+}
+
+/** 체크 개수 표시 + 버튼 활성화 */
+function updateMfdsStdCheckCount() {
+    var checks = document.querySelectorAll('.mfds-std-check:checked');
+    var countEl = document.getElementById('mfds-std-check-count');
+    if (countEl) {
+        countEl.textContent = checks.length > 0 ? checks.length + '개 선택됨' : '';
+    }
+}
+
+/** 기준규격에서 선택된 항목을 시험항목 테이블에 추가 */
+function addStdItemsToInspection() {
+    var checks = document.querySelectorAll('.mfds-std-check:checked');
+    if (checks.length === 0) {
+        showToast('⚠️ 추가할 항목을 선택하세요');
+        return;
+    }
+
+    var tbody = document.getElementById('inspection-items-tbody');
+    var section = document.getElementById('inspection-items-section');
+    if (!tbody || !section) return;
+
+    // 시험항목 섹션 표시
+    section.style.display = '';
+
+    // 기존 시험항목코드 중복 체크
+    var existingCodes = new Set();
+    tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
+        existingCodes.add(tr.getAttribute('data-test-code'));
+    });
+
+    var added = 0;
+    var skipped = 0;
+
+    checks.forEach(function(cb) {
+        var row = cb.closest('tr');
+        if (!row) return;
+        var testCode = row.getAttribute('data-test-code') || '';
+        var testName = row.getAttribute('data-test-name') || '';
+        var standard = row.getAttribute('data-standard') || '';
+        var unit = row.getAttribute('data-unit') || '';
+        var fee = parseInt(row.getAttribute('data-fee') || '0');
+
+        // 중복 체크
+        if (existingCodes.has(testCode)) {
+            skipped++;
+            return;
+        }
+
+        var idx = tbody.querySelectorAll('tr[data-item-key]').length;
+        var itemKey = testName + '||';
+
+        var tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.setAttribute('data-item-key', itemKey);
+        tr.setAttribute('data-fee', fee);
+        tr.setAttribute('data-test-code', testCode);
+        tr.setAttribute('data-unit', unit);
+
+        tr.innerHTML =
+            '<td style="padding:7px 10px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionItemCheck()"></td>' +
+            '<td style="padding:7px 10px;text-align:center;color:#667085">' + (idx + 1) + '</td>' +
+            '<td style="padding:7px 10px;color:#344054">' + testName + '</td>' +
+            '<td style="padding:7px 10px;text-align:center;color:#667085;font-size:12px">' + testCode + '</td>' +
+            '<td style="padding:7px 10px;color:#344054;font-size:12px;max-width:180px;word-break:break-all;">' + (standard || '-') + '</td>' +
+            '<td style="padding:7px 10px;text-align:center;color:#667085;font-size:12px">' + (unit || '-') + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;color:' + (fee > 0 ? '#6941C6' : '#ccc') + ';font-weight:' + (fee > 0 ? '600' : '400') + '">' + (fee > 0 ? fee.toLocaleString() + '원' : '-') + '</td>';
+
+        tbody.appendChild(tr);
+        existingCodes.add(testCode);
+        added++;
+    });
+
+    // 빈 행 제거 (안내 메시지 행)
+    var emptyRow = document.getElementById('ref-test-empty-row');
+    if (emptyRow && added > 0) emptyRow.remove();
+
+    // 합계 재계산
+    recalcInspectionTable();
+
+    // 체크 해제
+    document.querySelectorAll('.mfds-std-check').forEach(function(cb) { cb.checked = false; });
+    var allCheck = document.getElementById('mfds-std-check-all');
+    if (allCheck) allCheck.checked = false;
+    updateMfdsStdCheckCount();
+
+    // 결과 알림 + 스크롤
+    if (added > 0) {
+        showToast('✅ ' + added + '개 시험항목 추가' + (skipped > 0 ? ' (' + skipped + '개 중복 건너뜀)' : ''));
+        setTimeout(function() {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        if (typeof saveSampleToArray === 'function') saveSampleToArray();
+    } else if (skipped > 0) {
+        showToast('ℹ️ 이미 추가된 항목입니다 (' + skipped + '개)');
     }
 }
 
