@@ -30909,6 +30909,12 @@ function renderItemGroups() {
       if (!igAccFeeMap.has(key)) igAccFeeMap.set(key, f.수수료 || 0);
     });
 
+    // mfds_test_items 조회용 Map (testItemCode → 영문명, 별칭 등)
+    const mfdsLookup = {};
+    if (_mfdsTestItems && _mfdsTestItems.length) {
+      _mfdsTestItems.forEach(t => { mfdsLookup[t['시험항목코드']] = t; });
+    }
+
     const escAcc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const accordionHtml = Object.entries(typeGroupedAcc).map(([type, typeItems]) => {
       const typeTotalFee = typeItems.reduce((s, it) => s + (igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
@@ -30930,31 +30936,51 @@ function renderItemGroups() {
           </div>
         </div>`;
 
-      const itemsHtml = typeItems.map(item => {
+      // ── 시험항목 테이블 형식 렌더링 ──
+      let itemsHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+      itemsHtml += '<thead><tr style="background:#f8f9fa;border-bottom:2px solid #e0e0e0;">'
+        + '<th style="padding:6px 8px;text-align:left;font-weight:600;width:100px;">시험항목코드</th>'
+        + '<th style="padding:6px 8px;text-align:left;font-weight:600;">한글명</th>'
+        + '<th style="padding:6px 8px;text-align:left;font-weight:600;">영문명</th>'
+        + '<th style="padding:6px 8px;text-align:left;font-weight:600;width:100px;">별칭</th>'
+        + '<th style="padding:6px 8px;text-align:left;font-weight:600;width:60px;">단위</th>'
+        + '<th style="padding:6px 8px;text-align:center;font-weight:600;width:50px;">사용</th>'
+        + '<th style="padding:6px 8px;text-align:center;font-weight:600;width:80px;">BFL매핑</th>'
+        + '<th style="padding:6px 8px;text-align:right;font-weight:600;width:80px;">수수료</th>'
+        + '<th style="padding:6px 8px;text-align:center;font-weight:600;width:90px;">작업</th>'
+        + '</tr></thead><tbody>';
+
+      typeItems.forEach(item => {
         const idx = itemGroupData.indexOf(item);
         const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
         const tCode = item.testItemCode || '';
-        return `
-        <div class="accordion-item" onclick="event.stopPropagation(); openDetailItem('참고용', ${idx})">
-          <div class="item-col item-col-name">${item.항목명}</div>
-          <div class="item-col" style="min-width:90px;font-size:11px;color:#1565c0;font-family:monospace;">${tCode || '<span style="color:#ccc;">-</span>'}</div>
-          <div class="item-col item-col-spec">${item.규격 || '-'}</div>
-          <div class="item-col item-col-unit">
-            ${item.항목단위 ? `<span class="badge badge-success">${item.항목단위}</span>` : '-'}
-          </div>
-          <div class="item-col" style="min-width:80px;">${getMfdsMappingBadge(item.항목명)}</div>
-          <div class="item-col" style="min-width:80px;text-align:right;">
-            <span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span>
-          </div>
-          <div class="item-actions">
-            <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;">🔗</button>
-            <button onclick="event.stopPropagation();openDetailItem('참고용',${idx})" title="수정">✏️</button>
-            <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제">🗑️</button>
-          </div>
-        </div>`;
-      }).join('');
+        const mfds = tCode ? (mfdsLookup[tCode] || {}) : {};
+        const engName = mfds['영문명'] || '';
+        const alias = mfds['별칭'] || '';
+        const isUsed = tCode ? ((mfds['사용여부'] || 'Y') === 'Y') : true;
+        const rowOp = isUsed ? '' : 'opacity:.45;';
 
-      return `<div class="accordion-group-level1">${typeHeader}<div class="accordion-content-level1"><div class="accordion-items">${itemsHtml}</div></div></div>`;
+        itemsHtml += `<tr style="border-bottom:1px solid #f0f0f0;${rowOp}cursor:pointer;"
+            onclick="openDetailItem('참고용', ${idx})"
+            onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
+          <td style="padding:6px 8px;font-family:monospace;font-size:12px;color:#1565c0;">${tCode || '<span style="color:#ccc;">-</span>'}</td>
+          <td style="padding:6px 8px;font-weight:500;">${item.항목명 || ''}</td>
+          <td style="padding:6px 8px;color:#667085;font-size:12px;">${engName}</td>
+          <td style="padding:6px 8px;color:#999;font-size:12px;">${alias}</td>
+          <td style="padding:6px 8px;">${item.항목단위 ? '<span class="badge badge-success">' + item.항목단위 + '</span>' : '-'}</td>
+          <td style="padding:6px 4px;text-align:center;">${tCode ? '<input type="checkbox"' + (isUsed ? ' checked' : '') + ' disabled style="accent-color:#43a047;">' : '-'}</td>
+          <td style="padding:6px 8px;text-align:center;">${getMfdsMappingBadge(item.항목명)}</td>
+          <td style="padding:6px 8px;text-align:right;"><span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span></td>
+          <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
+            <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;border:none;background:none;cursor:pointer;font-size:14px;">🔗</button>
+            <button onclick="event.stopPropagation();openDetailItem('참고용',${idx})" title="수정" style="border:none;background:none;cursor:pointer;font-size:14px;">✏️</button>
+            <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제" style="border:none;background:none;cursor:pointer;font-size:14px;">🗑️</button>
+          </td>
+        </tr>`;
+      });
+      itemsHtml += '</tbody></table>';
+
+      return `<div class="accordion-group-level1">${typeHeader}<div class="accordion-content-level1">${itemsHtml}</div></div>`;
     }).join('');
 
     document.getElementById('item-group-accordion').innerHTML = accordionHtml || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
