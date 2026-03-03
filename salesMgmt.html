@@ -368,6 +368,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
       </div>
 
+      <!-- 인허가 사전 필터 (지도 드릴다운 전 선택) -->
+      <div id="bizLicPreFilter" style="display:none;margin-bottom:12px">
+        <div class="card">
+          <div class="card-bd" style="padding:10px 16px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:13px;font-weight:600;color:#1a2332;margin-right:6px">🏷️ 인허가:</span>
+            <div id="bizLicPreChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- STEP 0: 전국 시도 지도 (Leaflet + VWORLD) -->
       <div id="bizStep0">
         <div style="display:flex;gap:16px;flex-wrap:wrap">
@@ -4618,6 +4628,74 @@ var SIDO_COLORS = ['#1a73e8','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','
 // ── 식약처 전체 데이터 (정적 JSON) ──
 var fssAllData = null;
 var fssLoading = false;
+var _bizPreFilter = '전체'; // 인허가 사전 필터 (전체 = 필터 없음)
+
+// 인허가 사전 필터가 적용된 데이터 반환
+function fssFiltered() {
+  if(!fssAllData) return [];
+  if(_bizPreFilter === '전체') return fssAllData;
+  return fssAllData.filter(function(r) { return (r.biz || '기타') === _bizPreFilter; });
+}
+
+// 인허가 사전 필터 칩 생성 (데이터 로드 후 호출)
+function buildBizPreFilterChips() {
+  if(!fssAllData || !fssAllData.length) return;
+  var counts = {};
+  fssAllData.forEach(function(r) {
+    var biz = r.biz || '기타';
+    if(!biz || biz === '-') biz = '기타';
+    counts[biz] = (counts[biz] || 0) + 1;
+  });
+  var types = Object.keys(counts).sort();
+  var chipBase = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #d0d7de;background:#f6f8fa;color:#24292f;transition:all .15s;';
+  var chipActive = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #1565c0;background:#1565c0;color:#fff;transition:all .15s;font-weight:600;';
+  var html = '<span data-biz="전체" onclick="applyBizPreFilter(\'전체\')" style="' + chipActive + '">전체 <b>' + fssAllData.length.toLocaleString() + '</b></span>';
+  types.forEach(function(biz) {
+    var esc = biz.replace(/'/g, "\\'");
+    html += '<span data-biz="' + biz + '" onclick="applyBizPreFilter(\'' + esc + '\')" style="' + chipBase + '">' + biz + ' <b>' + counts[biz].toLocaleString() + '</b></span>';
+  });
+  document.getElementById('bizLicPreChips').innerHTML = html;
+  document.getElementById('bizLicPreFilter').style.display = 'block';
+}
+
+// 인허가 사전 필터 적용
+function applyBizPreFilter(biz) {
+  _bizPreFilter = biz;
+  // 칩 active 갱신
+  var chipBase = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #d0d7de;background:#f6f8fa;color:#24292f;transition:all .15s;';
+  var chipActive = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #1565c0;background:#1565c0;color:#fff;transition:all .15s;font-weight:600;';
+  document.querySelectorAll('#bizLicPreChips span[data-biz]').forEach(function(c) {
+    c.style.cssText = (c.getAttribute('data-biz') === biz) ? chipActive : chipBase;
+  });
+  // 지도 라벨 건수 갱신
+  updateSidoLabels();
+  // 시군구 라벨 갱신
+  if(sgGeoLayer && bizState.sido) {
+    sgGeoLayer.eachLayer(function(layer) {
+      var name = layer.feature.properties.name || '';
+      var cnt = fssFilterSg(bizState.sido, name).length;
+      layer.unbindTooltip();
+      var label = name + (cnt ? '<br><b style="color:#e53935;font-size:9px">' + cnt.toLocaleString() + '</b>' : '');
+      layer.bindTooltip(label, {permanent:true, direction:'center', className:'sg-label'});
+    });
+  }
+  // 읍면동 라벨 갱신
+  if(dongGeoLayer && bizState.sido && bizState.sigungu) {
+    dongGeoLayer.eachLayer(function(layer) {
+      var name = layer.feature.properties.name || '';
+      var cnt = fssFilterDong(bizState.sido, bizState.sigungu, name).length;
+      layer.unbindTooltip();
+      var label = name + (cnt ? '<br><b style="color:#e53935;font-size:9px">' + cnt.toLocaleString() + '</b>' : '');
+      layer.bindTooltip(label, {permanent:true, direction:'center', className:'sg-label'});
+    });
+  }
+  // bizStep3 결과가 보이면 다시 필터링
+  if(document.getElementById('bizStep3').style.display !== 'none' && _bizLicRows.length) {
+    var filtered = _bizPreFilter === '전체' ? _bizLicRows : _bizLicRows.filter(function(r) { return (r.biz || '기타') === _bizPreFilter; });
+    showFssResults(filtered);
+  }
+  toast('🏷️ ' + biz + ' 필터 적용');
+}
 var SIDO_ADDR = {'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종',
   '경기':'경기도','강원':'강원도','충북':'충청북도','충남':'충청남도','전북':'전라북도','전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주'};
 
@@ -4653,6 +4731,7 @@ function loadFssData() {
     fssLoading = false;
     console.log('[FSS] Firestore에서 ' + fssAllData.length + '건 로드');
     toast('📊 식약처 ' + fssAllData.length.toLocaleString() + '건 로드 완료 (Firestore)');
+    buildBizPreFilterChips();
     updateSidoLabels();
   }).catch(function(e) {
     fssLoading = false;
@@ -4664,9 +4743,9 @@ function loadFssData() {
 function fssFilterSido(sido) {
   if(!fssAllData) return [];
   var key = SIDO_ADDR[sido] || sido;
-  return fssAllData.filter(function(r) {
+  var src = fssFiltered(); // 인허가 사전 필터 적용
+  return src.filter(function(r) {
     if (r.sido) {
-      // 정확 매칭 우선, 부분 매칭 폴백 (서울↔서울특별시, 강원도↔강원특별자치도 등)
       return r.sido === key || r.sido === sido ||
              r.sido.indexOf(sido) >= 0 || (key !== sido && r.sido.indexOf(key) >= 0);
     }
@@ -5157,11 +5236,12 @@ async function doBizQuickSearch() {
   document.getElementById('bizStep2').style.display = 'none';
   document.getElementById('bizStep3').style.display = 'block';
 
-  // 1단계: Firestore 로컬 검색 (즉시, CORS 무관)
+  // 1단계: Firestore 로컬 검색 (즉시, CORS 무관) — 인허가 사전 필터 적용
   var localResults = [];
   if(fssAllData && fssAllData.length) {
     var qLower = q.toLowerCase();
-    localResults = fssAllData.filter(function(r) {
+    var src = fssFiltered(); // 인허가 사전 필터 적용
+    localResults = src.filter(function(r) {
       return (r.nm && r.nm.toLowerCase().indexOf(qLower) >= 0) ||
              (r.lic && r.lic.toLowerCase().indexOf(qLower) >= 0) ||
              (r.ceo && r.ceo.toLowerCase().indexOf(qLower) >= 0) ||
