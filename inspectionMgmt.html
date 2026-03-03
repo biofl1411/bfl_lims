@@ -29903,7 +29903,7 @@ async function loadInspectionConfig() {
     var igSnap = await db.collection('itemGroups').get();
     if (igSnap.size > 0) {
       itemGroupData = [];
-      igSnap.docs.forEach(function(d) { itemGroupData.push(d.data()); });
+      igSnap.docs.forEach(function(d) { var obj = d.data(); obj._docId = d.id; itemGroupData.push(obj); });
       _inspectionDataLoaded.itemGroup = true;
     }
 
@@ -30962,7 +30962,12 @@ function renderItemGroups() {
         const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
         const tCode = item.testItemCode || '';
         const mfds = tCode ? (mfdsLookup[tCode] || {}) : {};
-        const engName = mfds['영문명'] || '';
+        const mfdsKor = (mfds['한글명'] || '').trim();
+        const dispName = mfdsKor || item.항목명 || '';
+        let engName = (mfds['영문명'] || '').trim();
+        // 한글명=영문명 중복이면 영문명 비움; 항목명이 영문이면 영문명으로 표시
+        if (dispName && engName && dispName.toLowerCase() === engName.toLowerCase()) engName = '';
+        if (!engName && mfdsKor && item.항목명 && item.항목명 !== mfdsKor) engName = item.항목명;
         const alias = mfds['별칭'] || '';
         const isUsed = isTestItemActive(tCode);
         const rowOp = isUsed ? '' : 'opacity:.45;';
@@ -30971,7 +30976,7 @@ function renderItemGroups() {
             onclick="openDetailItem('참고용', ${idx})"
             onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
           <td style="padding:6px 8px;font-family:monospace;font-size:12px;color:#1565c0;">${tCode || '<span style="color:#ccc;">-</span>'}</td>
-          <td style="padding:6px 8px;font-weight:500;">${item.항목명 || ''}</td>
+          <td style="padding:6px 8px;font-weight:500;">${dispName}</td>
           <td style="padding:6px 8px;color:#667085;font-size:12px;">${engName}</td>
           <td style="padding:6px 8px;color:#999;font-size:12px;">${alias}</td>
           <td style="padding:6px 8px;">${item.항목단위 ? '<span class="badge badge-success">' + item.항목단위 + '</span>' : '-'}</td>
@@ -32733,16 +32738,56 @@ async function migrateEngKorNames() {
     }
   }
 
+  // ── itemGroups 항목명도 mfds_test_items 한글명으로 동기화 ──
+  var igUpdated = 0;
+  if (itemGroupData && itemGroupData.length && _mfdsTestItems && _mfdsTestItems.length) {
+    var mfdsMap = {};
+    _mfdsTestItems.forEach(function(t) { mfdsMap[t['시험항목코드']] = t; });
+    var igBatchArr = []; var igBatch = db.batch(); var igBatchCount = 0;
+    itemGroupData.forEach(function(ig, idx) {
+      var tc = ig.testItemCode;
+      if (!tc) return;
+      var mfds = mfdsMap[tc];
+      if (!mfds) return;
+      var mfdsKor = (mfds['한글명'] || '').trim();
+      if (!mfdsKor) return;
+      var curName = (ig.항목명 || '').trim();
+      if (curName === mfdsKor) return; // 이미 동일
+      // 영문인 항목명만 변환 (한글이면 건드리지 않음)
+      var isLatin = /^[A-Za-z0-9\s\-\(\),\.\/\+\'\[\]&;:%]+$/.test(curName);
+      if (!isLatin && curName) return;
+      ig.항목명 = mfdsKor; // 메모리 업데이트
+      igUpdated++;
+      if (ig._docId) {
+        igBatch.update(db.collection('itemGroups').doc(ig._docId), { '항목명': mfdsKor });
+        igBatchCount++;
+        if (igBatchCount >= 400) {
+          igBatchArr.push(igBatch);
+          igBatch = db.batch();
+          igBatchCount = 0;
+        }
+      }
+    });
+    if (igBatchCount > 0) igBatchArr.push(igBatch);
+    for (var ib = 0; ib < igBatchArr.length; ib++) {
+      try { await igBatchArr[ib].commit(); } catch(e) {
+        showToast('항목그룹 배치 실패: ' + e.message, 'error');
+      }
+    }
+  }
+
   // UI 갱신
   if (_mfdsTestFiltered) {
     _mfdsTestFiltered = _mfdsTestItems;
     applyMfdsTestFilters();
   }
   renderMfdsTestTable();
+  if (currentTab === 6) renderItemGroups();
 
-  var msg = '한글명 변환 완료: ' + updated + '건 업데이트';
+  var msg = '한글명 변환 완료: 시험항목 ' + updated + '건';
+  if (igUpdated > 0) msg += ' / 항목그룹 ' + igUpdated + '건';
   if (notFound.length > 0) msg += ' / ' + notFound.length + '건 매핑 없음';
-  showToast(msg, updated > 0 ? 'success' : 'info');
+  showToast(msg, (updated + igUpdated) > 0 ? 'success' : 'info');
   if (notFound.length > 0) console.log('매핑 없는 항목:', notFound);
 }
 
