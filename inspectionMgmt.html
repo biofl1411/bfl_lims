@@ -29859,7 +29859,19 @@ async function loadInspectionConfig() {
     else await saveFieldsToFirestore();
 
     var pd = await fsGetSettings('inspectionPurposes');
-    if (pd && pd.purposes && pd.purposes.length > 0) P = pd.purposes;
+    if (pd && pd.purposes && pd.purposes.length > 0) {
+      P = pd.purposes;
+      // itemSource 기본값 보정 (Firestore에 없는 경우)
+      var srcDefaults = {'자가품질위탁검사용':'mfdsTemplates','참고용(기준규격외)':'mfdsTestItems'};
+      var igNames = ['방사능(HPGe)','Allergen(ELISA)','Halal food(RT_PCR)','Vegan food(RT-PCR)','물질검사','Allergen(RT-PCR)','연구용역','잔류농약(참고용)','항생물질(인증용)','항생물질(참고용)','참고용(소비기한설정)'];
+      P.forEach(function(p) {
+        if (!p.itemSource) {
+          if (srcDefaults[p.n]) p.itemSource = srcDefaults[p.n];
+          else if (igNames.indexOf(p.n) >= 0) p.itemSource = 'itemGroups';
+          else p.itemSource = 'foodTypesMapping';
+        }
+      });
+    }
     else await savePurposesToFirestore();
 
     var ftSnap = await db.collection('foodTypes').get();
