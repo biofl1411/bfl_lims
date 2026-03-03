@@ -30816,6 +30816,11 @@ async function renderItemGroupsFromMfds(mapping) {
       if (korName && engName && korName.toLowerCase() === engName.toLowerCase()) {
         engName = '';
       }
+      // 역방향 검색: 한글명 → 영문 (ENG_TO_KOR_MAP 역맵)
+      if (!engName && korName) {
+        var _revEng = getKorToEngMap()[korName.toLowerCase()];
+        if (_revEng) engName = _revEng;
+      }
       html += '<tr style="border-bottom:1px solid #f0f0f0;' + rowOp + '" onmouseover="this.style.background=\'#f8f9ff\'" onmouseout="this.style.background=\'#fff\'">'
         + '<td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#1565c0;">' + code + '</td>'
         + '<td style="padding:8px 12px;font-weight:500;">' + korName + '</td>'
@@ -31001,6 +31006,11 @@ function renderItemGroups() {
         // 한글명=영문명 중복이면 영문명 비움; 항목명이 영문이면 영문명으로 표시
         if (dispName && engName && dispName.toLowerCase() === engName.toLowerCase()) engName = '';
         if (!engName && mfdsKor && item.항목명 && item.항목명 !== mfdsKor) engName = item.항목명;
+        // 역방향 검색: 한글 dispName → 영문 (ENG_TO_KOR_MAP 역맵)
+        if (!engName && dispName) {
+          const revEng = getKorToEngMap()[dispName.toLowerCase()];
+          if (revEng) engName = revEng;
+        }
         const alias = mfds['별칭'] || '';
         const isUsed = tCode ? isTestItemActive(tCode) : ((item.사용여부 || 'Y') === 'Y');
         const rowOp = isUsed ? '' : 'opacity:.45;';
@@ -32779,6 +32789,19 @@ var ENG_TO_KOR_MAP = {
   'Trans fat':'트랜스지방','Saturated fat':'포화지방','Cholesterol':'콜레스테롤',
   'Caffeine':'카페인','Taurine':'타우린'
 };
+
+// ═══ 역방향 맵: 한국어 → 영문 (자동 생성) ═══
+var _KOR_TO_ENG_MAP = null;
+function getKorToEngMap() {
+  if (_KOR_TO_ENG_MAP) return _KOR_TO_ENG_MAP;
+  _KOR_TO_ENG_MAP = {};
+  if (typeof ENG_TO_KOR_MAP !== 'undefined') {
+    for (var k in ENG_TO_KOR_MAP) {
+      _KOR_TO_ENG_MAP[ENG_TO_KOR_MAP[k].toLowerCase()] = k;
+    }
+  }
+  return _KOR_TO_ENG_MAP;
+}
 
 /** 영문 한글명 → 한국어로 일괄 변환 (mfds_test_items) */
 async function migrateEngKorNames() {
