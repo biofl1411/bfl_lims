@@ -5456,24 +5456,92 @@ function bizReg(name, addr) {
 var _bdmMaterialsCache = {};
 var _bdmCurrentLicNo = '';
 var _bdmProducts = []; // 현재 품목 목록 (원재료 연결용)
+var _bdmLoaded = false; // 데이터 로드 여부
 
-async function bizDetail(licNo, bizName) {
-  _bdmCurrentLicNo = licNo;
+// 모달 열기 — 인허가 드롭다운만 표시, 데이터 로드 안함
+function bizDetail(licNo, bizName) {
+  _bdmCurrentLicNo = '';
   _bdmProducts = [];
-  // 모달 열기
+  _bdmLoaded = false;
+
   var modal = document.getElementById('bizDetailModal');
   modal.style.display = 'flex';
   document.getElementById('bdmBizName').textContent = bizName || '-';
   document.getElementById('bdmLicNo').textContent = licNo || '-';
-  // 탭 초기화 (품목 탭 활성)
+
+  // 같은 업체명의 모든 인허가를 _bizLicRows에서 수집
+  var licOptions = [];
+  var seen = {};
+  _bizLicRows.forEach(function(r) {
+    var rNm = r.nm || r.BSSH_NM || '';
+    var rLic = r.lic || r.LCNS_NO || '';
+    var rBiz = r.biz || r.INDUTY_NM || '기타';
+    if(rNm === bizName && rLic && !seen[rLic]) {
+      seen[rLic] = true;
+      licOptions.push({ licNo: rLic, bizType: rBiz });
+    }
+  });
+  // 클릭한 인허가가 목록에 없으면 추가
+  if(licNo && !seen[licNo]) {
+    licOptions.unshift({ licNo: licNo, bizType: '-' });
+  }
+
+  // 드롭다운 생성
+  var sel = document.getElementById('bdmLicSelect');
+  sel.innerHTML = '';
+  if(licOptions.length === 0) {
+    sel.innerHTML = '<option value="' + licNo + '">' + licNo + '</option>';
+  } else {
+    licOptions.forEach(function(opt) {
+      var optEl = document.createElement('option');
+      optEl.value = opt.licNo;
+      optEl.textContent = opt.bizType + ' — ' + opt.licNo;
+      if(opt.licNo === licNo) optEl.selected = true;
+      sel.appendChild(optEl);
+    });
+  }
+
+  // 선택영역 보이기 + 데이터 탭 초기화
+  document.getElementById('bdmSelectArea').style.display = 'flex';
+  bizDetailTab('products');
+  bdmResetPanels();
+}
+
+// 패널 초기 상태로 리셋 (조회 전)
+function bdmResetPanels() {
+  var msg = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#8892a4;font-size:13px">인허가를 선택하고 <b>조회</b> 버튼을 눌러주세요.</td></tr>';
+  document.getElementById('bdmProductsBody').innerHTML = msg;
+  document.getElementById('bdmChangesBody').innerHTML = msg.replace('colspan="6"','colspan="4"');
+  document.getElementById('bdmMaterialsBody').innerHTML = msg.replace('colspan="6"','colspan="4"');
+  document.getElementById('bdmProductCount').textContent = '-';
+  document.getElementById('bdmChangeCount').textContent = '-';
+  document.getElementById('bdmMaterialCount').textContent = '-';
+  document.getElementById('bdmMaterialTitle').style.display = 'none';
+  document.getElementById('bdmMaterialBackBtn').style.display = 'none';
+}
+
+// "조회" 버튼 클릭 — 선택된 인허가로 데이터 로드
+async function bdmLoadData() {
+  var sel = document.getElementById('bdmLicSelect');
+  var licNo = sel.value;
+  if(!licNo) { toast('인허가번호를 선택해주세요.'); return; }
+
+  _bdmCurrentLicNo = licNo;
+  _bdmProducts = [];
+  _bdmLoaded = true;
+  document.getElementById('bdmLicNo').textContent = licNo;
+
+  // 탭 초기화
   bizDetailTab('products');
   // 로딩 표시
   document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#8892a4"><div class="spinner" style="display:inline-block;width:20px;height:20px;border:2px solid #e2e6ed;border-top:2px solid #1565c0;border-radius:50%;animation:spin .8s linear infinite"></div><br>품목 조회 중...</td></tr>';
   document.getElementById('bdmChangesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">변경이력 조회 대기 중...</td></tr>';
-  document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">품목 탭에서 제품을 클릭하면 원재료를 조회합니다.</td></tr>';
+  document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">원재료 조회 대기 중...</td></tr>';
   document.getElementById('bdmProductCount').textContent = '-';
   document.getElementById('bdmChangeCount').textContent = '-';
   document.getElementById('bdmMaterialCount').textContent = '-';
+  document.getElementById('bdmMaterialTitle').style.display = 'none';
+  document.getElementById('bdmMaterialBackBtn').style.display = 'none';
 
   // 1) fss_products 조회
   try {
@@ -5486,7 +5554,6 @@ async function bizDetail(licNo, bizName) {
     if(products.length === 0) {
       document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#e65100;font-size:12px">📋 품목 데이터 수집예정<br><span style="font-size:11px;color:#8892a4">최근 등록 업체는 품목 데이터가 아직 수집되지 않았을 수 있습니다.</span></td></tr>';
     } else {
-      // 보고일자 내림차순 정렬
       products.sort(function(a,b){ return (b.prms_dt||'').localeCompare(a.prms_dt||''); });
       var html = '';
       products.forEach(function(p, i){
@@ -5540,7 +5607,7 @@ async function bizDetail(licNo, bizName) {
     document.getElementById('bdmChangeCount').textContent = '-';
   }
 
-  // 3) fss_materials 전체 조회 (업체 기준) — 백그라운드
+  // 3) fss_materials 전체 조회 (업체 기준)
   _bdmMaterialsCache[licNo] = {};
   try {
     var matSnap = await db.collection('fss_materials').where('lcns_no','==',licNo).get();
@@ -5556,7 +5623,6 @@ async function bizDetail(licNo, bizName) {
     if(matTotal === 0) {
       document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#e65100;font-size:12px">📋 원재료 데이터 수집예정<br><span style="font-size:11px;color:#8892a4">원재료(C002/C003 API) 데이터가 아직 수집되지 않았을 수 있습니다.</span></td></tr>';
     } else {
-      // 기본: 전체 원재료를 제품별로 그룹핑하여 표시
       bdmRenderAllMaterials(licNo);
     }
     console.log('[bizDetail] fss_materials:', matTotal, '건 조회 (lcns_no=' + licNo + ')');
@@ -5923,14 +5989,22 @@ function renderCollectStatus(data) {
 <div id="bizDetailModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;width:90%;max-width:800px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
     <!-- 헤더 -->
-    <div style="padding:20px 24px 16px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <div style="padding:20px 24px 12px;border-bottom:none;display:flex;align-items:center;gap:12px;flex-shrink:0">
       <div style="width:40px;height:40px;background:linear-gradient(135deg,#1565c0,#42a5f5);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;flex-shrink:0">🏭</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:16px;font-weight:700;color:#1a2332" id="bdmBizName">-</div>
         <div style="font-size:12px;color:#8892a4;font-family:monospace">인허가번호: <span id="bdmLicNo">-</span></div>
       </div>
-      <button onclick="var ln=document.getElementById('bdmLicNo').textContent;var nm=document.getElementById('bdmBizName').textContent;bizReg(nm,'')" style="padding:6px 14px;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">📋 고객 등록</button>
+      <button onclick="var nm=document.getElementById('bdmBizName').textContent;bizReg(nm,'')" style="padding:6px 14px;background:#2e7d32;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">📋 고객 등록</button>
       <button onclick="bizDetailClose()" style="width:32px;height:32px;background:#f1f3f5;border:none;border-radius:8px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#5f6b7a">✕</button>
+    </div>
+    <!-- 인허가 선택 + 조회 버튼 -->
+    <div id="bdmSelectArea" style="padding:0 24px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid #e2e6ed">
+      <label style="font-size:12px;font-weight:600;color:#5f6b7a;white-space:nowrap">인허가 선택</label>
+      <select id="bdmLicSelect" style="flex:1;padding:7px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:12px;font-family:monospace;color:#1a2332;background:#fff;min-width:0">
+        <option value="">선택 후 조회</option>
+      </select>
+      <button onclick="bdmLoadData()" style="padding:7px 18px;background:#1565c0;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap">🔍 조회</button>
     </div>
     <!-- 탭 -->
     <div style="padding:0 24px;border-bottom:1px solid #e2e6ed;display:flex;gap:0;flex-shrink:0">
