@@ -33405,8 +33405,34 @@ function openDetail(idx){
 }
 
 function updateItemSourceUI() {
+  var purposeName = (document.getElementById('d-name').value || '').trim();
+  var isJaga = (purposeName === '자가품질위탁검사용');
+
+  // 자가품질위탁검사용: 전체 5개 옵션 / 나머지: 시험항목 + 항목그룹만
+  var allKeys = ['mfdsTemplates', 'itemGroups', 'mfdsTestItems', 'refFeeMapping', 'foodTypesMapping'];
+  var allowedKeys = isJaga ? allKeys : ['mfdsTestItems', 'itemGroups'];
+
+  allKeys.forEach(function(k) {
+    var opt = document.getElementById('src-opt-' + k);
+    if (!opt) return;
+    if (allowedKeys.indexOf(k) >= 0) {
+      opt.style.display = '';
+      opt.style.opacity = '1';
+      opt.style.pointerEvents = '';
+    } else {
+      opt.style.display = 'none';
+    }
+  });
+
+  // 현재 선택된 값이 허용 범위 밖이면 기본값으로 변경
   var srcRadio = document.querySelector('input[name="d-item-source"]:checked');
   var val = srcRadio ? srcRadio.value : '';
+  if (val && allowedKeys.indexOf(val) < 0) {
+    var defaultKey = isJaga ? 'mfdsTemplates' : 'itemGroups';
+    var defaultRadio = document.querySelector('input[name="d-item-source"][value="' + defaultKey + '"]');
+    if (defaultRadio) { defaultRadio.checked = true; val = defaultKey; }
+  }
+
   var descEl = document.getElementById('d-item-source-desc');
   var labels = {
     mfdsTemplates: '📋 접수등록 시 ① 검사관리 > 식품유형 탭(646건) + ② 기준규격 > 공통기준규격(33,663건) 두 곳에서 로드됩니다.',
@@ -33422,7 +33448,7 @@ function updateItemSourceUI() {
     descEl.style.display = 'none';
   }
   // 선택된 옵션 하이라이트
-  ['mfdsTemplates', 'itemGroups', 'mfdsTestItems', 'refFeeMapping', 'foodTypesMapping'].forEach(function(k) {
+  allKeys.forEach(function(k) {
     var opt = document.getElementById('src-opt-' + k);
     if (opt) opt.style.borderColor = (k === val) ? 'var(--pri)' : 'var(--bdr)';
   });
