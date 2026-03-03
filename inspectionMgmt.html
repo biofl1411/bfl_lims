@@ -679,6 +679,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
             <th style="padding:10px 12px;text-align:left;font-weight:600;">한글명</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;">영문명</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;width:100px;">별칭</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;width:80px;">단위</th>
             <th style="padding:10px 12px;text-align:center;font-weight:600;width:50px;">사용</th>
             <th style="padding:10px 12px;text-align:center;font-weight:600;width:120px;">BFL 매핑</th>
             <th style="padding:10px 12px;text-align:center;font-weight:600;width:80px;">작업</th>
@@ -1054,7 +1055,9 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
               <th style="padding:8px 10px;text-align:left;width:30px;cursor:pointer;user-select:none;" onclick="refFeeSort('no')">No <span id="ref-sort-no" style="font-size:10px;"></span></th>
               <th style="padding:8px 10px;text-align:left;width:60px;cursor:pointer;user-select:none;" onclick="refFeeSort('category')">분류 <span id="ref-sort-category" style="font-size:10px;"></span></th>
               <th style="padding:8px 10px;text-align:left;width:100px;cursor:pointer;user-select:none;" onclick="refFeeSort('code')">시험항목코드 <span id="ref-sort-code" style="font-size:10px;"></span></th>
-              <th style="padding:8px 10px;text-align:left;cursor:pointer;user-select:none;" onclick="refFeeSort('name')">시험항목명 <span id="ref-sort-name" style="font-size:10px;"></span></th>
+              <th style="padding:8px 10px;text-align:left;cursor:pointer;user-select:none;" onclick="refFeeSort('name')">한글명 <span id="ref-sort-name" style="font-size:10px;"></span></th>
+              <th style="padding:8px 10px;text-align:left;width:140px">영문명</th>
+              <th style="padding:8px 10px;text-align:left;width:70px">단위</th>
               <th style="padding:8px 6px;text-align:center;width:36px;color:var(--sub);font-size:11px;">활성</th>
               <th style="padding:8px 10px;text-align:right;width:120px;cursor:pointer;user-select:none;" onclick="refFeeSort('fee')">수수료(원) <span id="ref-sort-fee" style="font-size:10px;"></span></th>
               <th style="padding:8px 10px;text-align:left;width:150px">비고</th>
@@ -1063,7 +1066,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <tbody id="ref-fee-tbody"></tbody>
           <tfoot>
             <tr style="background:var(--bg);border-top:2px solid var(--bdr);">
-              <td colspan="6" style="padding:8px 10px;font-weight:700;text-align:right;"><span id="ref-fee-set-count" style="font-size:12px;font-weight:400;color:var(--sub);margin-right:12px;"></span>합계</td>
+              <td colspan="8" style="padding:8px 10px;font-weight:700;text-align:right;"><span id="ref-fee-set-count" style="font-size:12px;font-weight:400;color:var(--sub);margin-right:12px;"></span>합계</td>
               <td id="ref-fee-total" style="padding:8px 10px;font-weight:700;text-align:right;color:var(--primary);"></td>
               <td></td>
             </tr>
@@ -31514,6 +31517,13 @@ function getRefSubCategoryName(code) {
   return '';
 }
 
+// 참고용 맵핑에서 단위 조회
+function getRefFeeUnit(code) {
+  if (!_refFeeData) return '';
+  var item = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code.toUpperCase(); });
+  return item ? (item.unit || '') : '';
+}
+
 function getRefCodeCategoryBadge(code) {
   var cat = getRefCodeCategory(code);
   var subName = getRefSubCategoryName(code);
@@ -31597,7 +31607,7 @@ async function loadAndRenderRefFee() {
   if (!_refFeeData) {
     // 로딩 표시
     var tbody = document.getElementById('ref-fee-tbody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--sub);">데이터 로딩중...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="padding:40px;text-align:center;color:var(--sub);">데이터 로딩중...</td></tr>';
 
     // 1순위: Firestore settings/refFeeMapping
     try {
@@ -31624,6 +31634,8 @@ async function loadAndRenderRefFee() {
         return {
           testItemCode: code,
           itemName: ti['한글명'] || '',
+          engName: ti['영문명'] || '',
+          unit: '',
           fee: 0,
           note: ''
         };
@@ -31894,10 +31906,29 @@ function renderRefFeeTable() {
     html += '<td style="padding:7px 10px;color:var(--sub)">' + (idx + 1) + '</td>';
     html += '<td style="padding:7px 10px;">' + getRefCodeCategoryBadge(code) + '</td>';
     html += '<td style="padding:7px 10px;font-family:monospace;color:var(--primary);font-weight:600">' + code + '</td>';
+    // 시험항목 데이터에서 한글명/영문명 조회 (통일 기준)
+    var testItemRef = _mfdsTestItems ? _mfdsTestItems.find(function(t) { return t['시험항목코드'] === code; }) : null;
+    var korName = testItemRef ? (testItemRef['한글명'] || '') : (m.itemName || '');
+    var engName = testItemRef ? (testItemRef['영문명'] || '') : (m.engName || '');
+    var unitVal = m.unit || '';
     html += '<td style="padding:7px 4px;color:var(--txt)">';
-    html += '<input type="text" value="' + (m.itemName || '').replace(/"/g, '&quot;') + '" data-code="' + code + '" ';
+    html += '<input type="text" value="' + korName.replace(/"/g, '&quot;') + '" data-code="' + code + '" ';
     html += 'onchange="updateRefItemName(this)" ';
     html += 'style="width:100%;padding:4px 8px;border:1px solid transparent;border-radius:4px;font-size:13px;background:transparent;box-sizing:border-box;" ';
+    html += 'onfocus="this.style.borderColor=\'var(--bdr)\';this.style.background=\'#fff\'" ';
+    html += 'onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\'">';
+    html += '</td>';
+    html += '<td style="padding:7px 4px;color:#667085;font-size:12px">';
+    html += '<input type="text" value="' + engName.replace(/"/g, '&quot;') + '" data-code="' + code + '" ';
+    html += 'onchange="updateRefEngName(this)" ';
+    html += 'style="width:100%;padding:4px 8px;border:1px solid transparent;border-radius:4px;font-size:12px;background:transparent;box-sizing:border-box;color:#667085;" ';
+    html += 'onfocus="this.style.borderColor=\'var(--bdr)\';this.style.background=\'#fff\'" ';
+    html += 'onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\'">';
+    html += '</td>';
+    html += '<td style="padding:7px 4px">';
+    html += '<input type="text" value="' + unitVal.replace(/"/g, '&quot;') + '" data-code="' + code + '" ';
+    html += 'onchange="updateRefUnit(this)" ';
+    html += 'style="width:60px;padding:4px 8px;border:1px solid transparent;border-radius:4px;font-size:12px;background:transparent;box-sizing:border-box;color:#667085;" ';
     html += 'onfocus="this.style.borderColor=\'var(--bdr)\';this.style.background=\'#fff\'" ';
     html += 'onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\'">';
     html += '</td>';
@@ -31916,7 +31947,7 @@ function renderRefFeeTable() {
   });
 
   if (hasMore) {
-    html += '<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--sub);font-size:13px;background:#fffbe6;">';
+    html += '<tr><td colspan="10" style="padding:14px;text-align:center;color:var(--sub);font-size:13px;background:#fffbe6;">';
     html += '⚠ ' + filtered.length + '건 중 ' + RENDER_LIMIT + '건만 표시중 — 검색 또는 분류 필터를 사용하세요';
     html += '</td></tr>';
   }
@@ -31967,6 +31998,22 @@ function updateRefItemName(input) {
   if (_refFeeData) {
     var item = _refFeeData.find(function(m) { return m.testItemCode === code; });
     if (item) item.itemName = name;
+  }
+}
+function updateRefEngName(input) {
+  var code = input.getAttribute('data-code');
+  var val = (input.value || '').trim();
+  if (_refFeeData) {
+    var item = _refFeeData.find(function(m) { return m.testItemCode === code; });
+    if (item) item.engName = val;
+  }
+}
+function updateRefUnit(input) {
+  var code = input.getAttribute('data-code');
+  var val = (input.value || '').trim();
+  if (_refFeeData) {
+    var item = _refFeeData.find(function(m) { return m.testItemCode === code; });
+    if (item) item.unit = val;
   }
 }
 
@@ -33610,7 +33657,7 @@ function renderMfdsTestItems() {
     return;
   }
   var tbody = document.getElementById('mfds-test-item-tbody');
-  tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:#999;">⏳ 식약처 시험항목 로드 중...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" style="padding:40px;text-align:center;color:#999;">⏳ 식약처 시험항목 로드 중...</td></tr>';
 
   Promise.all([
     MFDS_CODES.loadTestItems(),
@@ -33628,7 +33675,7 @@ function renderMfdsTestItems() {
     applyMfdsTestFilters();
     renderMfdsTestTable();
   }).catch(function(err) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:#dc3545;">⚠️ 로드 실패: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:40px;text-align:center;color:#dc3545;">⚠️ 로드 실패: ' + err.message + '</td></tr>';
   });
 }
 
@@ -33954,7 +34001,7 @@ function renderMfdsTestTable() {
     (total !== _mfdsTestItems.length ? ' (전체 ' + _mfdsTestItems.length.toLocaleString() + '건)' : '');
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:#999;">검색 결과가 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:40px;text-align:center;color:#999;">검색 결과가 없습니다</td></tr>';
     document.getElementById('mfds-test-item-pagination').innerHTML = '';
     return;
   }
@@ -33978,6 +34025,7 @@ function renderMfdsTestTable() {
       + '<td style="padding:8px 12px;font-weight:500;">' + name + '</td>'
       + '<td style="padding:8px 12px;color:#667085;font-size:12px;">' + eng + '</td>'
       + '<td style="padding:8px 12px;color:#999;font-size:12px;">' + alias + '</td>'
+      + '<td style="padding:8px 12px;color:#667085;font-size:12px;">' + (getRefFeeUnit(code) || '-') + '</td>'
       + '<td style="padding:8px 6px;text-align:center"><input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-code="' + code + '" onchange="toggleMfdsTestItemActive(this)" style="accent-color:#43a047;"></td>'
       + '<td style="padding:8px 12px;text-align:center;">' + mappingHtml + '</td>'
       + '<td style="padding:8px 12px;text-align:center;">'
