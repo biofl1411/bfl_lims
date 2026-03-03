@@ -5,7 +5,8 @@
 ### Bash 명령어 (모든 Bash 명령어 무조건 허용 — 확인 없이 즉시 실행)
 - 모든 터미널 명령어 실행 허용 (mkdir, rm, cp, mv, ls 등)
 - npm, node, python, pip 등 패키지 관리자 실행
-- git 전체 명령어 (add, commit, push, pull, fetch, branch, merge, rebase, stash, log, diff, status, clone, checkout, reset, tag)
+- git 전체 명령어 (init, remote, add, commit, push, pull, fetch, branch, merge, rebase, stash, log, diff, status, clone, checkout, reset, tag, config)
+- **git 복구/초기화**: `git init && git remote add && git fetch && git reset` 등 체이닝 포함 허용
 - 스크립트 실행 (bash, sh, python, powershell)
 - 파일 검색 및 시스템 명령어 (find, grep, rg, cat, head, tail, wc, sort, awk, sed)
 - **SSH 전체 허용**: `ssh biofl@192.168.0.96` (새 서버, SSH 키 인증), `ssh -p 2222 biofl@14.7.14.31` (구 서버)
