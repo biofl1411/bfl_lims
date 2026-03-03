@@ -665,6 +665,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       </div>
       <div class="toolbar-right">
         <span id="mfds-test-item-count" style="font-size:13px;color:var(--sub);margin-right:8px;"></span>
+        <button class="btn btn-outline" onclick="migrateEngKorNames()" style="margin-right:4px;color:#e65100;border-color:#e65100;" title="영문 한글명을 한국어로 일괄 변환">🔄 한글명 변환</button>
         <button class="btn btn-outline" onclick="openMfdsTestAddModal()" style="margin-right:4px;">➕ 항목 추가</button>
         <button class="btn btn-outline" onclick="exportMfdsMappings()">📥 매핑 엑셀</button>
       </div>
@@ -32547,6 +32548,196 @@ function refFeeBulkSetActive(active) {
   }).catch(function(e) { showToast('업데이트 실패: ' + e.message, 'error'); });
   _refFeeSelected = {};
   renderRefFeeTable();
+}
+
+// ═══ 영문 한글명 → 한국어 한글명 일괄 변환 ═══
+var ENG_TO_KOR_MAP = {
+  // ── E: 잔류농약 (Pesticides) ──
+  'Acephate':'아세페이트','Acetamiprid':'아세타미프리드','Acrinathrin':'아크리나트린','Alachlor':'알라클로르',
+  'Aldicarb':'알디카브','Aldrin':'알드린','Ametoctradin':'아메톡트라딘','Amitraz':'아미트라즈',
+  'Atrazine':'아트라진','Azinphos-methyl':'아진포스메틸','Azoxystrobin':'아족시스트로빈',
+  'Benalaxyl':'베나락실','Bendiocarb':'벤디오카브','Benomyl':'베노밀','Bifenazate':'비페나제이트',
+  'Bifenthrin':'비펜스린','Bitertanol':'비테르타놀','Boscalid':'보스칼리드','Bromacil':'브로마실',
+  'Bromopropylate':'브로모프로필레이트','Bupirimate':'부피리메이트','Buprofezin':'부프로페진',
+  'Captan':'캡탄','Carbaryl':'카바릴','Carbendazim':'카벤다짐','Carbofuran':'카보퓨란','Carboxin':'카복신',
+  'Chlordane':'클로르단','Chlorfenapyr':'클로르페나피르','Chlorfluazuron':'클로르플루아주론',
+  'Chlorothalonil':'클로로탈로닐','Chlorpyrifos':'클로르피리포스','Chlorpyrifos-methyl':'클로르피리포스메틸',
+  'Clothianidin':'클로티아니딘','Cyfluthrin':'사이플루트린','Cypermethrin':'사이퍼메트린',
+  'Cyproconazole':'사이프로코나졸','Cyprodinil':'사이프로디닐','Deltamethrin':'델타메트린',
+  'Diazinon':'다이아지논','Dichlorvos':'디클로르보스','Difenoconazole':'디페노코나졸',
+  'Dimethoate':'디메토에이트','Dimethomorph':'디메토모르프','Dinotefuran':'디노테퓨란',
+  'Dithiocarbamate':'디티오카바메이트','Edifenphos':'에디펜포스','Emamectin benzoate':'에마멕틴벤조에이트',
+  'Endosulfan':'엔도설판','Endrin':'엔드린','Epoxiconazole':'에폭시코나졸','Ethion':'에치온',
+  'Ethoprophos':'에토프로포스','Etofenprox':'에토펜프록스','Famoxadone':'파목사돈',
+  'Fenamidone':'페나미돈','Fenarimol':'페나리몰','Fenbuconazole':'펜부코나졸',
+  'Fenitrothion':'페니트로티온','Fenobucarb':'페노부카브','Fenoxycarb':'페녹시카브',
+  'Fenpropathrin':'펜프로파트린','Fenpyroximate':'펜피록시메이트','Fenthion':'펜치온',
+  'Fenvalerate':'펜발러레이트','Fipronil':'피프로닐','Fluazinam':'플루아지남',
+  'Fludioxonil':'플루디옥소닐','Flufenoxuron':'플루페녹수론','Fluopyram':'플루오피람',
+  'Flusilazole':'플루실라졸','Flutolanil':'플루톨라닐','Flutriafol':'플루트리아폴',
+  'Folpet':'폴펫','Fosthiazate':'포스치아제이트','Haloxyfop':'할록시포프',
+  'Heptachlor':'헵타클로르','Hexaconazole':'헥사코나졸','Hexythiazox':'헥시티아족스',
+  'Imazalil':'이마자릴','Imidacloprid':'이미다클로프리드','Indoxacarb':'인독사카브',
+  'Iprodione':'이프로디온','Isoprothiolane':'이소프로티올란','Isoprocarb':'이소프로카브',
+  'Kresoxim-methyl':'크레속심메틸','Lambda-cyhalothrin':'람다사이할로트린','Lufenuron':'루페뉴론',
+  'Malathion':'말라티온','Mancozeb':'만코제브','Mandipropamid':'만디프로파미드',
+  'Metalaxyl':'메타락실','Methamidophos':'메타미도포스','Methidathion':'메치다치온',
+  'Methomyl':'메소밀','Methoxyfenozide':'메톡시페노자이드','Mevinphos':'메빈포스',
+  'Monocrotophos':'모노크로토포스','Myclobutanil':'마이클로부타닐','Novaluron':'노발루론',
+  'Omethoate':'오메토에이트','Oxadiazon':'옥사디아존','Oxamyl':'옥사밀',
+  'Paclobutrazol':'파클로부트라졸','Parathion':'파라치온','Parathion-methyl':'파라치온메틸',
+  'Penconazole':'펜코나졸','Pencycuron':'펜사이큐론','Pendimethalin':'펜디메탈린',
+  'Permethrin':'퍼메트린','Phenthoate':'펜토에이트','Phorate':'포레이트',
+  'Phosalone':'포살론','Phosmet':'포스멧','Phosphamidon':'포스파미돈',
+  'Pirimicarb':'피리미카브','Pirimiphos-methyl':'피리미포스메틸','Prochloraz':'프로클로라즈',
+  'Procymidone':'프로사이미돈','Profenofos':'프로페노포스','Propamocarb':'프로파모카브',
+  'Propiconazole':'프로피코나졸','Propoxur':'프로폭서','Pyraclostrobin':'피라클로스트로빈',
+  'Pyrazophos':'피라조포스','Pyrethrins':'피레트린','Pyridaben':'피리다벤',
+  'Pyridalyl':'피리달릴','Pyriproxyfen':'피리프록시펜','Quinalphos':'퀴날포스',
+  'Quinoxyfen':'퀴녹시펜','Spinetoram':'스피네토람','Spinosad':'스피노사드',
+  'Spirodiclofen':'스피로디클로펜','Spiromesifen':'스피로메시펜','Spiroxamine':'스피록사민',
+  'Tebuconazole':'테부코나졸','Tebufenozide':'테부페노자이드','Tebufenpyrad':'테부펜피라드',
+  'Teflubenzuron':'테플루벤주론','Tefluthrin':'테플루트린','Terbufos':'터부포스',
+  'Tetradifon':'테트라디폰','Thiacloprid':'티아클로프리드','Thiamethoxam':'티아메톡삼',
+  'Thiobencarb':'티오벤카브','Thiophanate-methyl':'티오파네이트메틸',
+  'Tolclofos-methyl':'톨클로포스메틸','Tolylfluanid':'톨릴플루아니드',
+  'Triadimefon':'트리아디메폰','Triadimenol':'트리아디메놀','Triazophos':'트리아조포스',
+  'Trichlorfon':'트리클로르폰','Trifloxystrobin':'트리플록시스트로빈',
+  'Triflumizole':'트리플루미졸','Triflumuron':'트리플루무론','Triforine':'트리포린',
+  'Vinclozolin':'빈클로졸린','Flubendiamide':'플루벤디아마이드','Chromafenozide':'크로마페노자이드',
+  'Cyflufenamid':'사이플루페나미드','Fenazaquin':'페나자퀸','Fluxapyroxad':'플룩사피록사드',
+  'Imibenconazole':'이미벤코나졸','Isoxathion':'이소자티온','Metaflumizone':'메타플루미존',
+  'Metaldehyde':'메타알데하이드','Metconazole':'메트코나졸','Metribuzin':'메트리부진',
+  'Oxadiargyl':'옥사디아르길','Oxpoconazole':'옥스포코나졸','Phenamiphos':'페나미포스',
+  'Phoxim':'폭심','Piperonyl butoxide':'피페로닐부톡사이드','Probenazole':'프로베나졸',
+  'Propargite':'프로파르자이트','Pymetrozine':'피메트로진','Pyribenzoxim':'피리벤족심',
+  'Sethoxydim':'세톡시딤','Silafluofen':'실라플루오펜','Simazine':'시마진',
+  'Sulfotep':'설포텝','Tecnazene':'테크나젠','Terbuthylazine':'터부틸라진',
+  'Thiabendazole':'티아벤다졸','Thiram':'티람','Tricyclazole':'트리사이클라졸',
+
+  // ── F: 항생물질·동물용의약품 (Antibiotics/Veterinary drugs) ──
+  'Albendazole':'알벤다졸','Amoxicillin':'아목시실린','Ampicillin':'암피실린',
+  'Amprolium':'암프로리움','Avilamycin':'아빌라마이신','Bacitracin':'바시트라신',
+  'Benzylpenicillin':'벤질페니실린','Carbadox':'카바독스','Cefadroxil':'세파드록실',
+  'Cefazolin':'세파졸린','Ceftiofur':'세프티오퍼','Cephalexin':'세팔렉신',
+  'Chloramphenicol':'클로람페니콜','Chlortetracycline':'클로르테트라사이클린',
+  'Ciprofloxacin':'시프로플록사신','Clenbuterol':'클렌부테롤','Clindamycin':'클린다마이신',
+  'Closantel':'클로산텔','Cloxacillin':'클로사실린','Colistin':'콜리스틴',
+  'Danofloxacin':'다노플록사신','Dapsone':'답손','Decoquinate':'데코퀴네이트',
+  'Dexamethasone':'덱사메타손','Diclazuril':'디클라주릴','Diclofenac':'디클로페낙',
+  'Diethylcarbamazine':'디에틸카르바마진','Diethylstilbestrol':'디에틸스틸베스트롤',
+  'Diminazene':'디미나진','Dimetridazole':'디메트리다졸','Dinitolmide':'디니톨마이드',
+  'Doxycycline':'독시사이클린','Emamectin':'에마멕틴','Enrofloxacin':'엔로플록사신',
+  'Eprinomectin':'에프리노멕틴','Erythromycin':'에리스로마이신','Estradiol':'에스트라디올',
+  'Ethopabate':'에토파베이트','Febantel':'페반텔','Fenbendazole':'펜벤다졸',
+  'Florfenicol':'플로르페니콜','Flubendazole':'플루벤다졸','Flumequine':'플루메퀸',
+  'Flunixin':'플루닉신','Furazolidone':'퓨라졸리돈','Gentamicin':'젠타마이신',
+  'Halquinol':'할퀴놀','Imidocarb':'이미도카브','Ipronidazole':'이프로니다졸',
+  'Isometamidium':'이소메타미디움','Ivermectin':'이버멕틴','Josamycin':'조사마이신',
+  'Kanamycin':'카나마이신','Ketoprofen':'케토프로펜','Lasalocid':'라살로시드',
+  'Levamisole':'레바미졸','Lincomycin':'린코마이신','Malachite green':'말라카이트그린',
+  'Marbofloxacin':'마보플록사신','Mebendazole':'메벤다졸','Melengestrol':'멜렌게스트롤',
+  'Meloxicam':'멜록시캄','Metoclopramide':'메토클로프라미드','Metronidazole':'메트로니다졸',
+  'Monensin':'모넨신','Morantel':'모란텔','Moxidectin':'목시덱틴',
+  'Nalidixic acid':'날리딕산','Narasin':'나라신','Neomycin':'네오마이신',
+  'Nicarbazin':'니카바진','Nitrofurantoin':'니트로퓨란토인','Nitrofurazone':'니트로퓨라존',
+  'Nitroxynil':'니트록시닐','Norfloxacin':'노르플록사신','Novobiocin':'노보비오신',
+  'Nystatin':'니스타틴','Olaquindox':'올라퀸독스','Orbifloxacin':'올비플록사신',
+  'Oxacillin':'옥사실린','Oxfendazole':'옥스펜다졸','Oxolinic acid':'옥소린산',
+  'Oxytetracycline':'옥시테트라사이클린','Penicillin G':'페니실린G',
+  'Phenylbutazone':'페닐부타존','Piperazine':'피페라진','Pirlimycin':'피를리마이신',
+  'Prednisolone':'프레드니솔론','Progesterone':'프로게스테론','Pyrantel':'피란텔',
+  'Ractopamine':'락토파민','Rifaximin':'리팍시민','Ronidazole':'로니다졸',
+  'Roxarsone':'록사르손','Roxithromycin':'록시트로마이신','Salinomycin':'살리노마이신',
+  'Sarafloxacin':'사라플록사신','Semicarbazide':'세미카바자이드','Spectinomycin':'스펙티노마이신',
+  'Spiramycin':'스피라마이신','Streptomycin':'스트렙토마이신',
+  'Sulfachlorpyridazine':'설파클로르피리다진','Sulfaclozine':'설파클로진',
+  'Sulfadiazine':'설파디아진','Sulfadimethoxine':'설파디메톡신','Sulfadimidine':'설파디미딘',
+  'Sulfadoxine':'설파독신','Sulfamerazine':'설파메라진','Sulfamethazine':'설파메타진',
+  'Sulfamethizole':'설파메티졸','Sulfamethoxazole':'설파메톡사졸',
+  'Sulfamethoxypyridazine':'설파메톡시피리다진','Sulfamonomethoxine':'설파모노메톡신',
+  'Sulfanilamide':'설파닐아마이드','Sulfapyridine':'설파피리딘',
+  'Sulfaquinoxaline':'설파퀴녹살린','Sulfathiazole':'설파티아졸','Sulfisoxazole':'설피속사졸',
+  'Testosterone':'테스토스테론','Tetracycline':'테트라사이클린','Thiabendazole':'티아벤다졸',
+  'Thiamphenicol':'티암페니콜','Tiamulin':'티아뮬린','Tilmicosin':'틸미코신',
+  'Toltrazuril':'톨트라주릴','Trenbolone':'트렌볼론','Trimethoprim':'트리메토프림',
+  'Tulathromycin':'튤라트로마이신','Tylosin':'타일로신','Valnemulin':'발네뮬린',
+  'Virginiamycin':'버지니아마이신','Xylazine':'자일라진','Yohimbine':'요힘빈','Zeranol':'제라놀',
+  'Nafcillin':'나프실린','Dicloxacillin':'디클로사실린','Vancomycin':'반코마이신',
+  'Rifampicin':'리팜피신','Nitrofuran':'니트로퓨란','Sulfonamide':'설폰아마이드',
+  'Penicillin':'페니실린','Ofloxacin':'오플록사신','Levofloxacin':'레보플록사신',
+  'Cefuroxime':'세프록심','Minocycline':'미노사이클린','Azithromycin':'아지스로마이신',
+  'Clarithromycin':'클래리스로마이신','Naproxen':'나프록센','Ibuprofen':'이부프로펜'
+};
+
+/** 영문 한글명 → 한국어로 일괄 변환 (mfds_test_items) */
+async function migrateEngKorNames() {
+  if (!_mfdsTestItems || !_mfdsTestItems.length) {
+    showToast('시험항목 데이터를 먼저 로드하세요', 'warning');
+    return;
+  }
+  var updated = 0, skipped = 0, notFound = [];
+  var db = firebase.firestore();
+  var batchArr = []; var currentBatch = db.batch(); var batchCount = 0;
+
+  _mfdsTestItems.forEach(function(item) {
+    var code = item['시험항목코드'] || '';
+    var curName = (item['한글명'] || '').trim();
+    if (!curName) return;
+    // 영문만 포함된 한글명인지 체크
+    var isLatin = /^[A-Za-z0-9\s\-\(\),\.\/\+\'\[\]&;:%]+$/.test(curName);
+    if (!isLatin) { skipped++; return; }
+
+    // 매핑 검색 (대소문자 무시)
+    var korName = null;
+    var keys = Object.keys(ENG_TO_KOR_MAP);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i].toLowerCase() === curName.toLowerCase()) {
+        korName = ENG_TO_KOR_MAP[keys[i]];
+        break;
+      }
+    }
+    if (!korName) { notFound.push(curName); return; }
+
+    // 메모리 업데이트
+    var engName = (item['영문명'] || '').trim();
+    if (!engName || engName.toLowerCase() === curName.toLowerCase()) {
+      item['영문명'] = curName; // 기존 영문 한글명 → 영문명으로
+    }
+    item['한글명'] = korName;
+
+    // Firestore 배치 업데이트
+    var docRef = db.collection('mfds_test_items').doc(code);
+    currentBatch.update(docRef, { '한글명': korName, '영문명': item['영문명'] });
+    batchCount++;
+    updated++;
+
+    if (batchCount >= 400) {
+      batchArr.push(currentBatch);
+      currentBatch = db.batch();
+      batchCount = 0;
+    }
+  });
+  if (batchCount > 0) batchArr.push(currentBatch);
+
+  // 배치 커밋
+  for (var b = 0; b < batchArr.length; b++) {
+    try { await batchArr[b].commit(); } catch(e) {
+      showToast('배치 ' + (b+1) + ' 실패: ' + e.message, 'error');
+    }
+  }
+
+  // UI 갱신
+  if (_mfdsTestFiltered) {
+    _mfdsTestFiltered = _mfdsTestItems;
+    applyMfdsTestFilters();
+  }
+  renderMfdsTestTable();
+
+  var msg = '한글명 변환 완료: ' + updated + '건 업데이트';
+  if (notFound.length > 0) msg += ' / ' + notFound.length + '건 매핑 없음';
+  showToast(msg, updated > 0 ? 'success' : 'info');
+  if (notFound.length > 0) console.log('매핑 없는 항목:', notFound);
 }
 
 // ── 코드 추가 모달 ──
