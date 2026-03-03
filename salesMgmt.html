@@ -368,12 +368,25 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
       </div>
 
-      <!-- 인허가 사전 필터 (지도 드릴다운 전 선택) -->
-      <div id="bizLicPreFilter" style="display:none;margin-bottom:12px">
+      <!-- 인허가 분야 선택 (드롭다운 + 조회 버튼) -->
+      <div id="bizLicPreFilter" style="margin-bottom:12px">
         <div class="card">
-          <div class="card-bd" style="padding:10px 16px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <span style="font-size:13px;font-weight:600;color:#1a2332;margin-right:6px">🏷️ 인허가:</span>
-            <div id="bizLicPreChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+          <div class="card-bd" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:600;color:#1a2332;white-space:nowrap">🏷️ 인허가 분야</span>
+            <select id="bizLicPreSelect" style="flex:1;min-width:200px;max-width:360px;padding:8px 12px;border:1px solid #d0d7de;border-radius:8px;font-size:13px;color:#1a2332;background:#fff">
+              <option value="전체">전체 (모든 인허가)</option>
+              <option value="식품제조가공업">식품제조가공업</option>
+              <option value="즉석판매제조가공업">즉석판매제조가공업</option>
+              <option value="건강기능식품전문제조업">건강기능식품전문제조업</option>
+              <option value="축산물가공업-유가공업">축산물가공업 (유가공)</option>
+              <option value="축산물가공업-식육가공업">축산물가공업 (식육가공)</option>
+              <option value="식육포장처리업">식육포장처리업</option>
+              <option value="식육즉석판매가공업">식육즉석판매가공업</option>
+              <option value="식품소분업">식품소분업</option>
+              <option value="수입식품등 수입판매업">수입식품등 수입판매업</option>
+            </select>
+            <button onclick="bizLicPreSearch()" style="padding:8px 20px;background:#1565c0;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;white-space:nowrap">🔍 조회</button>
+            <span id="bizLicPreCount" style="font-size:12px;color:#8892a4"></span>
           </div>
         </div>
       </div>
@@ -4630,43 +4643,25 @@ var fssAllData = null;
 var fssLoading = false;
 var _bizPreFilter = '전체'; // 인허가 사전 필터 (전체 = 필터 없음)
 
-// 인허가 사전 필터가 적용된 데이터 반환
+// 인허가 사전 필터가 적용된 데이터 반환 (드롭다운 기반이므로 전체 반환)
 function fssFiltered() {
   if(!fssAllData) return [];
-  if(_bizPreFilter === '전체') return fssAllData;
-  return fssAllData.filter(function(r) { return (r.biz || '기타') === _bizPreFilter; });
+  return fssAllData;
 }
 
-// 인허가 사전 필터 칩 생성 (데이터 로드 후 호출)
-function buildBizPreFilterChips() {
-  if(!fssAllData || !fssAllData.length) return;
-  var counts = {};
-  fssAllData.forEach(function(r) {
-    var biz = r.biz || '기타';
-    if(!biz || biz === '-') biz = '기타';
-    counts[biz] = (counts[biz] || 0) + 1;
-  });
-  var types = Object.keys(counts).sort();
-  var chipBase = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #d0d7de;background:#f6f8fa;color:#24292f;transition:all .15s;';
-  var chipActive = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #1565c0;background:#1565c0;color:#fff;transition:all .15s;font-weight:600;';
-  var html = '<span data-biz="전체" onclick="applyBizPreFilter(\'전체\')" style="' + chipActive + '">전체 <b>' + fssAllData.length.toLocaleString() + '</b></span>';
-  types.forEach(function(biz) {
-    var esc = biz.replace(/'/g, "\\'");
-    html += '<span data-biz="' + biz + '" onclick="applyBizPreFilter(\'' + esc + '\')" style="' + chipBase + '">' + biz + ' <b>' + counts[biz].toLocaleString() + '</b></span>';
-  });
-  document.getElementById('bizLicPreChips').innerHTML = html;
-  document.getElementById('bizLicPreFilter').style.display = 'block';
+// 드롭다운 인허가 분야 선택 → 조회
+function bizLicPreSearch() {
+  var sel = document.getElementById('bizLicPreSelect');
+  var biz = sel.value;
+  _bizPreFilter = biz;
+  fssAllData = null;
+  fssLoading = false;
+  loadFssData(biz);
 }
 
-// 인허가 사전 필터 적용
+// 인허가 사전 필터 적용 (지도 라벨 갱신)
 function applyBizPreFilter(biz) {
   _bizPreFilter = biz;
-  // 칩 active 갱신
-  var chipBase = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #d0d7de;background:#f6f8fa;color:#24292f;transition:all .15s;';
-  var chipActive = 'display:inline-block;padding:5px 12px;font-size:12px;border-radius:20px;cursor:pointer;border:1px solid #1565c0;background:#1565c0;color:#fff;transition:all .15s;font-weight:600;';
-  document.querySelectorAll('#bizLicPreChips span[data-biz]').forEach(function(c) {
-    c.style.cssText = (c.getAttribute('data-biz') === biz) ? chipActive : chipBase;
-  });
   // 지도 라벨 건수 갱신
   updateSidoLabels();
   // 시군구 라벨 갱신
@@ -4699,19 +4694,28 @@ function applyBizPreFilter(biz) {
 var SIDO_ADDR = {'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종',
   '경기':'경기도','강원':'강원도','충북':'충청북도','충남':'충청남도','전북':'전라북도','전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주'};
 
-function loadFssData() {
-  if(fssAllData || fssLoading) return;
+function loadFssData(bizFilter) {
+  if(fssLoading) return;
   fssLoading = true;
+  var filterLabel = bizFilter || '전체';
 
   // Firestore 준비 대기
   if (typeof isFirebaseReady === 'function' && !isFirebaseReady()) {
-    window.addEventListener('firebase-ready', function() { fssLoading = false; loadFssData(); }, { once: true });
+    window.addEventListener('firebase-ready', function() { fssLoading = false; loadFssData(bizFilter); }, { once: true });
     console.log('[FSS] Firebase 연결 대기 중...');
     return;
   }
 
-  // Firestore fss_businesses 컬렉션에서 로드
-  db.collection('fss_businesses').get().then(function(snap) {
+  // 로딩 표시
+  document.getElementById('bizLicPreCount').innerHTML = '<span style="color:#fb8c00">⏳ 조회 중...</span>';
+
+  // Firestore 쿼리: 분야 필터 적용
+  var query = db.collection('fss_businesses');
+  if(bizFilter && bizFilter !== '전체') {
+    query = query.where('induty_nm','==', bizFilter);
+  }
+
+  query.get().then(function(snap) {
     fssAllData = [];
     snap.forEach(function(doc) {
       var d = doc.data();
@@ -4729,13 +4733,15 @@ function loadFssData() {
       });
     });
     fssLoading = false;
-    console.log('[FSS] Firestore에서 ' + fssAllData.length + '건 로드');
-    toast('📊 식약처 ' + fssAllData.length.toLocaleString() + '건 로드 완료 (Firestore)');
-    buildBizPreFilterChips();
+    console.log('[FSS] Firestore에서 ' + fssAllData.length + '건 로드 (' + filterLabel + ')');
+    var cntText = '✅ ' + filterLabel + ' <b>' + fssAllData.length.toLocaleString() + '</b>건';
+    document.getElementById('bizLicPreCount').innerHTML = cntText;
+    toast('📊 ' + filterLabel + ' ' + fssAllData.length.toLocaleString() + '건 조회 완료');
     updateSidoLabels();
   }).catch(function(e) {
     fssLoading = false;
     console.error('[FSS] Firestore 로드 실패:', e);
+    document.getElementById('bizLicPreCount').innerHTML = '<span style="color:#e53935">❌ 조회 실패</span>';
     toast('⚠️ 식약처 데이터 로드 실패: ' + e.message);
   });
 }
@@ -4795,8 +4801,7 @@ function initSidoMap() {
   sidoMap = L.map('koreaMap', {zoomControl:true, attributionControl:false}).setView([36.0, 127.8], 7);
   // 타일 레이어
   applyMapTile();
-  // 식약처 전체 데이터 로드
-  loadFssData();
+  // 식약처 데이터는 인허가 분야 선택 후 "조회" 클릭 시 로드
   // 시도 경계 GeoJSON 로드
   fetch(SIDO_GEO_URL).then(function(r){return r.json()}).then(function(geo){
     sidoGeoLayer = L.geoJSON(geo, {
