@@ -33457,48 +33457,37 @@ function updateItemSourceUI() {
     if (opt) opt.style.borderColor = (k === val) ? 'var(--pri)' : 'var(--bdr)';
   });
 
-  // 항목그룹 세부 칩 렌더
-  renderItemGroupSourceChips(purposeName, val === 'itemGroups');
+  // 항목그룹 세부 칩 렌더 (항상 표시)
+  renderItemGroupSourceChips(purposeName);
 }
 
-/** 항목그룹 세부 칩: 검사목적별 검체유형 + 항목수 표시 */
-function renderItemGroupSourceChips(purposeName, isSelected) {
+/** 항목그룹 세부 칩: 등록된 검사목적 카테고리 전체 표시 */
+function renderItemGroupSourceChips(purposeName) {
   var container = document.getElementById('ig-source-chips');
   if (!container) return;
 
-  // 항목그룹이 선택되었고 데이터가 있을 때만 표시
-  if (!isSelected || !itemGroupData || !itemGroupData.length) {
+  if (!itemGroupData || !itemGroupData.length) {
     container.style.display = 'none';
-    container.innerHTML = '';
     return;
   }
 
-  // 현재 검사목적과 일치하는 항목 찾기
-  var matched = itemGroupData.filter(function(d) { return d.검사목적 === purposeName; });
+  // 검사목적별 항목수 집계
+  var purposeCount = {};
+  itemGroupData.forEach(function(d) {
+    var p = d.검사목적 || '기타';
+    purposeCount[p] = (purposeCount[p] || 0) + 1;
+  });
 
-  if (matched.length > 0) {
-    // 해당 검사목적의 검체유형별 항목수
-    var typeCount = {};
-    matched.forEach(function(d) {
-      var t = d.검체유형 || '기타';
-      typeCount[t] = (typeCount[t] || 0) + 1;
-    });
-    var html = Object.entries(typeCount).sort(function(a, b) { return b[1] - a[1]; }).map(function(e) {
-      return '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;">' + e[0] + ' <b>' + e[1] + '</b></span>';
-    }).join('');
-    container.innerHTML = '<span style="font-size:11px;color:#2e7d32;font-weight:600;">✅ ' + matched.length + '건 매칭</span> ' + html;
-  } else {
-    // 일치하는 항목 없음 → 전체 목록 보여주기
-    var purposeCount = {};
-    itemGroupData.forEach(function(d) {
-      var p = d.검사목적 || '기타';
-      purposeCount[p] = (purposeCount[p] || 0) + 1;
-    });
-    var html = Object.entries(purposeCount).sort(function(a, b) { return b[1] - a[1]; }).map(function(e) {
-      return '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;">' + e[0] + ' (' + e[1] + ')</span>';
-    }).join('');
-    container.innerHTML = '<span style="font-size:11px;color:#e65100;font-weight:600;">⚠️ "' + purposeName + '" 미등록</span><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">' + html + '</div>';
-  }
+  var sorted = Object.entries(purposeCount).sort(function(a, b) { return b[1] - a[1]; });
+  var html = sorted.map(function(e) {
+    var isCurrent = (e[0] === purposeName);
+    var bg = isCurrent ? '#1565c0' : '#f0f4f8';
+    var color = isCurrent ? '#fff' : '#555';
+    var fw = isCurrent ? '700' : '400';
+    return '<span style="background:' + bg + ';color:' + color + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:' + fw + ';white-space:nowrap;">' + e[0] + ' (' + e[1] + ')</span>';
+  }).join('');
+
+  container.innerHTML = html;
   container.style.display = 'flex';
   container.style.flexWrap = 'wrap';
   container.style.gap = '4px';
