@@ -2639,26 +2639,32 @@ async function loadMfdsTemplates() {
 // ============================================================================
 // 공통기준규격 품목명 캐시 (738건)
 // ============================================================================
-var _cmnStdProductNames = null; // [{name:'쌀', code:'A0100100000000'}, ...]
+// 공통기준규격 시험항목 목록 캐시 [{code:'C20008', name:'이물', stdVal:'음성', unit:'', fee:0}, ...]
+var _cmnStdTestItems = null;
 
-async function loadCmnStdProductNames() {
-    if (_cmnStdProductNames) return _cmnStdProductNames;
+async function loadCmnStdTestItems() {
+    if (_cmnStdTestItems) return _cmnStdTestItems;
     var cmnData = await MFDS_CODES.loadCommonStandards();
-    var prodMap = await MFDS_CODES.getProductNameMap();
-    // 공통기준규격에 존재하는 unique 품목코드 추출
-    var codeSet = {};
+    var testNameMap = await MFDS_CODES.getTestItemNameMap();
+    var unitMap = await MFDS_CODES.getUnitNameMap();
+    // 시험항목코드 기준 unique (기준규격값 포함)
+    var seen = {};
     cmnData.forEach(function(s) {
-        var c = s['품목코드'] || '';
-        if (c && !codeSet[c]) codeSet[c] = true;
+        if (s['사용여부'] !== 'Y') return;
+        var code = s['시험항목코드'] || '';
+        if (!code || seen[code]) return;
+        seen[code] = {
+            code: code,
+            name: (testNameMap && testNameMap[code]) || code,
+            stdVal: s['기준규격값'] || s['기준규격값설명'] || '',
+            unitCode: s['단위코드'] || '',
+            unit: (unitMap && unitMap[s['단위코드']]) || s['단위코드'] || ''
+        };
     });
-    _cmnStdProductNames = [];
-    Object.keys(codeSet).forEach(function(code) {
-        var name = (prodMap && prodMap[code]) || code;
-        _cmnStdProductNames.push({ name: name, code: code });
-    });
-    _cmnStdProductNames.sort(function(a, b) { return a.name.localeCompare(b.name); });
-    console.log('[공통기준규격] 품목명 캐시:', _cmnStdProductNames.length + '건');
-    return _cmnStdProductNames;
+    _cmnStdTestItems = Object.values(seen);
+    _cmnStdTestItems.sort(function(a, b) { return a.name.localeCompare(b.name); });
+    console.log('[공통기준규격] 시험항목 캐시:', _cmnStdTestItems.length + '건');
+    return _cmnStdTestItems;
 }
 
 // ============================================================================
@@ -2684,65 +2690,74 @@ async function searchFoodType(query) {
     const list = document.getElementById('food-type-list');
 
     if (isLims) {
-        // ★ 자가품질위탁검사용: 식품유형 + 공통기준규격 품목 통합 검색
+        // ★ 자가품질위탁검사용: 식품유형 + 공통기준규격 시험항목 통합 검색
         var templates = await loadMfdsTemplates();
-        var cmnProducts = await loadCmnStdProductNames();
+        var cmnItems = await loadCmnStdTestItems();
         var q = (query || '').trim().toLowerCase();
+
+        if (!q) {
+            // 빈 검색: 식품유형만 표시 (공통규격은 검색어 필요)
+            var allTmpls = [];
+            templates.forEach(function(t) {
+                if (t.templateName) allTmpls.push(t.templateName);
+            });
+            allTmpls.sort();
+            var html = '<div style="padding:6px 12px;font-size:11px;color:#1565c0;font-weight:700;background:#e3f2fd;border-bottom:1px solid #bbdefb">📋 식품유형 (' + allTmpls.length + ')</div>';
+            allTmpls.slice(0, 50).forEach(function(name) {
+                html += '<div class="autocomplete-item" onclick="selectFoodType(\'' + name.replace(/'/g, "\\'") + '\')">' + name + '</div>';
+            });
+            html += '<div style="padding:8px 12px;font-size:11px;color:#e65100;background:#fff3e0;border-top:1px solid #ffe0b2">📦 공통기준규격 항목은 <b>검색어를 입력</b>하면 표시됩니다</div>';
+            list.innerHTML = html;
+            list.classList.add('active');
+            return;
+        }
 
         // 1) 식품유형 (mfdsTemplates) 매칭
         var tmplResults = [];
         templates.forEach(function(t) {
             if (!t.templateName) return;
-            if (!q || t.templateName.toLowerCase().indexOf(q) >= 0) {
-                tmplResults.push({ name: t.templateName, type: 'tmpl' });
+            if (t.templateName.toLowerCase().indexOf(q) >= 0) {
+                tmplResults.push(t.templateName);
             }
         });
 
-        // 2) 공통기준규격 품목 매칭
+        // 2) 공통기준규격 시험항목명 매칭
         var cmnResults = [];
-        cmnProducts.forEach(function(p) {
-            if (!q || p.name.toLowerCase().indexOf(q) >= 0 || p.code.toLowerCase().indexOf(q) >= 0) {
-                cmnResults.push({ name: p.name, code: p.code, type: 'cmn' });
+        cmnItems.forEach(function(item) {
+            if (item.name.toLowerCase().indexOf(q) >= 0 || item.code.toLowerCase().indexOf(q) >= 0) {
+                cmnResults.push(item);
             }
         });
 
-        // 합치기: 식품유형 먼저, 공통규격 뒤에
-        var combined = [];
-        if (tmplResults.length > 0) combined = combined.concat(tmplResults.slice(0, 50));
-        if (cmnResults.length > 0) combined = combined.concat(cmnResults.slice(0, 50));
-
-        if (combined.length === 0) {
+        if (tmplResults.length === 0 && cmnResults.length === 0) {
             list.innerHTML = '<div style="padding:12px;color:#8892a4;font-size:12px;text-align:center">검색 결과 없음</div>';
             list.classList.add('active');
             return;
         }
 
         var html = '';
+        var regex = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+
         // 식품유형 그룹
         if (tmplResults.length > 0) {
             html += '<div style="padding:6px 12px;font-size:11px;color:#1565c0;font-weight:700;background:#e3f2fd;border-bottom:1px solid #bbdefb">📋 식품유형 (' + tmplResults.length + ')</div>';
-            tmplResults.slice(0, 50).forEach(function(r) {
-                var display = r.name;
-                if (q) {
-                    var regex = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-                    display = r.name.replace(regex, '<mark>$1</mark>');
-                }
-                html += '<div class="autocomplete-item" onclick="selectFoodType(\'' + r.name.replace(/'/g, "\\'") + '\')">' + display + '</div>';
+            tmplResults.slice(0, 30).forEach(function(name) {
+                html += '<div class="autocomplete-item" onclick="selectFoodType(\'' + name.replace(/'/g, "\\'") + '\')">' + name.replace(regex, '<mark>$1</mark>') + '</div>';
             });
         }
-        // 공통기준규격 그룹
+        // 공통기준규격 시험항목 그룹
         if (cmnResults.length > 0) {
-            html += '<div style="padding:6px 12px;font-size:11px;color:#e65100;font-weight:700;background:#fff3e0;border-bottom:1px solid #ffe0b2">📦 공통기준규격 (' + cmnResults.length + ')</div>';
-            cmnResults.slice(0, 50).forEach(function(r) {
-                var display = r.name;
-                if (q) {
-                    var regex = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-                    display = r.name.replace(regex, '<mark>$1</mark>');
-                }
-                html += '<div class="autocomplete-item" onclick="selectCmnStdProduct(\'' + r.code.replace(/'/g, "\\'") + '\',\'' + r.name.replace(/'/g, "\\'") + '\')" style="display:flex;justify-content:space-between;align-items:center">'
-                    + '<span>' + display + '</span>'
-                    + '<span style="font-size:10px;color:#999;font-family:monospace">' + r.code + '</span>'
-                    + '</div>';
+            html += '<div style="padding:6px 12px;font-size:11px;color:#e65100;font-weight:700;background:#fff3e0;border-bottom:1px solid #ffe0b2">📦 공통기준규격 항목 (' + cmnResults.length + ')</div>';
+            cmnResults.slice(0, 30).forEach(function(item) {
+                var fee = getFeeByCode(item.code);
+                var feeText = fee > 0 ? fee.toLocaleString() + '원' : '';
+                html += '<div class="autocomplete-item" onclick="addCmnStdItem(\'' + item.code.replace(/'/g, "\\'") + '\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+                    + '<span>' + item.name.replace(regex, '<mark>$1</mark>') + '</span>'
+                    + '<span style="font-size:10px;color:#999;white-space:nowrap">'
+                    + '<span style="font-family:monospace">' + item.code + '</span>'
+                    + (item.stdVal ? ' · ' + item.stdVal.substring(0, 15) : '')
+                    + (feeText ? ' · <b style="color:#1565c0">' + feeText + '</b>' : '')
+                    + '</span></div>';
             });
         }
 
@@ -2793,126 +2808,57 @@ function selectFoodType(type) {
 }
 
 // ============================================================================
-// 공통기준규격 품목 선택 → 해당 품목의 시험항목 로드
+// 공통기준규격 시험항목 → 검사항목 테이블에 직접 추가
 // ============================================================================
-async function selectCmnStdProduct(productCode, productName) {
-    document.getElementById('food-type-input').value = productName + ' (공통규격)';
-    document.getElementById('food-type-value').value = productName;
+function addCmnStdItem(testCode) {
+    if (!_cmnStdTestItems) return;
+    var item = _cmnStdTestItems.find(function(i) { return i.code === testCode; });
+    if (!item) return;
+
+    // 드롭다운 닫기
     document.getElementById('food-type-list').classList.remove('active');
-    showToast('공통기준규격: ' + productName, 'info');
 
-    // 기존 식품유형 시험항목 섹션 숨기고 기준규격 섹션 사용
-    var inspectionItemsEl = document.getElementById('inspection-items-section');
-    if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
+    // 검사항목 테이블 표시
+    var section = document.getElementById('inspection-items-section');
+    if (section) section.style.display = 'block';
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
 
-    // 공통기준규격에서 해당 품목의 시험항목 로드
-    await loadCmnStandardItems(productCode, productName);
-}
+    // 빈 안내 행 제거
+    var emptyRow = document.getElementById('ref-test-empty-row');
+    if (emptyRow) emptyRow.remove();
 
-// 공통기준규격 시험항목 로드 (품목코드 기반)
-async function loadCmnStandardItems(productCode, productName) {
-    var section = document.getElementById('mfds-std-section');
-    var tbody = document.getElementById('mfds-std-tbody');
-    var summary = document.getElementById('mfds-std-summary');
-    var info = document.getElementById('mfds-std-info');
-
-    if (!productCode || !section) return;
-
-    section.style.display = 'block';
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#667085">공통기준규격 로딩중...</td></tr>';
-    info.textContent = '공통규격 선택: ' + productCode + ' — ' + (productName || '');
-    summary.textContent = '';
-
-    try {
-        var cmnData = await MFDS_CODES.loadCommonStandards();
-        if (!_mfdsTestItemMap) _mfdsTestItemMap = await MFDS_CODES.getTestItemNameMap();
-        if (!_mfdsUnitMap) _mfdsUnitMap = await MFDS_CODES.getUnitNameMap();
-
-        // 선택된 품목코드의 공통기준규격 필터링
-        var trimmed = productCode.replace(/0+$/, '');
-        var matched = cmnData.filter(function(s) {
-            if (s['사용여부'] !== 'Y') return false;
-            var stdCode = s['품목코드'] || '';
-            return stdCode.indexOf(trimmed) === 0 || trimmed.indexOf(stdCode.replace(/0+$/, '')) === 0;
-        });
-
-        if (matched.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#999;font-size:13px">이 품목코드에 등록된 공통기준규격이 없습니다.</td></tr>';
-            summary.textContent = '0건';
-            return;
-        }
-
-        // 시험항목코드 기준 중복 제거 (하위 품목코드 우선)
-        var seenItems = {};
-        matched.forEach(function(s) {
-            var key = s['시험항목코드'];
-            if (!seenItems[key] || s['품목코드'].length > seenItems[key]['품목코드'].length) {
-                seenItems[key] = s;
-            }
-        });
-        var unique = Object.values(seenItems);
-
-        // 테이블 렌더링
-        var html = '';
-        var totalFee = 0;
-        var feeCount = 0;
-        unique.forEach(function(s, idx) {
-            var testCode = s['시험항목코드'] || '';
-            var testName = (_mfdsTestItemMap && _mfdsTestItemMap[testCode]) || testCode;
-            var stdVal = s['기준규격값'] || s['기준규격값설명'] || '';
-            var min = s['최소값'] || '';
-            var max = s['최대값'] || '';
-            var range = (min || max) ? (min + ' ~ ' + max) : '-';
-            var unitCode = s['단위코드'] || '';
-            var unit = (_mfdsUnitMap && _mfdsUnitMap[unitCode]) || unitCode;
-
-            var fee = getFeeByCode(testCode);
-            var feeText = fee > 0 ? fee.toLocaleString() + '원' : '-';
-            if (fee > 0) { totalFee += fee; feeCount++; }
-
-            html += '<tr style="border-bottom:1px solid #d4e5f7;" data-test-code="' + testCode + '" data-test-name="' + testName.replace(/"/g, '&quot;') + '" data-standard="' + stdVal.replace(/"/g, '&quot;') + '" data-unit="' + unit.replace(/"/g, '&quot;') + '" data-fee="' + fee + '" data-min="' + min + '" data-max="' + max + '">';
-            html += '<td style="padding:7px 6px;text-align:center"><input type="checkbox" class="mfds-std-check" value="' + idx + '" onchange="updateMfdsStdCheckCount()"></td>';
-            html += '<td style="padding:7px 10px;color:#667085">' + (idx + 1) + '</td>';
-            html += '<td style="padding:7px 10px;color:#344054">' + testName;
-            if (testCode !== testName) html += ' <span style="color:#999;font-size:11px;">(' + testCode + ')</span>';
-            html += '</td>';
-            html += '<td style="padding:7px 10px;color:#344054;font-size:12px;max-width:180px;word-break:break-all;">' + stdVal + '</td>';
-            html += '<td style="padding:7px 10px;text-align:center;color:#667085;font-size:12px">' + range + '</td>';
-            html += '<td style="padding:7px 10px;text-align:center;color:#667085;font-size:12px">' + unit + '</td>';
-            html += '<td style="padding:7px 10px;text-align:right;color:' + (fee > 0 ? '#1565c0' : '#ccc') + ';font-weight:' + (fee > 0 ? '600' : '400') + '">' + feeText + '</td>';
-            html += '</tr>';
-        });
-
-        tbody.innerHTML = html;
-
-        var tfoot = document.getElementById('mfds-std-tfoot');
-        if (totalFee > 0 && tfoot) {
-            tfoot.style.display = '';
-            document.getElementById('mfds-std-fee-total').textContent = totalFee.toLocaleString() + '원';
-            var supply = Math.round(totalFee / 1.1);
-            var vat = totalFee - supply;
-            document.getElementById('mfds-std-fee-supply').textContent = supply.toLocaleString() + '원';
-            document.getElementById('mfds-std-fee-vat').textContent = vat.toLocaleString() + '원';
-        } else if (tfoot) {
-            tfoot.style.display = 'none';
-        }
-
-        summary.textContent = unique.length + '개 시험항목 (공통규격)' + (feeCount > 0 ? ' / ' + totalFee.toLocaleString() + '원' : '');
-
-        window._mfdsFeeTotal = totalFee;
-        updateFeeSummary();
-
-        var addBar = document.getElementById('mfds-std-add-bar');
-        if (addBar && unique.length > 0) {
-            addBar.style.display = '';
-            var allCheck = document.getElementById('mfds-std-check-all');
-            if (allCheck) allCheck.checked = false;
-            updateMfdsStdCheckCount();
-        }
-    } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#e53e3e">로드 실패: ' + e.message + '</td></tr>';
-        console.error('[공통기준규격] 로드 오류:', e);
+    // 중복 체크
+    var existing = tbody.querySelector('tr[data-test-code="' + testCode + '"]');
+    if (existing) {
+        showToast(item.name + ' — 이미 추가된 항목입니다', 'warning');
+        return;
     }
+
+    var fee = getFeeByCode(testCode);
+    var rowCount = tbody.querySelectorAll('tr[data-test-code]').length;
+    var tr = document.createElement('tr');
+    tr.style.cssText = 'border-bottom:1px solid #eee';
+    tr.setAttribute('data-item-key', item.name + '||');
+    tr.setAttribute('data-fee', fee);
+    tr.setAttribute('data-test-code', testCode);
+    tr.setAttribute('data-unit', item.unit || '');
+    tr.innerHTML = '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" onchange="onInspectionCheckChange()"></td>'
+        + '<td style="padding:8px 12px;color:#667085">' + (rowCount + 1) + '</td>'
+        + '<td style="padding:8px 12px;color:#344054;font-weight:500">' + item.name + ' <span style="color:#e65100;font-size:10px;background:#fff3e0;padding:1px 5px;border-radius:3px">공통</span></td>'
+        + '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + testCode + '</td>'
+        + '<td style="padding:8px 12px;color:#344054;font-size:12px">' + (item.stdVal || '-') + '</td>'
+        + '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (item.unit || '-') + '</td>'
+        + '<td style="padding:8px 12px;text-align:right;color:#344054">' + (fee > 0 ? fee.toLocaleString() + '원' : '-') + '</td>';
+    tbody.appendChild(tr);
+
+    // 수수료 재계산
+    recalcInspectionTable();
+    showToast('공통규격 추가: ' + item.name + ' (' + testCode + ')', 'success');
+
+    // 검색란 포커스 유지 (계속 추가 가능)
+    var input = document.getElementById('food-type-input');
+    if (input) input.focus();
 }
 
 // ============================================================================
