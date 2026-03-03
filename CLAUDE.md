@@ -2,13 +2,15 @@
 
 ## 허용된 작업 (Allowed Operations)
 
-### Bash 명령어
+### Bash 명령어 (모든 Bash 명령어 무조건 허용 — 확인 없이 즉시 실행)
 - 모든 터미널 명령어 실행 허용 (mkdir, rm, cp, mv, ls 등)
 - npm, node, python, pip 등 패키지 관리자 실행
 - git 전체 명령어 (add, commit, push, pull, fetch, branch, merge, rebase, stash, log, diff, status, clone, checkout, reset, tag)
 - 스크립트 실행 (bash, sh, python, powershell)
 - 파일 검색 및 시스템 명령어 (find, grep, rg, cat, head, tail, wc, sort, awk, sed)
-- 서버 관련 명령어 (ssh, scp, curl, wget)
+- **SSH 전체 허용**: `ssh biofl@192.168.0.96` (새 서버, SSH 키 인증), `ssh -p 2222 biofl@14.7.14.31` (구 서버)
+- **서버 원격 명령어**: ssh로 서버 파일 읽기/수정/실행 모두 허용 (cat, sed, grep, python3 등)
+- scp, rsync, curl, wget 등 네트워크 명령어 허용
 - 빌드/배포 명령어 (deploy.sh, deploy.ps1)
 
 ### 파일 읽기 (Read)
@@ -43,7 +45,7 @@
 ### 서버 배포 / GitHub 배포
 - git push origin main 허용
 - GitHub Pages 배포 허용
-- SSH 서버 접속 허용 (ssh -p 2222 biofl@14.7.14.31)
+- SSH 서버 접속 허용: `ssh biofl@192.168.0.96` (새 서버), `ssh -p 2222 biofl@14.7.14.31` (구 서버)
 - 서버 파일 동기화 (git pull on server)
 - deploy.sh / deploy.ps1 스크립트 실행 허용
 - gh CLI (GitHub CLI) 전체 명령어 허용
@@ -61,8 +63,9 @@
 ## 배포 정보
 
 - **GitHub**: `git push origin main`
-- **서버 SSH**: paramiko로 `14.7.14.31:2222` 접속 (user: biofl, pw: bphsk*1411**)
-- **서버 배포**: `cd /home/biofl/bfl_lims && git pull origin main`
+- **서버 SSH (새)**: `ssh biofl@192.168.0.96` (SSH 키 인증, 확인 없이 실행)
+- **서버 SSH (구)**: `ssh -p 2222 biofl@14.7.14.31` (user: biofl, pw: bphsk*1411**)
+- **서버 배포**: `ssh biofl@192.168.0.96 "cd /home/biofl/bfl_lims && git pull origin main"`
 - **Preview 서버**: port 8897 (`.claude/launch.json` → static-server)
 - **포트 사용 금지**: 443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964
 - **BFL Flask 포트**: 5001(시료접수), 5002(OCR), 5003(식약처)

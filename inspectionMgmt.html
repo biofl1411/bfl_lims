@@ -967,8 +967,15 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;">
           <div>
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px;">분류 선택 (클릭 시 다음번호 자동생성)</label>
+            <div id="ref-add-category-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;"></div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);cursor:pointer;margin-top:2px;">
+              <input type="checkbox" id="ref-add-custom-range" onchange="onRefCustomRangeChange()" style="margin:0;"> 임의번호 (9xxxx 대역)
+            </label>
+          </div>
+          <div>
             <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">시험항목코드 *</label>
-            <input type="text" id="ref-add-code" placeholder="예: A10099" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;font-family:monospace;" oninput="checkRefCodeDuplicate()">
+            <input type="text" id="ref-add-code" placeholder="분류를 선택하거나 직접 입력" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;font-family:monospace;" oninput="checkRefCodeDuplicate()">
             <div id="ref-add-code-msg" style="font-size:12px;margin-top:4px;min-height:18px;"></div>
           </div>
           <div>
@@ -31503,6 +31510,8 @@ async function saveRefFeesToFirestore() {
 }
 
 // ── 코드 추가 모달 ──
+var _refAddSelectedCategory = null;
+
 function openRefFeeAddModal() {
   document.getElementById('refFeeAddModal').style.display = 'flex';
   document.getElementById('ref-add-code').value = '';
@@ -31511,11 +31520,76 @@ function openRefFeeAddModal() {
   document.getElementById('ref-add-note').value = '';
   document.getElementById('ref-add-code-msg').innerHTML = '';
   document.getElementById('ref-add-submit-btn').disabled = false;
-  document.getElementById('ref-add-code').focus();
+  var customCheck = document.getElementById('ref-add-custom-range');
+  if (customCheck) customCheck.checked = false;
+  _refAddSelectedCategory = null;
+  renderRefAddCategoryChips();
 }
 
 function closeRefFeeAddModal() {
   document.getElementById('refFeeAddModal').style.display = 'none';
+}
+
+// 모달 내 분류 칩 렌더링
+function renderRefAddCategoryChips() {
+  var container = document.getElementById('ref-add-category-chips');
+  if (!container) return;
+  var html = '';
+  Object.keys(REF_CODE_CATEGORIES).forEach(function(p) {
+    var cat = REF_CODE_CATEGORIES[p];
+    var cnt = (_refFeeCategoryIndex[p] || 0);
+    var isActive = _refAddSelectedCategory === p;
+    html += '<button type="button" onclick="selectRefAddCategory(\'' + p + '\')" ' +
+      'style="padding:4px 10px;border-radius:12px;border:1px solid ' + cat.color + ';' +
+      'background:' + (isActive ? cat.color : '#fff') + ';color:' + (isActive ? '#fff' : cat.color) + ';' +
+      'font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;" ' +
+      'title="' + cat.name + ' (' + cnt + '건)">' + p + ' ' + cat.name + '</button>';
+  });
+  container.innerHTML = html;
+}
+
+// 분류 칩 클릭 → 다음번호 자동생성
+function selectRefAddCategory(prefix) {
+  _refAddSelectedCategory = prefix;
+  renderRefAddCategoryChips();
+  var isCustom = document.getElementById('ref-add-custom-range') &&
+                 document.getElementById('ref-add-custom-range').checked;
+  var nextCode = getNextRefCode(prefix, isCustom);
+  document.getElementById('ref-add-code').value = nextCode;
+  checkRefCodeDuplicate();
+  document.getElementById('ref-add-name').focus();
+}
+
+// 임의번호 체크 변경 → 분류 선택되어 있으면 코드 재생성
+function onRefCustomRangeChange() {
+  if (_refAddSelectedCategory) {
+    selectRefAddCategory(_refAddSelectedCategory);
+  }
+}
+
+// 다음번호 자동생성 로직
+// customRange=false: 표준 범위 (00001~89999) 에서 max+1
+// customRange=true:  임의 범위 (90001~99999) 에서 max+1
+function getNextRefCode(prefix, customRange) {
+  if (!_refFeeData || _refFeeData.length === 0) {
+    return prefix + (customRange ? '90001' : '10001');
+  }
+  var maxNum = 0;
+  var rangeMin = customRange ? 90000 : 0;
+  var rangeMax = customRange ? 99999 : 89999;
+  _refFeeData.forEach(function(m) {
+    var code = (m.testItemCode || '').toUpperCase();
+    if (code.charAt(0) === prefix) {
+      var num = parseInt(code.substring(1)) || 0;
+      if (num >= rangeMin && num <= rangeMax && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  if (maxNum === 0) {
+    return prefix + (customRange ? '90001' : '10001');
+  }
+  return prefix + String(maxNum + 1).padStart(5, '0');
 }
 
 function checkRefCodeDuplicate() {
@@ -31535,6 +31609,9 @@ function checkRefCodeDuplicate() {
   var cat = REF_CODE_CATEGORIES[prefix];
   if (cat) {
     var catBadge = '<span style="color:' + cat.color + ';font-weight:600;">' + prefix + ' — ' + cat.name + '</span>';
+    // 임의번호 여부 표시
+    var numPart = parseInt(code.substring(1)) || 0;
+    var rangeLabel = numPart >= 90000 ? ' <span style="color:#f4511e;font-size:11px;">(임의번호)</span>' : '';
     // 중복 검사
     if (_refFeeData) {
       var exists = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code; });
@@ -31545,13 +31622,13 @@ function checkRefCodeDuplicate() {
         return;
       }
     }
-    msgEl.innerHTML = '✅ 사용 가능 — 분류: ' + catBadge;
+    msgEl.innerHTML = '✅ 사용 가능 — 분류: ' + catBadge + rangeLabel;
     msgEl.style.color = '#43a047';
     submitBtn.disabled = false;
   } else {
     msgEl.innerHTML = '⚠ 알 수 없는 접두어 "' + prefix + '" — 유효한 접두어: A, B, C, D, E, F, G, H, I, X';
     msgEl.style.color = '#ff9800';
-    submitBtn.disabled = false; // 경고만, 추가는 허용
+    submitBtn.disabled = false;
   }
 }
 
