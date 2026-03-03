@@ -5451,8 +5451,15 @@ function bizReg(name, addr) {
   toast('📋 "'+name+'" → 고객사 등록');
 }
 
-// ── 업체 상세 조회 (품목 + 변경이력) ──
+// ── 업체 상세 조회 (품목 + 원재료 + 변경이력) ──
+// 원재료 캐시: { licNo: { reportNo: [...materials] } }
+var _bdmMaterialsCache = {};
+var _bdmCurrentLicNo = '';
+var _bdmProducts = []; // 현재 품목 목록 (원재료 연결용)
+
 async function bizDetail(licNo, bizName) {
+  _bdmCurrentLicNo = licNo;
+  _bdmProducts = [];
   // 모달 열기
   var modal = document.getElementById('bizDetailModal');
   modal.style.display = 'flex';
@@ -5461,32 +5468,38 @@ async function bizDetail(licNo, bizName) {
   // 탭 초기화 (품목 탭 활성)
   bizDetailTab('products');
   // 로딩 표시
-  document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#8892a4"><div class="spinner" style="display:inline-block;width:20px;height:20px;border:2px solid #e2e6ed;border-top:2px solid #1565c0;border-radius:50%;animation:spin .8s linear infinite"></div><br>품목 조회 중...</td></tr>';
+  document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#8892a4"><div class="spinner" style="display:inline-block;width:20px;height:20px;border:2px solid #e2e6ed;border-top:2px solid #1565c0;border-radius:50%;animation:spin .8s linear infinite"></div><br>품목 조회 중...</td></tr>';
   document.getElementById('bdmChangesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">변경이력 조회 대기 중...</td></tr>';
+  document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">품목 탭에서 제품을 클릭하면 원재료를 조회합니다.</td></tr>';
   document.getElementById('bdmProductCount').textContent = '-';
   document.getElementById('bdmChangeCount').textContent = '-';
+  document.getElementById('bdmMaterialCount').textContent = '-';
 
   // 1) fss_products 조회
   try {
     var prodSnap = await db.collection('fss_products').where('lcns_no','==',licNo).get();
     var products = [];
     prodSnap.forEach(function(doc){ products.push(doc.data()); });
+    _bdmProducts = products;
     document.getElementById('bdmProductCount').textContent = products.length;
 
     if(products.length === 0) {
-      document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:#e65100;font-size:12px">📋 품목 데이터 수집예정<br><span style="font-size:11px;color:#8892a4">최근 등록 업체는 품목 데이터가 아직 수집되지 않았을 수 있습니다.</span></td></tr>';
+      document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#e65100;font-size:12px">📋 품목 데이터 수집예정<br><span style="font-size:11px;color:#8892a4">최근 등록 업체는 품목 데이터가 아직 수집되지 않았을 수 있습니다.</span></td></tr>';
     } else {
       // 보고일자 내림차순 정렬
       products.sort(function(a,b){ return (b.prms_dt||'').localeCompare(a.prms_dt||''); });
       var html = '';
       products.forEach(function(p, i){
         var prodEnd = (p.production === 'Y' || p.production === '종료') ? '<span style="color:#e53935;font-size:10px">종료</span>' : '<span style="color:#2e7d32;font-size:10px">생산중</span>';
-        html += '<tr>';
+        var reportNo = p.prdlst_report_no || '';
+        var clickAttr = reportNo ? ' onclick="bdmShowMaterials(\'' + reportNo.replace(/'/g,"\\'") + '\',\'' + (p.prdlst_nm||'').replace(/'/g,"\\'") + '\')" style="cursor:pointer"' : '';
+        html += '<tr' + clickAttr + '>';
         html += '<td style="font-size:12px"><b>' + (p.prdlst_nm||'-') + '</b></td>';
         html += '<td style="font-size:11px">' + (p.prdlst_dcnm||'-') + '</td>';
+        html += '<td style="font-size:11px;font-family:monospace;white-space:nowrap">' + (reportNo ? '<span style="color:#1565c0;font-size:10px" title="클릭하면 원재료 조회">' + reportNo + '</span>' : '-') + '</td>';
         html += '<td style="font-size:11px;font-family:monospace">' + formatDate8(p.prms_dt) + '</td>';
         html += '<td style="text-align:center">' + prodEnd + '</td>';
-        html += '<td style="font-size:10px;color:#5f6b7a;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (p.pog_daycnt||'') + ' / ' + (p.cstdy_mthd||'') + '">' + (p.pog_daycnt||'-') + '</td>';
+        html += '<td style="font-size:10px;color:#5f6b7a;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (p.pog_daycnt||'') + ' / ' + (p.cstdy_mthd||'') + '">' + (p.pog_daycnt||'-') + '</td>';
         html += '</tr>';
       });
       document.getElementById('bdmProductsBody').innerHTML = html;
@@ -5494,7 +5507,7 @@ async function bizDetail(licNo, bizName) {
     console.log('[bizDetail] fss_products:', products.length, '건 조회 (lcns_no=' + licNo + ')');
   } catch(e) {
     console.error('[bizDetail] fss_products 조회 실패:', e);
-    document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:#e53935">❌ 품목 조회 실패: ' + e.message + '</td></tr>';
+    document.getElementById('bdmProductsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#e53935">❌ 품목 조회 실패: ' + e.message + '</td></tr>';
     document.getElementById('bdmProductCount').textContent = '0';
   }
 
@@ -5526,14 +5539,143 @@ async function bizDetail(licNo, bizName) {
     document.getElementById('bdmChangesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">변경이력 컬렉션 미수집</td></tr>';
     document.getElementById('bdmChangeCount').textContent = '-';
   }
+
+  // 3) fss_materials 전체 조회 (업체 기준) — 백그라운드
+  _bdmMaterialsCache[licNo] = {};
+  try {
+    var matSnap = await db.collection('fss_materials').where('lcns_no','==',licNo).get();
+    var matTotal = 0;
+    matSnap.forEach(function(doc){
+      var d = doc.data();
+      var rn = d.prdlst_report_no || '_unknown';
+      if(!_bdmMaterialsCache[licNo][rn]) _bdmMaterialsCache[licNo][rn] = [];
+      _bdmMaterialsCache[licNo][rn].push(d);
+      matTotal++;
+    });
+    document.getElementById('bdmMaterialCount').textContent = matTotal;
+    if(matTotal === 0) {
+      document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#e65100;font-size:12px">📋 원재료 데이터 수집예정<br><span style="font-size:11px;color:#8892a4">원재료(C002/C003 API) 데이터가 아직 수집되지 않았을 수 있습니다.</span></td></tr>';
+    } else {
+      // 기본: 전체 원재료를 제품별로 그룹핑하여 표시
+      bdmRenderAllMaterials(licNo);
+    }
+    console.log('[bizDetail] fss_materials:', matTotal, '건 조회 (lcns_no=' + licNo + ')');
+  } catch(e) {
+    console.error('[bizDetail] fss_materials 조회 실패:', e);
+    document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">원재료 컬렉션 조회 실패</td></tr>';
+    document.getElementById('bdmMaterialCount').textContent = '-';
+  }
+}
+
+// 전체 원재료를 제품별 그룹으로 표시
+function bdmRenderAllMaterials(licNo) {
+  var cache = _bdmMaterialsCache[licNo] || {};
+  var reportNos = Object.keys(cache).sort();
+  if(reportNos.length === 0) return;
+
+  var html = '';
+  reportNos.forEach(function(rn) {
+    var mats = cache[rn];
+    // 제품명 찾기
+    var prodName = rn;
+    for(var i = 0; i < _bdmProducts.length; i++) {
+      if(_bdmProducts[i].prdlst_report_no === rn) { prodName = _bdmProducts[i].prdlst_nm || rn; break; }
+    }
+    mats.sort(function(a,b){ return parseInt(a.rawmtrl_ordno||0) - parseInt(b.rawmtrl_ordno||0); });
+    // 제품 그룹 헤더
+    html += '<tr style="background:#e8f0fe"><td colspan="4" style="padding:8px 12px;font-size:12px;font-weight:700;color:#1565c0;cursor:pointer" onclick="bdmShowMaterials(\'' + rn.replace(/'/g,"\\'") + '\',\'' + prodName.replace(/'/g,"\\'") + '\')">';
+    html += '📦 ' + prodName + ' <span style="font-size:10px;font-weight:400;color:#5f6b7a">(' + mats.length + '건 / 보고번호: ' + rn + ')</span></td></tr>';
+    // 원재료 행 (최대 5개만 미리보기)
+    var showMax = Math.min(mats.length, 5);
+    for(var j = 0; j < showMax; j++) {
+      var m = mats[j];
+      html += '<tr>';
+      html += '<td style="font-size:11px;padding:6px 12px 6px 24px">' + (m.rawmtrl_ordno||'-') + '</td>';
+      html += '<td style="font-size:12px;padding:6px 12px"><b>' + (m.rawmtrl_nm||'-') + '</b></td>';
+      html += '<td style="font-size:11px;padding:6px 12px;color:#5f6b7a">' + (m.prdlst_dcnm||'-') + '</td>';
+      html += '<td style="font-size:11px;padding:6px 12px;font-family:monospace">' + formatDate8(m.chng_dt) + '</td>';
+      html += '</tr>';
+    }
+    if(mats.length > 5) {
+      html += '<tr><td colspan="4" style="padding:4px 12px 8px 24px;font-size:11px;color:#1565c0;cursor:pointer" onclick="bdmShowMaterials(\'' + rn.replace(/'/g,"\\'") + '\',\'' + prodName.replace(/'/g,"\\'") + '\')">... 외 ' + (mats.length - 5) + '건 더 보기</td></tr>';
+    }
+  });
+  document.getElementById('bdmMaterialsBody').innerHTML = html;
+}
+
+// 특정 제품의 원재료 조회 (품목 탭 행 클릭 시)
+async function bdmShowMaterials(reportNo, productName) {
+  // 원재료 탭으로 전환
+  bizDetailTab('materials');
+
+  var licNo = _bdmCurrentLicNo;
+  // 제품명 표시
+  document.getElementById('bdmMaterialTitle').innerHTML = '📦 <b>' + (productName||reportNo) + '</b> <span style="font-size:11px;color:#8892a4;font-weight:400">(보고번호: ' + reportNo + ')</span>';
+  document.getElementById('bdmMaterialTitle').style.display = 'block';
+  document.getElementById('bdmMaterialBackBtn').style.display = 'inline-block';
+
+  // 캐시 확인
+  if(_bdmMaterialsCache[licNo] && _bdmMaterialsCache[licNo][reportNo]) {
+    renderMaterialRows(_bdmMaterialsCache[licNo][reportNo]);
+    return;
+  }
+
+  // 캐시 없으면 Firestore 직접 조회
+  document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4"><div class="spinner" style="display:inline-block;width:20px;height:20px;border:2px solid #e2e6ed;border-top:2px solid #1565c0;border-radius:50%;animation:spin .8s linear infinite"></div><br>원재료 조회 중...</td></tr>';
+
+  try {
+    var matSnap = await db.collection('fss_materials').where('prdlst_report_no','==',reportNo).get();
+    var materials = [];
+    matSnap.forEach(function(doc){ materials.push(doc.data()); });
+    // 캐시에 저장
+    if(!_bdmMaterialsCache[licNo]) _bdmMaterialsCache[licNo] = {};
+    _bdmMaterialsCache[licNo][reportNo] = materials;
+    renderMaterialRows(materials);
+    console.log('[bdmShowMaterials] fss_materials:', materials.length, '건 (report_no=' + reportNo + ')');
+  } catch(e) {
+    console.error('[bdmShowMaterials] 조회 실패:', e);
+    document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#e53935">❌ 원재료 조회 실패: ' + e.message + '</td></tr>';
+  }
+}
+
+function renderMaterialRows(materials) {
+  if(materials.length === 0) {
+    document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">이 제품의 원재료 데이터가 없습니다.</td></tr>';
+    return;
+  }
+  materials.sort(function(a,b){ return parseInt(a.rawmtrl_ordno||0) - parseInt(b.rawmtrl_ordno||0); });
+  var html = '';
+  materials.forEach(function(m, i){
+    html += '<tr>';
+    html += '<td style="font-size:11px;color:#5f6b7a;text-align:center;width:50px">' + (m.rawmtrl_ordno || (i+1)) + '</td>';
+    html += '<td style="font-size:12px"><b>' + (m.rawmtrl_nm||'-') + '</b></td>';
+    html += '<td style="font-size:11px;color:#5f6b7a">' + (m.prdlst_dcnm||'-') + '</td>';
+    html += '<td style="font-size:11px;font-family:monospace;width:100px">' + formatDate8(m.chng_dt) + '</td>';
+    html += '</tr>';
+  });
+  document.getElementById('bdmMaterialsBody').innerHTML = html;
+}
+
+// 원재료 전체보기로 돌아가기
+function bdmMaterialsBack() {
+  document.getElementById('bdmMaterialTitle').style.display = 'none';
+  document.getElementById('bdmMaterialBackBtn').style.display = 'none';
+  var licNo = _bdmCurrentLicNo;
+  if(_bdmMaterialsCache[licNo] && Object.keys(_bdmMaterialsCache[licNo]).length > 0) {
+    bdmRenderAllMaterials(licNo);
+  } else {
+    document.getElementById('bdmMaterialsBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">원재료 데이터가 없습니다.</td></tr>';
+  }
 }
 
 function bizDetailTab(tab) {
-  var isProducts = (tab === 'products');
-  document.getElementById('bdmTabProducts').className = isProducts ? 'bdm-tab active' : 'bdm-tab';
-  document.getElementById('bdmTabChanges').className = isProducts ? 'bdm-tab' : 'bdm-tab active';
-  document.getElementById('bdmProductsPanel').style.display = isProducts ? 'block' : 'none';
-  document.getElementById('bdmChangesPanel').style.display = isProducts ? 'none' : 'block';
+  var tabs = ['products','materials','changes'];
+  tabs.forEach(function(t){
+    var btn = document.getElementById('bdmTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    var panel = document.getElementById('bdm' + t.charAt(0).toUpperCase() + t.slice(1) + 'Panel');
+    if(btn) btn.className = (t === tab) ? 'bdm-tab active' : 'bdm-tab';
+    if(panel) panel.style.display = (t === tab) ? 'block' : 'none';
+  });
 }
 
 function bizDetailClose() {
@@ -5796,11 +5938,14 @@ function renderCollectStatus(data) {
         .bdm-tab{padding:12px 20px;font-size:13px;font-weight:500;color:#8892a4;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s}
         .bdm-tab:hover{color:#1a2332}
         .bdm-tab.active{color:#1565c0;font-weight:700;border-bottom-color:#1565c0}
-        #bdmProductsBody tr, #bdmChangesBody tr{border-bottom:1px solid #f1f3f5}
-        #bdmProductsBody tr:hover, #bdmChangesBody tr:hover{background:#f8f9fb}
-        #bdmProductsBody td, #bdmChangesBody td{padding:8px 12px}
+        #bdmProductsBody tr, #bdmChangesBody tr, #bdmMaterialsBody tr{border-bottom:1px solid #f1f3f5}
+        #bdmProductsBody tr:hover, #bdmChangesBody tr:hover, #bdmMaterialsBody tr:hover{background:#f8f9fb}
+        #bdmProductsBody td, #bdmChangesBody td, #bdmMaterialsBody td{padding:8px 12px}
+        #bdmProductsBody tr[onclick]{cursor:pointer}
+        #bdmProductsBody tr[onclick]:hover{background:#e3f2fd}
       </style>
       <button id="bdmTabProducts" class="bdm-tab active" onclick="bizDetailTab('products')">📦 품목 <span id="bdmProductCount" style="font-size:11px;background:#e3f2fd;padding:1px 6px;border-radius:8px;margin-left:4px">-</span></button>
+      <button id="bdmTabMaterials" class="bdm-tab" onclick="bizDetailTab('materials')">🧪 원재료 <span id="bdmMaterialCount" style="font-size:11px;background:#e3f2fd;padding:1px 6px;border-radius:8px;margin-left:4px">-</span></button>
       <button id="bdmTabChanges" class="bdm-tab" onclick="bizDetailTab('changes')">📝 변경이력 <span id="bdmChangeCount" style="font-size:11px;background:#e3f2fd;padding:1px 6px;border-radius:8px;margin-left:4px">-</span></button>
     </div>
     <!-- 품목 패널 -->
@@ -5809,12 +5954,31 @@ function renderCollectStatus(data) {
         <thead><tr style="background:#f8f9fb;position:sticky;top:0">
           <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">제품명</th>
           <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">품목유형</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">보고번호</th>
           <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">보고일자</th>
           <th style="padding:10px 8px;text-align:center;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">상태</th>
           <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">소비기한</th>
         </tr></thead>
         <tbody id="bdmProductsBody">
-          <tr><td colspan="5" style="text-align:center;padding:40px;color:#8892a4">조회 버튼을 눌러주세요</td></tr>
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:#8892a4">조회 버튼을 눌러주세요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- 원재료 패널 -->
+    <div id="bdmMaterialsPanel" style="flex:1;overflow-y:auto;padding:0;display:none">
+      <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <button id="bdmMaterialBackBtn" onclick="bdmMaterialsBack()" style="display:none;padding:4px 10px;background:#f1f3f5;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;cursor:pointer;color:#5f6b7a">← 전체 보기</button>
+        <div id="bdmMaterialTitle" style="display:none;font-size:13px;color:#1a2332"></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f8f9fb;position:sticky;top:0">
+          <th style="padding:10px 12px;text-align:center;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed;width:50px">순번</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">원재료명</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed">품목유형</th>
+          <th style="padding:10px 12px;text-align:left;color:#5f6b7a;font-weight:600;font-size:11px;border-bottom:1px solid #e2e6ed;width:100px">변경일자</th>
+        </tr></thead>
+        <tbody id="bdmMaterialsBody">
+          <tr><td colspan="4" style="text-align:center;padding:40px;color:#8892a4">품목 탭에서 제품을 클릭하면 원재료를 조회합니다.</td></tr>
         </tbody>
       </table>
     </div>
