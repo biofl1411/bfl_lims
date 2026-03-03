@@ -920,7 +920,8 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         📋 참고용(기준규격외) 시험항목별 수수료 매핑 — 접수 등록에서 참고용 시험항목 추가 시 이 수수료가 적용됩니다.
       </div>
       <!-- 분류 필터 칩 -->
-      <div id="ref-fee-category-chips" style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+      <div id="ref-fee-category-chips" style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+      <div id="ref-fee-sub-chips" style="margin-bottom:10px;display:none;padding-left:4px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;"></div>
       <div class="toolbar" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div class="search-box" style="flex:1;min-width:200px;">
           <span>🔍</span>
@@ -933,6 +934,12 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <input type="checkbox" id="ref-fee-only-active" onchange="renderRefFeeTable()"> 활성 항목만
         </label>
         <span id="ref-fee-count" style="font-size:13px;color:var(--sub);white-space:nowrap;"></span>
+        <span style="color:#ccc;">|</span>
+        <span style="font-size:11px;color:var(--sub);">일괄 수수료:</span>
+        <input type="number" id="ref-fee-bulk-amount" placeholder="금액" style="width:80px;padding:4px 8px;border:1px solid var(--bdr);border-radius:4px;font-size:12px;text-align:right;">
+        <button onclick="applyBulkFee()" style="padding:5px 10px;border:1px solid #1565c0;border-radius:6px;background:#e3f2fd;color:#1565c0;font-size:11px;font-weight:600;cursor:pointer;">선택 항목 적용</button>
+        <button onclick="applyBulkFeeFiltered()" style="padding:5px 10px;border:1px solid #ff8f00;border-radius:6px;background:#fff8e1;color:#ff8f00;font-size:11px;font-weight:600;cursor:pointer;">현재 필터 적용</button>
+        <span style="color:#ccc;">|</span>
         <button class="btn" onclick="openRefFeeAddModal()" style="padding:6px 14px;font-size:13px;background:#43a047;color:#fff;border:none;border-radius:6px;cursor:pointer;">+ 코드 추가</button>
         <button class="btn btn-primary" onclick="saveRefFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
       </div>
@@ -31364,6 +31371,7 @@ async function saveMfdsFeesToFirestore() {
 // ══ 참고용(기준규격외) 수수료 매핑 ══
 var _refFeeData = null;
 var _refFeeCategory = 'all'; // 현재 선택된 분류 필터
+var _refFeeSubCategory = null; // 현재 선택된 소분류 필터 (null=전체)
 var _refFeeSortCol = null;   // 현재 정렬 컬럼
 var _refFeeSortAsc = true;   // 정렬 방향
 var _refFeeSelected = {};    // 선택된 항목 {code: true}
@@ -31568,10 +31576,60 @@ function renderRefFeeCategoryChips() {
       p + ' ' + cat.name + ' <span style="opacity:.7;">' + cnt + '</span></button>';
   });
   container.innerHTML = html;
+  renderRefFeeSubChips();
+}
+
+function renderRefFeeSubChips() {
+  var container = document.getElementById('ref-fee-sub-chips');
+  if (!container) return;
+  // 대분류가 선택되지 않았거나 소분류가 없으면 숨김
+  if (_refFeeCategory === 'all' || !REF_SUB_CATEGORIES[_refFeeCategory]) {
+    container.style.display = 'none';
+    return;
+  }
+  var subs = REF_SUB_CATEGORIES[_refFeeCategory];
+  var cat = REF_CODE_CATEGORIES[_refFeeCategory];
+  // 소분류별 건수 계산
+  var subCounts = {};
+  if (_refFeeData) {
+    _refFeeData.forEach(function(m) {
+      var code = (m.testItemCode || '').toUpperCase();
+      if (code.charAt(0) === _refFeeCategory) {
+        var s = code.charAt(1);
+        if (!subCounts[s]) subCounts[s] = 0;
+        subCounts[s]++;
+      }
+    });
+  }
+  var html = '<span style="font-size:11px;color:var(--sub);margin-right:2px;">소분류:</span>';
+  // 전체 버튼
+  html += '<button onclick="setRefFeeSubCategory(null)" style="padding:3px 10px;border-radius:10px;border:1px solid ' +
+    (!_refFeeSubCategory ? cat.color : '#bbb') + ';background:' +
+    (!_refFeeSubCategory ? cat.color : '#f5f5f5') + ';color:' +
+    (!_refFeeSubCategory ? '#fff' : '#555') + ';font-size:11px;font-weight:600;cursor:pointer;">전체</button>';
+  Object.keys(subs).forEach(function(s) {
+    var cnt = subCounts[s] || 0;
+    if (cnt === 0) return;
+    var isActive = _refFeeSubCategory === s;
+    html += '<button onclick="setRefFeeSubCategory(\'' + s + '\')" style="padding:3px 10px;border-radius:10px;border:1px solid ' +
+      (isActive ? cat.color : '#bbb') + ';background:' +
+      (isActive ? cat.color : '#f5f5f5') + ';color:' +
+      (isActive ? '#fff' : '#555') + ';font-size:11px;cursor:pointer;">' +
+      subs[s] + ' <span style="opacity:.6;">' + cnt + '</span></button>';
+  });
+  container.innerHTML = html;
+  container.style.display = 'flex';
+}
+
+function setRefFeeSubCategory(sub) {
+  _refFeeSubCategory = (_refFeeSubCategory === sub) ? null : sub;
+  renderRefFeeSubChips();
+  renderRefFeeTable();
 }
 
 function setRefFeeCategory(cat) {
   _refFeeCategory = (_refFeeCategory === cat) ? 'all' : cat;
+  _refFeeSubCategory = null; // 소분류 초기화
   renderRefFeeCategoryChips();
   renderRefFeeTable();
 }
@@ -31594,6 +31652,12 @@ function renderRefFeeTable() {
     filtered = filtered.filter(function(m) {
       return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
     });
+    // 소분류 필터
+    if (_refFeeSubCategory) {
+      filtered = filtered.filter(function(m) {
+        return (m.testItemCode || '').charAt(1) === _refFeeSubCategory;
+      });
+    }
   }
   if (query) {
     filtered = filtered.filter(function(m) {
@@ -31783,6 +31847,11 @@ function getRefFeeFilteredItems() {
     filtered = filtered.filter(function(m) {
       return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
     });
+    if (_refFeeSubCategory) {
+      filtered = filtered.filter(function(m) {
+        return (m.testItemCode || '').charAt(1) === _refFeeSubCategory;
+      });
+    }
   }
   if (query) {
     filtered = filtered.filter(function(m) {
@@ -31793,6 +31862,34 @@ function getRefFeeFilteredItems() {
   if (onlySet) filtered = filtered.filter(function(m) { return (m.fee || 0) > 0; });
   if (onlyActive) filtered = filtered.filter(function(m) { return m.isActive !== false; });
   return filtered;
+}
+
+// 일괄 수수료 적용 — 선택된 항목에만
+function applyBulkFee() {
+  var amount = parseInt(document.getElementById('ref-fee-bulk-amount').value);
+  if (isNaN(amount) || amount < 0) { showToast('수수료 금액을 입력하세요', 'warning'); return; }
+  var codes = Object.keys(_refFeeSelected).filter(function(c) { return _refFeeSelected[c]; });
+  if (codes.length === 0) { showToast('선택된 항목이 없습니다', 'warning'); return; }
+  var codeSet = {};
+  codes.forEach(function(c) { codeSet[c] = true; });
+  var cnt = 0;
+  _refFeeData.forEach(function(m) {
+    if (codeSet[m.testItemCode]) { m.fee = amount; cnt++; }
+  });
+  renderRefFeeTable();
+  showToast(cnt + '건에 수수료 ' + amount.toLocaleString() + '원 일괄 적용 — Firestore 저장을 눌러주세요', 'info');
+}
+
+// 일괄 수수료 적용 — 현재 필터에 보이는 항목 전체
+function applyBulkFeeFiltered() {
+  var amount = parseInt(document.getElementById('ref-fee-bulk-amount').value);
+  if (isNaN(amount) || amount < 0) { showToast('수수료 금액을 입력하세요', 'warning'); return; }
+  var filtered = getRefFeeFilteredItems();
+  if (filtered.length === 0) { showToast('필터된 항목이 없습니다', 'warning'); return; }
+  if (!confirm('현재 필터의 ' + filtered.length + '건에 수수료 ' + amount.toLocaleString() + '원을 일괄 적용하시겠습니까?')) return;
+  filtered.forEach(function(m) { m.fee = amount; });
+  renderRefFeeTable();
+  showToast(filtered.length + '건에 수수료 ' + amount.toLocaleString() + '원 일괄 적용 — Firestore 저장을 눌러주세요', 'info');
 }
 
 // 현재 필터 전체 선택
