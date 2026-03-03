@@ -2813,3 +2813,39 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 - `foodTypesMapping` 컬렉션 생성: `food_item_fee_mapping.js` 기반 9,237건 업로드 + 분야(식품/축산) 필드 추가
 - **주의**: 현재 업로드된 맵핑 데이터는 재확인 필요 (올바른 자료가 아님, 추후 교체 예정)
 - I2580 중복제거 적용: 16,104건 → 16,099건
+
+### 2026-03-03
+
+#### 검사관리 참고용 탭 개선 (inspectionMgmt.html)
+
+##### 참고용 아코디언 테이블 형식 변경
+- 기존 `<div class="accordion-item">` → `<table>` 형식으로 변경 (시험항목 탭과 동일)
+- 컬럼: 시험항목코드, 한글명, 영문명, 별칭, 단위, 사용, BFL매핑, 수수료, 작업
+- `mfdsLookup` Map으로 `_mfdsTestItems`에서 영문명/별칭 조회
+
+##### 띄어쓰기 매칭 개선
+- `findTestItemCodeByName()` 4차 매칭 추가: 공백 제거 후 비교 (예: "총 아플라톡신" ↔ "총아플라톡신")
+- `autoMatchItemGroupCodes`: 띄어쓰기 차이 있는 항목명을 식약처 기준으로 자동 수정
+
+##### 사용여부(활성/비활성) 단일 원본 통합
+- **문제**: 시험항목 탭은 `mfds_test_items['사용여부']`, 수수료 탭은 `refFeeData.isActive` — 이중 관리로 불일치
+- **해결**: `isTestItemActive(code)` / `toggleTestItemActive(cb)` 통합 함수 생성
+- `mfds_test_items['사용여부']` ('Y'/'N')가 유일한 원본 — 모든 탭에서 공통 사용
+- `refFeeData.isActive` 참조 전부 제거
+
+##### 검체유형 삭제/수정 기능
+- `deleteItemGroupType(purpose, type)`: 검체유형 + 하위 항목 일괄 삭제
+- `editItemGroupType(purpose, type)`: 검체유형 이름 변경 (prompt)
+
+##### 한글명/영문명 한국어 변환
+- **문제**: 잔류농약(E)/항생물질(F) 항목의 한글명이 영문 화학명으로 되어있음
+- **해결**: `ENG_TO_KOR_MAP` (300+ 항목 영문→한국어 매핑) 생성
+- 렌더링 3단계 fallback: (1) `_mfdsTestItems` 한글명 → (2) 영문명/별칭으로 검색 → (3) `ENG_TO_KOR_MAP`
+- testItemCode 없는 항목도 영문명으로 `_mfdsTestItems` 자동 검색하여 한글명 + 사용체크 표시
+- "🔄 한글명 변환" 버튼: 참고용 탭 toolbar, `_mfdsTestItems` + `itemGroups` 항목명 일괄 업데이트
+- `itemGroupData`에 `_docId` 저장하여 Firestore 직접 업데이트 가능
+
+##### 미완료 (추후 작업)
+- 영문명 컬럼에 영문 표시 개선 (현재 일부 비어있음)
+- testItemCode 없는 항목의 사용 체크박스 연동 완성
+- 참고용 칩 추가: 영양성분 칩 만들기 + 항목 구현
