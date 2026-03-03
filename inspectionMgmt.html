@@ -817,7 +817,10 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       </div>
     </div>
 
-    <div class="filter-chips" id="ig-filter-chips"></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div class="filter-chips" id="ig-filter-chips" style="flex:1;"></div>
+      <button onclick="autoMatchItemGroupCodes()" style="padding:5px 12px;font-size:12px;border:1px solid #1565c0;color:#1565c0;background:#e3f2fd;border-radius:6px;cursor:pointer;white-space:nowrap;" title="모든 항목에 시험항목코드 자동매칭">🔗 코드 자동매칭</button>
+    </div>
 
     <!-- 카드 뷰 -->
     <div class="card-grid" id="item-group-cards" style="display: none;"></div>
@@ -1212,7 +1215,15 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       
       <div class="detail-section">
         <div class="detail-section-title">검사 항목</div>
-        
+
+        <div class="form-group" id="group-시험항목코드" style="display:none;">
+          <label>시험항목코드</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" id="input-시험항목코드" style="flex:1;font-family:monospace;color:#1565c0;" placeholder="예: IM7200082">
+            <button type="button" onclick="autoFillTestItemCode()" style="padding:4px 10px;font-size:12px;border:1px solid #1565c0;color:#1565c0;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap;" title="항목명으로 자동 검색">🔍 자동</button>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>항목명</label>
           <input type="text" id="input-항목명">
@@ -30743,9 +30754,11 @@ function renderItemGroups() {
       const itemListHtml = items.map(item => {
         const idx = itemGroupData.indexOf(item);
         const itemFee = igFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
+        const tCode = item.testItemCode || '';
         return `
         <div class="item-list-item" onclick="openDetailItem('참고용', ${idx})" style="cursor:pointer;">
           <div class="item-list-name">${item.항목명}</div>
+          ${tCode ? `<span style="font-size:10px;color:#1565c0;font-family:monospace;background:#e3f2fd;padding:1px 5px;border-radius:3px;">${tCode}</span>` : ''}
           <div class="item-list-spec">${item.규격 || '-'}</div>
           ${item.항목단위 ? `<span class="item-list-unit">${item.항목단위}</span>` : ''}
           ${getMfdsMappingBadge(item.항목명)}
@@ -30805,9 +30818,11 @@ function renderItemGroups() {
       const itemsHtml = typeItems.map(item => {
         const idx = itemGroupData.indexOf(item);
         const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
+        const tCode = item.testItemCode || '';
         return `
         <div class="accordion-item" onclick="event.stopPropagation(); openDetailItem('참고용', ${idx})">
           <div class="item-col item-col-name">${item.항목명}</div>
+          <div class="item-col" style="min-width:90px;font-size:11px;color:#1565c0;font-family:monospace;">${tCode || '<span style="color:#ccc;">-</span>'}</div>
           <div class="item-col item-col-spec">${item.규격 || '-'}</div>
           <div class="item-col item-col-unit">
             ${item.항목단위 ? `<span class="badge badge-success">${item.항목단위}</span>` : '-'}
@@ -30958,8 +30973,11 @@ function openDetailItem(type, index, itemList, pos) {
   if (type === '참고용') {
     document.getElementById('group-검사목적').style.display = 'block';
     document.getElementById('input-검사목적').value = item.검사목적 || '';
+    document.getElementById('group-시험항목코드').style.display = 'block';
+    document.getElementById('input-시험항목코드').value = item.testItemCode || '';
   } else {
     document.getElementById('group-검사목적').style.display = 'none';
+    document.getElementById('group-시험항목코드').style.display = 'none';
   }
 
   // 라벨 태그 섹션 (식품유형일 때만)
@@ -31045,7 +31063,7 @@ function openDetailItem(type, index, itemList, pos) {
       if (el) el.oninput = checkFormChanges;
     });
   } else {
-    ['input-검체유형','input-항목명','input-규격','input-항목단위','input-시험법근거'].forEach(id => {
+    ['input-검체유형','input-항목명','input-규격','input-항목단위','input-시험법근거','input-시험항목코드'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.oninput = checkFormChanges;
     });
@@ -31150,6 +31168,7 @@ function saveItem() {
         foodTypeData.push(newItem);
       } else if (editingType === '참고용') {
         newItem.검사목적 = document.getElementById('input-검사목적').value;
+        newItem.testItemCode = (document.getElementById('input-시험항목코드').value || '').trim();
         itemGroupData.push(newItem);
       }
     }
@@ -31196,6 +31215,7 @@ function saveItem() {
 
       if (editingType === '참고용') {
         updatedItem.검사목적 = document.getElementById('input-검사목적').value;
+        updatedItem.testItemCode = (document.getElementById('input-시험항목코드').value || '').trim();
       }
 
       if (editingType === '식품유형') {
@@ -33620,6 +33640,100 @@ function filterData() {
     currentFilter.search = document.getElementById('search-item-group').value;
   }
   renderData();
+}
+
+// ══════════════════════════════════════════════════════
+// 항목그룹 시험항목코드 자동매칭
+// ══════════════════════════════════════════════════════
+
+/** 항목명으로 시험항목코드 찾기 (한글명/영문명 매칭) */
+function findTestItemCodeByName(itemName) {
+  if (!_mfdsTestItems || !_mfdsTestItems.length || !itemName) return null;
+  var nameNorm = itemName.trim().toLowerCase();
+  // 1차: 한글명 정확 매칭
+  for (var i = 0; i < _mfdsTestItems.length; i++) {
+    var t = _mfdsTestItems[i];
+    if ((t['한글명'] || '').trim().toLowerCase() === nameNorm) return t['시험항목코드'];
+  }
+  // 2차: 영문명 정확 매칭
+  for (var i = 0; i < _mfdsTestItems.length; i++) {
+    var t = _mfdsTestItems[i];
+    if ((t['영문명'] || '').trim().toLowerCase() === nameNorm) return t['시험항목코드'];
+  }
+  // 3차: 별칭(alias) 매칭 — refFeeMapping에서 itemName→testItemCode
+  if (_refFeeData) {
+    for (var i = 0; i < _refFeeData.length; i++) {
+      var r = _refFeeData[i];
+      if ((r.itemName || '').trim().toLowerCase() === nameNorm && r.testItemCode) return r.testItemCode;
+    }
+  }
+  return null;
+}
+
+/** 항목그룹 전체 시험항목코드 자동매칭 */
+async function autoMatchItemGroupCodes() {
+  // 시험항목 미로드 시 로드
+  if (!_mfdsTestItems || !_mfdsTestItems.length) {
+    showToast('시험항목 데이터 로드 중...', 'info');
+    try {
+      var results = await Promise.all([
+        MFDS_CODES.loadTestItems(),
+        MFDS_CODES.loadItemMappings(),
+        MFDS_CODES.loadUnits()
+      ]);
+      _mfdsTestItems = results[0];
+      _mfdsItemMappings = results[1];
+      _mfdsUnits = results[2];
+      _mfdsTestLoaded = true;
+    } catch(err) {
+      showToast('시험항목 로드 실패: ' + err.message, 'error');
+      return;
+    }
+  }
+  // 참고용 맵핑(refFeeMapping) 미로드 시 로드
+  if (!_refFeeData) {
+    try { await loadRefFeeMapping(); } catch(e) {}
+  }
+
+  var matched = 0, total = 0, already = 0;
+  itemGroupData.forEach(function(item) {
+    total++;
+    if (item.testItemCode) { already++; return; }
+    var code = findTestItemCodeByName(item.항목명);
+    if (code) {
+      item.testItemCode = code;
+      matched++;
+    }
+  });
+
+  if (matched > 0) {
+    await saveItemGroupsToFirestore();
+    renderData();
+  }
+  showToast('자동매칭 완료: ' + matched + '건 매칭 / ' + already + '건 기존 / ' + (total - matched - already) + '건 미매칭', matched > 0 ? 'success' : 'info');
+}
+
+/** 상세폼에서 현재 항목명으로 시험항목코드 자동 검색 */
+async function autoFillTestItemCode() {
+  var itemName = (document.getElementById('input-항목명').value || '').trim();
+  if (!itemName) { showToast('항목명을 먼저 입력하세요', 'warning'); return; }
+  // 시험항목 미로드 시 로드
+  if (!_mfdsTestItems || !_mfdsTestItems.length) {
+    showToast('시험항목 데이터 로드 중...', 'info');
+    try {
+      var results = await Promise.all([MFDS_CODES.loadTestItems(), MFDS_CODES.loadItemMappings(), MFDS_CODES.loadUnits()]);
+      _mfdsTestItems = results[0]; _mfdsItemMappings = results[1]; _mfdsUnits = results[2]; _mfdsTestLoaded = true;
+    } catch(e) { showToast('로드 실패', 'error'); return; }
+  }
+  if (!_refFeeData) { try { await loadRefFeeMapping(); } catch(e) {} }
+  var code = findTestItemCodeByName(itemName);
+  if (code) {
+    document.getElementById('input-시험항목코드').value = code;
+    showToast('매칭됨: ' + code, 'success');
+    checkFormChanges();
+  } else {
+    showToast('"' + itemName + '" → 매칭되는 시험항목 없음', 'warning');
+  }
 }
 
 // ══════════════════════════════════════════════════════
