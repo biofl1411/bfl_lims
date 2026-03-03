@@ -33870,6 +33870,14 @@ function findTestItemCodeByName(itemName) {
       if ((r.itemName || '').trim().toLowerCase() === nameNorm && r.testItemCode) return r.testItemCode;
     }
   }
+  // 4차: 띄어쓰기 제거 후 매칭 (BFL "총 아플라톡신" ↔ MFDS "총아플라톡신")
+  var nameNoSpace = nameNorm.replace(/\s/g, '');
+  if (nameNoSpace) {
+    for (var i = 0; i < _mfdsTestItems.length; i++) {
+      var t = _mfdsTestItems[i];
+      if ((t['한글명'] || '').trim().toLowerCase().replace(/\s/g, '') === nameNoSpace) return t['시험항목코드'];
+    }
+  }
   return null;
 }
 
@@ -33898,22 +33906,56 @@ async function autoMatchItemGroupCodes() {
     try { await loadRefFeeMapping(); } catch(e) {}
   }
 
-  var matched = 0, total = 0, already = 0;
+  // 띄어쓰기 제거 비교용 MFDS 인덱스 생성
+  var mfdsNoSpaceMap = {};
+  _mfdsTestItems.forEach(function(t) {
+    var key = (t['한글명'] || '').trim().toLowerCase().replace(/\s/g, '');
+    if (key && !mfdsNoSpaceMap[key]) mfdsNoSpaceMap[key] = t;
+  });
+
+  var matched = 0, total = 0, already = 0, spaceFixed = 0;
   itemGroupData.forEach(function(item) {
     total++;
-    if (item.testItemCode) { already++; return; }
+    if (item.testItemCode) {
+      already++;
+      // 기존 매칭 항목도 띄어쓰기 정규화 (식약처 기준)
+      var existMfds = _mfdsTestItems.find(function(t) { return t['시험항목코드'] === item.testItemCode; });
+      if (existMfds) {
+        var bflN = (item.항목명 || '').trim();
+        var mfdsN = (existMfds['한글명'] || '').trim();
+        if (bflN !== mfdsN && bflN.replace(/\s/g, '').toLowerCase() === mfdsN.replace(/\s/g, '').toLowerCase()) {
+          item.항목명 = mfdsN;
+          spaceFixed++;
+        }
+      }
+      return;
+    }
+
+    // 1~4차: 매칭 (한글명/영문명/별칭/띄어쓰기 무시)
     var code = findTestItemCodeByName(item.항목명);
     if (code) {
+      // 매칭 성공 → 띄어쓰기 차이 시 식약처 기준으로 수정
+      var mfdsItem = _mfdsTestItems.find(function(t) { return t['시험항목코드'] === code; });
+      if (mfdsItem) {
+        var bflName = (item.항목명 || '').trim();
+        var mfdsName = (mfdsItem['한글명'] || '').trim();
+        if (bflName !== mfdsName && bflName.replace(/\s/g, '').toLowerCase() === mfdsName.replace(/\s/g, '').toLowerCase()) {
+          item.항목명 = mfdsName;
+          spaceFixed++;
+        }
+      }
       item.testItemCode = code;
       matched++;
     }
   });
 
-  if (matched > 0) {
+  if (matched > 0 || spaceFixed > 0) {
     await saveItemGroupsToFirestore();
     renderData();
   }
-  showToast('자동매칭 완료: ' + matched + '건 매칭 / ' + already + '건 기존 / ' + (total - matched - already) + '건 미매칭', matched > 0 ? 'success' : 'info');
+  var msg = '자동매칭 완료: ' + matched + '건 매칭 / ' + already + '건 기존 / ' + (total - matched - already) + '건 미매칭';
+  if (spaceFixed > 0) msg += ' / ✏️ ' + spaceFixed + '건 띄어쓰기 수정';
+  showToast(msg, matched > 0 ? 'success' : 'info');
 }
 
 /** 상세폼에서 현재 항목명으로 시험항목코드 자동 검색 */
