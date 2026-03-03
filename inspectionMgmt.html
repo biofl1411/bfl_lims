@@ -29814,6 +29814,58 @@ async function loadInspectionConfig() {
   }
 }
 
+// 5개 카테고리 유형(검체유형) 제거 → 항목만 남기고 중복 제거
+function cleanupFlatCategories() {
+  var TARGET_PURPOSES = [
+    'Allergen(ELISA)',
+    'Allergen(RT-PCR)',
+    '방사능(HPGe)',
+    'Vegan food(RT-PCR)',
+    'Halal food(RT_PCR)'
+  ];
+
+  var changed = false;
+  TARGET_PURPOSES.forEach(function(purpose) {
+    // 해당 검사목적의 항목만 추출
+    var items = itemGroupData.filter(function(d) { return d.검사목적 === purpose; });
+    if (items.length === 0) return;
+
+    // 중복 제거 (항목명 기준, 첫 번째 것 유지)
+    var seen = {};
+    var unique = [];
+    items.forEach(function(d) {
+      var key = (d.항목명 || '').trim();
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      unique.push({
+        검사목적: d.검사목적,
+        검체유형: d.검사목적,  // 유형 = 검사목적 이름 (단일 그룹화)
+        항목명: d.항목명,
+        규격: d.규격 || '-',
+        항목단위: d.항목단위 || '',
+        시험법근거: d.시험법근거 || '',
+        분야: d.분야 || '식품',
+        담당자: d.담당자 || '',
+        담당자소속: d.담당자소속 || '',
+        직급: d.직급 || ''
+      });
+    });
+
+    if (unique.length < items.length) {
+      // 기존 항목 제거 후 정리된 항목 추가
+      itemGroupData = itemGroupData.filter(function(d) { return d.검사목적 !== purpose; });
+      itemGroupData = itemGroupData.concat(unique);
+      changed = true;
+      console.log('[정리] ' + purpose + ': ' + items.length + '건 → ' + unique.length + '건 (중복 ' + (items.length - unique.length) + '건 제거)');
+    }
+  });
+
+  if (changed) {
+    console.log('[정리] 5개 카테고리 유형 정리 완료, Firestore 저장 중...');
+    saveItemGroupsToFirestore();
+  }
+}
+
 // 초기화
 function init() {
   // foodTypeData는 loadInspectionConfig()에서 Firestore 로드됨
@@ -29839,6 +29891,9 @@ function init() {
       분야: getDivision(item.검체유형)
     }));
   }
+
+  // 5개 카테고리 유형 제거 + 중복 항목 제거 (2026-03-03)
+  cleanupFlatCategories();
 
   // 수수료 데이터 로드 (food_item_fee_mapping.js — 엑셀에서 전체 재추출, purpose 태그 포함)
   if (feeData.length === 0 && typeof FOOD_ITEM_FEE_MAPPING !== 'undefined') {
