@@ -31582,14 +31582,12 @@ function renderRefFeeCategoryChips() {
 function renderRefFeeSubChips() {
   var container = document.getElementById('ref-fee-sub-chips');
   if (!container) return;
-  // 대분류가 선택되지 않았거나 소분류가 없으면 숨김
   if (_refFeeCategory === 'all' || !REF_SUB_CATEGORIES[_refFeeCategory]) {
     container.style.display = 'none';
     return;
   }
   var subs = REF_SUB_CATEGORIES[_refFeeCategory];
   var cat = REF_CODE_CATEGORIES[_refFeeCategory];
-  // 소분류별 건수 계산
   var subCounts = {};
   if (_refFeeData) {
     _refFeeData.forEach(function(m) {
@@ -31601,17 +31599,19 @@ function renderRefFeeSubChips() {
       }
     });
   }
+  var activeSubs = Object.keys(_refFeeSubSelections);
+  var noSub = activeSubs.length === 0;
   var html = '<span style="font-size:11px;color:var(--sub);margin-right:2px;">소분류:</span>';
-  // 전체 버튼
-  html += '<button onclick="setRefFeeSubCategory(null)" style="padding:3px 10px;border-radius:10px;border:1px solid ' +
-    (!_refFeeSubCategory ? cat.color : '#bbb') + ';background:' +
-    (!_refFeeSubCategory ? cat.color : '#f5f5f5') + ';color:' +
-    (!_refFeeSubCategory ? '#fff' : '#555') + ';font-size:11px;font-weight:600;cursor:pointer;">전체</button>';
+  // 전체 버튼 — 소분류 선택 없을 때 활성
+  html += '<button onclick="clearRefFeeSubSelections()" style="padding:3px 10px;border-radius:10px;border:1px solid ' +
+    (noSub ? cat.color : '#bbb') + ';background:' +
+    (noSub ? cat.color : '#f5f5f5') + ';color:' +
+    (noSub ? '#fff' : '#555') + ';font-size:11px;font-weight:600;cursor:pointer;">전체</button>';
   Object.keys(subs).forEach(function(s) {
     var cnt = subCounts[s] || 0;
     if (cnt === 0) return;
-    var isActive = _refFeeSubCategory === s;
-    html += '<button onclick="setRefFeeSubCategory(\'' + s + '\')" style="padding:3px 10px;border-radius:10px;border:1px solid ' +
+    var isActive = !!_refFeeSubSelections[s];
+    html += '<button onclick="toggleRefFeeSubCategory(\'' + s + '\')" style="padding:3px 10px;border-radius:10px;border:1px solid ' +
       (isActive ? cat.color : '#bbb') + ';background:' +
       (isActive ? cat.color : '#f5f5f5') + ';color:' +
       (isActive ? '#fff' : '#555') + ';font-size:11px;cursor:pointer;">' +
@@ -31624,8 +31624,9 @@ function renderRefFeeSubChips() {
 function setRefFeeSubCategory(sub) {
   var deselect = (_refFeeSubCategory === sub);
   _refFeeSubCategory = deselect ? null : sub;
-  // 소분류 선택 시 해당 항목 자동 선택 / 해제 시 선택 초기화
+
   if (!deselect && sub && _refFeeCategory !== 'all' && _refFeeData) {
+    // 소분류 선택 → 해당 항목 자동 선택
     _refFeeSelected = {};
     _refFeeData.forEach(function(m) {
       var code = (m.testItemCode || '').toUpperCase();
@@ -31634,6 +31635,7 @@ function setRefFeeSubCategory(sub) {
       }
     });
   } else if (deselect) {
+    // 해제 → 선택 초기화
     _refFeeSelected = {};
   }
   renderRefFeeSubChips();
@@ -31642,9 +31644,57 @@ function setRefFeeSubCategory(sub) {
   updateRefFeeBulkBar();
 }
 
+// 여러 소분류 동시 선택 (토글)
+var _refFeeSubSelections = {}; // { '2': true, '3': true } 형태
+function toggleRefFeeSubCategory(sub) {
+  if (_refFeeCategory === 'all' || !_refFeeData) return;
+  var prefix = _refFeeCategory;
+
+  if (_refFeeSubSelections[sub]) {
+    // 해제: 해당 소분류 항목 선택 해제
+    delete _refFeeSubSelections[sub];
+    _refFeeData.forEach(function(m) {
+      var code = (m.testItemCode || '').toUpperCase();
+      if (code.charAt(0) === prefix && code.charAt(1) === sub) {
+        delete _refFeeSelected[m.testItemCode];
+      }
+    });
+  } else {
+    // 선택: 해당 소분류 항목 추가 선택
+    _refFeeSubSelections[sub] = true;
+    _refFeeData.forEach(function(m) {
+      var code = (m.testItemCode || '').toUpperCase();
+      if (code.charAt(0) === prefix && code.charAt(1) === sub) {
+        _refFeeSelected[m.testItemCode] = true;
+      }
+    });
+  }
+
+  // 활성 소분류가 있으면 필터도 적용 (복수 소분류)
+  var activeSubs = Object.keys(_refFeeSubSelections);
+  _refFeeSubCategory = activeSubs.length > 0 ? '__multi__' : null;
+
+  renderRefFeeSubChips();
+  renderRefFeeTable();
+  syncRefFeeCheckboxes();
+  updateRefFeeBulkBar();
+}
+
+function clearRefFeeSubSelections() {
+  _refFeeSubSelections = {};
+  _refFeeSubCategory = null;
+  _refFeeSelected = {};
+  renderRefFeeSubChips();
+  renderRefFeeTable();
+  syncRefFeeCheckboxes();
+  updateRefFeeBulkBar();
+}
+
 function setRefFeeCategory(cat) {
   _refFeeCategory = (_refFeeCategory === cat) ? 'all' : cat;
-  _refFeeSubCategory = null; // 소분류 초기화
+  _refFeeSubCategory = null;
+  _refFeeSubSelections = {}; // 다중 소분류 초기화
+  _refFeeSelected = {};
   renderRefFeeCategoryChips();
   renderRefFeeTable();
 }
@@ -31667,10 +31717,11 @@ function renderRefFeeTable() {
     filtered = filtered.filter(function(m) {
       return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
     });
-    // 소분류 필터
-    if (_refFeeSubCategory) {
+    // 소분류 필터 (단일 또는 다중)
+    var activeSubs = Object.keys(_refFeeSubSelections);
+    if (activeSubs.length > 0) {
       filtered = filtered.filter(function(m) {
-        return (m.testItemCode || '').charAt(1) === _refFeeSubCategory;
+        return _refFeeSubSelections[(m.testItemCode || '').charAt(1)];
       });
     }
   }
@@ -31685,6 +31736,16 @@ function renderRefFeeTable() {
   }
   if (onlyActive) {
     filtered = filtered.filter(function(m) { return m.isActive !== false; });
+  }
+
+  // 선택된 항목 상단 배치
+  var hasSelection = Object.keys(_refFeeSelected).length > 0;
+  if (hasSelection && !_refFeeSortCol) {
+    filtered = filtered.slice().sort(function(a, b) {
+      var sa = _refFeeSelected[a.testItemCode] ? 0 : 1;
+      var sb = _refFeeSelected[b.testItemCode] ? 0 : 1;
+      return sa - sb;
+    });
   }
 
   // 정렬
@@ -31862,9 +31923,10 @@ function getRefFeeFilteredItems() {
     filtered = filtered.filter(function(m) {
       return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
     });
-    if (_refFeeSubCategory) {
+    var activeSubs = Object.keys(_refFeeSubSelections);
+    if (activeSubs.length > 0) {
       filtered = filtered.filter(function(m) {
-        return (m.testItemCode || '').charAt(1) === _refFeeSubCategory;
+        return _refFeeSubSelections[(m.testItemCode || '').charAt(1)];
       });
     }
   }
