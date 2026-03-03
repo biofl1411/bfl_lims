@@ -30712,9 +30712,120 @@ function buildItemGroupChips() {
   container.innerHTML = html;
 }
 
+// ═══ 참고용 검사목적 → 시험항목 카테고리 매핑 ═══
+// 매핑된 검사목적은 mfds_test_items에서 동적 로드
+var IG_MFDS_MAP = {
+  '방사능(HPGe)':       { prefix: 'B', sub: '7', label: '중금속/유해물질 > 방사능' },
+  '잔류농약(참고용)':    { prefix: 'E', sub: null, label: '잔류농약 전체' },
+  '항생물질(참고용)':    { prefix: 'F', sub: null, label: '동물용의약품 전체' },
+  '이물질검사':          { prefix: 'H', sub: null, label: '이물/곰팡이 전체' },
+  'Allergen(RT-PCR)':   { prefix: 'X', sub: '2', label: '기타 > RT-PCR' },
+  'Allergen(ELISA)':    { prefix: 'X', sub: '3', label: '기타 > ELISA' }
+};
+
+/** 참고용 칩이 mfds_test_items 매핑인지 확인 */
+function getIgMfdsMapping(purposeName) {
+  return IG_MFDS_MAP[purposeName] || null;
+}
+
+/** 참고용: mfds_test_items 기반 동적 테이블 렌더 */
+async function renderItemGroupsFromMfds(mapping) {
+  var accordion = document.getElementById('item-group-accordion');
+  var cards = document.getElementById('item-group-cards');
+  cards.style.display = 'none';
+  accordion.style.display = 'block';
+
+  // mfds_test_items 미로드 시 로드
+  if (!_mfdsTestItems || !_mfdsTestItems.length) {
+    accordion.innerHTML = '<div style="padding:40px;text-align:center;color:#999;">⏳ 시험항목 데이터 로드 중...</div>';
+    try {
+      var results = await Promise.all([MFDS_CODES.loadTestItems(), MFDS_CODES.loadItemMappings(), MFDS_CODES.loadUnits()]);
+      _mfdsTestItems = results[0]; _mfdsItemMappings = results[1]; _mfdsUnits = results[2]; _mfdsTestLoaded = true;
+    } catch(e) {
+      accordion.innerHTML = '<div style="padding:40px;text-align:center;color:#dc3545;">⚠️ 시험항목 로드 실패</div>';
+      return;
+    }
+  }
+  if (!_refFeeData) { try { await loadRefFeeMapping(); } catch(e) {} }
+
+  // 필터링: prefix + sub
+  var filtered = _mfdsTestItems.filter(function(t) {
+    var code = (t['시험항목코드'] || '');
+    if (code.charAt(0) !== mapping.prefix) return false;
+    if (mapping.sub && code.charAt(1) !== mapping.sub) return false;
+    return true;
+  });
+
+  // 소분류별 그룹
+  var subGroups = {};
+  var subDefs = REF_SUB_CATEGORIES[mapping.prefix] || {};
+  filtered.forEach(function(t) {
+    var code = t['시험항목코드'] || '';
+    var subKey = code.charAt(1) || '0';
+    var subName = subDefs[subKey] || '기타';
+    if (!subGroups[subKey]) subGroups[subKey] = { name: subName, items: [] };
+    subGroups[subKey].items.push(t);
+  });
+
+  // 테이블 렌더
+  var cat = REF_CODE_CATEGORIES[mapping.prefix] || { name: '미분류', color: '#999' };
+  var html = '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">'
+    + '<span style="background:' + cat.color + ';color:#fff;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;">' + cat.name + '</span>'
+    + '<span style="font-size:13px;color:var(--sub);">총 ' + filtered.length + '건</span></div>';
+
+  Object.keys(subGroups).sort().forEach(function(subKey) {
+    var sg = subGroups[subKey];
+    html += '<div style="margin-bottom:12px;">';
+    if (Object.keys(subGroups).length > 1) {
+      html += '<div style="font-weight:600;font-size:13px;padding:6px 0;color:#333;border-bottom:1px solid #eee;margin-bottom:4px;">'
+        + mapping.prefix + subKey + ' ' + sg.name + ' <span style="color:#999;font-weight:400;">(' + sg.items.length + ')</span></div>';
+    }
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="background:#f8f9fa;border-bottom:2px solid #e0e0e0;">'
+      + '<th style="padding:8px 12px;text-align:left;font-weight:600;width:100px;">시험항목코드</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-weight:600;">한글명</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-weight:600;">영문명</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-weight:600;width:120px;">별칭</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-weight:600;width:60px;">단위</th>'
+      + '<th style="padding:8px 12px;text-align:center;font-weight:600;width:50px;">사용</th>'
+      + '<th style="padding:8px 12px;text-align:center;font-weight:600;width:80px;">BFL 매핑</th>'
+      + '</tr></thead><tbody>';
+    sg.items.forEach(function(item) {
+      var code = item['시험항목코드'] || '';
+      var isUsed = (item['사용여부'] || 'Y') === 'Y';
+      var rowOp = isUsed ? '' : 'opacity:.45;';
+      var mp = findMfdsMappingByTestCode ? findMfdsMappingByTestCode(code) : null;
+      var mpHtml = mp
+        ? '<span style="background:#c8e6c9;color:#2e7d32;padding:1px 6px;border-radius:4px;font-size:10px;">✅ ' + (mp.bflItemName || '') + '</span>'
+        : '<span style="background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:4px;font-size:10px;">⚠ 미매핑</span>';
+      html += '<tr style="border-bottom:1px solid #f0f0f0;' + rowOp + '" onmouseover="this.style.background=\'#f8f9ff\'" onmouseout="this.style.background=\'#fff\'">'
+        + '<td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#1565c0;">' + code + '</td>'
+        + '<td style="padding:8px 12px;font-weight:500;">' + (item['한글명'] || '') + '</td>'
+        + '<td style="padding:8px 12px;color:#667085;font-size:12px;">' + (item['영문명'] || '') + '</td>'
+        + '<td style="padding:8px 12px;color:#999;font-size:12px;">' + (item['별칭'] || '') + '</td>'
+        + '<td style="padding:8px 12px;color:#667085;font-size:12px;">' + (getRefFeeUnit(code) || '-') + '</td>'
+        + '<td style="padding:8px 6px;text-align:center;"><input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-code="' + code + '" onchange="toggleMfdsTestItemActive(this)" style="accent-color:#43a047;"></td>'
+        + '<td style="padding:8px 12px;text-align:center;">' + mpHtml + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+
+  accordion.innerHTML = html;
+}
+
 // 참고용 렌더링 (2단계 아코디언)
 function renderItemGroups() {
   buildItemGroupChips();
+
+  // mfds_test_items 매핑 체크
+  var mfdsMap = getIgMfdsMapping(currentFilter.purpose);
+  if (mfdsMap) {
+    document.getElementById('item-group-cards').style.display = 'none';
+    renderItemGroupsFromMfds(mfdsMap);
+    return;
+  }
+
   let filtered = filterItemGroupData();
   
   if (currentView[0] === 'card') {
