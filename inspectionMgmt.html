@@ -30858,8 +30858,8 @@ function renderItemGroups() {
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <div class="card-actions">
-              <button onclick="event.stopPropagation();editItemGroupPurpose('${esc(purpose)}')" title="카테고리 수정">✏️</button>
-              <button onclick="event.stopPropagation();deleteItemGroupPurpose('${esc(purpose)}')" title="카테고리 삭제">🗑️</button>
+              <button onclick="event.stopPropagation();editItemGroupType('${esc(purpose)}','${esc(type)}')" title="검체유형 수정">✏️</button>
+              <button onclick="event.stopPropagation();deleteItemGroupType('${esc(purpose)}','${esc(type)}')" title="검체유형 삭제">🗑️</button>
             </div>
             <div class="card-badge">${items.length}개</div>
             ${typeTotalFee > 0 ? `<div class="fee-badge" style="margin-top:0;">💰 ${typeTotalFee.toLocaleString()}원</div>` : ''}
@@ -30928,8 +30928,8 @@ function renderItemGroups() {
           </div>
           <div class="accordion-info" style="display:flex;gap:12px;align-items:center;">
             <div class="card-actions">
-              <button onclick="event.stopPropagation();editItemGroupPurpose('${escAcc(purpose)}')" title="카테고리 수정">✏️</button>
-              <button onclick="event.stopPropagation();deleteItemGroupPurpose('${escAcc(purpose)}')" title="카테고리 삭제">🗑️</button>
+              <button onclick="event.stopPropagation();editItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 수정">✏️</button>
+              <button onclick="event.stopPropagation();deleteItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 삭제">🗑️</button>
             </div>
             ${typeTotalFee > 0 ? `<span class="fee-badge">💰 ${typeTotalFee.toLocaleString()}원</span>` : ''}
             <span class="accordion-count">${typeItems.length}개</span>
@@ -31465,6 +31465,46 @@ function deleteItemGroupPurpose(purpose) {
   }
 
   showToast(`'${purpose}' 카테고리 삭제 (${count}건)`, 'info');
+  updateStats();
+  renderData();
+  saveItemGroupsToFirestore();
+}
+
+// ══ 참고용: 검체유형(하위 카테고리) 삭제 ══
+function deleteItemGroupType(purpose, type) {
+  const count = itemGroupData.filter(d => d.검사목적 === purpose && d.검체유형 === type).length;
+  if (!confirm(`'${type}' 검체유형과 하위 ${count}건을 모두 삭제하시겠습니까?`)) return;
+
+  itemGroupData = itemGroupData.filter(d => !(d.검사목적 === purpose && d.검체유형 === type));
+
+  showToast(`'${type}' 검체유형 삭제 (${count}건)`, 'info');
+  updateStats();
+  renderData();
+  saveItemGroupsToFirestore();
+}
+
+// ══ 참고용: 검체유형(하위 카테고리) 이름 수정 ══
+function editItemGroupType(purpose, oldType) {
+  const newType = prompt(`검체유형 이름을 수정합니다.\n현재: ${oldType}`, oldType);
+  if (!newType || newType.trim() === '' || newType.trim() === oldType) return;
+  const trimmed = newType.trim();
+
+  // 동일 검사목적 내 중복 체크
+  const existing = new Set(itemGroupData.filter(d => d.검사목적 === purpose).map(d => d.검체유형));
+  if (existing.has(trimmed)) {
+    showToast(`'${trimmed}' 검체유형이 이미 존재합니다.`, 'warning');
+    return;
+  }
+
+  let count = 0;
+  itemGroupData.forEach(item => {
+    if (item.검사목적 === purpose && item.검체유형 === oldType) {
+      item.검체유형 = trimmed;
+      count++;
+    }
+  });
+
+  showToast(`'${oldType}' → '${trimmed}' 변경 (${count}건)`, 'success');
   updateStats();
   renderData();
   saveItemGroupsToFirestore();
