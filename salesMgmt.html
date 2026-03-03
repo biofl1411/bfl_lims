@@ -362,7 +362,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <span style="color:#1a73e8;font-weight:600;cursor:pointer" onclick="bizGoStep(0)">전국</span>
           </div>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-            <input id="bizQuickSearch" placeholder="업체명 빠른검색..." style="padding:6px 12px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:180px" onkeydown="if(event.key==='Enter')doBizQuickSearch()">
+            <input id="bizQuickSearch" placeholder="업체명, 인허가번호, 대표자..." style="padding:6px 12px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:220px" onkeydown="if(event.key==='Enter')doBizQuickSearch()">
             <button class="btn btn-primary btn-sm" onclick="doBizQuickSearch()" style="padding:6px 12px">🔍</button>
           </div>
         </div>
@@ -5147,20 +5147,42 @@ async function doRegionSearch() {
 
 async function doBizQuickSearch() {
   var q = document.getElementById('bizQuickSearch').value.trim();
-  if(!q) { toast('업체명을 입력하세요.'); return; }
+  if(!q) { toast('검색어를 입력하세요.'); return; }
   bizState = {sido:'검색', sigungu:q, dong:''};
   updateBreadcrumb();
   document.getElementById('bizStep0').style.display = 'none';
   document.getElementById('bizStep1').style.display = 'none';
   document.getElementById('bizStep2').style.display = 'none';
   document.getElementById('bizStep3').style.display = 'block';
-  document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 검색 중...</div>';
-  document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 조회 중...</td></tr>';
-  document.getElementById('bizKakaoCount').textContent = '...';
-  document.getElementById('bizFssCount').textContent = '...';
-  await searchKakao(q);
-  await searchFss(q);
-  initResultMap(q);
+
+  // 1단계: Firestore 로컬 검색 (즉시, CORS 무관)
+  var localResults = [];
+  if(fssAllData && fssAllData.length) {
+    var qLower = q.toLowerCase();
+    localResults = fssAllData.filter(function(r) {
+      return (r.nm && r.nm.toLowerCase().indexOf(qLower) >= 0) ||
+             (r.lic && r.lic.toLowerCase().indexOf(qLower) >= 0) ||
+             (r.ceo && r.ceo.toLowerCase().indexOf(qLower) >= 0) ||
+             (r.biz && r.biz.toLowerCase().indexOf(qLower) >= 0) ||
+             (r.addr && r.addr.toLowerCase().indexOf(qLower) >= 0);
+    });
+  }
+
+  if(localResults.length > 0) {
+    // Firestore 결과 즉시 표시
+    showFssResults(localResults);
+    document.getElementById('bizKakaoCount').textContent = '-';
+    toast('🔍 Firestore에서 ' + localResults.length + '건 검색');
+  } else {
+    // Firestore에 없으면 기존 방식 (카카오맵 + 식약처 API)
+    document.getElementById('bizResultList').innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4">⏳ 검색 중...</div>';
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#8892a4">⏳ 외부 API 조회 중...</td></tr>';
+    document.getElementById('bizKakaoCount').textContent = '...';
+    document.getElementById('bizFssCount').textContent = '...';
+    await searchKakao(q);
+    await searchFss(q);
+    initResultMap(q);
+  }
 }
 
 async function searchKakao(query) {
