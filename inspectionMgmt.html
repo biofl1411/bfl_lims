@@ -30799,9 +30799,20 @@ async function renderItemGroupsFromMfds(mapping) {
       var mpHtml = mp
         ? '<span style="background:#c8e6c9;color:#2e7d32;padding:1px 6px;border-radius:4px;font-size:10px;">✅ ' + (mp.bflItemName || '') + '</span>'
         : '<span style="background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:4px;font-size:10px;">⚠ 미매핑</span>';
-      // 한글명/영문명 정리: 한글명=영문명 중복이면 영문명 비움
+      // 한글명/영문명 정리: ENG_TO_KOR_MAP fallback + 중복 비움
       var korName = (item['한글명'] || '').trim();
       var engName = (item['영문명'] || '').trim();
+      if (typeof ENG_TO_KOR_MAP !== 'undefined') {
+        var _needsKor = !korName || (engName && korName.toLowerCase() === engName.toLowerCase());
+        if (_needsKor) {
+          var _lookupNames = [engName, korName].filter(Boolean);
+          for (var _li = 0; _li < _lookupNames.length; _li++) {
+            var _nl = _lookupNames[_li].trim().toLowerCase();
+            for (var _k in ENG_TO_KOR_MAP) { if (_k.toLowerCase() === _nl) { korName = ENG_TO_KOR_MAP[_k]; break; } }
+            if (korName && (!engName || korName.toLowerCase() !== engName.toLowerCase())) break;
+          }
+        }
+      }
       if (korName && engName && korName.toLowerCase() === engName.toLowerCase()) {
         engName = '';
       }
@@ -30973,18 +30984,25 @@ function renderItemGroups() {
           if (found) { mfds = found; tCode = found['시험항목코드'] || ''; }
         }
         let mfdsKor = (mfds['한글명'] || '').trim();
-        // ENG_TO_KOR_MAP fallback (mfds에 없는 항목)
-        if (!mfdsKor && item.항목명 && typeof ENG_TO_KOR_MAP !== 'undefined') {
-          const _el = item.항목명.trim().toLowerCase();
-          for (const k in ENG_TO_KOR_MAP) { if (k.toLowerCase() === _el) { mfdsKor = ENG_TO_KOR_MAP[k]; break; } }
+        let engName = (mfds['영문명'] || '').trim();
+        // ENG_TO_KOR_MAP fallback: 한글명이 없거나 영문명과 동일(한글 번역 없음)
+        if (typeof ENG_TO_KOR_MAP !== 'undefined') {
+          const needsKor = !mfdsKor || (engName && mfdsKor.toLowerCase() === engName.toLowerCase());
+          if (needsKor) {
+            const lookupNames = [item.항목명, engName, mfdsKor].filter(Boolean);
+            for (const nm of lookupNames) {
+              const nl = nm.trim().toLowerCase();
+              for (const k in ENG_TO_KOR_MAP) { if (k.toLowerCase() === nl) { mfdsKor = ENG_TO_KOR_MAP[k]; break; } }
+              if (mfdsKor && (!engName || mfdsKor.toLowerCase() !== engName.toLowerCase())) break;
+            }
+          }
         }
         const dispName = mfdsKor || item.항목명 || '';
-        let engName = (mfds['영문명'] || '').trim();
         // 한글명=영문명 중복이면 영문명 비움; 항목명이 영문이면 영문명으로 표시
         if (dispName && engName && dispName.toLowerCase() === engName.toLowerCase()) engName = '';
         if (!engName && mfdsKor && item.항목명 && item.항목명 !== mfdsKor) engName = item.항목명;
         const alias = mfds['별칭'] || '';
-        const isUsed = isTestItemActive(tCode);
+        const isUsed = tCode ? isTestItemActive(tCode) : ((item.사용여부 || 'Y') === 'Y');
         const rowOp = isUsed ? '' : 'opacity:.45;';
 
         itemsHtml += `<tr style="border-bottom:1px solid #f0f0f0;${rowOp}cursor:pointer;"
@@ -30995,7 +31013,9 @@ function renderItemGroups() {
           <td style="padding:6px 8px;color:#667085;font-size:12px;">${engName}</td>
           <td style="padding:6px 8px;color:#999;font-size:12px;">${alias}</td>
           <td style="padding:6px 8px;">${item.항목단위 ? '<span class="badge badge-success">' + item.항목단위 + '</span>' : '-'}</td>
-          <td style="padding:6px 4px;text-align:center;">${tCode ? '<input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-code="' + tCode + '" onchange="event.stopPropagation();toggleTestItemActive(this)" style="accent-color:#43a047;">' : '-'}</td>
+          <td style="padding:6px 4px;text-align:center;">${tCode
+            ? '<input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-code="' + tCode + '" onchange="event.stopPropagation();toggleTestItemActive(this)" style="accent-color:#43a047;">'
+            : '<input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-idx="' + idx + '" onchange="event.stopPropagation();toggleItemGroupActive(this)" style="accent-color:#ff9800;">'}</td>
           <td style="padding:6px 8px;text-align:center;">${getMfdsMappingBadge(item.항목명)}</td>
           <td style="padding:6px 8px;text-align:right;"><span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span></td>
           <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
@@ -32544,6 +32564,30 @@ function toggleTestItemActive(cb) {
   showToast(code + ' ' + (isUsed ? '활성화' : '비활성화'), 'info');
 }
 
+/** 사용여부 토글 — testItemCode 없는 항목용 (itemGroups 직접 업데이트) */
+function toggleItemGroupActive(cb) {
+  var idx = parseInt(cb.getAttribute('data-idx'));
+  if (isNaN(idx) || !itemGroupData[idx]) return;
+  var item = itemGroupData[idx];
+  var isUsed = cb.checked;
+
+  // 1) 메모리 업데이트
+  item['사용여부'] = isUsed ? 'Y' : 'N';
+
+  // 2) Firestore 업데이트
+  if (item._docId) {
+    firebase.firestore().collection('itemGroups').doc(item._docId)
+      .update({ '사용여부': isUsed ? 'Y' : 'N' })
+      .catch(function(e) { console.error('사용여부 업데이트 실패:', e); });
+  }
+
+  // 3) 행 투명도 즉시 반영
+  var row = cb.closest('tr');
+  if (row) row.style.opacity = isUsed ? '1' : '.45';
+
+  showToast((item.항목명 || '') + ' ' + (isUsed ? '활성화' : '비활성화'), 'info');
+}
+
 // 기존 함수명 호환 (모두 같은 단일 함수 참조)
 var toggleMfdsTestItemActive = toggleTestItemActive;
 var refFeeToggleActive = toggleTestItemActive;
@@ -32695,7 +32739,45 @@ var ENG_TO_KOR_MAP = {
   'Crystal violet':'크리스탈바이올렛','Leucocrystal violet':'류코크리스탈바이올렛',
   'Leucomalachite green':'류코말라카이트그린','3-Amino-2-oxazolidinone':'3-아미노-2-옥사졸리디논',
   'Semicarbazide':'세미카바자이드','1-Aminohydantoin':'1-아미노하이단토인',
-  'Difurazone':'디퓨라존','Islanditoxin':'이슬란디톡신'
+  'Difurazone':'디퓨라존','Islanditoxin':'이슬란디톡신',
+
+  // ── B: 중금속·유해물질·곰팡이독소 (Heavy metals/Mycotoxins) ──
+  'Lead':'납','Cadmium':'카드뮴','Mercury':'수은','Arsenic':'비소','Tin':'주석',
+  'Chromium':'크롬','Nickel':'니켈','Manganese':'망간','Antimony':'안티몬','Copper':'구리',
+  'Zinc':'아연','Iron':'철','Aluminum':'알루미늄','Barium':'바륨','Selenium':'셀레늄',
+  'Aflatoxin B1':'아플라톡신 B1','Aflatoxin B2':'아플라톡신 B2',
+  'Aflatoxin G1':'아플라톡신 G1','Aflatoxin G2':'아플라톡신 G2',
+  'Aflatoxin M1':'아플라톡신 M1','Total Aflatoxins':'총 아플라톡신',
+  'Ochratoxin A':'오크라톡신 A','Deoxynivalenol':'데옥시니발레놀',
+  'Zearalenone':'제랄레논','Fumonisin B1':'푸모니신 B1','Fumonisin B2':'푸모니신 B2',
+  'Patulin':'파투린','T-2 toxin':'T-2 독소','HT-2 toxin':'HT-2 독소',
+  'Nivalenol':'니발레놀','Sterigmatocystin':'스테리그마토시스틴',
+  'Benzo(a)pyrene':'벤조(a)피렌','Benzopyrene':'벤조피렌','Acrylamide':'아크릴아마이드',
+  '3-MCPD':'3-엠씨피디','Ethyl carbamate':'에틸카바메이트','Melamine':'멜라민',
+  'Formaldehyde':'포름알데히드','Methanol':'메탄올','Nitrate':'질산염','Nitrite':'아질산염',
+
+  // ── C: 미생물 (Microorganisms) ──
+  'Salmonella':'살모넬라','Listeria monocytogenes':'리스테리아 모노사이토제네스',
+  'Listeria':'리스테리아','Staphylococcus aureus':'황색포도상구균',
+  'Staphylococcus':'포도상구균','Escherichia coli':'대장균',
+  'E. coli':'대장균','Bacillus cereus':'바실러스 세레우스',
+  'Clostridium perfringens':'클로스트리디움 퍼프린젠스','Clostridium botulinum':'클로스트리디움 보툴리눔',
+  'Vibrio parahaemolyticus':'장염비브리오','Campylobacter':'캠필로박터',
+  'Yersinia enterocolitica':'예르시니아 엔테로콜리티카','Cronobacter sakazakii':'크로노박터 사카자키',
+  'Norovirus':'노로바이러스','Hepatitis A':'A형간염바이러스',
+  'Enterohemorrhagic E. coli':'장출혈성대장균',
+
+  // ── A: 이화학·영양성분 (General Chemistry/Nutrients) ──
+  'Moisture':'수분','Crude protein':'조단백질','Crude fat':'조지방',
+  'Crude fiber':'조섬유','Crude ash':'조회분','Total nitrogen':'총질소',
+  'Calcium':'칼슘','Phosphorus':'인','Sodium':'나트륨','Potassium':'칼륨',
+  'Magnesium':'마그네슘','Vitamin A':'비타민A','Vitamin C':'비타민C',
+  'Vitamin D':'비타민D','Vitamin E':'비타민E','Vitamin B1':'비타민B1',
+  'Vitamin B2':'비타민B2','Vitamin B6':'비타민B6','Vitamin B12':'비타민B12',
+  'Niacin':'나이아신','Folic acid':'엽산','Biotin':'비오틴',
+  'Pantothenic acid':'판토텐산','Total sugars':'총당류','Dietary fiber':'식이섬유',
+  'Trans fat':'트랜스지방','Saturated fat':'포화지방','Cholesterol':'콜레스테롤',
+  'Caffeine':'카페인','Taurine':'타우린'
 };
 
 /** 영문 한글명 → 한국어로 일괄 변환 (mfds_test_items) */
