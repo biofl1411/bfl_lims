@@ -134,7 +134,7 @@ body {
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: visible;
   margin-bottom: 24px;
 }
 .card-header {
@@ -151,12 +151,13 @@ body {
 
 .api-table {
   width: 100%;
+  min-width: 1150px;
   border-collapse: collapse;
 }
 .api-table th {
   background: #f8f9fb;
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 8px 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text2);
   text-align: left;
@@ -164,8 +165,8 @@ body {
   white-space: nowrap;
 }
 .api-table td {
-  padding: 12px 14px;
-  font-size: 13px;
+  padding: 10px 10px;
+  font-size: 12px;
   border-bottom: 1px solid #f0f2f5;
   vertical-align: middle;
   white-space: nowrap;
@@ -357,7 +358,7 @@ body {
         <button class="btn btn-warning btn-sm" onclick="triggerCollect('resume')">⏩ 이어서 수집</button>
       </div>
     </div>
-    <div id="tableWrap">
+    <div id="tableWrap" style="overflow-x:auto">
       <div class="loading">데이터를 불러오는 중...</div>
     </div>
   </div>
@@ -422,6 +423,24 @@ function formatTime(dtStr) {
   });
 }
 
+// ISO datetime → MM-DD 형식
+function formatDate10(dtStr) {
+  if (!dtStr) return '-';
+  try {
+    var d = new Date(dtStr);
+    if (isNaN(d.getTime())) return '-';
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return mm + '-' + dd;
+  } catch(e) { return '-'; }
+}
+
+// YYYYMMDD → YYYY-MM-DD 형식
+function formatDate8d(s) {
+  if (!s || s.length < 8) return s || '-';
+  return s.substring(0, 4) + '-' + s.substring(4, 6) + '-' + s.substring(6, 8);
+}
+
 function showToast(msg) {
   var t = document.getElementById('toast');
   t.textContent = msg;
@@ -476,6 +495,17 @@ async function loadAllLogs() {
   }
 }
 
+async function loadApiFreshness() {
+  try {
+    var doc = await db.collection('fss_config').doc('api_freshness').get();
+    if (doc.exists) return doc.data();
+    return {};
+  } catch(e) {
+    console.warn('freshness 로드 실패:', e.message);
+    return {};
+  }
+}
+
 async function loadData() {
   if (!isFirebaseReady()) {
     document.getElementById('refreshInfo').textContent = 'Firebase 연결 대기 중...';
@@ -485,10 +515,11 @@ async function loadData() {
   document.getElementById('refreshInfo').textContent = '데이터 로딩 중...';
 
   try {
-    // 1. 카운트 메타데이터 + 수집 로그를 동시에 조회 (2개 쿼리만)
-    var results = await Promise.all([loadDataCounts(), loadAllLogs()]);
+    // 1. 카운트 메타데이터 + 수집 로그 + freshness를 동시에 조회
+    var results = await Promise.all([loadDataCounts(), loadAllLogs(), loadApiFreshness()]);
     var dataCounts = results[0];
     var latestLogs = results[1];
+    var freshness = results[2];
     var apiCounts = dataCounts.counts || {};
 
     var apis = [];
@@ -499,6 +530,7 @@ async function loadData() {
       var dbCount = apiCounts[sid] || 0;
       var lastLog = latestLogs[sid] || null;
 
+      var fresh = freshness[sid] || {};
       var apiData = {
         api_source: sid,
         name: info.name,
@@ -506,6 +538,8 @@ async function loadData() {
         db_count: dbCount,
         last_api_total: lastLog ? (lastLog.total_count || 0) : 0,
         last_collect: null,
+        total_count_changed_at: fresh.total_count_changed_at || '',
+        latest_data_date: fresh.latest_data_date || '',
       };
 
       if (lastLog) {
@@ -571,7 +605,8 @@ function renderTable(apis) {
     + '<th>진행률</th>'
     + '<th>상태</th>'
     + '<th>최근 수집</th>'
-    + '<th>소요시간</th>'
+    + '<th>건수 변동일</th>'
+    + '<th>최신 데이터</th>'
     + '</tr></thead><tbody>';
 
   apis.forEach(function(a) {
@@ -605,6 +640,11 @@ function renderTable(apis) {
       }
     }
 
+    // 건수 변동일
+    var changedAt = a.total_count_changed_at ? formatDate10(a.total_count_changed_at) : '-';
+    // 최신 데이터 날짜
+    var latestDate = a.latest_data_date ? formatDate8d(a.latest_data_date) : '-';
+
     html += '<tr>'
       + '<td><span class="api-id">' + a.api_source + '</span></td>'
       + '<td>' + a.name + '</td>'
@@ -617,7 +657,8 @@ function renderTable(apis) {
       + '</div></td>'
       + '<td>' + statusHtml + '</td>'
       + '<td class="time-cell">' + lastTime + '</td>'
-      + '<td class="time-cell">' + duration + '</td>'
+      + '<td class="time-cell">' + changedAt + '</td>'
+      + '<td class="time-cell">' + latestDate + '</td>'
       + '</tr>';
   });
 
