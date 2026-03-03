@@ -599,9 +599,13 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
               <input type="radio" name="d-item-source" value="itemGroups" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
               <div><div style="font-weight:700;font-size:13px">항목그룹 (참고용)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">itemGroups — 검사목적별 검체유형·항목명·수수료 그룹 데이터</div></div>
             </label>
+            <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-mfdsTestItems">
+              <input type="radio" name="d-item-source" value="mfdsTestItems" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
+              <div><div style="font-weight:700;font-size:13px">시험항목 (식약처 2,940건)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">mfds_test_items — 식약처 시험항목 코드 A~X 분류에서 개별 검색/추가</div></div>
+            </label>
             <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-refFeeMapping">
               <input type="radio" name="d-item-source" value="refFeeMapping" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
-              <div><div style="font-weight:700;font-size:13px">참고용 맵핑 (시험항목코드)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">refFeeMapping — A~X 분류 코드 기반 시험항목 개별 검색/추가</div></div>
+              <div><div style="font-weight:700;font-size:13px">참고용 맵핑 (수수료 코드)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">refFeeMapping — A~X 분류 코드 기반 수수료 등록된 시험항목</div></div>
             </label>
             <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-foodTypesMapping">
               <input type="radio" name="d-item-source" value="foodTypesMapping" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
@@ -672,6 +676,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <tr style="background:var(--bg);border-bottom:2px solid var(--bdr);position:sticky;top:0;z-index:1;">
             <th style="padding:10px 12px;text-align:left;font-weight:600;width:100px;">시험항목코드</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;">분류</th>
+            <th style="padding:10px 12px;text-align:center;font-weight:600;width:50px;">사용</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;">한글명</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;">영문명</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;width:100px;">별칭</th>
@@ -1369,7 +1374,7 @@ var FIELDS=[
 
 var P=[
   {c:1,n:'자가품질위탁검사용',i:42,o:1,rcpt:'QC-26-02-0001',rcptDesc:'목적코드-년도-월-일련번호',prefix:'QC',fields:['F','L'],fieldUse:false,fieldMode:'code',fieldCodes:{F:'QC',L:'LQC'},itemSource:'mfdsTemplates'},
-  {c:2,n:'참고용(기준규격외)',i:38,o:1,rcpt:'RE-26-02-0001',rcptDesc:'목적코드-년도-월-일련번호',prefix:'RE',fields:['F'],fieldUse:false,fieldMode:'code',fieldCodes:{F:'RE'},itemSource:'refFeeMapping'},
+  {c:2,n:'참고용(기준규격외)',i:38,o:1,rcpt:'RE-26-02-0001',rcptDesc:'목적코드-년도-월-일련번호',prefix:'RE',fields:['F'],fieldUse:false,fieldMode:'code',fieldCodes:{F:'RE'},itemSource:'mfdsTestItems'},
   {c:4,n:'참고용(유통기한설정)',i:28,o:1,rcpt:'SL-26-02-0001',rcptDesc:'목적코드-년도-월-일련번호',prefix:'SL',fields:['F'],fieldUse:false,fieldMode:'code',fieldCodes:{F:'SL'}},
   {c:6,n:'참고용(영양성분)',i:14,o:1,rcpt:'NU-26-02-0001',rcptDesc:'목적코드-년도-월-일련번호',prefix:'NU',fields:['F'],fieldUse:false,fieldMode:'code',fieldCodes:{F:'NU'}},
   {c:10,n:'정도관리',i:8,o:1,rcpt:'QA-26-0001',rcptDesc:'목적코드-년도-일련번호',prefix:'QA',fields:['F','L'],fieldUse:false,fieldMode:'code',fieldCodes:{F:'QA',L:'LQA'}},
@@ -32223,6 +32228,55 @@ function refFeeToggleActive(cb) {
   // 행 스타일 즉시 반영
   var row = cb.closest('tr');
   if (row) row.style.opacity = cb.checked ? '1' : '.45';
+  // 시험항목 동기화: 참고용맵핑 활성 ↔ 시험항목 사용여부
+  syncActiveToTestItem(code, cb.checked);
+}
+
+/** 참고용맵핑 활성 → 시험항목 사용여부 동기화 */
+function syncActiveToTestItem(code, isActive) {
+  if (!_mfdsTestItems || _mfdsTestItems.length === 0) return;
+  var testItem = _mfdsTestItems.find(function(t) { return (t['시험항목코드'] || '').toUpperCase() === code.toUpperCase(); });
+  if (testItem) {
+    testItem['사용여부'] = isActive ? 'Y' : 'N';
+    // Firestore 업데이트
+    var db = firebase.firestore();
+    db.collection('mfds_test_items').doc(code.toUpperCase()).update({ '사용여부': isActive ? 'Y' : 'N' }).catch(function() {});
+  }
+}
+
+/** 시험항목 사용여부 → 참고용맵핑 활성 동기화 */
+function syncActiveToRefFee(code, isUsed) {
+  if (!_refFeeData || _refFeeData.length === 0) return;
+  var refItem = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code.toUpperCase(); });
+  if (refItem) {
+    refItem.isActive = isUsed;
+  }
+}
+
+/** 시험항목 사용 체크박스 토글 */
+function toggleMfdsTestItemActive(cb) {
+  var code = cb.getAttribute('data-code');
+  var isUsed = cb.checked;
+  // 메모리 업데이트
+  if (_mfdsTestItems) {
+    var item = _mfdsTestItems.find(function(t) { return t['시험항목코드'] === code; });
+    if (item) item['사용여부'] = isUsed ? 'Y' : 'N';
+  }
+  if (_mfdsTestFiltered) {
+    var fItem = _mfdsTestFiltered.find(function(t) { return t['시험항목코드'] === code; });
+    if (fItem) fItem['사용여부'] = isUsed ? 'Y' : 'N';
+  }
+  // Firestore 업데이트
+  var db = firebase.firestore();
+  db.collection('mfds_test_items').doc(code.toUpperCase()).update({ '사용여부': isUsed ? 'Y' : 'N' }).catch(function(e) {
+    console.error('시험항목 사용여부 업데이트 실패:', e);
+  });
+  // 행 투명도 변경
+  var row = cb.closest('tr');
+  if (row) row.style.opacity = isUsed ? '1' : '.45';
+  // 참고용맵핑 동기화
+  syncActiveToRefFee(code, isUsed);
+  showToast(code + ' ' + (isUsed ? '활성화' : '비활성화'), 'info');
 }
 
 function refFeeBulkSetActive(active) {
@@ -32232,6 +32286,8 @@ function refFeeBulkSetActive(active) {
     _refFeeData.forEach(function(m) {
       if (_refFeeSelected[m.testItemCode]) {
         m.isActive = active;
+        // 시험항목 동기화
+        syncActiveToTestItem(m.testItemCode, active);
       }
     });
   }
@@ -33276,7 +33332,8 @@ function updateItemSourceUI() {
   var labels = {
     mfdsTemplates: '📋 접수등록 시 식약처 고시 식품유형 목록에서 검체유형을 선택하면, 해당 식품유형의 시험항목 템플릿이 자동 로드됩니다.',
     itemGroups: '📦 접수등록 시 항목그룹에 등록된 검체유형·항목명·수수료 데이터가 로드됩니다.',
-    refFeeMapping: '🔗 접수등록 시 참고용맵핑(A~X 코드)에서 시험항목을 개별 검색하여 추가하는 모드입니다.',
+    mfdsTestItems: '🔬 접수등록 시 식약처 시험항목(2,940건)에서 A~X 분류 기반으로 개별 검색하여 추가합니다.',
+    refFeeMapping: '🔗 접수등록 시 참고용맵핑(수수료 코드)에서 수수료가 등록된 시험항목을 검색하여 추가합니다.',
     foodTypesMapping: '💰 접수등록 시 기존 수수료 맵핑 데이터(검사목적+분야+검체유형)에서 항목이 로드됩니다.'
   };
   if (val && labels[val]) {
@@ -33286,7 +33343,7 @@ function updateItemSourceUI() {
     descEl.style.display = 'none';
   }
   // 선택된 옵션 하이라이트
-  ['mfdsTemplates', 'itemGroups', 'refFeeMapping', 'foodTypesMapping'].forEach(function(k) {
+  ['mfdsTemplates', 'itemGroups', 'mfdsTestItems', 'refFeeMapping', 'foodTypesMapping'].forEach(function(k) {
     var opt = document.getElementById('src-opt-' + k);
     if (opt) opt.style.borderColor = (k === val) ? 'var(--pri)' : 'var(--bdr)';
   });
@@ -33541,7 +33598,7 @@ function renderMfdsTestItems() {
     return;
   }
   var tbody = document.getElementById('mfds-test-item-tbody');
-  tbody.innerHTML = '<tr><td colspan="7" style="padding:40px;text-align:center;color:#999;">⏳ 식약처 시험항목 로드 중...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:#999;">⏳ 식약처 시험항목 로드 중...</td></tr>';
 
   Promise.all([
     MFDS_CODES.loadTestItems(),
@@ -33559,7 +33616,7 @@ function renderMfdsTestItems() {
     applyMfdsTestFilters();
     renderMfdsTestTable();
   }).catch(function(err) {
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:40px;text-align:center;color:#dc3545;">⚠️ 로드 실패: ' + err.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:#dc3545;">⚠️ 로드 실패: ' + err.message + '</td></tr>';
   });
 }
 
@@ -33885,7 +33942,7 @@ function renderMfdsTestTable() {
     (total !== _mfdsTestItems.length ? ' (전체 ' + _mfdsTestItems.length.toLocaleString() + '건)' : '');
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:40px;text-align:center;color:#999;">검색 결과가 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:#999;">검색 결과가 없습니다</td></tr>';
     document.getElementById('mfds-test-item-pagination').innerHTML = '';
     return;
   }
@@ -33901,9 +33958,12 @@ function renderMfdsTestTable() {
       ? '<span style="background:#c8e6c9;color:#2e7d32;padding:2px 8px;border-radius:4px;font-size:11px;" title="' + mapping.bflItemName + '">✅ ' + mapping.bflItemName + '</span>'
       : '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:11px;">⚠ 미매핑</span>';
 
-    html += '<tr style="border-bottom:1px solid #f0f0f0;transition:background 0.15s;" onmouseover="this.style.background=\'#f8f9ff\'" onmouseout="this.style.background=\'#fff\'">'
+    var isUsed = (item['사용여부'] || 'Y') === 'Y';
+    var rowOpacity = isUsed ? '' : 'opacity:.45;';
+    html += '<tr style="border-bottom:1px solid #f0f0f0;transition:background 0.15s;' + rowOpacity + '" onmouseover="this.style.background=\'#f8f9ff\'" onmouseout="this.style.background=\'#fff\'">'
       + '<td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#1565c0;">' + code + '</td>'
       + '<td style="padding:8px 12px;">' + getRefCodeCategoryBadge(code) + '</td>'
+      + '<td style="padding:8px 6px;text-align:center"><input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-code="' + code + '" onchange="toggleMfdsTestItemActive(this)" style="accent-color:#43a047;"></td>'
       + '<td style="padding:8px 12px;font-weight:500;">' + name + '</td>'
       + '<td style="padding:8px 12px;color:#667085;font-size:12px;">' + eng + '</td>'
       + '<td style="padding:8px 12px;color:#999;font-size:12px;">' + alias + '</td>'
