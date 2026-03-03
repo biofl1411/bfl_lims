@@ -471,6 +471,9 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
               <button class="btn btn-secondary btn-sm" onclick="bizGoStep(0)">🗺️ 새로 검색</button>
             </div>
           </div>
+          <div id="bizLicFilter" style="padding:8px 16px;border-bottom:1px solid #f0f0f0;display:none;gap:6px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:12px;font-weight:600;color:#5f6b7a;margin-right:4px">인허가:</span>
+          </div>
           <div class="card-bd" style="padding:0;overflow-x:auto">
             <table class="tbl">
               <thead><tr><th>업체명</th><th>대표자</th><th>업종</th><th>인허가번호</th><th>소재지</th><th>관할관청</th><th></th></tr></thead>
@@ -5002,25 +5005,80 @@ function selectDong(dong) {
   showFssResults(rows);
 }
 
+// ── 인허가 필터 상태 ──
+var _bizLicFilter = '전체';
+var _bizLicRows = [];
+
 function showFssResults(rows) {
   document.getElementById('bizStep0').style.display = 'none';
   document.getElementById('bizStep1').style.display = 'none';
   document.getElementById('bizStep2').style.display = 'none';
   document.getElementById('bizStep3').style.display = 'block';
+
+  _bizLicRows = rows;
+  _bizLicFilter = '전체';
+  buildBizLicChips(rows);
+
   document.getElementById('bizFssCount').textContent = rows.length;
   if(rows.length === 0) {
-    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">해당 지역에 등록된 식품제조가공업체가 없습니다.</td></tr>';
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">해당 지역에 등록된 업체가 없습니다.</td></tr>';
+    return;
+  }
+  renderBizTable(rows);
+  toast('🏭 식약처 ' + rows.length + '건 조회');
+}
+
+function buildBizLicChips(rows) {
+  var el = document.getElementById('bizLicFilter');
+  if(!rows || rows.length === 0) { el.style.display = 'none'; return; }
+  var counts = {};
+  rows.forEach(function(r) {
+    var biz = r.biz || r.INDUTY_NM || '기타';
+    if(!biz || biz === '-') biz = '기타';
+    counts[biz] = (counts[biz] || 0) + 1;
+  });
+  var types = Object.keys(counts).sort();
+  if(types.length <= 1) { el.style.display = 'none'; return; }
+  var esc = function(s) { return s.replace(/'/g, "\\'"); };
+  var html = '<span style="font-size:12px;font-weight:600;color:#5f6b7a;margin-right:4px">인허가:</span>';
+  html += '<span class="filter-chip active" onclick="filterBizByLic(\'전체\')" style="padding:4px 10px;font-size:11px;border-radius:16px;cursor:pointer">전체 <b>' + rows.length + '</b></span>';
+  types.forEach(function(biz) {
+    html += '<span class="filter-chip" onclick="filterBizByLic(\'' + esc(biz) + '\')" style="padding:4px 10px;font-size:11px;border-radius:16px;cursor:pointer">' + biz + ' <b>' + counts[biz] + '</b></span>';
+  });
+  el.innerHTML = html;
+  el.style.display = 'flex';
+}
+
+function filterBizByLic(biz) {
+  _bizLicFilter = biz;
+  var filtered = biz === '전체' ? _bizLicRows : _bizLicRows.filter(function(r) {
+    return (r.biz || r.INDUTY_NM || '기타') === biz;
+  });
+  document.getElementById('bizFssCount').textContent = filtered.length;
+  renderBizTable(filtered);
+  // 칩 active 갱신
+  var chips = document.querySelectorAll('#bizLicFilter .filter-chip');
+  chips.forEach(function(c) {
+    var txt = c.textContent.trim();
+    var chipBiz = txt.replace(/\s*\d+$/, '');
+    c.classList.toggle('active', biz === '전체' ? chipBiz === '전체' : chipBiz === biz);
+  });
+}
+
+function renderBizTable(rows) {
+  if(!rows || rows.length === 0) {
+    document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8892a4;font-size:12px">결과 없음</td></tr>';
     return;
   }
   var html = '';
   rows.forEach(function(r, i){
-    var nm = r.nm || '-';
-    var ceo = r.ceo || '-';
-    var biz = r.biz || '-';
-    var lic = r.lic || '-';
-    var addr = r.addr || '-';
-    var org = r.org || '';
-    var tel = r.tel || '';
+    var nm = r.nm || r.BSSH_NM || '-';
+    var ceo = r.ceo || r.PRSDNT_NM || '-';
+    var biz = r.biz || r.INDUTY_NM || '-';
+    var lic = r.lic || r.LCNS_NO || '-';
+    var addr = r.addr || r.LOCP_ADDR || '-';
+    var org = r.org || r.INSTT_NM || '';
+    var tel = r.tel || r.TELNO || '';
     html += '<tr>';
     html += '<td style="font-size:12px"><b>' + nm + '</b>' + (tel ? '<br><span style="font-size:10px;color:#8892a4">📞 ' + tel + '</span>' : '') + '</td>';
     html += '<td style="font-size:12px">' + ceo + '</td>';
@@ -5032,7 +5090,6 @@ function showFssResults(rows) {
     html += '</tr>';
   });
   document.getElementById('fssTableBody').innerHTML = html;
-  toast('🏭 식약처 ' + rows.length + '건 조회');
 }
 
 function bizGoStep(n) {
@@ -5231,32 +5288,16 @@ async function searchFss(region) {
     });
   }
 
+  // 인허가 칩 필터 + 테이블 렌더 (showFssResults 재사용)
+  _bizLicRows = allRows;
+  _bizLicFilter = '전체';
+  buildBizLicChips(allRows);
   document.getElementById('bizFssCount').textContent = allRows.length;
   if(allRows.length === 0) {
     document.getElementById('fssTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#8892a4;font-size:12px">인허가 결과 없음<br><span style="font-size:11px">CORS 차단으로 조회 불가 시, 브라우저에서 직접 확인:<br><a href="https://openapi.foodsafetykorea.go.kr/api/' + apiKey + '/I1220/json/1/5/BSSH_NM=' + encodeURIComponent(bizState.sigungu||bizState.sido||'') + '" target="_blank" style="color:#1565c0">🔗 식약처 API 직접 열기</a></span></td></tr>';
     return;
   }
-  var html = '';
-  allRows.forEach(function(r, i){
-    var nm = r.BSSH_NM || '-';
-    var ceo = r.PRSDNT_NM || '-';
-    var biz = r.INDUTY_NM || '-';
-    var lic = r.LCNS_NO || '-';
-    var addr = r.LOCP_ADDR || '-';
-    var org = r.INSTT_NM || '';
-    var tel = r.TELNO || '';
-    html += '<tr>';
-    html += '<td><b>' + nm + '</b>' + (tel ? '<br><span style="font-size:10px;color:#8892a4">📞 ' + tel + '</span>' : '') + '</td>';
-    html += '<td>' + ceo + '</td>';
-    html += '<td><span style="font-size:11px">' + biz + '</span></td>';
-    html += '<td style="font-size:10px;font-family:monospace">' + lic + '</td>';
-    html += '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + addr + '</td>';
-    html += '<td><span style="font-size:11px;color:#1565c0">' + org + '</span></td>';
-    html += '<td><span id="fD' + i + '" style="font-size:10px;color:#1565c0;background:#e3f2fd;padding:2px 6px;border-radius:4px;cursor:pointer" onclick="calcAddrDist(\'' + addr.replace(/'/g,"\\'") + '\',\'fD' + i + '\')">📐</span></td>';
-    html += '<td><button style="font-size:10px;padding:2px 8px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="bizDetail(\'' + lic.replace(/'/g,"\\'") + '\',\'' + nm.replace(/'/g,"\\'") + '\')">🔍 조회</button></td>';
-    html += '</tr>';
-  });
-  document.getElementById('fssTableBody').innerHTML = html;
+  renderBizTable(allRows);
   toast('🏭 식약처 ' + allRows.length + '건 조회');
 }
 
