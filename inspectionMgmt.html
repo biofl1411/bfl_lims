@@ -936,12 +936,30 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <button class="btn" onclick="openRefFeeAddModal()" style="padding:6px 14px;font-size:13px;background:#43a047;color:#fff;border:none;border-radius:6px;cursor:pointer;">+ 코드 추가</button>
         <button class="btn btn-primary" onclick="saveRefFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
       </div>
-      <!-- 일괄 액션 바 -->
-      <div id="ref-fee-bulk-bar" style="display:none;margin-bottom:8px;padding:8px 14px;background:#e3f2fd;border-radius:8px;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span id="ref-fee-sel-count" style="font-size:13px;font-weight:600;color:#1565c0;"></span>
-        <button onclick="refFeeBulkSetActive(true)" style="padding:4px 12px;border:none;border-radius:6px;background:#43a047;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">활성화</button>
-        <button onclick="refFeeBulkSetActive(false)" style="padding:4px 12px;border:none;border-radius:6px;background:#e53935;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">비활성화</button>
-        <button onclick="refFeeClearSelection()" style="padding:4px 12px;border:none;border-radius:6px;background:#fff;color:var(--sub);font-size:12px;cursor:pointer;border:1px solid var(--bdr);">선택 해제</button>
+      <!-- 일괄 선택 도구 -->
+      <div style="margin-bottom:8px;padding:10px 14px;background:#f5f5f5;border-radius:8px;border:1px solid var(--bdr);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:600;color:var(--sub);">일괄 선택:</span>
+          <button onclick="refFeeSelectFiltered()" style="padding:3px 10px;border:1px solid #1565c0;border-radius:6px;background:#fff;color:#1565c0;font-size:11px;font-weight:600;cursor:pointer;">현재 필터 전체</button>
+          <span style="color:#ccc;">|</span>
+          <div id="ref-bulk-cat-chips" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
+        <div id="ref-bulk-sub-chips" style="display:none;margin-bottom:6px;padding-left:2px;">
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--sub);">소분류:</span>
+            <div id="ref-bulk-sub-inner" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--sub);">코드 패턴:</span>
+          <input type="text" id="ref-bulk-pattern" placeholder="예: B9, C2, E1" style="width:120px;padding:3px 8px;border:1px solid var(--bdr);border-radius:4px;font-size:12px;font-family:monospace;">
+          <button onclick="refFeeSelectByPattern()" style="padding:3px 10px;border:1px solid #1565c0;border-radius:6px;background:#e3f2fd;color:#1565c0;font-size:11px;cursor:pointer;">패턴 선택</button>
+          <span style="color:#ccc;">|</span>
+          <span id="ref-fee-sel-count" style="font-size:12px;font-weight:600;color:#1565c0;"></span>
+          <button onclick="refFeeBulkSetActive(true)" id="ref-bulk-active-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#43a047;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">활성화</button>
+          <button onclick="refFeeBulkSetActive(false)" id="ref-bulk-inactive-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#e53935;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">비활성화</button>
+          <button onclick="refFeeClearSelection()" id="ref-bulk-clear-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#fff;color:var(--sub);font-size:11px;cursor:pointer;border:1px solid var(--bdr);">선택 해제</button>
+        </div>
       </div>
       <div style="overflow-x:auto;max-height:calc(100vh - 300px);overflow-y:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -31607,37 +31625,188 @@ function refFeeCheckItem(cb) {
   updateRefFeeBulkBar();
 }
 
+// 전체선택: 현재 필터된 전체 항목 (렌더링 500건 넘어도 전부)
 function refFeeToggleAll(checked) {
+  if (checked) {
+    var filtered = getRefFeeFilteredItems();
+    filtered.forEach(function(m) { _refFeeSelected[m.testItemCode] = true; });
+  } else {
+    _refFeeSelected = {};
+  }
+  // DOM 체크박스 동기화
   var cbs = document.querySelectorAll('#ref-fee-tbody input[type="checkbox"][data-code]');
-  // 선택 체크박스만 (첫번째 컬럼) — onchange="refFeeCheckItem" 인 것
   cbs.forEach(function(cb) {
     if (cb.getAttribute('onchange') === 'refFeeCheckItem(this)') {
-      cb.checked = checked;
-      var code = cb.getAttribute('data-code');
-      if (checked) { _refFeeSelected[code] = true; }
-      else { delete _refFeeSelected[code]; }
+      cb.checked = !!_refFeeSelected[cb.getAttribute('data-code')];
     }
   });
   updateRefFeeBulkBar();
 }
 
+// 현재 필터 조건에 맞는 항목 배열 반환
+function getRefFeeFilteredItems() {
+  if (!_refFeeData) return [];
+  var query = (document.getElementById('ref-fee-search').value || '').trim().toLowerCase();
+  var onlySet = document.getElementById('ref-fee-only-set') && document.getElementById('ref-fee-only-set').checked;
+  var onlyActive = document.getElementById('ref-fee-only-active') && document.getElementById('ref-fee-only-active').checked;
+  var filtered = _refFeeData;
+  if (_refFeeCategory !== 'all') {
+    filtered = filtered.filter(function(m) {
+      return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
+    });
+  }
+  if (query) {
+    filtered = filtered.filter(function(m) {
+      return (m.testItemCode || '').toLowerCase().indexOf(query) >= 0 ||
+             (m.itemName || '').toLowerCase().indexOf(query) >= 0;
+    });
+  }
+  if (onlySet) filtered = filtered.filter(function(m) { return (m.fee || 0) > 0; });
+  if (onlyActive) filtered = filtered.filter(function(m) { return m.isActive !== false; });
+  return filtered;
+}
+
+// 현재 필터 전체 선택
+function refFeeSelectFiltered() {
+  var filtered = getRefFeeFilteredItems();
+  filtered.forEach(function(m) { _refFeeSelected[m.testItemCode] = true; });
+  syncRefFeeCheckboxes();
+  updateRefFeeBulkBar();
+  showToast(filtered.length + '건 선택됨', 'info');
+}
+
+// 대분류별 선택
+function refFeeSelectByCategory(prefix) {
+  if (!_refFeeData) return;
+  _refFeeData.forEach(function(m) {
+    if ((m.testItemCode || '').charAt(0).toUpperCase() === prefix) {
+      _refFeeSelected[m.testItemCode] = true;
+    }
+  });
+  syncRefFeeCheckboxes();
+  updateRefFeeBulkBar();
+  renderRefBulkSubChips(prefix);
+}
+
+// 소분류별 선택
+function refFeeSelectBySub(prefix, sub) {
+  if (!_refFeeData) return;
+  var subStr = String(sub);
+  _refFeeData.forEach(function(m) {
+    var code = (m.testItemCode || '').toUpperCase();
+    if (code.charAt(0) === prefix && code.charAt(1) === subStr) {
+      _refFeeSelected[m.testItemCode] = true;
+    }
+  });
+  syncRefFeeCheckboxes();
+  updateRefFeeBulkBar();
+}
+
+// 코드 패턴으로 선택 (예: "B9" → B9xxxx 전체, "C2" → C2xxxx 전체)
+function refFeeSelectByPattern() {
+  var input = document.getElementById('ref-bulk-pattern');
+  var pattern = (input.value || '').trim().toUpperCase();
+  if (!pattern || !_refFeeData) { showToast('패턴을 입력하세요 (예: B9, C2, E1)', 'warning'); return; }
+  var cnt = 0;
+  // 쉼표로 분리하여 여러 패턴 지원
+  var patterns = pattern.split(/[,\s]+/).filter(Boolean);
+  _refFeeData.forEach(function(m) {
+    var code = (m.testItemCode || '').toUpperCase();
+    for (var i = 0; i < patterns.length; i++) {
+      if (code.indexOf(patterns[i]) === 0) {
+        _refFeeSelected[m.testItemCode] = true;
+        cnt++;
+        break;
+      }
+    }
+  });
+  syncRefFeeCheckboxes();
+  updateRefFeeBulkBar();
+  input.value = '';
+  showToast(patterns.join(', ') + ' 패턴: ' + cnt + '건 선택됨', 'info');
+}
+
 function refFeeClearSelection() {
   _refFeeSelected = {};
-  var cbs = document.querySelectorAll('#ref-fee-tbody input[type="checkbox"]');
-  cbs.forEach(function(cb) {
-    if (cb.getAttribute('onchange') === 'refFeeCheckItem(this)') cb.checked = false;
-  });
+  syncRefFeeCheckboxes();
   var checkAll = document.getElementById('ref-fee-check-all');
   if (checkAll) checkAll.checked = false;
   updateRefFeeBulkBar();
 }
 
+// DOM 체크박스를 _refFeeSelected와 동기화
+function syncRefFeeCheckboxes() {
+  var cbs = document.querySelectorAll('#ref-fee-tbody input[type="checkbox"][data-code]');
+  cbs.forEach(function(cb) {
+    if (cb.getAttribute('onchange') === 'refFeeCheckItem(this)') {
+      cb.checked = !!_refFeeSelected[cb.getAttribute('data-code')];
+    }
+  });
+}
+
 function updateRefFeeBulkBar() {
   var cnt = Object.keys(_refFeeSelected).length;
-  var bar = document.getElementById('ref-fee-bulk-bar');
-  if (bar) bar.style.display = cnt > 0 ? 'flex' : 'none';
   var cntEl = document.getElementById('ref-fee-sel-count');
-  if (cntEl) cntEl.textContent = cnt + '건 선택됨';
+  if (cntEl) cntEl.textContent = cnt > 0 ? cnt + '건 선택됨' : '';
+  // 액션 버튼 표시/숨김
+  ['ref-bulk-active-btn', 'ref-bulk-inactive-btn', 'ref-bulk-clear-btn'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = cnt > 0 ? 'inline-block' : 'none';
+  });
+  // 대분류 칩 렌더링
+  renderRefBulkCatChips();
+}
+
+// 일괄 선택 도구: 대분류 칩 렌더링
+function renderRefBulkCatChips() {
+  var container = document.getElementById('ref-bulk-cat-chips');
+  if (!container) return;
+  var html = '';
+  Object.keys(REF_CODE_CATEGORIES).forEach(function(p) {
+    var cat = REF_CODE_CATEGORIES[p];
+    var cnt = _refFeeCategoryIndex[p] || 0;
+    if (cnt === 0) return;
+    // 현재 선택된 항목 중 이 분류 개수
+    var selCnt = 0;
+    Object.keys(_refFeeSelected).forEach(function(code) {
+      if (code.charAt(0).toUpperCase() === p) selCnt++;
+    });
+    var label = p + ' ' + cat.name + ' ' + cnt;
+    if (selCnt > 0) label += ' (' + selCnt + '선택)';
+    html += '<button type="button" onclick="refFeeSelectByCategory(\'' + p + '\')" ' +
+      'style="padding:2px 8px;border-radius:10px;border:1px solid ' + cat.color + ';' +
+      'background:' + (selCnt > 0 ? cat.color : '#fff') + ';color:' + (selCnt > 0 ? '#fff' : cat.color) + ';' +
+      'font-size:10px;font-weight:600;cursor:pointer;" title="' + cat.name + ' 전체 선택">' + label + '</button>';
+  });
+  container.innerHTML = html;
+}
+
+// 일괄 선택 도구: 소분류 칩 렌더링
+function renderRefBulkSubChips(prefix) {
+  var container = document.getElementById('ref-bulk-sub-chips');
+  var inner = document.getElementById('ref-bulk-sub-inner');
+  if (!container || !inner) return;
+  var subs = REF_SUB_CATEGORIES[prefix];
+  if (!subs) { container.style.display = 'none'; return; }
+  container.style.display = 'block';
+  var cat = REF_CODE_CATEGORIES[prefix];
+  var html = '';
+  Object.keys(subs).forEach(function(s) {
+    // 해당 소분류 건수
+    var cnt = 0;
+    if (_refFeeData) {
+      _refFeeData.forEach(function(m) {
+        var code = (m.testItemCode || '').toUpperCase();
+        if (code.charAt(0) === prefix && code.charAt(1) === s) cnt++;
+      });
+    }
+    if (cnt === 0) return;
+    html += '<button type="button" onclick="refFeeSelectBySub(\'' + prefix + '\',\'' + s + '\')" ' +
+      'style="padding:2px 8px;border-radius:10px;border:1px solid ' + cat.color + ';' +
+      'background:#fff;color:' + cat.color + ';font-size:10px;cursor:pointer;" ' +
+      'title="' + prefix + s + 'xxxx 전체 선택">' + s + ' ' + subs[s] + ' ' + cnt + '</button>';
+  });
+  inner.innerHTML = html;
 }
 
 // ── 활성화/비활성화 ──
