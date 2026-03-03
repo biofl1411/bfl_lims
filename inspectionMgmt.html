@@ -597,7 +597,11 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
             </label>
             <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-itemGroups">
               <input type="radio" name="d-item-source" value="itemGroups" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
-              <div><div style="font-weight:700;font-size:13px">항목그룹 (참고용)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">검사관리 &gt; 📦 참고용 탭의 데이터 (5,467건)</div></div>
+              <div style="flex:1;">
+                <div style="font-weight:700;font-size:13px">항목그룹 (참고용)</div>
+                <div style="font-size:11px;color:var(--sub);margin-top:2px">검사관리 &gt; 📦 참고용 탭의 데이터</div>
+                <div id="ig-source-chips" style="display:none;margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+              </div>
             </label>
             <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-mfdsTestItems">
               <input type="radio" name="d-item-source" value="mfdsTestItems" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
@@ -33452,6 +33456,53 @@ function updateItemSourceUI() {
     var opt = document.getElementById('src-opt-' + k);
     if (opt) opt.style.borderColor = (k === val) ? 'var(--pri)' : 'var(--bdr)';
   });
+
+  // 항목그룹 세부 칩 렌더
+  renderItemGroupSourceChips(purposeName, val === 'itemGroups');
+}
+
+/** 항목그룹 세부 칩: 검사목적별 검체유형 + 항목수 표시 */
+function renderItemGroupSourceChips(purposeName, isSelected) {
+  var container = document.getElementById('ig-source-chips');
+  if (!container) return;
+
+  // 항목그룹이 선택되었고 데이터가 있을 때만 표시
+  if (!isSelected || !itemGroupData || !itemGroupData.length) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  // 현재 검사목적과 일치하는 항목 찾기
+  var matched = itemGroupData.filter(function(d) { return d.검사목적 === purposeName; });
+
+  if (matched.length > 0) {
+    // 해당 검사목적의 검체유형별 항목수
+    var typeCount = {};
+    matched.forEach(function(d) {
+      var t = d.검체유형 || '기타';
+      typeCount[t] = (typeCount[t] || 0) + 1;
+    });
+    var html = Object.entries(typeCount).sort(function(a, b) { return b[1] - a[1]; }).map(function(e) {
+      return '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;">' + e[0] + ' <b>' + e[1] + '</b></span>';
+    }).join('');
+    container.innerHTML = '<span style="font-size:11px;color:#2e7d32;font-weight:600;">✅ ' + matched.length + '건 매칭</span> ' + html;
+  } else {
+    // 일치하는 항목 없음 → 전체 목록 보여주기
+    var purposeCount = {};
+    itemGroupData.forEach(function(d) {
+      var p = d.검사목적 || '기타';
+      purposeCount[p] = (purposeCount[p] || 0) + 1;
+    });
+    var html = Object.entries(purposeCount).sort(function(a, b) { return b[1] - a[1]; }).map(function(e) {
+      return '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;">' + e[0] + ' (' + e[1] + ')</span>';
+    }).join('');
+    container.innerHTML = '<span style="font-size:11px;color:#e65100;font-weight:600;">⚠️ "' + purposeName + '" 미등록</span><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">' + html + '</div>';
+  }
+  container.style.display = 'flex';
+  container.style.flexWrap = 'wrap';
+  container.style.gap = '4px';
+  container.style.alignItems = 'center';
 }
 
 function closeDetail(){
