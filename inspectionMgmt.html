@@ -31131,7 +31131,29 @@ async function renderItemGroups() {
     }).join('');
 
     document.getElementById('item-group-accordion').innerHTML = accordionHtml || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
+
+    // 이전에 열려있던 아코디언 복원
+    if (_openAccordionTypes && _openAccordionTypes.size > 0) {
+      document.querySelectorAll('#item-group-accordion .accordion-header-level1').forEach(function(hdr) {
+        var nameEl = hdr.querySelector('.accordion-name');
+        if (nameEl && _openAccordionTypes.has(nameEl.textContent.trim())) {
+          hdr.classList.add('active');
+          var content = hdr.nextElementSibling;
+          if (content) content.classList.add('active');
+        }
+      });
+    }
   }
+}
+
+// 열려있는 아코디언 상태 저장
+var _openAccordionTypes = new Set();
+function _saveOpenAccordions() {
+  _openAccordionTypes = new Set();
+  document.querySelectorAll('#item-group-accordion .accordion-header-level1.active').forEach(function(hdr) {
+    var nameEl = hdr.querySelector('.accordion-name');
+    if (nameEl) _openAccordionTypes.add(nameEl.textContent.trim());
+  });
 }
 
 // 아코디언 토글
@@ -31466,6 +31488,7 @@ function saveItem() {
     else if (editingType === '참고용') saveItemGroupsToFirestore();
     else if (editingType === '수수료') saveFeesToFirestore();
 
+    _saveOpenAccordions();
     closeDetailItem();
     updateStats();
     renderData();
@@ -31540,6 +31563,7 @@ function saveItem() {
     else if (editingType === '참고용') saveItemGroupsToFirestore();
     else if (editingType === '수수료') saveFeesToFirestore();
 
+    _saveOpenAccordions();
     closeDetailItem();
     updateStats();
     renderData();
@@ -31570,6 +31594,7 @@ function deleteItem() {
   if (editingType === '식품유형') saveFoodTypesToFirestore();
   else if (editingType === '참고용') saveItemGroupsToFirestore();
   else if (editingType === '수수료') { saveFeesToFirestore(); buildFeePurposeMenu(); }
+  _saveOpenAccordions();
   closeDetailItem();
   updateStats();
   renderData();
@@ -31652,6 +31677,8 @@ async function copyItemGroupType(purpose, type) {
     itemGroupData.push(copy);
   });
   showToast('📋 "' + newName + '" ' + items.length + '건 복사 완료', 'success');
+  _saveOpenAccordions();
+  _openAccordionTypes.add(newName);
   updateStats();
   renderData();
   await saveItemGroupsToFirestore();
@@ -31664,6 +31691,8 @@ function deleteItemGroupType(purpose, type) {
   itemGroupData = itemGroupData.filter(d => !(d.검사목적 === purpose && d.검체유형 === type));
 
   showToast(`'${type}' 검체유형 삭제 (${count}건)`, 'info');
+  _saveOpenAccordions();
+  _openAccordionTypes.delete(type);
   updateStats();
   renderData();
   saveItemGroupsToFirestore();
@@ -31691,6 +31720,9 @@ function editItemGroupType(purpose, oldType) {
   });
 
   showToast(`'${oldType}' → '${trimmed}' 변경 (${count}건)`, 'success');
+  _saveOpenAccordions();
+  _openAccordionTypes.delete(oldType);
+  _openAccordionTypes.add(trimmed);
   updateStats();
   renderData();
   saveItemGroupsToFirestore();
@@ -31704,6 +31736,7 @@ function deleteItemGroupItem(index) {
 
   itemGroupData.splice(index, 1);
   showToast('항목이 삭제되었습니다.', 'info');
+  _saveOpenAccordions();
   updateStats();
   renderData();
   saveItemGroupsToFirestore();
@@ -31994,6 +32027,8 @@ async function executeBulkAdd() {
   // 저장
   showToast('⏳ ' + newCodes.length + '건 저장 중...', 'info');
   await saveItemGroupsToFirestore();
+  _saveOpenAccordions();
+  _openAccordionTypes.add(검체유형);
   closeBulkAddModal();
   updateStats();
   renderData();
@@ -35708,7 +35743,7 @@ function saveMfdsMapping() {
     closeMfdsMappingModal();
     // 테이블 갱신
     if (currentTab === 4) renderMfdsTestTable();
-    if (currentTab === 6) renderItemGroups();
+    if (currentTab === 6) { _saveOpenAccordions(); renderItemGroups(); }
   }).catch(function(err) {
     showToast('매핑 저장 실패: ' + err.message, 'error');
   });
@@ -35725,7 +35760,7 @@ function deleteMfdsMapping() {
     showToast('🗑️ 매핑 삭제: ' + bflName, 'info');
     closeMfdsMappingModal();
     if (currentTab === 4) renderMfdsTestTable();
-    if (currentTab === 6) renderItemGroups();
+    if (currentTab === 6) { _saveOpenAccordions(); renderItemGroups(); }
   }).catch(function(err) {
     showToast('매핑 삭제 실패: ' + err.message, 'error');
   });
