@@ -891,12 +891,14 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
             <span><strong>영문명:</strong> <span id="mfds-map-selected-eng"></span></span>
           </div>
         </div>
-        <!-- 식약처 단위 선택 -->
-        <div style="margin-bottom:16px;">
+        <!-- 식약처 단위 선택 (자동완성) -->
+        <div style="margin-bottom:16px;position:relative;">
           <label style="font-size:13px;font-weight:600;color:#344054;display:block;margin-bottom:6px;">식약처 단위코드</label>
-          <select id="mfds-map-unit" style="width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;">
-            <option value="">단위 선택...</option>
-          </select>
+          <input type="text" id="mfds-map-unit-input" placeholder="단위 검색 (예: mg, g/100g, %)" autocomplete="off"
+                 oninput="filterMfdsUnitList()" onfocus="filterMfdsUnitList()"
+                 style="width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;">
+          <input type="hidden" id="mfds-map-unit" value="">
+          <div id="mfds-map-unit-list" style="display:none;position:absolute;left:0;right:0;top:100%;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #d0d5dd;border-top:none;border-radius:0 0 8px 8px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
         </div>
       </div>
       <div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end;">
@@ -29861,21 +29863,43 @@ async function saveFoodTypesToFirestore() {
 }
 async function saveItemGroupsToFirestore() {
   try {
-    var BATCH_SIZE = 450;
+    var BATCH_SIZE = 400;
+    // 안전장치: 데이터가 비정상적으로 적으면 저장 중단
     var existing = await db.collection('itemGroups').get();
-    for (var bi = 0; bi < existing.docs.length; bi += BATCH_SIZE) {
+    if (existing.size > 100 && itemGroupData.length < existing.size * 0.5) {
+      console.error('[안전장치] itemGroupData(' + itemGroupData.length + ')가 Firestore(' + existing.size + ')의 50% 미만. 저장 중단.');
+      showToast('⚠️ 데이터 이상 감지 — 저장이 중단되었습니다. 페이지를 새로고침하세요.', 'error');
+      return;
+    }
+    // 기존 문서 맵
+    var existMap = {};
+    existing.docs.forEach(function(d) { existMap[d.id] = true; });
+    // 새 문서 맵 (ig_0, ig_1, ...)
+    var newDocIds = new Set();
+    for (var i = 0; i < itemGroupData.length; i++) newDocIds.add('ig_' + i);
+    // 삭제 대상: Firestore에 있지만 새 데이터에 없는 문서
+    var toDelete = existing.docs.filter(function(d) { return !newDocIds.has(d.id); });
+    // 삭제 배치
+    for (var bi = 0; bi < toDelete.length; bi += BATCH_SIZE) {
       var batch = db.batch();
-      existing.docs.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
+      toDelete.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
       await batch.commit();
     }
+    // 저장 배치 (set = upsert)
     for (var bi = 0; bi < itemGroupData.length; bi += BATCH_SIZE) {
       var batch = db.batch();
-      itemGroupData.slice(bi, bi + BATCH_SIZE).forEach(function(item, j) {
+      var clean = itemGroupData.slice(bi, bi + BATCH_SIZE).map(function(item) {
+        var obj = {}; Object.keys(item).forEach(function(k) { if (k !== '_docId') obj[k] = item[k]; }); return obj;
+      });
+      clean.forEach(function(item, j) {
         batch.set(db.collection('itemGroups').doc('ig_' + (bi + j)), item);
       });
       await batch.commit();
     }
-  } catch(e) { console.warn('참고용 저장 실패:', e); }
+  } catch(e) {
+    console.error('참고용 저장 실패:', e);
+    showToast('⚠️ 저장 중 오류: ' + e.message, 'error');
+  }
 }
 async function saveFeesToFirestore() {
   try {
@@ -35591,20 +35615,65 @@ function openMfdsMappingFromGroup(bflItemName, bflUnit) {
   document.getElementById('mfds-mapping-modal').style.display = 'flex';
 }
 
-/** 단위 드롭다운 채우기 */
+/** 단위 자동완성 초기화 */
 function populateMfdsUnitSelect(selectedCode) {
-  var select = document.getElementById('mfds-map-unit');
-  select.innerHTML = '<option value="">단위 선택...</option>';
-  _mfdsUnits.forEach(function(u) {
+  var input = document.getElementById('mfds-map-unit-input');
+  var hidden = document.getElementById('mfds-map-unit');
+  hidden.value = selectedCode || '';
+  if (selectedCode) {
+    var found = _mfdsUnits.find(function(u) { return u['단위코드'] === selectedCode; });
+    input.value = found ? (selectedCode + ' — ' + (found['단위명']||'')) : selectedCode;
+  } else {
+    input.value = '';
+  }
+  document.getElementById('mfds-map-unit-list').style.display = 'none';
+}
+
+/** 단위 자동완성 필터링 */
+function filterMfdsUnitList() {
+  var input = document.getElementById('mfds-map-unit-input');
+  var list = document.getElementById('mfds-map-unit-list');
+  var q = (input.value || '').trim().toLowerCase();
+  // 검색어가 없으면 전체 표시 (최대 20건)
+  var filtered = _mfdsUnits.filter(function(u) {
+    if (!q) return true;
+    var code = (u['단위코드']||'').toLowerCase();
+    var name = (u['단위명']||'').toLowerCase();
+    return code.indexOf(q) >= 0 || name.indexOf(q) >= 0;
+  }).slice(0, 30);
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:10px;color:#999;font-size:12px;">검색 결과 없음</div>';
+    list.style.display = 'block';
+    return;
+  }
+  var h = '';
+  filtered.forEach(function(u) {
     var code = u['단위코드'] || '';
     var name = u['단위명'] || '';
-    var opt = document.createElement('option');
-    opt.value = code;
-    opt.textContent = code + ' — ' + name;
-    if (code === selectedCode) opt.selected = true;
-    select.appendChild(opt);
+    h += '<div onclick="selectMfdsUnit(\'' + code.replace(/'/g,"\\'") + '\',\'' + name.replace(/'/g,"\\'") + '\')" '
+      + 'style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;" '
+      + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'\'">'
+      + '<span style="color:#1565c0;font-weight:600;">' + code + '</span> — ' + name + '</div>';
   });
+  list.innerHTML = h;
+  list.style.display = 'block';
 }
+
+/** 단위 선택 */
+function selectMfdsUnit(code, name) {
+  document.getElementById('mfds-map-unit').value = code;
+  document.getElementById('mfds-map-unit-input').value = code + ' — ' + name;
+  document.getElementById('mfds-map-unit-list').style.display = 'none';
+}
+
+// 단위 리스트 외부 클릭 시 닫기
+document.addEventListener('click', function(e) {
+  var list = document.getElementById('mfds-map-unit-list');
+  var input = document.getElementById('mfds-map-unit-input');
+  if (list && input && !list.contains(e.target) && e.target !== input) {
+    list.style.display = 'none';
+  }
+});
 
 /** 모달 내 시험항목 검색 (참고용→시험항목 방향) */
 function searchMfdsMappingItems() {
@@ -35696,9 +35765,8 @@ function saveMfdsMapping() {
   if (!bflName) { showToast('BFL 항목명을 선택하세요.', 'error'); return; }
   if (!testCode) { showToast('식약처 시험항목을 선택하세요.', 'error'); return; }
 
-  var unitSelect = document.getElementById('mfds-map-unit');
-  var unitCode = unitSelect.value;
-  var unitName = unitCode ? unitSelect.options[unitSelect.selectedIndex].textContent : '';
+  var unitCode = document.getElementById('mfds-map-unit').value;
+  var unitName = document.getElementById('mfds-map-unit-input').value || '';
 
   var mapping = {
     bflItemName: bflName,
