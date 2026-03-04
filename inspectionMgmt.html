@@ -625,7 +625,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
             </label>
             <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-mfdsTestItems">
               <input type="radio" name="d-item-source" value="mfdsTestItems" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
-              <div><div style="font-weight:700;font-size:13px">시험항목 (식약처 2,940건)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">검사관리 &gt; 🧪 시험항목 탭의 데이터 (2,940건)</div></div>
+              <div><div style="font-weight:700;font-size:13px">시험항목 (<span id="src-mfds-test-count">식약처</span>)</div><div style="font-size:11px;color:var(--sub);margin-top:2px">검사관리 &gt; 🧪 시험항목 탭의 데이터</div></div>
             </label>
             <label class="field-opt" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid var(--bdr);border-radius:12px;cursor:pointer;transition:all .2s;background:var(--bg)" id="src-opt-refFeeMapping">
               <input type="radio" name="d-item-source" value="refFeeMapping" onchange="updateItemSourceUI()" style="margin-top:3px;accent-color:var(--pri)">
@@ -34655,10 +34655,11 @@ function openDetail(idx){
 function updateItemSourceUI() {
   var purposeName = (document.getElementById('d-name').value || '').trim();
   var isJaga = (purposeName === '자가품질위탁검사용');
+  var isRef = (purposeName === '참고용');
 
-  // 자가품질위탁검사용: 전체 5개 옵션 / 나머지: 시험항목 + 항목그룹만
+  // 자가품질위탁검사용: 전체 5개 / 참고용: 항목그룹+시험항목+참고용맵핑 / 나머지: 시험항목+항목그룹
   var allKeys = ['mfdsTemplates', 'itemGroups', 'mfdsTestItems', 'refFeeMapping', 'foodTypesMapping'];
-  var allowedKeys = isJaga ? allKeys : ['mfdsTestItems', 'itemGroups'];
+  var allowedKeys = isJaga ? allKeys : isRef ? ['itemGroups', 'mfdsTestItems', 'refFeeMapping'] : ['mfdsTestItems', 'itemGroups'];
 
   allKeys.forEach(function(k) {
     var opt = document.getElementById('src-opt-' + k);
@@ -34681,13 +34682,22 @@ function updateItemSourceUI() {
     if (defaultRadio) { defaultRadio.checked = true; val = defaultKey; }
   }
 
+  // 동적 건수 표시 (시험항목)
+  var testCntEl = document.getElementById('src-mfds-test-count');
+  if (testCntEl) {
+    var cnt = _mfdsTestItems ? _mfdsTestItems.length : 0;
+    testCntEl.textContent = cnt > 0 ? ('식약처 ' + cnt.toLocaleString() + '건') : '식약처';
+  }
+
   var descEl = document.getElementById('d-item-source-desc');
+  var igCnt = itemGroupData ? itemGroupData.length : 0;
+  var testCnt = _mfdsTestItems ? _mfdsTestItems.length : 0;
   var labels = {
-    mfdsTemplates: '📋 접수등록 시 ① 검사관리 > 식품유형 탭(646건) + ② 기준규격 > 공통기준규격(33,663건) 두 곳에서 로드됩니다.',
-    itemGroups: '📦 접수등록 시 검사관리 > 참고용 탭(5,467건)에서 해당 검사목적의 항목이 로드됩니다.',
-    mfdsTestItems: '🧪 접수등록 시 검사관리 > 시험항목 탭(2,940건)에서 개별 검색하여 추가합니다.',
+    mfdsTemplates: '📋 접수등록 시 ① 검사관리 > 식품유형 탭 + ② 기준규격 > 공통기준규격 두 곳에서 로드됩니다.',
+    itemGroups: '📦 접수등록 시 검사관리 > 참고용 탭(' + igCnt.toLocaleString() + '건)에서 해당 검사목적의 항목이 로드됩니다.',
+    mfdsTestItems: '🧪 접수등록 시 검사관리 > 시험항목 탭(' + (testCnt > 0 ? testCnt.toLocaleString() : '') + '건)에서 개별 검색하여 추가합니다.',
     refFeeMapping: '🔗 접수등록 시 검사관리 > 수수료 탭 > 참고용 매핑에서 수수료 등록된 항목을 검색하여 추가합니다.',
-    foodTypesMapping: '💰 접수등록 시 검사관리 > 수수료 탭 > 수수료 목록(9,237건)에서 항목이 로드됩니다.'
+    foodTypesMapping: '💰 접수등록 시 검사관리 > 수수료 탭 > 수수료 목록에서 항목이 로드됩니다.'
   };
   if (val && labels[val]) {
     descEl.textContent = labels[val];
