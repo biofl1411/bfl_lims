@@ -2114,22 +2114,24 @@ function onTestPurposeChange() {
     const testField = document.querySelector('input[name="test-field"]:checked')?.value;
     const helpEl = document.getElementById('test-purpose-help');
 
-    // ★ 검사목적에 따라 UI 모드 전환
+    // ★ Firestore P 배열에서 선택된 검사목적의 itemSource 조회
+    const purposeObj = testPurpose ? firestorePurposes.find(p => p.n === testPurpose) : null;
+    _currentItemSource = (purposeObj && purposeObj.itemSource) ? purposeObj.itemSource : 'foodTypesMapping';
+
+    // 검사목적에 따라 UI 모드 전환 (itemSource 기반)
     updateInspectionMode(testPurpose);
 
     if (testPurpose) {
-        // Firestore P 배열에서 선택된 검사목적의 접수번호 형식 라벨 표시
-        const purposeObj = firestorePurposes.find(p => p.n === testPurpose);
         if (helpEl) {
             if (purposeObj && purposeObj.rcpt) {
                 helpEl.innerHTML = `📋 접수번호 형식: <strong>${purposeObj.rcpt}</strong>` +
                     (purposeObj.rcptDesc ? ` <span style="color:#888">(${purposeObj.rcptDesc})</span>` : '');
             } else {
-                var isLims = (testPurpose === '자가품질위탁검사용');
-                helpEl.textContent = isLims ? '식품유형을 검색하세요 (고시항목 기준)' : '검체유형을 선택하세요';
+                var srcLabel = {mfdsTemplates:'식품유형 검색 (고시항목)', itemGroups:'검체유형 선택 (항목그룹)', mfdsTestItems:'시험항목 검색', refFeeMapping:'시험항목 검색 (수수료 매핑)', foodTypesMapping:'검체유형 선택'};
+                helpEl.textContent = srcLabel[_currentItemSource] || '검체유형을 선택하세요';
             }
         }
-        var modeLabel = (testPurpose === '자가품질위탁검사용') ? ' (식약처 연동)' : '';
+        var modeLabel = _currentItemSource === 'mfdsTemplates' ? ' (식약처 연동)' : '';
         showToast(`검사목적 선택: ${testPurpose}${modeLabel}`, 'info');
 
         // 이전 접수번호 자동 조회 (Firestore receipts에서 최근 내역)
@@ -2148,13 +2150,14 @@ function onTestPurposeChange() {
 // 참고용(기준규격외) 모드 플래그 — 시험항목 검색 모드인지 추적
 var _isRefTestMode = false;
 var _refTestItemsCache = null;
+var _currentItemSource = ''; // 현재 검사목적의 항목 로드 소스
+var _itemGroupsCache = null; // itemGroups Firestore 캐시
 
 function updateInspectionMode(testPurpose) {
-    var isLims = (testPurpose === '자가품질위탁검사용');
-    var isRef = (testPurpose === '참고용(기준규격외)');
+    var src = _currentItemSource;
 
-    // 모드 플래그 업데이트
-    _isRefTestMode = isRef;
+    // 시험항목 직접 검색 모드 (mfdsTestItems 또는 refFeeMapping)
+    _isRefTestMode = (src === 'mfdsTestItems' || src === 'refFeeMapping');
 
     // 식약처 연동 섹션 (품목코드 피커 + 기준규격 테이블)
     var mfdsPickerEl = document.getElementById('mfds-product-picker-container');
@@ -2168,13 +2171,29 @@ function updateInspectionMode(testPurpose) {
     var foodTypeInput = document.getElementById('food-type-input');
     var foodTypeLabel = foodTypeGroup ? foodTypeGroup.querySelector('label') : null;
 
-    // 자가품질위탁검사용이 아닌 경우 카테고리 고정 해제
-    if (!isLims && typeof MFDS_CODES !== 'undefined' && MFDS_CODES.unlockCategories) {
+    // mfdsTemplates 아닌 경우 카테고리 고정 해제
+    if (src !== 'mfdsTemplates' && typeof MFDS_CODES !== 'undefined' && MFDS_CODES.unlockCategories) {
         MFDS_CODES.unlockCategories();
     }
 
-    if (isRef) {
-        // ★ 참고용(기준규격외) 모드: 시험항목 직접 검색/추가
+    if (!testPurpose) {
+        // 미선택: 품목코드 숨김, 검체유형 비활성화
+        _restoreFoodTypeLabel(foodTypeLabel);
+        _restoreFoodTypeInput(foodTypeInput);
+        if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
+        if (mfdsStdEl) mfdsStdEl.style.display = 'none';
+        if (foodTypeGroup) foodTypeGroup.style.display = '';
+        if (foodTypeInput) {
+            foodTypeInput.disabled = true;
+            foodTypeInput.placeholder = '검사목적을 먼저 선택하세요';
+            foodTypeInput.value = '';
+        }
+        if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
+        return;
+    }
+
+    if (src === 'mfdsTestItems' || src === 'refFeeMapping') {
+        // ★ 시험항목 직접 검색 모드 (mfdsTestItems / refFeeMapping)
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
         if (foodTypeGroup) foodTypeGroup.style.display = '';
@@ -2188,14 +2207,12 @@ function updateInspectionMode(testPurpose) {
 
         if (foodTypeInput) {
             foodTypeInput.disabled = false;
-            foodTypeInput.placeholder = '시험항목명 또는 코드 검색... (2,940건)';
             foodTypeInput.value = '';
-            // 이벤트 핸들러 변경: 식품유형 검색 → 시험항목 검색
             foodTypeInput.oninput = function() { searchRefTestItems(this.value); };
             foodTypeInput.onfocus = function() { searchRefTestItems(''); };
         }
 
-        // 시험항목 테이블 초기화 (빈 상태로 표시)
+        // 시험항목 테이블 초기화
         if (inspectionItemsEl) {
             inspectionItemsEl.style.display = 'block';
             var tbody = document.getElementById('inspection-items-tbody');
@@ -2206,19 +2223,26 @@ function updateInspectionMode(testPurpose) {
             if (tfoot) tfoot.style.display = 'none';
         }
 
-        // help 텍스트 변경
-        var helpEl = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
-        if (helpEl) helpEl.textContent = '검사목적관리 > 시험항목(2,940건)에서 검색하여 추가합니다';
-
-        // 시험항목 데이터 미리 로드
-        if (typeof MFDS_CODES !== 'undefined') {
-            MFDS_CODES.loadTestItems().then(function(items) {
-                _refTestItemsCache = items;
-                console.log('[참고용] 시험항목 로드 완료:', items.length + '건');
+        // 데이터 미리 로드 + placeholder 동적 건수
+        if (src === 'refFeeMapping') {
+            buildRefFeeMap().then(function() {
+                var cnt = _refFeeMap ? Object.keys(_refFeeMap).length : 0;
+                if (foodTypeInput) foodTypeInput.placeholder = '시험항목명 또는 코드 검색... (수수료 매핑 ' + cnt.toLocaleString() + '건)';
             });
+            var helpEl = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
+            if (helpEl) helpEl.textContent = '수수료 > 참고용 매핑에서 검색하여 추가합니다';
+        } else {
+            if (typeof MFDS_CODES !== 'undefined') {
+                MFDS_CODES.loadTestItems().then(function(items) {
+                    _refTestItemsCache = items;
+                    if (foodTypeInput) foodTypeInput.placeholder = '시험항목명 또는 코드 검색... (' + items.length.toLocaleString() + '건)';
+                });
+            }
+            var helpEl = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
+            if (helpEl) helpEl.textContent = '시험항목 탭에서 검색하여 추가합니다';
         }
 
-    } else if (isLims) {
+    } else if (src === 'mfdsTemplates') {
         // 식약처 연동 모드: 품목코드 피커(메인) + 검체유형 검색(보조) 병행
         _restoreFoodTypeLabel(foodTypeLabel);
         _restoreFoodTypeInput(foodTypeInput);
@@ -2233,7 +2257,7 @@ function updateInspectionMode(testPurpose) {
         var helpEl2 = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
         if (helpEl2) helpEl2.textContent = '시험분야 + 검사목적에 따라 표시됩니다';
 
-        // 식약처 품목코드 피커: 항상 펼침 (접힘 토글 없이)
+        // 식약처 품목코드 피커: 항상 펼침
         if (mfdsPickerEl) {
             mfdsPickerEl.style.display = '';
             var oldToggle = mfdsPickerEl.querySelector('.mfds-picker-toggle');
@@ -2246,8 +2270,8 @@ function updateInspectionMode(testPurpose) {
         if (typeof MFDS_CODES !== 'undefined' && MFDS_CODES.lockCategories) {
             MFDS_CODES.lockCategories('가공식품', '가공식품(전부개정)');
         }
-    } else if (testPurpose) {
-        // 기존 모드: 검체유형 활성화, 식약처 섹션 숨김
+    } else {
+        // 검체유형 검색 모드: itemGroups / foodTypesMapping
         _restoreFoodTypeLabel(foodTypeLabel);
         _restoreFoodTypeInput(foodTypeInput);
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
@@ -2255,25 +2279,14 @@ function updateInspectionMode(testPurpose) {
         if (foodTypeGroup) foodTypeGroup.style.display = '';
         if (foodTypeInput) {
             foodTypeInput.disabled = false;
-            foodTypeInput.placeholder = '검색 또는 클릭...';
-        }
-        var helpEl3 = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
-        if (helpEl3) helpEl3.textContent = '시험분야 + 검사목적에 따라 표시됩니다';
-    } else {
-        // 미선택: 품목코드 숨김, 검체유형 비활성화
-        _restoreFoodTypeLabel(foodTypeLabel);
-        _restoreFoodTypeInput(foodTypeInput);
-        if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
-        if (mfdsStdEl) mfdsStdEl.style.display = 'none';
-        if (foodTypeGroup) foodTypeGroup.style.display = '';
-        if (foodTypeInput) {
-            foodTypeInput.disabled = true;
-            foodTypeInput.placeholder = '검사목적을 먼저 선택하세요';
-            foodTypeInput.value = '';
+            foodTypeInput.placeholder = src === 'itemGroups' ? '검체유형 검색 (항목그룹)...' : '검색 또는 클릭...';
         }
         if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
-        var helpEl4 = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
-        if (helpEl4) helpEl4.textContent = '시험분야 + 검사목적에 따라 표시됩니다';
+        var helpEl3 = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
+        if (helpEl3) helpEl3.textContent = src === 'itemGroups' ? '참고용 탭의 검체유형에서 항목을 로드합니다' : '시험분야 + 검사목적에 따라 표시됩니다';
+
+        // itemGroups 미리 로드
+        if (src === 'itemGroups') loadItemGroupsData();
     }
 }
 
@@ -2337,6 +2350,20 @@ function getFeeByCode(testCode) {
         return MFDS_FEE_MAP[testCode].fee || 0;
     }
     return 0;
+}
+
+// ★ itemGroups Firestore 로드 (캐시)
+async function loadItemGroupsData() {
+    if (_itemGroupsCache) return _itemGroupsCache;
+    try {
+        var snap = await db.collection('itemGroups').get();
+        _itemGroupsCache = snap.docs.map(function(d) { return d.data(); });
+        console.log('[항목그룹] Firestore 로드:', _itemGroupsCache.length + '건');
+    } catch(e) {
+        console.warn('[항목그룹] 로드 실패:', e.message);
+        _itemGroupsCache = [];
+    }
+    return _itemGroupsCache;
 }
 
 // ═══ 참고용 수수료 맵 ═══
@@ -2406,6 +2433,11 @@ async function searchRefTestItems(query) {
 
     // 검색 실행
     var results = MFDS_CODES.searchTestItems(query, _refTestItemsCache);
+
+    // refFeeMapping 모드: 수수료 매핑에 있는 항목만 필터링
+    if (_currentItemSource === 'refFeeMapping' && _refFeeMap) {
+        results = results.filter(function(item) { return _refFeeMap[item['시험항목코드']]; });
+    }
 
     if (results.length === 0) {
         list.innerHTML = '<div style="padding:12px;color:#8892a4;font-size:12px;text-align:center">검색 결과 없음</div>';
@@ -2682,16 +2714,53 @@ async function searchFoodType(query) {
         return;
     }
 
-    // 참고용(기준규격외) 모드 → 시험항목 검색으로 리다이렉트
+    // 시험항목 직접 검색 모드 → 리다이렉트
     if (_isRefTestMode) {
         searchRefTestItems(query);
         return;
     }
 
-    var isLims = (testPurpose === '자가품질위탁검사용');
+    var src = _currentItemSource;
     const list = document.getElementById('food-type-list');
 
-    if (isLims) {
+    if (src === 'itemGroups') {
+        // ★ 항목그룹 모드: itemGroups에서 검체유형 목록 검색
+        var igData = await loadItemGroupsData();
+        var typeSet = new Set();
+        var typeCounts = {};
+        igData.forEach(function(d) {
+            if (d.검사목적 === testPurpose && d.검체유형) {
+                typeSet.add(d.검체유형);
+                typeCounts[d.검체유형] = (typeCounts[d.검체유형] || 0) + 1;
+            }
+        });
+        var allTypes = Array.from(typeSet).sort();
+        var filteredTypes = query ? allTypes.filter(function(t) { return t.toLowerCase().indexOf(query.toLowerCase()) >= 0; }) : allTypes;
+
+        if (filteredTypes.length === 0) {
+            list.innerHTML = '<div style="padding:12px;color:#8892a4;font-size:12px;text-align:center">' + (allTypes.length === 0 ? '등록된 검체유형이 없습니다 (참고용 탭에서 추가)' : '검색 결과 없음') + '</div>';
+            list.classList.add('active');
+            return;
+        }
+
+        var html = '<div style="padding:6px 12px;font-size:11px;color:#7c5cfc;font-weight:700;background:#f5f3ff;border-bottom:1px solid #ede9fe">📦 항목그룹 검체유형 (' + filteredTypes.length + ')</div>';
+        filteredTypes.forEach(function(type) {
+            var cnt = typeCounts[type] || 0;
+            var display = type;
+            if (query) {
+                var regex = new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+                display = type.replace(regex, '<mark>$1</mark>');
+            }
+            html += '<div class="autocomplete-item" onclick="selectFoodType(\'' + type.replace(/'/g, "\\'") + '\')" style="display:flex;justify-content:space-between">'
+                + '<span>' + display + '</span>'
+                + '<span style="font-size:11px;color:#7c5cfc;font-weight:600">' + cnt + '개</span></div>';
+        });
+        list.innerHTML = html;
+        list.classList.add('active');
+        return;
+    }
+
+    if (src === 'mfdsTemplates') {
         // ★ 자가품질위탁검사용: 식품유형 + 공통기준규격 시험항목 통합 검색
         var templates = await loadMfdsTemplates();
         var cmnItems = await loadCmnStdTestItems();
@@ -2875,6 +2944,61 @@ async function loadInspectionItems(foodType) {
 
     if (!foodType) {
         section.style.display = 'none';
+        return;
+    }
+
+    // ★ itemGroups 모드: 항목그룹에서 검체유형 하위 항목 로드
+    if (_currentItemSource === 'itemGroups') {
+        var igData = await loadItemGroupsData();
+        var currentPurpose = document.getElementById('test-purpose').value || '';
+        var items = igData.filter(function(d) {
+            return d.검사목적 === currentPurpose && d.검체유형 === foodType;
+        });
+
+        if (items.length === 0) {
+            section.style.display = 'block';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#999;font-size:13px">해당 검체유형에 등록된 시험항목이 없습니다.</td></tr>';
+            tfoot.style.display = 'none';
+            summary.textContent = '';
+            return;
+        }
+
+        var total = 0;
+        var html = '';
+        items.forEach(function(item, idx) {
+            var fee = item.항목수수료 || 0;
+            total += fee;
+            var itemKey = (item.항목명 || '') + '||' + (item.규격 || '');
+            var code = item.testItemCode || '';
+            html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + itemKey + '" data-fee="' + fee + '" data-test-code="' + code + '" data-unit="' + (item.항목단위 || '') + '">';
+            html += '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionCheckChange()"></td>';
+            html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
+            html += '<td style="padding:8px 12px;color:#344054;font-weight:500">' + (item.항목명 || '') + '</td>';
+            html += '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + code + '</td>';
+            html += '<td style="padding:8px 12px;color:#344054;font-size:12px">' + (item.규격 || '-') + '</td>';
+            html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (item.항목단위 || '-') + '</td>';
+            html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
+            html += '</tr>';
+        });
+
+        tbody.innerHTML = html;
+        tfoot.style.display = '';
+        totalEl.textContent = total.toLocaleString() + '원';
+        var supply = Math.round(total / 1.1);
+        var vat = total - supply;
+        document.getElementById('inspection-items-supply').textContent = supply.toLocaleString() + '원';
+        document.getElementById('inspection-items-vat').textContent = vat.toLocaleString() + '원';
+        summary.textContent = items.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
+        var srcInfo = document.getElementById('inspection-source-info');
+        if (srcInfo) {
+            srcInfo.style.display = 'flex';
+            srcInfo.innerHTML = '<span style="font-weight:700">📦 항목그룹</span>'
+                + '<span style="background:#fff;padding:2px 10px;border-radius:5px;border:1px solid #ede9fe">' + foodType + '</span>'
+                + '<span style="color:#667085">' + items.length + '개 항목</span>';
+        }
+        section.style.display = 'block';
+        saveSampleToArray();
+        updateFeeSummary();
         return;
     }
 
