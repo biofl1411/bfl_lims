@@ -364,7 +364,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 .fee-save-bar .btn-discard-fees:hover{background:#e0f2f1}
 .bulk-add-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:none;align-items:center;justify-content:center}
 .bulk-add-overlay.active{display:flex}
-.bulk-add-modal{background:#fff;border-radius:16px;width:860px;max-width:95vw;max-height:88vh;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+.bulk-add-modal{background:#fff;border-radius:16px;width:860px;max-width:95vw;height:80vh;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
 .bulk-add-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--bdr)}
 .bulk-add-header h3{margin:0;font-size:16px;font-weight:700}
 .bulk-add-header button{border:none;background:transparent;font-size:20px;cursor:pointer;padding:4px;line-height:1;color:var(--sub)}
@@ -1213,7 +1213,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <span id="bulk-selected-count" style="font-size:13px;font-weight:600;color:#7c5cfc;white-space:nowrap;">선택: 0건</span>
       </div>
       <div id="bulk-category-chips" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
-      <div style="flex:1;min-height:0;max-height:400px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;">
+      <div style="flex:1;min-height:200px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;">
         <table class="bulk-add-table">
           <thead>
             <tr>
@@ -31504,6 +31504,23 @@ function saveItem() {
         itemGroupData[editingIndex] = updatedItem;
       }
 
+      // 참고용: 단위 변경 시 같은 검체유형 그룹 일괄 수정 제안
+      if (editingType === '참고용' && editingItem.항목단위 !== updatedItem.항목단위 && updatedItem.항목단위) {
+        var sameGroup = itemGroupData.filter(function(d, i){
+          return i !== editingIndex && d.검체유형 === updatedItem.검체유형 && d.검사목적 === updatedItem.검사목적;
+        });
+        if (sameGroup.length > 0) {
+          var diffCount = sameGroup.filter(function(d){ return d.항목단위 !== updatedItem.항목단위; }).length;
+          if (diffCount > 0 && confirm('같은 검체유형 "' + updatedItem.검체유형 + '"의 나머지 ' + diffCount + '건 항목도\n단위를 "' + updatedItem.항목단위 + '"(으)로 일괄 변경하시겠습니까?')) {
+            itemGroupData.forEach(function(d, i){
+              if (i !== editingIndex && d.검체유형 === updatedItem.검체유형 && d.검사목적 === updatedItem.검사목적) {
+                d.항목단위 = updatedItem.항목단위;
+              }
+            });
+          }
+        }
+      }
+
       document.getElementById('input-분야').value = updatedItem.분야;
     }
 
@@ -31718,7 +31735,7 @@ async function openBulkAddModal() {
   // 상태 초기화
   _bulkAddSelected = new Set();
   _bulkAddPage = 0;
-  _bulkAddCatFilter = 'all';
+  _bulkAddCatFilter = 'none';  // 초기: 카테고리 미선택
   document.getElementById('bulk-검체유형').value = '';
   document.getElementById('bulk-search').value = '';
   // 검사목적 드롭다운
@@ -31728,8 +31745,8 @@ async function openBulkAddModal() {
     var opt = document.createElement('option'); opt.value = p.n; opt.textContent = p.n; sel.appendChild(opt);
   });
   if (currentFilter.purpose && currentFilter.purpose !== '전체') sel.value = currentFilter.purpose;
-  // 필터 + 렌더
-  _bulkAddFiltered = _mfdsTestItems.filter(function(t){ return isTestItemActive(t['시험항목코드']); });
+  // 초기: 빈 테이블 (카테고리 선택 유도)
+  _bulkAddFiltered = [];
   renderBulkCategoryChips();
   renderBulkAddTable();
   updateBulkAddUI();
@@ -31743,8 +31760,10 @@ function closeBulkAddModal() {
 
 function filterBulkAddItems() {
   var q = (document.getElementById('bulk-search').value || '').trim().toLowerCase();
+  // 카테고리 미선택 + 검색어 없으면 빈 결과
+  if (_bulkAddCatFilter === 'none' && !q) { _bulkAddFiltered = []; _bulkAddPage = 0; renderBulkAddTable(); updateBulkAddUI(); return; }
   var base = _mfdsTestItems.filter(function(t){ return isTestItemActive(t['시험항목코드']); });
-  if (_bulkAddCatFilter !== 'all') {
+  if (_bulkAddCatFilter !== 'all' && _bulkAddCatFilter !== 'none') {
     base = base.filter(function(t){ return (t['시험항목코드']||'').charAt(0).toUpperCase() === _bulkAddCatFilter; });
   }
   if (q) {
@@ -31767,7 +31786,8 @@ function renderBulkCategoryChips() {
   var catCnt = {};
   var activeItems = _mfdsTestItems.filter(function(t){ return isTestItemActive(t['시험항목코드']); });
   activeItems.forEach(function(t){ var p=(t['시험항목코드']||'').charAt(0).toUpperCase(); if(p) catCnt[p]=(catCnt[p]||0)+1; });
-  var h = '<button type="button" onclick="setBulkCatFilter(\'all\')" style="padding:3px 10px;border-radius:12px;border:1px solid #666;background:'+(_bulkAddCatFilter==='all'?'#666':'#fff')+';color:'+(_bulkAddCatFilter==='all'?'#fff':'#666')+';font-size:11px;font-weight:600;cursor:pointer;">전체 '+activeItems.length+'</button>';
+  var allOn = _bulkAddCatFilter==='all';
+  var h = '<button type="button" onclick="setBulkCatFilter(\'all\')" style="padding:3px 10px;border-radius:12px;border:1px solid #666;background:'+(allOn?'#666':'#fff')+';color:'+(allOn?'#fff':'#666')+';font-size:11px;font-weight:600;cursor:pointer;">전체 '+activeItems.length+'</button>';
   Object.keys(REF_CODE_CATEGORIES).forEach(function(p){
     var cat = REF_CODE_CATEGORIES[p]; var cnt = catCnt[p]||0; var on = _bulkAddCatFilter===p;
     h += '<button type="button" onclick="setBulkCatFilter(\''+p+'\')" style="padding:3px 10px;border-radius:12px;border:1px solid '+cat.color+';background:'+(on?cat.color:'#fff')+';color:'+(on?'#fff':cat.color)+';font-size:11px;font-weight:600;cursor:pointer;">'+p+' '+cat.name+' '+cnt+'</button>';
@@ -31778,6 +31798,12 @@ function renderBulkCategoryChips() {
 function setBulkCatFilter(prefix) {
   _bulkAddCatFilter = prefix;
   _bulkAddPage = 0;
+  // 카테고리 선택 시 검체유형 필드에 카테고리명 자동 복사 (비어있을 때만)
+  var typeInput = document.getElementById('bulk-검체유형');
+  if (prefix !== 'all' && prefix !== 'none' && !typeInput.value.trim()) {
+    var cat = REF_CODE_CATEGORIES[prefix];
+    if (cat) typeInput.value = cat.name;
+  }
   filterBulkAddItems();
   renderBulkCategoryChips();
 }
@@ -31790,7 +31816,10 @@ function renderBulkAddTable() {
   var end = Math.min(start + _bulkAddPageSize, total);
   var items = _bulkAddFiltered.slice(start, end);
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#999;">검색 결과가 없습니다</td></tr>';
+    var msg = (_bulkAddCatFilter === 'none' && !(document.getElementById('bulk-search').value||'').trim())
+      ? '⬆ 위 대분류 칩을 클릭하여 카테고리를 선택하세요'
+      : '검색 결과가 없습니다';
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#999;">'+msg+'</td></tr>';
     document.getElementById('bulk-add-pagination').innerHTML = '';
     document.getElementById('bulk-select-all').checked = false;
     return;
