@@ -31061,7 +31061,7 @@ async function renderItemGroups() {
 
     const escAcc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const accordionHtml = Object.entries(typeGroupedAcc).map(([type, typeItems]) => {
-      const typeTotalFee = typeItems.reduce((s, it) => s + (igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
+      const typeTotalFee = typeItems.reduce((s, it) => s + (it.항목수수료 || igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
       const purpose = typeItems[0]?.검사목적 || '';
 
       const typeHeader = `
@@ -31098,7 +31098,7 @@ async function renderItemGroups() {
 
       typeItems.forEach(item => {
         const idx = itemGroupData.indexOf(item);
-        const itemFee = igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
+        const itemFee = item.항목수수료 || igAccFeeMap.get(item.검체유형 + '||' + item.항목명) || 0;
         let tCode = item.testItemCode || '';
         let mfds = tCode ? (mfdsLookup[tCode] || {}) : {};
         // testItemCode 없으면 항목명으로 _mfdsTestItems 검색
@@ -31125,10 +31125,14 @@ async function renderItemGroups() {
             }
           }
         }
-        const dispName = mfdsKor || item.항목명 || '';
+        // 한글명 우선순위: 항목명이 한글이면 항목명 우선, 아니면 mfdsKor fallback
+        const isKorean = item.항목명 && /[가-힣]/.test(item.항목명);
+        const dispName = isKorean ? item.항목명 : (mfdsKor || item.항목명 || '');
         // 한글명=영문명 중복이면 영문명 비움; 항목명이 영문이면 영문명으로 표시
         if (dispName && engName && dispName.toLowerCase() === engName.toLowerCase()) engName = '';
-        if (!engName && mfdsKor && item.항목명 && item.항목명 !== mfdsKor) engName = item.항목명;
+        if (!engName && mfdsKor && item.항목명 && item.항목명 !== mfdsKor && item.항목명 !== dispName) engName = item.항목명;
+        // mfdsKor가 있고 dispName과 다르면 영문명 위치에 mfds 한글명 보조 표시
+        if (!engName && mfdsKor && mfdsKor !== dispName) engName = mfdsKor;
         // 역방향 검색: 한글 dispName → 영문 (ENG_TO_KOR_MAP 역맵)
         if (!engName && dispName) {
           const revEng = getKorToEngMap()[dispName.toLowerCase()];
@@ -31375,20 +31379,16 @@ function openDetailItem(type, index, itemList, pos) {
       }
     });
 
-    // 식품공전/참고용: 수수료 읽기전용으로 표시
+    // 참고용: 수수료 항상 표시 + 편집 가능
     const directFee = item.항목수수료 || 0;
     const feeMatch = feeData.find(f => f.검체유형 === item.검체유형 && f.항목명 === item.항목명);
-    if (directFee > 0 || feeMatch) {
-      document.getElementById('group-수수료').style.display = 'block';
-      document.getElementById('input-분류').value = feeMatch ? (feeMatch.검사목적 || '자가품질위탁검사용') : '자가품질위탁검사용';
-      document.getElementById('input-수수료').value = directFee > 0 ? directFee : (feeMatch ? feeMatch.수수료 : '');
-      document.getElementById('input-비고').value = feeMatch ? (feeMatch.비고 || '') : '';
-      document.getElementById('input-분류').disabled = true;
-      document.getElementById('input-수수료').disabled = true;
-      document.getElementById('input-비고').disabled = true;
-    } else {
-      document.getElementById('group-수수료').style.display = 'none';
-    }
+    document.getElementById('group-수수료').style.display = 'block';
+    document.getElementById('input-분류').value = feeMatch ? (feeMatch.검사목적 || '') : (item.검사목적 || '');
+    document.getElementById('input-수수료').value = directFee > 0 ? directFee : (feeMatch ? feeMatch.수수료 : '');
+    document.getElementById('input-비고').value = feeMatch ? (feeMatch.비고 || '') : (item.비고 || '');
+    document.getElementById('input-분류').disabled = true;
+    document.getElementById('input-수수료').disabled = false;
+    document.getElementById('input-비고').disabled = false;
   }
 
   // 삭제 버튼 표시
@@ -31512,6 +31512,8 @@ function saveItem() {
       } else if (editingType === '참고용') {
         newItem.검사목적 = document.getElementById('input-검사목적').value;
         newItem.testItemCode = (document.getElementById('input-시험항목코드').value || '').trim();
+        var feeVal = parseInt(document.getElementById('input-수수료').value) || 0;
+        if (feeVal > 0) newItem.항목수수료 = feeVal;
         itemGroupData.push(newItem);
       }
     }
@@ -31560,6 +31562,8 @@ function saveItem() {
       if (editingType === '참고용') {
         updatedItem.검사목적 = document.getElementById('input-검사목적').value;
         updatedItem.testItemCode = (document.getElementById('input-시험항목코드').value || '').trim();
+        var feeVal = parseInt(document.getElementById('input-수수료').value) || 0;
+        updatedItem.항목수수료 = feeVal > 0 ? feeVal : (editingItem.항목수수료 || 0);
       }
 
       if (editingType === '식품유형') {
@@ -31845,12 +31849,22 @@ function addNew(type) {
   document.getElementById('group-검사목적').style.display = type === '참고용' ? 'block' : 'none';
   if (type === '참고용') document.getElementById('input-검사목적').value = '';
 
-  // 수수료 필드: 수수료 탭일 때만 표시
-  document.getElementById('group-수수료').style.display = type === '수수료' ? 'block' : 'none';
+  // 수수료 필드: 수수료/참고용 탭일 때 표시
+  document.getElementById('group-수수료').style.display = (type === '수수료' || type === '참고용') ? 'block' : 'none';
   if (type === '수수료') {
     document.getElementById('input-분류').value = '자가품질위탁검사용';
     document.getElementById('input-수수료').value = '';
     document.getElementById('input-비고').value = '';
+    document.getElementById('input-수수료').disabled = false;
+    document.getElementById('input-비고').disabled = false;
+  }
+  if (type === '참고용') {
+    document.getElementById('input-분류').value = '';
+    document.getElementById('input-분류').disabled = true;
+    document.getElementById('input-수수료').value = '';
+    document.getElementById('input-수수료').disabled = false;
+    document.getElementById('input-비고').value = '';
+    document.getElementById('input-비고').disabled = false;
   }
 
   // 삭제 버튼 숨기기 (추가 모드)
