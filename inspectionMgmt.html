@@ -1223,6 +1223,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
               <th>한글명</th>
               <th>영문명</th>
               <th style="width:70px;">단위</th>
+              <th style="width:60px;">BFL</th>
             </tr>
           </thead>
           <tbody id="bulk-add-tbody"></tbody>
@@ -1285,6 +1286,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <select id="input-분야" style="padding:8px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:14px;background:#fff;">
             <option value="식품">식품</option>
             <option value="축산">축산</option>
+            <option value="기타">기타</option>
           </select>
         </div>
       </div>
@@ -1460,6 +1462,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 var FIELDS=[
   {id:'F',name:'식품',code:'F',color:'#4361ee',desc:'식품 검사 분야'},
   {id:'L',name:'축산',code:'L',color:'#ff6b6b',desc:'축산물 검사 분야'},
+  {id:'E',name:'기타',code:'E',color:'#43a047',desc:'기타 검사 분야 (전체)'},
 ];
 
 var P=[
@@ -29945,8 +29948,14 @@ var _inspectionDataLoaded = { foodType: false, itemGroup: false, fee: false };
 async function loadInspectionConfig() {
   try {
     var fd = await fsGetSettings('inspectionFields');
-    if (fd && fd.fields && fd.fields.length > 0) FIELDS = fd.fields;
-    else await saveFieldsToFirestore();
+    if (fd && fd.fields && fd.fields.length > 0) {
+      FIELDS = fd.fields;
+      // 기타(E) 분야 자동 추가
+      if (!FIELDS.find(function(f){ return f.id === 'E'; })) {
+        FIELDS.push({id:'E',name:'기타',code:'E',color:'#43a047',desc:'기타 검사 분야 (전체)'});
+        await saveFieldsToFirestore();
+      }
+    } else await saveFieldsToFirestore();
 
     var pd = await fsGetSettings('inspectionPurposes');
     if (pd && pd.purposes && pd.purposes.length > 0) {
@@ -30960,6 +30969,7 @@ async function renderItemGroups() {
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <div class="card-actions">
+              <button onclick="event.stopPropagation();copyItemGroupType('${esc(purpose)}','${esc(type)}')" title="검체유형 복사">📋</button>
               <button onclick="event.stopPropagation();editItemGroupType('${esc(purpose)}','${esc(type)}')" title="검체유형 수정">✏️</button>
               <button onclick="event.stopPropagation();deleteItemGroupType('${esc(purpose)}','${esc(type)}')" title="검체유형 삭제">🗑️</button>
             </div>
@@ -31030,6 +31040,7 @@ async function renderItemGroups() {
           </div>
           <div class="accordion-info" style="display:flex;gap:12px;align-items:center;">
             <div class="card-actions">
+              <button onclick="event.stopPropagation();copyItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 복사">📋</button>
               <button onclick="event.stopPropagation();editItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 수정">✏️</button>
               <button onclick="event.stopPropagation();deleteItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 삭제">🗑️</button>
             </div>
@@ -31624,6 +31635,28 @@ function deleteItemGroupPurpose(purpose) {
 }
 
 // ══ 참고용: 검체유형(하위 카테고리) 삭제 ══
+async function copyItemGroupType(purpose, type) {
+  var items = itemGroupData.filter(function(d){ return d.검사목적 === purpose && d.검체유형 === type; });
+  if (!items.length) { showToast('복사할 항목이 없습니다.', 'warning'); return; }
+  var newName = prompt('복사할 새 검체유형 이름을 입력하세요.\n(기존: ' + type + ', ' + items.length + '건)', type + '_복사');
+  if (!newName || !newName.trim()) return;
+  newName = newName.trim();
+  // 중복 체크
+  var exists = itemGroupData.some(function(d){ return d.검사목적 === purpose && d.검체유형 === newName; });
+  if (exists) { showToast('이미 존재하는 검체유형입니다: ' + newName, 'warning'); return; }
+  // 항목 복사
+  items.forEach(function(orig){
+    var copy = {};
+    Object.keys(orig).forEach(function(k){ if(k !== '_docId') copy[k] = orig[k]; });
+    copy.검체유형 = newName;
+    itemGroupData.push(copy);
+  });
+  showToast('📋 "' + newName + '" ' + items.length + '건 복사 완료', 'success');
+  updateStats();
+  renderData();
+  await saveItemGroupsToFirestore();
+}
+
 function deleteItemGroupType(purpose, type) {
   const count = itemGroupData.filter(d => d.검사목적 === purpose && d.검체유형 === type).length;
   if (!confirm(`'${type}' 검체유형과 하위 ${count}건을 모두 삭제하시겠습니까?`)) return;
@@ -31808,8 +31841,14 @@ function setBulkCatFilter(prefix) {
   renderBulkCategoryChips();
 }
 
+function _getBulkUnitMap() {
+  var m = {};
+  itemGroupData.forEach(function(d){ if(d.testItemCode && d.항목단위) m[d.testItemCode] = d.항목단위; });
+  return m;
+}
 function renderBulkAddTable() {
   var tbody = document.getElementById('bulk-add-tbody');
+  var unitMap = _getBulkUnitMap();
   var total = _bulkAddFiltered.length;
   var totalPages = Math.ceil(total / _bulkAddPageSize) || 1;
   var start = _bulkAddPage * _bulkAddPageSize;
@@ -31819,22 +31858,25 @@ function renderBulkAddTable() {
     var msg = (_bulkAddCatFilter === 'none' && !(document.getElementById('bulk-search').value||'').trim())
       ? '⬆ 위 대분류 칩을 클릭하여 카테고리를 선택하세요'
       : '검색 결과가 없습니다';
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#999;">'+msg+'</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:40px;text-align:center;color:#999;">'+msg+'</td></tr>';
     document.getElementById('bulk-add-pagination').innerHTML = '';
     document.getElementById('bulk-select-all').checked = false;
     return;
   }
   var allChecked = items.every(function(t){ return _bulkAddSelected.has(t['시험항목코드']); });
   document.getElementById('bulk-select-all').checked = allChecked;
+  var bflCodes = new Set();
+  itemGroupData.forEach(function(d){ if(d.testItemCode) bflCodes.add(d.testItemCode); });
   var h = '';
   items.forEach(function(t){
     var code = t['시험항목코드']||'';
     var name = (t['한글명']||'').trim();
     var eng = (t['영문명']||'').trim();
     if (name && eng && name.toLowerCase()===eng.toLowerCase()) eng = '';
-    var unit = getRefFeeUnit(code) || '-';
+    var unit = unitMap[code] || getRefFeeUnit(code) || '-';
     var chk = _bulkAddSelected.has(code);
     var badge = getRefCodeCategoryBadge(code);
+    var bfl = bflCodes.has(code) ? '<span style="color:#43a047;" title="BFL 등록 항목">✅</span>' : '';
     h += '<tr class="'+(chk?'checked':'')+'" onclick="toggleBulkItem(\''+code.replace(/'/g,"\\'")+'\')" style="cursor:pointer;">';
     h += '<td style="text-align:center;"><input type="checkbox" '+(chk?'checked':'')+' onclick="event.stopPropagation();toggleBulkItem(\''+code.replace(/'/g,"\\'")+'\')" style="accent-color:#7c5cfc;"></td>';
     h += '<td style="font-family:monospace;font-size:12px;color:#1565c0;">'+code+'</td>';
@@ -31842,6 +31884,7 @@ function renderBulkAddTable() {
     h += '<td style="font-weight:500;">'+name+'</td>';
     h += '<td style="color:#667085;font-size:12px;">'+eng+'</td>';
     h += '<td style="color:#667085;font-size:12px;">'+unit+'</td>';
+    h += '<td style="text-align:center;">'+bfl+'</td>';
     h += '</tr>';
   });
   tbody.innerHTML = h;
@@ -31933,13 +31976,14 @@ async function executeBulkAdd() {
   var 분야 = getDivision(검체유형);
   var mfdsMap = {};
   _mfdsTestItems.forEach(function(t){ mfdsMap[t['시험항목코드']] = t; });
+  var unitMap = _getBulkUnitMap();
   newCodes.forEach(function(code){
     var m = mfdsMap[code] || {};
     itemGroupData.push({
       검체유형: 검체유형,
       항목명: m['한글명'] || m['영문명'] || code,
       규격: '',
-      항목단위: getRefFeeUnit(code) || '',
+      항목단위: unitMap[code] || getRefFeeUnit(code) || '',
       시험법근거: '',
       분야: 분야,
       담당자: '', 담당자소속: '', 직급: '',
