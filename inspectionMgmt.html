@@ -34713,25 +34713,48 @@ function renderTestItemCatChips(show) {
   if (!c1) return;
   if (!show) { c1.innerHTML = ''; if (c2) c2.innerHTML = ''; return; }
 
+  // 데이터 미로드 시 자동 로드 후 재렌더
+  if ((!_mfdsTestItems || _mfdsTestItems.length === 0) && typeof MFDS_CODES !== 'undefined') {
+    c1.innerHTML = '<span style="font-size:11px;color:#999;">⏳ 시험항목 로드 중...</span>';
+    MFDS_CODES.loadTestItems().then(function(items) {
+      _mfdsTestItems = items;
+      _mfdsTestLoaded = true;
+      renderTestItemCatChips(true);
+    });
+    return;
+  }
+
   // 건수 집계
   var catCounts = {};
+  var totalCnt = 0;
   (_mfdsTestItems || []).forEach(function(t) {
     var p = (t['시험항목코드'] || '').charAt(0).toUpperCase();
-    if (p) catCounts[p] = (catCounts[p] || 0) + 1;
+    if (p) { catCounts[p] = (catCounts[p] || 0) + 1; totalCnt++; }
   });
 
-  var html = '';
+  // "전체" 칩
+  var noFilter = _editTestItemCats.length === 0;
+  var html = '<span onclick="toggleTestItemCatAll()" style="cursor:pointer;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;border:2px solid #555;'
+    + (noFilter ? 'background:#555;color:#fff;' : 'background:#fff;color:#555;')
+    + 'white-space:nowrap;user-select:none;">전체 ' + totalCnt + '</span> ';
+
   Object.keys(REF_CODE_CATEGORIES).forEach(function(k) {
     var cat = REF_CODE_CATEGORIES[k];
     var cnt = catCounts[k] || 0;
-    if (cnt === 0) return;
     var active = _editTestItemCats.indexOf(k) >= 0;
     html += '<span onclick="toggleTestItemCat(\'' + k + '\')" style="cursor:pointer;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;border:2px solid ' + cat.color + ';'
       + (active ? 'background:' + cat.color + ';color:#fff;' : 'background:#fff;color:' + cat.color + ';')
-      + 'white-space:nowrap;user-select:none;">' + k + ' ' + cat.name + ' ' + cnt + '</span>';
+      + (cnt === 0 ? 'opacity:0.4;' : '')
+      + 'white-space:nowrap;user-select:none;">' + k + ' ' + cat.name + ' ' + cnt + '</span> ';
   });
   c1.innerHTML = html;
   renderTestItemSubChips();
+}
+/** "전체" 칩 토글 — 모든 대분류 선택 해제 */
+function toggleTestItemCatAll() {
+  _editTestItemCats = [];
+  _editTestItemSubs = {};
+  renderTestItemCatChips(true);
 }
 
 /** 시험항목 소분류 칩 렌더링 (선택된 대분류별) */
@@ -34758,12 +34781,12 @@ function renderTestItemSubChips() {
     var cat = REF_CODE_CATEGORIES[letter];
     Object.keys(subs).forEach(function(s) {
       var cnt = subCounts[letter + s] || 0;
-      if (cnt === 0) return;
       var selSubs = _editTestItemSubs[letter] || [];
       var active = selSubs.indexOf(s) >= 0;
       html += '<span onclick="toggleTestItemSub(\'' + letter + '\',\'' + s + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500;border:1.5px solid ' + (cat ? cat.color : '#999') + ';'
         + (active ? 'background:' + (cat ? cat.color : '#999') + ';color:#fff;' : 'background:#fafafa;color:#555;')
-        + 'white-space:nowrap;user-select:none;">' + s + ' ' + subs[s] + ' ' + cnt + '</span>';
+        + (cnt === 0 ? 'opacity:0.4;' : '')
+        + 'white-space:nowrap;user-select:none;">' + s + ' ' + subs[s] + ' ' + cnt + '</span> ';
     });
   });
   c2.innerHTML = html;
