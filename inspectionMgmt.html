@@ -847,6 +847,14 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <button onclick="autoMatchItemGroupCodes()" style="padding:5px 12px;font-size:12px;border:1px solid #1565c0;color:#1565c0;background:#e3f2fd;border-radius:6px;cursor:pointer;white-space:nowrap;" title="모든 항목에 시험항목코드 자동매칭">🔗 코드 자동매칭</button>
       <button onclick="migrateEngKorNames()" style="padding:5px 12px;font-size:12px;border:1px solid #e65100;color:#e65100;background:#fff3e0;border-radius:6px;cursor:pointer;white-space:nowrap;" title="영문 한글명을 한국어로 일괄 변환">🔄 한글명 변환</button>
     </div>
+    <div id="ig-delete-bar" style="display:none;padding:8px 16px;background:#fff3f3;border:1px solid #ffcdd2;border-radius:8px;margin-top:8px;align-items:center;gap:12px;">
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" id="ig-select-all-types" onchange="toggleIgSelectAllTypes(this.checked)" style="accent-color:#dc3545;"> 전체선택
+      </label>
+      <span id="ig-delete-count" style="font-size:13px;color:#dc3545;font-weight:600;"></span>
+      <button onclick="deleteSelectedIgTypes()" style="padding:4px 14px;font-size:12px;border:1px solid #dc3545;color:#fff;background:#dc3545;border-radius:6px;cursor:pointer;font-weight:600;">🗑️ 선택 삭제</button>
+      <button onclick="clearIgTypeSelection()" style="padding:4px 14px;font-size:12px;border:1px solid #d0d5dd;color:#344054;background:#fff;border-radius:6px;cursor:pointer;">취소</button>
+    </div>
 
     <!-- 카드 뷰 -->
     <div class="card-grid" id="item-group-cards" style="display: none;"></div>
@@ -31059,6 +31067,7 @@ async function renderItemGroups() {
       const typeHeader = `
         <div class="accordion-header-level1" onclick="toggleAccordionLevel1(this)">
           <div class="accordion-title">
+            <input type="checkbox" class="ig-type-check" data-purpose="${escAcc(purpose)}" data-type="${escAcc(type)}" onclick="event.stopPropagation();updateIgDeleteBar()" style="accent-color:#dc3545;margin-right:4px;">
             <span class="accordion-icon">▶</span>
             <span class="accordion-name">${type}</span>
           </div>
@@ -31764,6 +31773,58 @@ function deleteItemGroupItem(index) {
   updateStats();
   renderData();
   saveItemGroupsToFirestore();
+}
+
+// ══ 참고용: 검체유형 선택 삭제 ══
+function updateIgDeleteBar() {
+  var checks = document.querySelectorAll('.ig-type-check:checked');
+  var bar = document.getElementById('ig-delete-bar');
+  if (checks.length > 0) {
+    bar.style.display = 'flex';
+    var totalItems = 0;
+    checks.forEach(function(cb) {
+      var purpose = cb.dataset.purpose;
+      var type = cb.dataset.type;
+      totalItems += itemGroupData.filter(function(d) { return d.검사목적 === purpose && d.검체유형 === type; }).length;
+    });
+    document.getElementById('ig-delete-count').textContent = checks.length + '개 검체유형 선택 (' + totalItems + '건)';
+  } else {
+    bar.style.display = 'none';
+  }
+  // 전체선택 체크 상태
+  var allChecks = document.querySelectorAll('.ig-type-check');
+  document.getElementById('ig-select-all-types').checked = allChecks.length > 0 && checks.length === allChecks.length;
+}
+
+function toggleIgSelectAllTypes(checked) {
+  document.querySelectorAll('.ig-type-check').forEach(function(cb) { cb.checked = checked; });
+  updateIgDeleteBar();
+}
+
+function clearIgTypeSelection() {
+  document.querySelectorAll('.ig-type-check').forEach(function(cb) { cb.checked = false; });
+  document.getElementById('ig-delete-bar').style.display = 'none';
+  document.getElementById('ig-select-all-types').checked = false;
+}
+
+async function deleteSelectedIgTypes() {
+  var checks = document.querySelectorAll('.ig-type-check:checked');
+  if (!checks.length) return;
+  var targets = [];
+  checks.forEach(function(cb) { targets.push({ purpose: cb.dataset.purpose, type: cb.dataset.type }); });
+  var totalItems = 0;
+  targets.forEach(function(t) {
+    totalItems += itemGroupData.filter(function(d) { return d.검사목적 === t.purpose && d.검체유형 === t.type; }).length;
+  });
+  if (!confirm(targets.length + '개 검체유형 (' + totalItems + '건)을 삭제하시겠습니까?\n\n' + targets.map(function(t) { return '• ' + t.type; }).join('\n'))) return;
+  var deleteSet = new Set(targets.map(function(t) { return t.purpose + '||' + t.type; }));
+  itemGroupData = itemGroupData.filter(function(d) { return !deleteSet.has((d.검사목적||'') + '||' + (d.검체유형||'')); });
+  showToast(targets.length + '개 검체유형 삭제 (' + totalItems + '건)', 'info');
+  _saveOpenAccordions();
+  clearIgTypeSelection();
+  updateStats();
+  renderData();
+  await saveItemGroupsToFirestore();
 }
 
 function addNew(type) {
