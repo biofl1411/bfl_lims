@@ -362,6 +362,26 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 .fee-save-bar .btn-save-fees:hover{background:#00695c;transform:translateY(-1px)}
 .fee-save-bar .btn-discard-fees{background:transparent;color:#00695c;border:1px solid #80cbc4;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer;transition:all .2s}
 .fee-save-bar .btn-discard-fees:hover{background:#e0f2f1}
+.bulk-add-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:none;align-items:center;justify-content:center}
+.bulk-add-overlay.active{display:flex}
+.bulk-add-modal{background:#fff;border-radius:16px;width:860px;max-width:95vw;max-height:88vh;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+.bulk-add-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--bdr)}
+.bulk-add-header h3{margin:0;font-size:16px;font-weight:700}
+.bulk-add-header button{border:none;background:transparent;font-size:20px;cursor:pointer;padding:4px;line-height:1;color:var(--sub)}
+.bulk-add-body{padding:20px 24px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.bulk-add-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 24px;border-top:1px solid var(--bdr);background:var(--bg)}
+.bulk-add-footer button{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--bdr);background:#fff}
+.bulk-add-footer button:last-child{background:#7c5cfc;color:#fff;border-color:#7c5cfc}
+.bulk-add-footer button:last-child:disabled{opacity:.5;cursor:not-allowed}
+.bulk-add-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:#ede9fe;color:#5b21b6;border-radius:12px;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s}
+.bulk-add-chip:hover{background:#ddd6fe;text-decoration:line-through}
+.bulk-add-table{width:100%;border-collapse:collapse;font-size:13px}
+.bulk-add-table thead{position:sticky;top:0;background:#f8f9fa;z-index:1}
+.bulk-add-table th{padding:8px 10px;text-align:left;font-weight:600;font-size:12px;color:var(--sub);border-bottom:2px solid var(--bdr)}
+.bulk-add-table td{padding:7px 10px;border-bottom:1px solid #f0f0f0}
+.bulk-add-table tr.checked{background:#f5f3ff}
+.bulk-add-table tr:hover{background:#fafafe}
+.bulk-add-table tr.checked:hover{background:#ede9fe}
 @keyframes feeSavePulse{0%,100%{box-shadow:0 0 0 0 rgba(38,166,154,.3)}50%{box-shadow:0 0 12px 4px rgba(38,166,154,.15)}}
 
 /* 정렬 드롭다운 */
@@ -791,6 +811,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </div>
         <button class="btn btn-outline" onclick="downloadExcel('참고용')">📥 엑셀</button>
         <button class="btn btn-success" onclick="addNew('참고용')">➕ 추가</button>
+        <button class="btn btn-outline" onclick="openBulkAddModal()" style="border-color:#7c5cfc;color:#7c5cfc;">📋 일괄추가</button>
       
         <div class="sort-dropdown">
           <button class="sort-button" onclick="toggleSortMenu(event)">
@@ -1165,6 +1186,56 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <div class="batch-edit-footer">
       <button onclick="closeBatchEditModal()">취소</button>
       <button onclick="applyBatchEdit()">적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- 일괄추가 모달 -->
+<div class="bulk-add-overlay" id="bulk-add-overlay" onclick="if(event.target===this)closeBulkAddModal()">
+  <div class="bulk-add-modal">
+    <div class="bulk-add-header">
+      <h3>📋 시험항목 일괄 추가</h3>
+      <button onclick="closeBulkAddModal()">✕</button>
+    </div>
+    <div class="bulk-add-body">
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1;">
+          <label style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:4px;display:block;">검체유형 <span style="color:#e53935">*</span></label>
+          <input type="text" id="bulk-검체유형" placeholder="예: 9대 영양성분_13일" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:14px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:4px;display:block;">검사목적</label>
+          <select id="bulk-검사목적" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:14px;"></select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="bulk-search" placeholder="🔍 시험항목코드 / 한글명 / 영문명 / 별칭 검색..." oninput="filterBulkAddItems()" style="flex:1;padding:8px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:13px;">
+        <span id="bulk-selected-count" style="font-size:13px;font-weight:600;color:#7c5cfc;white-space:nowrap;">선택: 0건</span>
+      </div>
+      <div id="bulk-category-chips" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+      <div style="flex:1;min-height:0;max-height:400px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;">
+        <table class="bulk-add-table">
+          <thead>
+            <tr>
+              <th style="width:36px;text-align:center;"><input type="checkbox" id="bulk-select-all" onchange="toggleBulkSelectAll(this.checked)"></th>
+              <th style="width:100px;">시험항목코드</th>
+              <th>대분류</th>
+              <th>한글명</th>
+              <th>영문명</th>
+              <th style="width:70px;">단위</th>
+            </tr>
+          </thead>
+          <tbody id="bulk-add-tbody"></tbody>
+        </table>
+      </div>
+      <div id="bulk-add-pagination" style="display:flex;gap:4px;justify-content:center;"></div>
+      <div id="bulk-selected-chips" style="display:flex;flex-wrap:wrap;gap:4px;max-height:70px;overflow-y:auto;">
+        <span style="color:var(--sub);font-size:12px;">선택된 항목이 없습니다</span>
+      </div>
+    </div>
+    <div class="bulk-add-footer">
+      <button onclick="closeBulkAddModal()">취소</button>
+      <button id="bulk-add-btn" onclick="executeBulkAdd()" disabled>✅ 0건 추가</button>
     </div>
   </div>
 </div>
@@ -31624,6 +31695,236 @@ function addNew(type) {
 
   document.getElementById('detail-panel').classList.add('active');
   document.getElementById('overlay').classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════
+// 참고용 — 시험항목 일괄추가 기능
+// ═══════════════════════════════════════════════════════════
+var _bulkAddSelected = new Set();
+var _bulkAddFiltered = [];
+var _bulkAddPage = 0;
+var _bulkAddPageSize = 50;
+var _bulkAddCatFilter = 'all';
+
+async function openBulkAddModal() {
+  // 시험항목 데이터 로드
+  if (!_mfdsTestItems || !_mfdsTestItems.length) {
+    try {
+      showToast('⏳ 시험항목 데이터 로드 중...', 'info');
+      var results = await Promise.all([MFDS_CODES.loadTestItems(), MFDS_CODES.loadItemMappings(), MFDS_CODES.loadUnits()]);
+      _mfdsTestItems = results[0]; _mfdsItemMappings = results[1]; _mfdsUnits = results[2]; _mfdsTestLoaded = true;
+    } catch(e) { showToast('시험항목 로드 실패: ' + e.message, 'error'); return; }
+  }
+  // 상태 초기화
+  _bulkAddSelected = new Set();
+  _bulkAddPage = 0;
+  _bulkAddCatFilter = 'all';
+  document.getElementById('bulk-검체유형').value = '';
+  document.getElementById('bulk-search').value = '';
+  // 검사목적 드롭다운
+  var sel = document.getElementById('bulk-검사목적');
+  sel.innerHTML = '';
+  P.filter(function(p){return p.o;}).forEach(function(p){
+    var opt = document.createElement('option'); opt.value = p.n; opt.textContent = p.n; sel.appendChild(opt);
+  });
+  if (currentFilter.purpose && currentFilter.purpose !== '전체') sel.value = currentFilter.purpose;
+  // 필터 + 렌더
+  _bulkAddFiltered = _mfdsTestItems.filter(function(t){ return isTestItemActive(t['시험항목코드']); });
+  renderBulkCategoryChips();
+  renderBulkAddTable();
+  updateBulkAddUI();
+  document.getElementById('bulk-add-overlay').classList.add('active');
+}
+
+function closeBulkAddModal() {
+  document.getElementById('bulk-add-overlay').classList.remove('active');
+  _bulkAddSelected = new Set();
+}
+
+function filterBulkAddItems() {
+  var q = (document.getElementById('bulk-search').value || '').trim().toLowerCase();
+  var base = _mfdsTestItems.filter(function(t){ return isTestItemActive(t['시험항목코드']); });
+  if (_bulkAddCatFilter !== 'all') {
+    base = base.filter(function(t){ return (t['시험항목코드']||'').charAt(0).toUpperCase() === _bulkAddCatFilter; });
+  }
+  if (q) {
+    base = base.filter(function(t){
+      return (t['시험항목코드']||'').toLowerCase().indexOf(q)>=0 ||
+        (t['한글명']||'').toLowerCase().indexOf(q)>=0 ||
+        (t['영문명']||'').toLowerCase().indexOf(q)>=0 ||
+        (t['별칭']||'').toLowerCase().indexOf(q)>=0;
+    });
+  }
+  _bulkAddFiltered = base;
+  _bulkAddPage = 0;
+  renderBulkAddTable();
+  updateBulkAddUI();
+}
+
+function renderBulkCategoryChips() {
+  var el = document.getElementById('bulk-category-chips');
+  if (!el) return;
+  var catCnt = {};
+  var activeItems = _mfdsTestItems.filter(function(t){ return isTestItemActive(t['시험항목코드']); });
+  activeItems.forEach(function(t){ var p=(t['시험항목코드']||'').charAt(0).toUpperCase(); if(p) catCnt[p]=(catCnt[p]||0)+1; });
+  var h = '<button type="button" onclick="setBulkCatFilter(\'all\')" style="padding:3px 10px;border-radius:12px;border:1px solid #666;background:'+(_bulkAddCatFilter==='all'?'#666':'#fff')+';color:'+(_bulkAddCatFilter==='all'?'#fff':'#666')+';font-size:11px;font-weight:600;cursor:pointer;">전체 '+activeItems.length+'</button>';
+  Object.keys(REF_CODE_CATEGORIES).forEach(function(p){
+    var cat = REF_CODE_CATEGORIES[p]; var cnt = catCnt[p]||0; var on = _bulkAddCatFilter===p;
+    h += '<button type="button" onclick="setBulkCatFilter(\''+p+'\')" style="padding:3px 10px;border-radius:12px;border:1px solid '+cat.color+';background:'+(on?cat.color:'#fff')+';color:'+(on?'#fff':cat.color)+';font-size:11px;font-weight:600;cursor:pointer;">'+p+' '+cat.name+' '+cnt+'</button>';
+  });
+  el.innerHTML = h;
+}
+
+function setBulkCatFilter(prefix) {
+  _bulkAddCatFilter = prefix;
+  _bulkAddPage = 0;
+  filterBulkAddItems();
+  renderBulkCategoryChips();
+}
+
+function renderBulkAddTable() {
+  var tbody = document.getElementById('bulk-add-tbody');
+  var total = _bulkAddFiltered.length;
+  var totalPages = Math.ceil(total / _bulkAddPageSize) || 1;
+  var start = _bulkAddPage * _bulkAddPageSize;
+  var end = Math.min(start + _bulkAddPageSize, total);
+  var items = _bulkAddFiltered.slice(start, end);
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#999;">검색 결과가 없습니다</td></tr>';
+    document.getElementById('bulk-add-pagination').innerHTML = '';
+    document.getElementById('bulk-select-all').checked = false;
+    return;
+  }
+  var allChecked = items.every(function(t){ return _bulkAddSelected.has(t['시험항목코드']); });
+  document.getElementById('bulk-select-all').checked = allChecked;
+  var h = '';
+  items.forEach(function(t){
+    var code = t['시험항목코드']||'';
+    var name = (t['한글명']||'').trim();
+    var eng = (t['영문명']||'').trim();
+    if (name && eng && name.toLowerCase()===eng.toLowerCase()) eng = '';
+    var unit = getRefFeeUnit(code) || '-';
+    var chk = _bulkAddSelected.has(code);
+    var badge = getRefCodeCategoryBadge(code);
+    h += '<tr class="'+(chk?'checked':'')+'" onclick="toggleBulkItem(\''+code.replace(/'/g,"\\'")+'\')" style="cursor:pointer;">';
+    h += '<td style="text-align:center;"><input type="checkbox" '+(chk?'checked':'')+' onclick="event.stopPropagation();toggleBulkItem(\''+code.replace(/'/g,"\\'")+'\')" style="accent-color:#7c5cfc;"></td>';
+    h += '<td style="font-family:monospace;font-size:12px;color:#1565c0;">'+code+'</td>';
+    h += '<td>'+badge+'</td>';
+    h += '<td style="font-weight:500;">'+name+'</td>';
+    h += '<td style="color:#667085;font-size:12px;">'+eng+'</td>';
+    h += '<td style="color:#667085;font-size:12px;">'+unit+'</td>';
+    h += '</tr>';
+  });
+  tbody.innerHTML = h;
+  renderBulkAddPagination(totalPages);
+}
+
+function renderBulkAddPagination(totalPages) {
+  var el = document.getElementById('bulk-add-pagination');
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  var h = '';
+  var btnStyle = 'padding:4px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:12px;cursor:pointer;background:#fff;';
+  var activeStyle = 'padding:4px 10px;border:1px solid #7c5cfc;border-radius:6px;font-size:12px;cursor:pointer;background:#7c5cfc;color:#fff;font-weight:600;';
+  h += '<button onclick="goBulkAddPage('+(_bulkAddPage-1)+')" style="'+btnStyle+'"'+ (_bulkAddPage===0?' disabled':'') +'>◀</button>';
+  var start = Math.max(0, _bulkAddPage - 3);
+  var end = Math.min(totalPages, start + 7);
+  if (end - start < 7) start = Math.max(0, end - 7);
+  for (var i = start; i < end; i++) {
+    h += '<button onclick="goBulkAddPage('+i+')" style="'+(i===_bulkAddPage?activeStyle:btnStyle)+'">'+(i+1)+'</button>';
+  }
+  h += '<button onclick="goBulkAddPage('+(_bulkAddPage+1)+')" style="'+btnStyle+'"'+(_bulkAddPage>=totalPages-1?' disabled':'') +'>▶</button>';
+  h += '<span style="font-size:11px;color:var(--sub);margin-left:8px;">'+_bulkAddFiltered.length+'건</span>';
+  el.innerHTML = h;
+}
+
+function goBulkAddPage(page) {
+  var totalPages = Math.ceil(_bulkAddFiltered.length / _bulkAddPageSize);
+  if (page < 0 || page >= totalPages) return;
+  _bulkAddPage = page;
+  renderBulkAddTable();
+}
+
+function toggleBulkItem(code) {
+  if (_bulkAddSelected.has(code)) _bulkAddSelected.delete(code);
+  else _bulkAddSelected.add(code);
+  renderBulkAddTable();
+  updateBulkAddUI();
+}
+
+function toggleBulkSelectAll(checked) {
+  var start = _bulkAddPage * _bulkAddPageSize;
+  var end = Math.min(start + _bulkAddPageSize, _bulkAddFiltered.length);
+  _bulkAddFiltered.slice(start, end).forEach(function(t){
+    var code = t['시험항목코드'];
+    if (checked) _bulkAddSelected.add(code); else _bulkAddSelected.delete(code);
+  });
+  renderBulkAddTable();
+  updateBulkAddUI();
+}
+
+function updateBulkAddUI() {
+  var cnt = _bulkAddSelected.size;
+  document.getElementById('bulk-selected-count').textContent = '선택: ' + cnt + '건';
+  var btn = document.getElementById('bulk-add-btn');
+  btn.textContent = '✅ ' + cnt + '건 추가';
+  btn.disabled = (cnt === 0);
+  // 선택 칩 미리보기
+  var chips = document.getElementById('bulk-selected-chips');
+  if (cnt === 0) { chips.innerHTML = '<span style="color:var(--sub);font-size:12px;">선택된 항목이 없습니다</span>'; return; }
+  var codes = Array.from(_bulkAddSelected);
+  var h = '', max = 20;
+  codes.slice(0, max).forEach(function(code){
+    var t = _mfdsTestItems.find(function(x){ return x['시험항목코드']===code; });
+    var label = t ? (t['한글명']||code) : code;
+    h += '<span class="bulk-add-chip" onclick="event.stopPropagation();toggleBulkItem(\''+code.replace(/'/g,"\\'")+'\')">' + label + ' ✕</span>';
+  });
+  if (codes.length > max) h += '<span style="padding:3px 8px;font-size:11px;color:var(--sub);">+' + (codes.length-max) + '건 더</span>';
+  chips.innerHTML = h;
+}
+
+async function executeBulkAdd() {
+  var 검체유형 = (document.getElementById('bulk-검체유형').value||'').trim();
+  var 검사목적 = document.getElementById('bulk-검사목적').value;
+  if (!검체유형) { showToast('검체유형을 입력해주세요.', 'warning'); document.getElementById('bulk-검체유형').focus(); return; }
+  if (_bulkAddSelected.size === 0) { showToast('시험항목을 선택해주세요.', 'warning'); return; }
+  // 중복 감지
+  var existKeys = new Set();
+  itemGroupData.forEach(function(d){
+    if (d.검사목적===검사목적 && d.검체유형===검체유형 && d.testItemCode) existKeys.add(d.testItemCode);
+  });
+  var dupes = [], newCodes = [];
+  _bulkAddSelected.forEach(function(code){
+    if (existKeys.has(code)) dupes.push(code); else newCodes.push(code);
+  });
+  if (dupes.length > 0) {
+    if (!confirm(dupes.length + '건의 중복 항목이 있습니다.\n중복을 제외한 ' + newCodes.length + '건만 추가하시겠습니까?')) return;
+  }
+  if (newCodes.length === 0) { showToast('추가할 새 항목이 없습니다 (모두 중복).', 'warning'); return; }
+  // 아이템 생성
+  var 분야 = getDivision(검체유형);
+  var mfdsMap = {};
+  _mfdsTestItems.forEach(function(t){ mfdsMap[t['시험항목코드']] = t; });
+  newCodes.forEach(function(code){
+    var m = mfdsMap[code] || {};
+    itemGroupData.push({
+      검체유형: 검체유형,
+      항목명: m['한글명'] || m['영문명'] || code,
+      규격: '',
+      항목단위: getRefFeeUnit(code) || '',
+      시험법근거: '',
+      분야: 분야,
+      담당자: '', 담당자소속: '', 직급: '',
+      검사목적: 검사목적,
+      testItemCode: code
+    });
+  });
+  // 저장
+  showToast('⏳ ' + newCodes.length + '건 저장 중...', 'info');
+  await saveItemGroupsToFirestore();
+  closeBulkAddModal();
+  updateStats();
+  renderData();
+  showToast('✅ ' + newCodes.length + '건 일괄 추가 완료!', 'success');
 }
 
 // ══ 수수료 탭: 서브탭 전환 ══
