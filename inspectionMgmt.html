@@ -35680,17 +35680,24 @@ function saveMfdsMapping() {
 
   MFDS_CODES.saveItemMapping(mapping).then(function() {
     _mfdsItemMappings[bflName] = mapping;
-    // 참고용 itemGroupData에 단위 반영
-    if (pureUnitName && _mfdsMapCurrent.source === 'itemGroup') {
+    // 참고용 itemGroupData에 단위+시험항목코드 반영
+    if (_mfdsMapCurrent.source === 'itemGroup') {
       var updated = 0;
       itemGroupData.forEach(function(d) {
-        if (d.항목명 === bflName && d.항목단위 !== pureUnitName) {
-          d.항목단위 = pureUnitName;
-          updated++;
+        if (d.항목명 === bflName) {
+          var changed = false;
+          if (pureUnitName && d.항목단위 !== pureUnitName) { d.항목단위 = pureUnitName; changed = true; }
+          if (testCode && d.testItemCode !== testCode) { d.testItemCode = testCode; changed = true; }
+          if (changed) updated++;
         }
       });
       if (updated > 0) {
         saveItemGroupsToFirestore();
+        // 열려있는 편집 패널 항목단위도 갱신
+        var unitInput = document.getElementById('input-항목단위');
+        if (unitInput && pureUnitName) unitInput.value = pureUnitName;
+        var codeInput = document.getElementById('input-시험항목코드');
+        if (codeInput && testCode) codeInput.value = testCode;
         showToast('✅ 매핑 저장 + 항목단위 "' + pureUnitName + '" ' + updated + '건 반영', 'success');
       } else {
         showToast('✅ 매핑 저장: ' + bflName + ' → ' + testCode, 'success');
