@@ -30838,7 +30838,7 @@ async function renderItemGroupsFromMfds(mapping) {
 }
 
 // 참고용 렌더링 (2단계 아코디언)
-function renderItemGroups() {
+async function renderItemGroups() {
   buildItemGroupChips();
 
   // mfds_test_items 매핑 체크
@@ -30847,6 +30847,14 @@ function renderItemGroups() {
     document.getElementById('item-group-cards').style.display = 'none';
     renderItemGroupsFromMfds(mfdsMap);
     return;
+  }
+
+  // _mfdsTestItems 미로드 시 자동 로드 (영문명 lookup용)
+  if (!_mfdsTestItems || !_mfdsTestItems.length) {
+    try {
+      var results = await Promise.all([MFDS_CODES.loadTestItems(), MFDS_CODES.loadItemMappings(), MFDS_CODES.loadUnits()]);
+      _mfdsTestItems = results[0]; _mfdsItemMappings = results[1]; _mfdsUnits = results[2]; _mfdsTestLoaded = true;
+    } catch(e) { console.warn('mfds_test_items 로드 실패:', e); }
   }
 
   let filtered = filterItemGroupData();
@@ -32824,7 +32832,125 @@ var ENG_TO_KOR_MAP = {
   'Dimetridazole, 2-hydroxymethyl-1-methyl-5-nitroimidazole[HMMNI]':'디메트리다졸 (+ HMMNI)',
   'Ronidazole, 2-hydroxymethyl-1-methyl-5-nitroimidazole[HMMNI]':'로니다졸 (+ HMMNI)',
   'MQCA (Olaquindox : 3-methyl quinoxaline-2-carboxylic acid)':'MQCA (올라퀸독스 대사체)',
-  'QCA (Carbadox : Quinoxaline-2-carboxylic acid)':'QCA (카바독스 대사체)'
+  'QCA (Carbadox : Quinoxaline-2-carboxylic acid)':'QCA (카바독스 대사체)',
+  // ── 잔류농약 단일 화합물 ──
+  'Abamectin B1a':'아바멕틴 B1a',
+  'Allidochlor':'알리도클로르',
+  'Aramite':'아라마이트',
+  'Azamethiphos':'아자메티포스',
+  'Bromophos-ethyl':'브로모포스에틸',
+  'Capsaicin':'캡사이신',
+  'Chlorbenside':'클로르벤사이드',
+  'Chloridazone':'클로리다존',
+  'Chloroxuron':'클로록수론',
+  'Crotoxyphos':'크로톡시포스',
+  'Crufomate':'크루포메이트',
+  'Cyprazine':'사이프라진',
+  'Demeton-S-methyl':'데메톤-S-메틸',
+  'Demeton-S-methyl-sulfone':'데메톤-S-메틸설폰',
+  'Dialifor':'디알리포르',
+  'Diclobutrazol':'디클로부트라졸',
+  'Flumioxazin':'플루미옥사진',
+  'Fluorochloridone':'플루오로클로리돈',
+  'Flupoxam':'플루폭삼',
+  'Fluridone':'플루리돈',
+  'Fluthiacet-methyl':'플루티아셋메틸',
+  'Foramsulfuron':'포람설퓨론',
+  'Isoproturon':'이소프로투론',
+  'Isoxadifen-ethyl':'이속사디펜에틸',
+  'Mefentrifluconazole':'메펜트리플루코나졸',
+  'Mephosfolan':'메포스폴란',
+  'Methoprotryn':'메토프로트린',
+  'Monolinuron':'모노리누론',
+  'Neburon':'네부론',
+  'Ortho-phenyl phenol':'오르토페닐페놀',
+  'Oxydemeton-methyl':'옥시데메톤메틸',
+  'Pebulate':'페뷸레이트',
+  'Perthane':'퍼데인',
+  'Phenmedipham':'펜메디팜',
+  'Phosfolan':'포스폴란',
+  'Picolinafen':'피콜리나펜',
+  'Propachlor':'프로파클로르',
+  'Propazine':'프로파진',
+  'Propham':'프로팜',
+  'Propyzamide':'프로피자마이드',
+  'Proquinazid':'프로퀴나지드',
+  'Pydiflumetofen':'피디플루메토펜',
+  'Pyraziflumid':'피라지플루미드',
+  'Quizalofop-ethyl':'퀴잘로포프에틸',
+  'Sulprofos':'설프로포스',
+  'Tetraniliprole':'테트라닐리프롤',
+  'Thionazin':'티오나진',
+  'Tri-allate':'트리알레이트',
+  'Tribufos':'트리부포스',
+  'Tridiphane':'트리디페인',
+  'Triticonazole':'트리티코나졸',
+  'Vernolate':'버놀레이트',
+  'XMC':'XMC (자일렌올메틸카바메이트)',
+  // ── 잔류농약 복합/이성체 화합물 ──
+  'Acetochlor, EMA(2-ethyl-6-methylaniline, HEMA(2-(1-hydroxyl-ethyl)-6-methyl-aniline)':'아세토클로르 (+ EMA, HEMA)',
+  'Acetochlor, EMA2-ethyl-6-methylaniline, HEMA2-1-hydroxyl-ethyl-6-methyl-aniline':'아세토클로르 (+ EMA, HEMA)',
+  'Acibenzolar-S-methyl, Acibenzolar acid':'아시벤졸라-S-메틸 (+ 산)',
+  'Aldrin, Dieldrin':'알드린 (+ 디엘드린)',
+  'BHC(α, β, δ)':'BHC (α, β, δ)',
+  'Benthiavalicarb-isopropyl(R, S)':'벤티아발리카브이소프로필 (R, S)',
+  'Carbendazim, Thiophanate-methyl':'카벤다짐 (+ 티오파네이트메틸)',
+  'Carbofuran, 3-hydroxycarbofuran, Furathiocarb':'카보퓨란 (+ 3-히드록시카보퓨란, 퓨라티오카브)',
+  'Chlordane(cis, trans)':'클로르데인 (시스, 트랜스)',
+  'Chlorfenvinphos(E, Z)':'클로르펜빈포스 (E, Z)',
+  'Clethodim, Clethodim sulfone, Clethodim sulfoxide':'클레토딤 (+ 설폰, 설폭사이드)',
+  'Deltamethrin, Tralomethrin':'델타메트린 (+ 트랄로메트린)',
+  'Demeton-S, Demeton-S-sulfone, Demeton-S-sulfoxide, Disulfoton, Disulfoton sulfone, Disulfoton sulfoxide':'데메톤-S (+ 설폰/설폭사이드, 디설포톤)',
+  'Dichlorvos, Trichlorfon':'디클로르보스 (+ 트리클로르폰)',
+  'Dimethomorph(E, Z)':'디메토모르프 (E, Z)',
+  'Dimethylvinphos(E, Z)':'디메틸빈포스 (E, Z)',
+  'Endosulfan(alpha, beta, sulfate)':'엔도설판 (알파, 베타, 설페이트)',
+  'Endrin, δ-keto-Endrin':'엔드린 (+ δ-케토엔드린)',
+  'Fenamiphos, Fenamiphos sulfone, Fenamiphos sulfoxide':'페나미포스 (+ 설폰, 설폭사이드)',
+  'Fenvalerate, Iso. (1, 2)':'펜발러레이트 이성체 (1, 2)',
+  'Ferimzone(E, Z)':'페림존 (E, Z)',
+  'Flucythrinate, Iso. (1, 2)':'플루사이트리네이트 이성체 (1, 2)',
+  'Fluvalinate, Iso. (1, 2)':'플루발리네이트 이성체 (1, 2)',
+  'Heptachlor(Heptachlor, Heptachlor-epoxide)':'헵타클로르 (+ 에폭사이드)',
+  'Heptachlor, Heptachlor epoxide':'헵타클로르 (+ 에폭사이드)',
+  'Lepimectin(A3, A4)':'레피멕틴 (A3, A4)',
+  'Lindane(γ-BHC)':'린데인 (γ-BHC)',
+  'Lindane, γ-BHC':'린데인 (γ-BHC)',
+  'Metaflumizone(E, Z)':'메타플루미존 (E, Z)',
+  'Methomyl, Thiodicarb':'메소밀 (+ 티오디카브)',
+  'Milbemectin(A3, A4)':'밀베멕틴 (A3, A4)',
+  'Nonachlor(cis, trans)':'노나클로르 (시스, 트랜스)',
+  'Norea Noruron':'노레아 (노루론)',
+  'Norea(Noruron)':'노레아 (노루론)',
+  'Oxamyl, Oxamyl oxime':'옥사밀 (+ 옥심)',
+  'Permethrin(cis, trans)':'퍼메트린 (시스, 트랜스)',
+  'Phenothrin(cis, trans)':'페노트린 (시스, 트랜스)',
+  'Phorate, Phorate oxon, Phorate oxon sulfone, Phorate sulfone, Phorate oxon sulfoxide, Phorate sulfoxide':'포레이트 (+ 옥손/설폰/설폭사이드)',
+  'Phosphamidon (E, Z)':'포스파미돈 (E, Z)',
+  'Phosphamidon(E, Z)':'포스파미돈 (E, Z)',
+  'Phthalide, Fthalide':'프탈라이드 (+ 프탈라이드)',
+  'Picarbutrazox, TZ-1E':'피카부트라족스 (+ TZ-1E)',
+  'Prochloraz(BTS 44595, BTS 44596, 2,4,6-trichlorophenol)':'프로클로라즈 (+ BTS, 트리클로로페놀)',
+  'Prochloraz, 2,4,6-trichlorophenol':'프로클로라즈 (+ 트리클로로페놀)',
+  'Propiconazole, Iso. (1, 2)':'프로피코나졸 이성체 (1, 2)',
+  'Pyflubumide, Pyflubumide-NH':'피플루부마이드 (+ NH)',
+  'Pyribencarb, KIE-9749':'피리벤카브 (+ KIE-9749)',
+  'Pyriminobac-methyl(E, Z)':'피리미노박메틸 (E, Z)',
+  'Sedaxane(cis, trans)':'세다산 (시스, 트랜스)',
+  'Spinosyn(A, D)':'스피노신 (A, D)',
+  'Spirotetramat, Spirotetramat-enol':'스피로테트라맷 (+ 에놀)',
+  'Tebufloquin, Tebufloquin M1':'테부플로퀸 (+ M1)',
+  'Terbufos, Terbufos oxon, Terbufos oxon sulfone, Terbufos oxon sulfoxide, Terbufos sulfone, Terbufos sulfoxide':'터부포스 (+ 옥손/설폰/설폭사이드)',
+  'Trinexapac-ethyl, Trinexapac':'트리넥사팩에틸 (+ 트리넥사팩)',
+  "p,p'-DDD, p,p'-DDE, o,p'-DDT, p,p'-DDT":'DDT 류 (DDD, DDE, DDT)',
+  // ── 기기분석/DNA ──
+  'FT-IR':'FT-IR (적외선분광)',
+  'FT-IR(비교실험)':'FT-IR (비교실험)',
+  'XRF':'XRF (형광X선)',
+  'XRF(비교실험)':'XRF (비교실험)',
+  'DNAnimal Screen Fish':'DNA 어류 스크리닝',
+  'DNAnimal Screen Halal (horse/donkey, pork) Kit':'DNA 할랄 스크리닝 키트',
+  'DNAnimal Screen Mammal & Bird':'DNA 포유류/조류 스크리닝'
 };
 
 // ═══ 역방향 맵: 한국어 → 영문 (자동 생성 + 표기 변형 보조) ═══
