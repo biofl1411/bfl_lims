@@ -29869,6 +29869,49 @@ async function saveFoodTypesToFirestore() {
     }
   } catch(e) { console.warn('식품공전 저장 실패:', e); }
 }
+// ============================================================================
+// 항목 그룹 내 순서 이동 (▲ 위로 / ▼ 아래로)
+// ============================================================================
+function moveItemInGroup(globalIdx, direction) {
+  // direction: -1 = 위로, +1 = 아래로
+  var item = itemGroupData[globalIdx];
+  if (!item) return;
+  var type = item.검체유형;
+  var purpose = item.검사목적;
+
+  // 같은 검체유형+검사목적의 항목들만 추출 (전역 인덱스 포함)
+  var siblings = [];
+  itemGroupData.forEach(function(it, i) {
+    if (it.검체유형 === type && it.검사목적 === purpose) siblings.push({ item: it, gIdx: i });
+  });
+
+  // 현재 항목의 siblings 내 위치
+  var localPos = -1;
+  for (var i = 0; i < siblings.length; i++) {
+    if (siblings[i].gIdx === globalIdx) { localPos = i; break; }
+  }
+  if (localPos < 0) return;
+  var targetPos = localPos + direction;
+  if (targetPos < 0 || targetPos >= siblings.length) return;
+
+  // 전역 배열에서 두 항목 스왑
+  var fromGIdx = siblings[localPos].gIdx;
+  var toGIdx = siblings[targetPos].gIdx;
+  var temp = itemGroupData[fromGIdx];
+  itemGroupData[fromGIdx] = itemGroupData[toGIdx];
+  itemGroupData[toGIdx] = temp;
+
+  // 열린 아코디언 상태 기억
+  _openAccordionTypes = new Set();
+  document.querySelectorAll('#item-group-accordion .accordion-header-level1.active .accordion-name').forEach(function(el) {
+    _openAccordionTypes.add(el.textContent.trim());
+  });
+
+  // 다시 렌더링
+  renderItemGroups();
+  showToast('항목 순서 변경됨', 'info');
+}
+
 async function saveItemGroupsToFirestore() {
   try {
     var BATCH_SIZE = 400;
@@ -31148,6 +31191,8 @@ async function renderItemGroups() {
           <td style="padding:6px 8px;text-align:center;">${getMfdsMappingBadge(item.항목명)}</td>
           <td style="padding:6px 8px;text-align:right;"><span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span></td>
           <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
+            <button onclick="event.stopPropagation();moveItemInGroup(${idx},-1)" title="위로 이동" style="border:none;background:none;cursor:pointer;font-size:12px;color:#5b67f5;">▲</button>
+            <button onclick="event.stopPropagation();moveItemInGroup(${idx},1)" title="아래로 이동" style="border:none;background:none;cursor:pointer;font-size:12px;color:#5b67f5;">▼</button>
             <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;border:none;background:none;cursor:pointer;font-size:14px;">🔗</button>
             <button onclick="event.stopPropagation();openDetailItem('참고용',${idx})" title="수정" style="border:none;background:none;cursor:pointer;font-size:14px;">✏️</button>
             <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제" style="border:none;background:none;cursor:pointer;font-size:14px;">🗑️</button>
