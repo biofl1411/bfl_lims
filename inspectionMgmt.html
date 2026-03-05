@@ -29918,6 +29918,48 @@ function reorderItemByNumber(globalIdx, type, purpose, newPosStr) {
   showToast('순서 변경: ' + (currentLocalPos+1) + ' → ' + (targetLocalPos+1), 'info');
 }
 
+// ============================================================================
+// 패키지 수수료 설정 (검체유형 단위)
+// ============================================================================
+function editPackageFee(purpose, type, currentFee) {
+  var input = prompt('📦 패키지 수수료 설정\n\n검체유형: ' + type + '\n\n금액을 입력하세요 (0 입력 시 패키지 해제, 개별 합산으로 전환):', currentFee || '');
+  if (input === null) return; // 취소
+  var fee = parseInt(input) || 0;
+
+  // 해당 검체유형+검사목적의 모든 항목에 패키지수수료 설정
+  var updated = 0;
+  itemGroupData.forEach(function(it) {
+    if (it.검체유형 === type && it.검사목적 === purpose) {
+      if (fee > 0) {
+        it.패키지수수료 = fee;
+      } else {
+        delete it.패키지수수료;
+      }
+      updated++;
+    }
+  });
+
+  if (updated === 0) {
+    showToast('해당 검체유형 항목을 찾을 수 없습니다.', 'error');
+    return;
+  }
+
+  // 열린 아코디언 상태 기억
+  _openAccordionTypes = new Set();
+  document.querySelectorAll('#item-group-accordion .accordion-header-level1.active .accordion-name').forEach(function(el) {
+    _openAccordionTypes.add(el.textContent.trim());
+  });
+
+  // 저장 + 렌더링
+  saveItemGroupsToFirestore();
+  renderItemGroups();
+  if (fee > 0) {
+    showToast('📦 패키지 수수료 설정: ' + type + ' → ' + fee.toLocaleString() + '원 (' + updated + '건)', 'success');
+  } else {
+    showToast('패키지 수수료 해제: ' + type + ' → 개별 합산으로 전환', 'info');
+  }
+}
+
 async function saveItemGroupsToFirestore() {
   try {
     var BATCH_SIZE = 400;
@@ -31103,7 +31145,16 @@ async function renderItemGroups() {
     const escAcc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const accordionHtml = Object.entries(typeGroupedAcc).map(([type, typeItems]) => {
       const typeTotalFee = typeItems.reduce((s, it) => s + (it.항목수수료 || igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
+      const packageFee = typeItems[0]?.패키지수수료 || 0;
       const purpose = typeItems[0]?.검사목적 || '';
+
+      // 수수료 표시: 패키지수수료 우선, 없으면 개별 합산
+      let feeDisplay = '';
+      if (packageFee > 0) {
+        feeDisplay = `<span class="fee-badge" style="background:#e8f5e9;color:#2e7d32;cursor:pointer;" onclick="event.stopPropagation();editPackageFee('${escAcc(purpose)}','${escAcc(type)}',${packageFee})" title="패키지 수수료 (클릭하여 수정)">📦 패키지: ${packageFee.toLocaleString()}원</span>`;
+      } else if (typeTotalFee > 0) {
+        feeDisplay = `<span class="fee-badge">💰 ${typeTotalFee.toLocaleString()}원</span>`;
+      }
 
       const typeHeader = `
         <div class="accordion-header-level1" onclick="toggleAccordionLevel1(this)">
@@ -31114,11 +31165,12 @@ async function renderItemGroups() {
           </div>
           <div class="accordion-info" style="display:flex;gap:12px;align-items:center;">
             <div class="card-actions">
+              <button onclick="event.stopPropagation();editPackageFee('${escAcc(purpose)}','${escAcc(type)}',${packageFee})" title="패키지 수수료 설정">💰</button>
               <button onclick="event.stopPropagation();copyItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 복사">📋</button>
               <button onclick="event.stopPropagation();editItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 수정">✏️</button>
               <button onclick="event.stopPropagation();deleteItemGroupType('${escAcc(purpose)}','${escAcc(type)}')" title="검체유형 삭제">🗑️</button>
             </div>
-            ${typeTotalFee > 0 ? `<span class="fee-badge">💰 ${typeTotalFee.toLocaleString()}원</span>` : ''}
+            ${feeDisplay}
             <span class="accordion-count">${typeItems.length}개</span>
           </div>
         </div>`;
