@@ -466,9 +466,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         </div>
                         <div id="product-history-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-top:4px;max-height:300px;overflow-y:auto"></div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position:relative">
                         <label>보고번호</label>
-                        <input type="text" id="report-no" placeholder="보고번호 입력">
+                        <div style="display:flex;gap:6px">
+                            <input type="text" id="report-no" placeholder="보고번호 입력" style="flex:1;min-width:0">
+                            <button type="button" class="btn-receipt secondary" onclick="fetchMaterials()" style="padding:8px 10px;font-size:12px;white-space:nowrap" title="원재료 조회">📋 원재료</button>
+                        </div>
+                        <div id="materials-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-top:4px;max-height:350px;overflow-y:auto;min-width:400px"></div>
                     </div>
                     <div class="form-group autocomplete-input" id="food-type-group">
                         <label>검체유형 <span class="required">*</span></label>
@@ -4513,6 +4517,54 @@ function showToast(message, type = 'success') {
     if (type) toast.classList.add(type);
     toast.classList.add('active');
     setTimeout(() => toast.classList.remove('active'), 3000);
+}
+
+// ============================================================================
+// 원재료 조회 (fss_materials: 보고번호 기준)
+// ============================================================================
+async function fetchMaterials() {
+    var reportNo = (document.getElementById('report-no').value || '').trim();
+    var panel = document.getElementById('materials-panel');
+    if (!reportNo) {
+        showToast('보고번호가 없습니다. 보고번호조회를 먼저 실행하세요.', 'warning');
+        return;
+    }
+    panel.innerHTML = '<div style="padding:16px;text-align:center;color:#888"><span class="loading-spinner" style="display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#5b67f5;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 원재료 조회 중...</div>';
+    panel.style.display = '';
+    try {
+        var snap = await db.collection('fss_materials').where('prdlst_report_no', '==', reportNo).get();
+        if (snap.empty) {
+            panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">📭 원재료 데이터가 없습니다. (보고번호: ' + reportNo + ')</div>';
+            return;
+        }
+        var materials = [];
+        snap.forEach(function(doc) { materials.push(doc.data()); });
+        materials.sort(function(a, b) { return (parseInt(a.rawmtrl_ordno) || 0) - (parseInt(b.rawmtrl_ordno) || 0); });
+
+        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">📋 원재료 목록 <span style="color:#5b67f5">' + materials.length + '건</span><span style="flex:1"></span><button type="button" onclick="closeMaterialsPanel()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+        html += '<tr style="background:#f8f9fb;border-bottom:1px solid #e2e6ed"><th style="padding:6px 10px;text-align:center;width:40px;color:#8892a4">순번</th><th style="padding:6px 10px;text-align:left;color:#8892a4">원재료명</th><th style="padding:6px 10px;text-align:left;color:#8892a4;width:100px">품목유형</th><th style="padding:6px 10px;text-align:center;color:#8892a4;width:90px">변경일자</th></tr>';
+        materials.forEach(function(m) {
+            var dt = (m.chng_dt || '');
+            if (dt.length === 8) dt = dt.substring(0,4) + '-' + dt.substring(4,6) + '-' + dt.substring(6,8);
+            html += '<tr style="border-bottom:1px solid #f0f0f0">';
+            html += '<td style="padding:6px 10px;text-align:center;color:#5f6b7a">' + (m.rawmtrl_ordno || '-') + '</td>';
+            html += '<td style="padding:6px 10px;font-weight:600">' + (m.rawmtrl_nm || '-') + '</td>';
+            html += '<td style="padding:6px 10px;color:#5f6b7a">' + (m.prdlst_dcnm || '-') + '</td>';
+            html += '<td style="padding:6px 10px;text-align:center;color:#888">' + (dt || '-') + '</td>';
+            html += '</tr>';
+        });
+        html += '</table>';
+        panel.innerHTML = html;
+        showToast('원재료 ' + materials.length + '건 조회 완료', 'info');
+    } catch(e) {
+        console.warn('[원재료 조회 실패]', e);
+        panel.innerHTML = '<div style="padding:16px;text-align:center;color:#e53935;font-size:13px">⚠️ 조회 실패: ' + (e.message || '') + '</div>';
+    }
+}
+
+function closeMaterialsPanel() {
+    document.getElementById('materials-panel').style.display = 'none';
 }
 
 // ============================================================================
