@@ -3807,7 +3807,7 @@ function setPrevReceiptNo() {
 // ============================================================================
 // 접수번호 세그먼트 기반 생성 (검사목적관리 설정 연동)
 // ============================================================================
-function buildReceiptNoFromSegments(purposeObj, testField) {
+function buildReceiptNoFromSegments(purposeObj, testField, prevReceiptNo) {
     const segments = purposeObj.segments;
     const sep = (purposeObj.segSep === 'none' || purposeObj.segSep === '') ? '' : (purposeObj.segSep !== undefined && purposeObj.segSep !== null ? purposeObj.segSep : '-');
     const fieldId = getFieldCode(testField);
@@ -3817,11 +3817,48 @@ function buildReceiptNoFromSegments(purposeObj, testField) {
     const m = (today.getMonth() + 1).toString().padStart(2, '0');
     const d = today.getDate().toString().padStart(2, '0');
 
+    // 이전 접수번호에서 일련번호 추출
+    let nextSerial = 1;
+    if (prevReceiptNo) {
+        // 세그먼트 구성에서 serial 위치와 자릿수 파악
+        let serialDigits = 4;
+        let serialPos = -1;
+        const prevParts = [];
+        segments.forEach((s, i) => {
+            if (s.t === 'serial') { serialDigits = parseInt(s.v) || 4; serialPos = i; }
+        });
+        // 이전 접수번호를 구분자로 분리하여 serial 위치의 숫자 추출
+        if (serialPos >= 0) {
+            let prevSplit;
+            if (sep) {
+                prevSplit = prevReceiptNo.split(sep);
+            } else {
+                // 구분자 없을 때: 각 세그먼트 길이로 잘라내기
+                prevSplit = [];
+                let offset = 0;
+                segments.forEach(s => {
+                    let len = 0;
+                    if (s.t === 'fixed') len = (purposeObj.fieldCodes && purposeObj.fieldCodes[fieldId]) ? purposeObj.fieldCodes[fieldId].length : (s.v || '??').length;
+                    else if (s.t === 'field') len = fieldId.length;
+                    else if (s.t === 'year') len = s.v === '4' ? 4 : 2;
+                    else if (s.t === 'month' || s.t === 'day') len = 2;
+                    else if (s.t === 'serial') len = parseInt(s.v) || 4;
+                    else if (s.t === 'purpose') len = parseInt(s.digits) || 2;
+                    prevSplit.push(prevReceiptNo.substring(offset, offset + len));
+                    offset += len;
+                });
+            }
+            if (prevSplit[serialPos]) {
+                const prevNum = parseInt(prevSplit[serialPos], 10);
+                if (!isNaN(prevNum)) nextSerial = prevNum + 1;
+            }
+        }
+    }
+
     const parts = [];
     segments.forEach(s => {
         switch(s.t) {
             case 'fixed':
-                // fieldCodes가 있으면 분야별 코드 사용
                 if (purposeObj.fieldCodes && purposeObj.fieldCodes[fieldId]) {
                     parts.push(purposeObj.fieldCodes[fieldId]);
                 } else {
@@ -3842,7 +3879,7 @@ function buildReceiptNoFromSegments(purposeObj, testField) {
                 break;
             case 'serial':
                 const digits = parseInt(s.v) || 4;
-                parts.push('1'.padStart(digits, '0'));
+                parts.push(String(nextSerial).padStart(digits, '0'));
                 break;
             case 'purpose':
                 const pDigits = parseInt(s.digits) || 2;
@@ -3865,7 +3902,29 @@ async function allocateReceiptNo() {
         return;
     }
 
-    const prevReceiptNo = document.getElementById('prev-receipt-no').value.trim();
+    // Firestore에서 해당 분야+목적의 최신 접수번호 직접 조회
+    let prevReceiptNo = '';
+    try {
+        const snap = await db.collection('receipts')
+            .where('testPurpose', '==', testPurpose)
+            .limit(200)
+            .get();
+        if (!snap.empty) {
+            const matched = snap.docs
+                .map(d => d.data())
+                .filter(r => r.testField === testField && r.receiptNo)
+                .sort((a, b) => (b.receiptNo || '').localeCompare(a.receiptNo || ''));
+            if (matched.length > 0) {
+                prevReceiptNo = matched[0].receiptNo;
+            }
+        }
+    } catch(e) {
+        console.warn('[Firestore] 이전 접수번호 조회 실패:', e.message);
+    }
+    // UI 수동 입력값이 있으면 우선
+    const manualPrev = document.getElementById('prev-receipt-no').value.trim();
+    if (manualPrev) prevReceiptNo = manualPrev;
+
     let receiptNo = '';
 
     // 선택된 검사목적의 P 객체 찾기 (시험분야 매칭 우선)
@@ -3875,8 +3934,8 @@ async function allocateReceiptNo() {
 
     // 1순위: 세그먼트 기반 생성 (검사목적관리에서 설정한 접수번호 형식)
     if (purposeObj && purposeObj.segments && purposeObj.segments.length > 0) {
-        receiptNo = buildReceiptNoFromSegments(purposeObj, testField);
-        console.log(`[세그먼트] 접수번호 생성: ${receiptNo} (${testPurpose})`);
+        receiptNo = buildReceiptNoFromSegments(purposeObj, testField, prevReceiptNo);
+        console.log(`[세그먼트] 접수번호 생성: ${receiptNo} (${testPurpose}, 분야: ${testField}, 이전: ${prevReceiptNo || '없음'})`);
     }
 
     // 2순위: API 호출 (세그먼트 미설정 시)
