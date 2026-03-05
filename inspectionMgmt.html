@@ -29870,36 +29870,43 @@ async function saveFoodTypesToFirestore() {
   } catch(e) { console.warn('식품공전 저장 실패:', e); }
 }
 // ============================================================================
-// 항목 그룹 내 순서 이동 (▲ 위로 / ▼ 아래로)
+// 항목 그룹 내 순서 변경 (숫자 입력으로 위치 지정)
 // ============================================================================
-function moveItemInGroup(globalIdx, direction) {
-  // direction: -1 = 위로, +1 = 아래로
-  var item = itemGroupData[globalIdx];
-  if (!item) return;
-  var type = item.검체유형;
-  var purpose = item.검사목적;
+function reorderItemByNumber(globalIdx, type, purpose, newPosStr) {
+  var newPos = parseInt(newPosStr);
+  if (isNaN(newPos) || newPos < 1) return;
 
-  // 같은 검체유형+검사목적의 항목들만 추출 (전역 인덱스 포함)
+  // 같은 검체유형+검사목적의 항목들 (전역 인덱스 포함)
   var siblings = [];
   itemGroupData.forEach(function(it, i) {
     if (it.검체유형 === type && it.검사목적 === purpose) siblings.push({ item: it, gIdx: i });
   });
 
-  // 현재 항목의 siblings 내 위치
-  var localPos = -1;
+  // 현재 항목의 로컬 위치
+  var currentLocalPos = -1;
   for (var i = 0; i < siblings.length; i++) {
-    if (siblings[i].gIdx === globalIdx) { localPos = i; break; }
+    if (siblings[i].gIdx === globalIdx) { currentLocalPos = i; break; }
   }
-  if (localPos < 0) return;
-  var targetPos = localPos + direction;
-  if (targetPos < 0 || targetPos >= siblings.length) return;
+  if (currentLocalPos < 0) return;
 
-  // 전역 배열에서 두 항목 스왑
-  var fromGIdx = siblings[localPos].gIdx;
-  var toGIdx = siblings[targetPos].gIdx;
-  var temp = itemGroupData[fromGIdx];
-  itemGroupData[fromGIdx] = itemGroupData[toGIdx];
-  itemGroupData[toGIdx] = temp;
+  // 범위 보정
+  var targetLocalPos = Math.min(Math.max(newPos - 1, 0), siblings.length - 1);
+  if (targetLocalPos === currentLocalPos) return;
+
+  // 이동할 항목을 siblings에서 제거 후 새 위치에 삽입
+  var movedItem = siblings.splice(currentLocalPos, 1)[0];
+  siblings.splice(targetLocalPos, 0, movedItem);
+
+  // 전역 배열에서 해당 그룹 항목들의 전역 인덱스 목록 (순서대로)
+  var globalPositions = [];
+  itemGroupData.forEach(function(it, i) {
+    if (it.검체유형 === type && it.검사목적 === purpose) globalPositions.push(i);
+  });
+
+  // 전역 배열에 새 순서 반영
+  for (var i = 0; i < siblings.length; i++) {
+    itemGroupData[globalPositions[i]] = siblings[i].item;
+  }
 
   // 열린 아코디언 상태 기억
   _openAccordionTypes = new Set();
@@ -29907,9 +29914,8 @@ function moveItemInGroup(globalIdx, direction) {
     _openAccordionTypes.add(el.textContent.trim());
   });
 
-  // 다시 렌더링
   renderItemGroups();
-  showToast('항목 순서 변경됨', 'info');
+  showToast('순서 변경: ' + (currentLocalPos+1) + ' → ' + (targetLocalPos+1), 'info');
 }
 
 async function saveItemGroupsToFirestore() {
@@ -31120,6 +31126,7 @@ async function renderItemGroups() {
       // ── 시험항목 테이블 형식 렌더링 ──
       let itemsHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
       itemsHtml += '<thead><tr style="background:#f8f9fa;border-bottom:2px solid #e0e0e0;">'
+        + '<th style="padding:6px 4px;text-align:center;font-weight:600;width:45px;">순서</th>'
         + '<th style="padding:6px 8px;text-align:left;font-weight:600;width:100px;">시험항목코드</th>'
         + '<th style="padding:6px 8px;text-align:left;font-weight:600;">한글명</th>'
         + '<th style="padding:6px 8px;text-align:left;font-weight:600;">영문명</th>'
@@ -31177,9 +31184,16 @@ async function renderItemGroups() {
         const isUsed = tCode ? isTestItemActive(tCode) : ((item.사용여부 || 'Y') === 'Y');
         const rowOp = isUsed ? '' : 'opacity:.45;';
 
+        const localOrder = typeItems.indexOf(item) + 1;
         itemsHtml += `<tr style="border-bottom:1px solid #f0f0f0;${rowOp}cursor:pointer;"
             onclick="openDetailItem('참고용', ${idx})"
             onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
+          <td style="padding:4px 2px;text-align:center;" onclick="event.stopPropagation()">
+            <input type="number" value="${localOrder}" min="1" max="${typeItems.length}"
+              onchange="event.stopPropagation();reorderItemByNumber(${idx},'${escAcc(type)}','${escAcc(purpose)}',this.value)"
+              onclick="event.stopPropagation();this.select()"
+              style="width:38px;padding:3px 2px;text-align:center;border:1px solid #d0d5dd;border-radius:4px;font-size:12px;font-weight:600;color:#5b67f5;">
+          </td>
           <td style="padding:6px 8px;font-family:monospace;font-size:12px;color:#1565c0;">${tCode || '<span style="color:#ccc;">-</span>'}</td>
           <td style="padding:6px 8px;font-weight:500;">${dispName}</td>
           <td style="padding:6px 8px;color:#667085;font-size:12px;">${engName}</td>
@@ -31191,8 +31205,6 @@ async function renderItemGroups() {
           <td style="padding:6px 8px;text-align:center;">${getMfdsMappingBadge(item.항목명)}</td>
           <td style="padding:6px 8px;text-align:right;"><span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span></td>
           <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
-            <button onclick="event.stopPropagation();moveItemInGroup(${idx},-1)" title="위로 이동" style="border:none;background:none;cursor:pointer;font-size:12px;color:#5b67f5;">▲</button>
-            <button onclick="event.stopPropagation();moveItemInGroup(${idx},1)" title="아래로 이동" style="border:none;background:none;cursor:pointer;font-size:12px;color:#5b67f5;">▼</button>
             <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;border:none;background:none;cursor:pointer;font-size:14px;">🔗</button>
             <button onclick="event.stopPropagation();openDetailItem('참고용',${idx})" title="수정" style="border:none;background:none;cursor:pointer;font-size:14px;">✏️</button>
             <button onclick="event.stopPropagation();deleteItemGroupItem(${idx})" title="삭제" style="border:none;background:none;cursor:pointer;font-size:14px;">🗑️</button>
