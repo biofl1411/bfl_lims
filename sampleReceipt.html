@@ -461,7 +461,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                     <div class="form-group" style="position:relative">
                         <label>제품/시료명 <span class="required">*</span></label>
                         <div style="display:flex;gap:6px">
-                            <input type="text" id="product-name" required style="flex:1;min-width:0" onchange="fetchReportNo()">
+                            <input type="text" id="product-name" required style="flex:1;min-width:0" oninput="debounceReportNo()">
                             <button type="button" class="btn-receipt secondary" onclick="searchProductHistory()" style="padding:8px 14px;font-size:13px;white-space:nowrap">📋 조회</button>
                         </div>
                         <div id="product-history-panel" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-top:4px;max-height:300px;overflow-y:auto"></div>
@@ -478,7 +478,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <small class="field-help">시험분야 + 검사목적에 따라 표시됩니다</small>
                     </div>
                     <div style="padding-top:24px">
-                        <button type="button" class="btn-receipt secondary" onclick="fetchReportNo()" style="padding:9px 16px;font-size:13px" title="인허가번호+제품명으로 보고번호 자동 조회">🔍 보고번호조회</button>
+                        <button type="button" class="btn-receipt secondary" onclick="fetchReportNo(true)" style="padding:9px 16px;font-size:13px" title="인허가번호+제품명으로 보고번호 자동 조회">🔍 보고번호조회</button>
                     </div>
                 </div>
                 <!-- 식약처 품목코드 선택 (자가품질위탁검사용 선택 시 표시) -->
@@ -1344,6 +1344,8 @@ function fillFormFromOcrResult(result) {
                 if (sample.productName) {
                     var pn = document.getElementById('product-name');
                     if (pn) { pn.value = sample.productName; filledFields.push('product-name'); }
+                    // 보고번호 자동 조회 (OCR/이력 채움 후)
+                    fetchReportNo();
                 }
                 // 검체유형 (food-type-input + food-type-value)
                 if (sample.foodType) {
@@ -4516,32 +4518,65 @@ function showToast(message, type = 'success') {
 // ============================================================================
 // 보고번호 자동 조회 (fss_products: 인허가번호 + 제품명 매칭)
 // ============================================================================
-async function fetchReportNo() {
+var _reportNoTimer = null;
+function debounceReportNo() {
+    clearTimeout(_reportNoTimer);
+    _reportNoTimer = setTimeout(function(){ fetchReportNo(); }, 600);
+}
+
+async function fetchReportNo(manual) {
     var licNo = (document.getElementById('lic-no').value || '').trim();
     var productName = (document.getElementById('product-name').value || '').trim();
-    if (!licNo || !productName) return;
+    if (!licNo) {
+        if (manual) showToast('인허가번호가 없습니다. 업체를 먼저 선택하세요.', 'warning');
+        return;
+    }
+    if (!productName) {
+        if (manual) showToast('제품/시료명을 입력하세요.', 'warning');
+        return;
+    }
 
     try {
         var snap = await db.collection('fss_products').where('lcns_no', '==', licNo).get();
-        if (snap.empty) return;
+        if (snap.empty) {
+            if (manual) showToast('해당 인허가번호(' + licNo + ')의 품목 데이터가 없습니다.', 'warning');
+            return;
+        }
 
-        var normalizedInput = productName.replace(/\s/g, '');
+        var normalizedInput = productName.replace(/\s/g, '').toLowerCase();
         var matched = null;
+        // 1차: 정확 매칭 (공백제거)
         snap.forEach(function(doc) {
             var d = doc.data();
-            var prdName = (d.prdlst_nm || '').replace(/\s/g, '');
+            var prdName = (d.prdlst_nm || '').replace(/\s/g, '').toLowerCase();
             if (prdName === normalizedInput) {
                 if (!matched || (d.prms_dt || '') > (matched.prms_dt || '')) {
                     matched = d;
                 }
             }
         });
+        // 2차: 부분 매칭 (입력값이 품목명에 포함되거나, 품목명이 입력값에 포함)
+        if (!matched) {
+            snap.forEach(function(doc) {
+                var d = doc.data();
+                var prdName = (d.prdlst_nm || '').replace(/\s/g, '').toLowerCase();
+                if (prdName.indexOf(normalizedInput) >= 0 || normalizedInput.indexOf(prdName) >= 0) {
+                    if (!matched || (d.prms_dt || '') > (matched.prms_dt || '')) {
+                        matched = d;
+                    }
+                }
+            });
+        }
         if (matched && matched.prdlst_report_no) {
             document.getElementById('report-no').value = matched.prdlst_report_no;
             console.log('[보고번호] 자동 입력:', matched.prdlst_report_no, '(제품:', matched.prdlst_nm, ')');
+            if (manual) showToast('보고번호 조회 완료: ' + matched.prdlst_report_no, 'info');
+        } else {
+            if (manual) showToast('일치하는 품목이 없습니다. (조회: ' + snap.size + '건, 입력: "' + productName + '")', 'warning');
         }
     } catch(e) {
         console.warn('[보고번호 조회 실패]', e.message);
+        if (manual) showToast('보고번호 조회 실패: ' + e.message, 'error');
     }
 }
 
