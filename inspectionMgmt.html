@@ -31075,6 +31075,7 @@ async function renderItemGroups() {
     const esc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const cardsHtml = Object.entries(typeGrouped).map(([type, items]) => {
       const typeTotalFee = items.reduce((s, it) => s + (igFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
+      const cardPackageFee = items.reduce(function(max, it) { return Math.max(max, it.패키지수수료 || 0); }, 0);
       const purpose = items[0]?.검사목적 || '';
 
       const headerHtml = `
@@ -31112,8 +31113,10 @@ async function renderItemGroups() {
           </div>
         </div>`;
       }).join('');
-      return `<div class="food-type-card">${headerHtml}<div class="item-list">${itemListHtml}</div>
-        ${typeTotalFee > 0 ? `<div class="fee-total-row"><span>합계</span><span>💰 ${typeTotalFee.toLocaleString()}원</span></div>` : ''}</div>`;
+      const cardFeeRow = cardPackageFee > 0
+        ? `<div class="fee-total-row"><span>📦 패키지</span><span style="color:#2e7d32;font-weight:700;">${cardPackageFee.toLocaleString()}원</span></div>`
+        : (typeTotalFee > 0 ? `<div class="fee-total-row"><span>합계</span><span>💰 ${typeTotalFee.toLocaleString()}원</span></div>` : '');
+      return `<div class="food-type-card">${headerHtml}<div class="item-list">${itemListHtml}</div>${cardFeeRow}</div>`;
     }).join('');
 
     document.getElementById('item-group-cards').innerHTML = cardsHtml || '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">검색 결과가 없습니다</div></div>';
@@ -31145,7 +31148,7 @@ async function renderItemGroups() {
     const escAcc = s => s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const accordionHtml = Object.entries(typeGroupedAcc).map(([type, typeItems]) => {
       const typeTotalFee = typeItems.reduce((s, it) => s + (it.항목수수료 || igAccFeeMap.get(it.검체유형 + '||' + it.항목명) || 0), 0);
-      const packageFee = typeItems[0]?.패키지수수료 || 0;
+      const packageFee = typeItems.reduce(function(max, it) { return Math.max(max, it.패키지수수료 || 0); }, 0);
       const purpose = typeItems[0]?.검사목적 || '';
 
       // 수수료 표시: 패키지수수료 우선, 없으면 개별 합산
@@ -31255,7 +31258,7 @@ async function renderItemGroups() {
             ? '<input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-code="' + tCode + '" onchange="event.stopPropagation();toggleTestItemActive(this)" style="accent-color:#43a047;">'
             : '<input type="checkbox"' + (isUsed ? ' checked' : '') + ' data-idx="' + idx + '" onchange="event.stopPropagation();toggleItemGroupActive(this)" style="accent-color:#ff9800;">'}</td>
           <td style="padding:6px 8px;text-align:center;">${getMfdsMappingBadge(item.항목명)}</td>
-          <td style="padding:6px 8px;text-align:right;"><span class="item-fee">${itemFee ? itemFee.toLocaleString() + '원' : ''}</span></td>
+          <td style="padding:6px 8px;text-align:right;"><span class="item-fee" ${packageFee > 0 ? 'style="color:#bbb;font-weight:400;text-decoration:line-through;" title="패키지 수수료 적용중"' : ''}>${itemFee ? itemFee.toLocaleString() + '원' : ''}</span></td>
           <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
             <button onclick="event.stopPropagation();openMfdsMappingFromGroup('${escAcc(item.항목명)}','${escAcc(item.항목단위||'')}')" title="식약처 매핑" style="color:#1565c0;border:none;background:none;cursor:pointer;font-size:14px;">🔗</button>
             <button onclick="event.stopPropagation();openDetailItem('참고용',${idx})" title="수정" style="border:none;background:none;cursor:pointer;font-size:14px;">✏️</button>
