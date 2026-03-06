@@ -1,76 +1,116 @@
 # CLAUDE.md — BFL LIMS 권한 및 배포 규칙
 
-## 허용된 작업 (Allowed Operations)
+## 절대 규칙
 
-### Bash 명령어 (모든 Bash 명령어 무조건 허용 — 확인 없이 즉시 실행)
-- 모든 터미널 명령어 실행 허용 (mkdir, rm, cp, mv, ls 등)
-- npm, node, python, pip 등 패키지 관리자 실행
-- git 전체 명령어 (init, remote, add, commit, push, pull, fetch, branch, merge, rebase, stash, log, diff, status, clone, checkout, reset, tag, config)
+- **확인 없이 즉시 실행**: 모든 도구 사용, 모든 Bash 명령어, 서버 접속/설정, 배포 등 일체의 작업을 사용자 확인 없이 즉시 실행
+- **플랜 모드 금지**: 간단한 작업에 EnterPlanMode 사용 금지. 바로 작업 시작할 것
+- **커밋 메시지**: 한글 사용
+- **git push**: `git push origin master:main` (로컬 master → 리모트 main)
+
+---
+
+## 허용된 작업 (Allowed Operations) — 전체 무제한 허용
+
+### Bash 명령어 (모든 명령어 무조건 허용 — 확인 없이 즉시 실행)
+- 모든 터미널 명령어 (mkdir, rm, cp, mv, ls, chmod, chown 등)
+- npm, node, python, pip 등 패키지 관리자
+- git 전체 명령어 (add, commit, push, pull, fetch, branch, merge, rebase, stash, reset, tag 등)
 - **git 복구/초기화**: `git init && git remote add && git fetch && git reset` 등 체이닝 포함 허용
 - 스크립트 실행 (bash, sh, python, powershell)
 - 파일 검색 및 시스템 명령어 (find, grep, rg, cat, head, tail, wc, sort, awk, sed)
-- **SSH 전체 허용**: `ssh biofl@192.168.0.96` (새 서버, SSH 키 인증), `ssh -p 2222 biofl@14.7.14.31` (구 서버)
-- **서버 원격 명령어**: ssh로 서버 파일 읽기/수정/실행 모두 허용 (cat, sed, grep, python3 등)
-- scp, rsync, curl, wget 등 네트워크 명령어 허용
+- scp, rsync, curl, wget 등 네트워크 명령어
 - 빌드/배포 명령어 (deploy.sh, deploy.ps1)
 
-### 파일 읽기 (Read)
-- 프로젝트 내 모든 파일 읽기 허용
-- PDF 파일 읽기 허용 (mfds_integration/*.pdf 포함)
-- 이미지 파일 읽기 허용 (png, jpg, svg 등)
-- Excel/CSV 파일 읽기 허용
-- JSON, JS, HTML, CSS, Python 등 모든 소스 파일
+### SSH / 서버 관리 (전체 허용 — 확인 없이 즉시 실행)
+- **서버 SSH**: `ssh biofl@192.168.0.96` (비밀번호: `bphsk*1411**`, paramiko 사용)
+- **구 서버 SSH**: `ssh -p 2222 biofl@14.7.14.31` (user: biofl, pw: `bphsk*1411**`)
+- **서버 원격 명령어**: ssh로 파일 읽기/수정/실행/설치/삭제 모두 허용
+- **sudo 명령어**: `echo "bphsk*1411**" | sudo -S ...` 형태로 root 권한 실행 허용
+- **서버 패키지 설치/제거**: apt install, apt remove 등 전체 허용
+- **서버 서비스 관리**: systemctl start/stop/restart/enable 전체 허용
+- **nginx 설정 변경**: /etc/nginx/ 설정 파일 수정, 인증서 생성/교체 허용
+- **cron 등록/수정**: crontab 편집 허용
+- **서버 파일 권한 변경**: chmod, chown 전체 허용
+- **프로세스 관리**: kill, nohup 실행/종료 허용
+
+### 파일 읽기/편집/생성 (전체 허용)
+- 프로젝트 내 모든 파일 읽기/수정/생성/삭제 허용
+- PDF, 이미지, Excel/CSV, JSON, JS, HTML, CSS, Python 등 모든 형식
 - .env, .gitignore, 설정 파일 등 모든 프로젝트 파일
+- README.md, CLAUDE.md, NEXT_SESSION.md 등 문서 파일 수정
 
-### 파일 편집 (Edit/Write)
-- 프로젝트 내 모든 파일 생성, 수정, 삭제 허용
-- HTML, CSS, JS, Python 코드 변경
-- 설정 파일 (json, yaml, properties 등) 수정
-- README.md, CLAUDE.md 등 문서 파일 수정
-- 새 파일 및 디렉토리 생성
-
-### 웹 페치 (WebFetch)
+### 웹 페치 (WebFetch) — 전체 허용
 - 모든 도메인 웹 페치 허용
-- API 문서 및 레퍼런스 조회
-- npm/CDN 패키지 정보 조회
-- 식약처 공공 API 관련 문서 조회
-- Firebase, Google Cloud 문서 조회
-- GitHub 관련 정보 조회
+- API 문서, npm/CDN, 식약처 공공 API, Firebase, Google Cloud, GitHub 등
 
-### MCP 서버 (외부 서비스 연동)
+### MCP 서버 (외부 서비스 연동) — 전체 허용
 - Claude in Chrome (브라우저 제어) 전체 허용
 - Claude Preview (개발 서버 미리보기) 전체 허용
 - MCP Registry (커넥터 검색/연결) 전체 허용
 - 기타 연결 가능한 모든 MCP 도구 사용 허용
 
-### 서버 배포 / GitHub 배포
-- git push origin main 허용
+### 서버 배포 / GitHub 배포 — 전체 허용
+- `git push origin master:main` 허용 (확인 없이 즉시)
 - GitHub Pages 배포 허용
-- SSH 서버 접속 허용: `ssh biofl@192.168.0.96` (새 서버), `ssh -p 2222 biofl@14.7.14.31` (구 서버)
-- 서버 파일 동기화 (git pull on server)
+- 서버 배포: `ssh biofl@192.168.0.96 "cd /home/biofl/bfl_lims && git pull origin main"` 허용
 - deploy.sh / deploy.ps1 스크립트 실행 허용
 - gh CLI (GitHub CLI) 전체 명령어 허용
 
-### 파일 접근
-- 프로젝트 루트 및 하위 모든 디렉토리 접근 허용
-- mfds_integration/ 폴더 (PDF, Excel, Java 소스 등) 접근 허용
-- data/ 폴더 (GeoJSON, JSON 등) 접근 허용
-- js/ 폴더 (모든 JavaScript 파일) 접근 허용
-- etc/ 폴더 접근 허용
-- .claude/ 폴더 접근 허용
+### 파일 접근 — 전체 허용
+- 프로젝트 루트 및 하위 모든 디렉토리
+- mfds_integration/, data/, js/, img/, etc/, .claude/ 등 전체
 
 ---
 
 ## 배포 정보
 
-- **GitHub**: `git push origin main`
-- **서버 SSH (새)**: `ssh biofl@192.168.0.96` (SSH 키 인증, 확인 없이 실행)
-- **서버 SSH (구)**: `ssh -p 2222 biofl@14.7.14.31` (user: biofl, pw: bphsk*1411**)
-- **서버 배포**: `ssh biofl@192.168.0.96 "cd /home/biofl/bfl_lims && git pull origin main"`
+### 로컬 개발
 - **Preview 서버**: port 8897 (`.claude/launch.json` → static-server)
-- **포트 사용 금지**: 443, 2222, 5000, 5050, 6001, 6005, 6800, 7000, 8000, 8443, 8501, 63964
-- **BFL Flask 포트**: 5001(시료접수), 5002(OCR), 5003(식약처)
-- **커밋 규칙**: 한글 커밋 메시지 사용
+- **BFL Flask 포트**: 5001(시료접수 receipt_api), 5002(OCR ocr_proxy), 5003(식약처 api_server)
+
+### GitHub
+- **Repository**: `https://github.com/biofl1411/bfl_lims.git`
+- **Push**: `git push origin master:main` (로컬 master → 리모트 main)
+- ⚠️ 로컬 브랜치 `master` → 리모트 `main`
+
+### 서버 (192.168.0.96)
+- **OS**: Ubuntu, nginx 1.24.0
+- **SSH 접속**: `paramiko` 사용 (password: `bphsk*1411**`)
+- **웹 서비스**: `https://192.168.0.96:8443/` (nginx SSL, 자체 서명 인증서)
+- **nginx 설정**: `/etc/nginx/sites-available/bfl_lims` (port 8443 SSL)
+- **LIMS 루트**: `/home/biofl/bfl_lims`
+- **배포**: `ssh → cd /home/biofl/bfl_lims && git pull origin main`
+- **서비스 자동시작**: `@reboot /home/biofl/start_services.sh` (crontab)
+- **식약처 수집기**: `/home/biofl/fss_collector/collector.py --auto` (매일 18:00 UTC = KST 03:00)
+- **포트 사용 현황**:
+  - 22: SSH
+  - 5001: receipt_api (시료접수)
+  - 5002: ocr_proxy (OCR)
+  - 5003: api_server (식약처)
+  - 6001: business_metrics (경영실적)
+  - 7000: gunicorn (유통기한 웹)
+  - 8080: tomcat/java
+  - 8443: nginx HTTPS (BFL LIMS)
+  - 8501: biofl-statistics (통계)
+- **포트 사용 금지**: 443, 2222, 5000, 5050, 6005, 6800, 8000, 63964
+
+### 구 서버 (14.7.14.31)
+- **SSH**: `ssh -p 2222 biofl@14.7.14.31` (pw: `bphsk*1411**`)
+
+---
+
+## 서버 설정 이력 (2026-03-06)
+
+### nginx 설치 및 설정 (서버 교체 후 복구)
+- `apt install nginx` → nginx 1.24.0
+- SSL 인증서: `/etc/nginx/ssl/server.crt`, `/etc/nginx/ssl/server.key` (자체 서명, 10년)
+- 설정: `/etc/nginx/sites-available/bfl_lims` (port 8443, proxy /api/ /ocr/ /fss/)
+- 디렉토리 권한: `/home/biofl` 755, `/home/biofl/bfl_lims` 755 (nginx www-data 접근용)
+- `systemctl enable nginx` (부팅 시 자동 시작)
+
+### 식약처 수집기 cron 복구
+- venv python 심볼릭 링크 복구: `ln -sf /usr/bin/python3.12 .../venv/bin/python3`
+- cron 등록: `0 18 * * * cd /home/biofl/fss_collector && .../venv/bin/python collector.py --auto`
 
 ---
 

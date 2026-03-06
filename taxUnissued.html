@@ -84,6 +84,7 @@ tr:hover{background:#f8f9fb}
         <div class="tabs">
             <div class="tab active" onclick="switchTab('deferred')">미발행 (날짜미정) <span class="tab-badge" id="badge-deferred">0</span></div>
             <div class="tab" onclick="switchTab('requested')">발행 요청 완료 <span class="tab-badge" id="badge-requested" style="background:#2563eb">0</span></div>
+            <div class="tab" onclick="switchTab('cancelReq')">취소 요청 <span class="tab-badge" id="badge-cancel" style="background:#ef4444">0</span></div>
         </div>
 
         <!-- 탭1: 미발행 (날짜미정) -->
@@ -151,6 +152,64 @@ tr:hover{background:#f8f9fb}
                                 <tr><td colspan="9" class="empty-msg">로딩 중...</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 탭3: 취소 요청 -->
+        <div class="tab-panel" id="panel-cancelReq">
+            <div class="card">
+                <div class="card-hd">
+                    <h3>계산서 취소 요청</h3>
+                    <div class="right">
+                        <button class="btn btn-secondary" onclick="loadCancelReqData()">새로고침</button>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <p style="font-size:12px;color:#6b7280;margin-bottom:12px">발행완료된 계산서 중 취소가 필요한 건을 검색하여 취소 사유를 입력하세요. 재무관리 &gt; 세금계산서 &gt; 계산서 취소 탭에서 최종 취소됩니다.</p>
+                    <div style="display:flex;gap:8px;margin-bottom:16px">
+                        <input type="text" id="cancel-search" placeholder="접수번호 또는 업체명 검색" style="flex:1;padding:10px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
+                        <button class="btn btn-primary" onclick="searchForCancel()">검색</button>
+                    </div>
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>접수번호</th>
+                                    <th>접수일</th>
+                                    <th>발행일</th>
+                                    <th>업체명</th>
+                                    <th class="text-right">금액</th>
+                                    <th>취소 사유 입력</th>
+                                    <th class="text-center">요청</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cancel-req-body">
+                                <tr><td colspan="7" class="empty-msg">접수번호 또는 업체명으로 검색하세요</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-top:20px">
+                        <h4 style="font-size:14px;font-weight:700;margin-bottom:10px;color:#ef4444">취소 요청 진행중</h4>
+                        <div class="tbl-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>접수번호</th>
+                                        <th>업체명</th>
+                                        <th class="text-right">금액</th>
+                                        <th>취소 사유</th>
+                                        <th>요청일</th>
+                                        <th class="text-center">상태</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cancel-pending-body">
+                                    <tr><td colspan="6" class="empty-msg">취소 요청된 건이 없습니다</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -287,11 +346,97 @@ async function setIssueDate(idx) {
 
 function switchTab(name) {
     document.querySelectorAll('.tab').forEach(function(t, i) {
-        var tabs = ['deferred','requested'];
+        var tabs = ['deferred','requested','cancelReq'];
         t.classList.toggle('active', tabs[i] === name);
     });
     document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
     document.getElementById('panel-' + name).classList.add('active');
+    if (name === 'cancelReq') loadCancelReqData();
+}
+
+/* === 취소 요청 === */
+var cancelSearchResults = [];
+
+function loadCancelReqData() {
+    // 취소 요청 진행중 목록
+    var pending = allReceipts.filter(function(r) {
+        return r.data.taxCancelRequested && !r.data.taxCancelled;
+    });
+    document.getElementById('badge-cancel').textContent = pending.length;
+
+    var tbody = document.getElementById('cancel-pending-body');
+    if (pending.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">취소 요청된 건이 없습니다</td></tr>';
+    } else {
+        tbody.innerHTML = pending.map(function(r) {
+            var d = r.data;
+            return '<tr>' +
+                '<td>' + (d.receiptNo || r.id) + '</td>' +
+                '<td>' + (d.companyName || d.company || '-') + '</td>' +
+                '<td class="text-right" style="font-weight:700">' + formatMoney(getTotalFee(d)) + '</td>' +
+                '<td style="color:#ef4444">' + (d.taxCancelReason || '-') + '</td>' +
+                '<td>' + (d.taxCancelRequestDate || '-') + '</td>' +
+                '<td class="text-center"><span class="badge badge-deferred">재무팀 처리 대기</span></td>' +
+                '</tr>';
+        }).join('');
+    }
+}
+
+function searchForCancel() {
+    var keyword = document.getElementById('cancel-search').value.trim().toLowerCase();
+    if (!keyword) { showToast('검색어를 입력하세요'); return; }
+
+    // 발행완료 + 취소요청 안된 건에서 검색
+    cancelSearchResults = allReceipts.filter(function(r) {
+        var d = r.data;
+        if (!d.taxInvoiceIssued || d.taxCancelRequested || d.taxCancelled) return false;
+        var no = (d.receiptNo || r.id).toLowerCase();
+        var company = (d.companyName || d.company || '').toLowerCase();
+        return no.indexOf(keyword) !== -1 || company.indexOf(keyword) !== -1;
+    });
+
+    var tbody = document.getElementById('cancel-req-body');
+    if (cancelSearchResults.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">검색 결과가 없습니다</td></tr>';
+        return;
+    }
+    tbody.innerHTML = cancelSearchResults.map(function(r, idx) {
+        var d = r.data;
+        return '<tr>' +
+            '<td>' + (d.receiptNo || r.id) + '</td>' +
+            '<td>' + (d.receiptDate || '-') + '</td>' +
+            '<td style="color:#10b981;font-weight:600">' + (d.taxInvoiceDate || '-') + '</td>' +
+            '<td>' + (d.companyName || d.company || '-') + '</td>' +
+            '<td class="text-right" style="font-weight:700">' + formatMoney(getTotalFee(d)) + '</td>' +
+            '<td><input type="text" id="cancel-reason-' + idx + '" placeholder="취소 사유 입력" style="width:100%;padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px"></td>' +
+            '<td class="text-center"><button class="btn btn-sm" style="background:#ef4444;color:#fff" onclick="submitCancelRequest(' + idx + ')">취소요청</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function submitCancelRequest(idx) {
+    var r = cancelSearchResults[idx];
+    var reason = document.getElementById('cancel-reason-' + idx).value.trim();
+    if (!reason) { showToast('취소 사유를 입력하세요'); return; }
+
+    try {
+        var today = new Date().toISOString().substring(0,10);
+        await db.collection('receipts').doc(r.id).update({
+            taxCancelRequested: true,
+            taxCancelReason: reason,
+            taxCancelRequestDate: today,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        r.data.taxCancelRequested = true;
+        r.data.taxCancelReason = reason;
+        r.data.taxCancelRequestDate = today;
+
+        loadCancelReqData();
+        searchForCancel(); // 검색 결과 갱신
+        showToast('취소 요청 완료');
+    } catch(e) {
+        showToast('요청 실패: ' + e.message);
+    }
 }
 
 function showToast(msg) {
