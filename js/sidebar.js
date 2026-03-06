@@ -159,7 +159,16 @@ const SIDEBAR_MENU = [
     ]
   },
   { id: 'results',       icon: '📄', label: '성적 관리',      disabled: true },
-  { id: 'finance',       icon: '💰', label: '재무 관리',      disabled: true },
+  {
+    id: 'finance',
+    icon: '💰',
+    label: '재무 관리',
+    sub: [
+      { label: '매출 관리',           disabled: true },
+      { label: '입금 관리',           href: 'paymentMgmt.html',    page: 'finance-payment' },
+      { label: '세금계산서',          href: 'taxInvoice.html',     page: 'finance-tax' }
+    ]
+  },
   { id: 'stats',         icon: '📈', label: '통계 분석',      disabled: true },
   { id: 'docs',          icon: '📁', label: '문서 관리',      disabled: true },
   { id: 'inventory',     icon: '🧪', label: '재고/시약 관리', disabled: true },

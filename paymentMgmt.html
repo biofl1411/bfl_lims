@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 입금 관리</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.content{flex:1;padding:24px;overflow-y:auto}
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-success{background:#10b981;color:#fff}.btn-success:hover{background:#059669}
+.btn-sm{padding:5px 10px;font-size:11px}
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.card-bd{padding:20px}
+
+/* 검색 바 */
+.search-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.search-bar input,.search-bar select{padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit}
+.search-bar input:focus,.search-bar select:focus{outline:none;border-color:#1a73e8}
+.search-bar input[type="text"]{width:200px}
+.search-bar input[type="date"]{width:140px}
+
+/* 테이블 */
+.tbl-wrap{overflow-x:auto;border:1px solid #e2e6ed;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:#f8f9fb;position:sticky;top:0}
+th{padding:10px 12px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #f0f2f5;color:#1a2332}
+tr:hover{background:#f8f9fb}
+.text-right{text-align:right}
+.text-center{text-align:center}
+
+/* 상태 배지 */
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.badge-unpaid{background:#fef2f2;color:#ef4444}
+.badge-partial{background:#fffbeb;color:#f59e0b}
+.badge-paid{background:#ecfdf5;color:#10b981}
+
+/* 입금 모달 */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-hd{padding:18px 24px;border-bottom:1px solid #eef0f4;display:flex;align-items:center}
+.modal-hd h3{font-size:16px;font-weight:700;color:#1a2332;flex:1}
+.modal-hd .close{background:none;border:none;font-size:20px;color:#9ca3af;cursor:pointer}
+.modal-bd{padding:24px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:#5f6b7a;margin-bottom:4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#1a73e8}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-ft{padding:16px 24px;border-top:1px solid #eef0f4;display:flex;gap:8px;justify-content:flex-end}
+
+/* 입금 이력 */
+.pay-history{margin-top:12px;border:1px solid #eef0f4;border-radius:8px;overflow:hidden}
+.pay-history-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #f0f2f5;font-size:12px}
+.pay-history-item:last-child{border:none}
+.pay-history-item .date{color:#6b7280;min-width:80px}
+.pay-history-item .method{padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px}
+.method-card{background:#dbeafe;color:#2563eb}
+.method-cash{background:#dcfce7;color:#16a34a}
+.method-transfer{background:#fef3c7;color:#d97706}
+.pay-history-item .amount{font-weight:700;color:#1a2332;margin-left:auto}
+.pay-history-item .del-btn{background:none;border:none;color:#d0d5dd;cursor:pointer;font-size:14px}
+.pay-history-item .del-btn:hover{color:#ef4444}
+
+/* 요약 */
+.summary-row{display:flex;gap:16px;margin-bottom:16px}
+.summary-card{flex:1;padding:16px 20px;background:#fff;border:1px solid #e2e6ed;border-radius:10px;text-align:center}
+.summary-card .label{font-size:12px;color:#6b7280;margin-bottom:4px}
+.summary-card .value{font-size:20px;font-weight:700;color:#1a2332}
+.summary-card .value.red{color:#ef4444}
+.summary-card .value.green{color:#10b981}
+.summary-card .value.blue{color:#2563eb}
+
+.empty-msg{text-align:center;padding:40px;color:#9ca3af}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;background:#1f2937;color:#fff;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;z-index:1100}
+.toast.show{opacity:1}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="js/sidebar.js?v=2"></script>
+</head>
+<body>
+<aside class="sidebar" id="sidebar"></aside>
+<div class="main">
+    <div class="topbar">
+        <span class="topbar-title">재무 관리</span>
+        <span class="topbar-sep">›</span>
+        <span class="topbar-sub">입금 관리</span>
+    </div>
+    <div class="content">
+        <!-- 요약 -->
+        <div class="summary-row" id="summary-row">
+            <div class="summary-card"><div class="label">총 청구금액</div><div class="value blue" id="sum-total">0</div></div>
+            <div class="summary-card"><div class="label">입금 완료</div><div class="value green" id="sum-paid">0</div></div>
+            <div class="summary-card"><div class="label">미수금</div><div class="value red" id="sum-unpaid">0</div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-hd">
+                <h3>입금 현황</h3>
+                <div class="right">
+                    <button class="btn btn-secondary" onclick="loadData()">새로고침</button>
+                </div>
+            </div>
+            <div class="card-bd">
+                <div class="search-bar">
+                    <input type="text" id="search-company" placeholder="업체명 검색">
+                    <select id="search-status">
+                        <option value="">전체 상태</option>
+                        <option value="미입금">미입금</option>
+                        <option value="부분입금">부분입금</option>
+                        <option value="입금완료">입금완료</option>
+                    </select>
+                    <input type="date" id="search-from" title="시작일">
+                    <span style="color:#9ca3af">~</span>
+                    <input type="date" id="search-to" title="종료일">
+                    <button class="btn btn-primary" onclick="applyFilter()">검색</button>
+                </div>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>접수번호</th>
+                                <th>접수일</th>
+                                <th>업체명</th>
+                                <th>제품명</th>
+                                <th class="text-right">청구금액</th>
+                                <th class="text-right">입금액</th>
+                                <th class="text-right">잔액</th>
+                                <th class="text-center">상태</th>
+                                <th class="text-center">입금처리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <tr><td colspan="9" class="empty-msg">로딩 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 입금 처리 모달 -->
+<div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+        <div class="modal-hd">
+            <h3 id="modal-title">입금 처리</h3>
+            <button class="close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-bd">
+            <div style="margin-bottom:16px;padding:12px;background:#f8f9fb;border-radius:8px;font-size:13px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                    <span style="color:#6b7280">접수번호</span>
+                    <span style="font-weight:700" id="modal-receipt-no"></span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                    <span style="color:#6b7280">업체명</span>
+                    <span style="font-weight:600" id="modal-company"></span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                    <span style="color:#6b7280">청구금액</span>
+                    <span style="font-weight:700;color:#2563eb" id="modal-total"></span>
+                </div>
+                <div style="display:flex;justify-content:space-between">
+                    <span style="color:#6b7280">잔액</span>
+                    <span style="font-weight:700;color:#ef4444" id="modal-remain"></span>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>입금방법</label>
+                    <select id="pay-method">
+                        <option value="카드">카드</option>
+                        <option value="현금">현금</option>
+                        <option value="계좌이체">계좌이체</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>입금일자</label>
+                    <input type="date" id="pay-date">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>입금액</label>
+                <input type="text" id="pay-amount" placeholder="금액 입력" inputmode="numeric">
+            </div>
+            <div class="form-group">
+                <label>비고</label>
+                <input type="text" id="pay-memo" placeholder="메모 (선택)">
+            </div>
+
+            <!-- 입금 이력 -->
+            <div style="font-size:12px;font-weight:600;color:#5f6b7a;margin-top:16px;margin-bottom:6px">입금 이력</div>
+            <div class="pay-history" id="pay-history">
+                <div style="padding:12px;color:#9ca3af;text-align:center;font-size:12px">입금 이력이 없습니다</div>
+            </div>
+        </div>
+        <div class="modal-ft">
+            <button class="btn btn-secondary" onclick="closeModal()">닫기</button>
+            <button class="btn btn-success" onclick="processPayment()">입금 처리</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var allReceipts = [];   // [{id, data}]
+var filteredList = [];
+var currentReceiptId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 기본 날짜 설정 (최근 3개월)
+    var today = new Date();
+    document.getElementById('search-to').value = formatDate(today);
+    var from = new Date(today);
+    from.setMonth(from.getMonth() - 3);
+    document.getElementById('search-from').value = formatDate(from);
+    document.getElementById('pay-date').value = formatDate(today);
+
+    // 입금액 숫자 포맷
+    document.getElementById('pay-amount').addEventListener('input', function(e) {
+        var v = e.target.value.replace(/[^\d]/g, '');
+        if (v) e.target.value = Number(v).toLocaleString();
+        else e.target.value = '';
+    });
+
+    loadData();
+});
+
+function formatDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function formatMoney(n) {
+    return (n || 0).toLocaleString() + '원';
+}
+
+async function loadData() {
+    try {
+        var fromVal = document.getElementById('search-from').value;
+        var toVal = document.getElementById('search-to').value;
+
+        var query = db.collection('receipts').orderBy('createdAt', 'desc');
+
+        // 날짜 필터는 클라이언트에서 처리 (createdAt이 timestamp이므로)
+        var snap = await query.limit(500).get();
+
+        allReceipts = [];
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            allReceipts.push({ id: doc.id, data: d });
+        });
+
+        applyFilter();
+    } catch(e) {
+        console.error('로드 실패:', e);
+        document.getElementById('table-body').innerHTML = '<tr><td colspan="9" class="empty-msg" style="color:#ef4444">로드 실패: ' + e.message + '</td></tr>';
+    }
+}
+
+function applyFilter() {
+    var keyword = document.getElementById('search-company').value.trim().toLowerCase();
+    var status = document.getElementById('search-status').value;
+    var fromVal = document.getElementById('search-from').value;
+    var toVal = document.getElementById('search-to').value;
+
+    filteredList = allReceipts.filter(function(r) {
+        var d = r.data;
+        // 업체명 필터
+        if (keyword) {
+            var company = (d.companyName || d.company || '').toLowerCase();
+            if (company.indexOf(keyword) === -1) return false;
+        }
+        // 날짜 필터
+        var receiptDate = d.receiptDate || '';
+        if (fromVal && receiptDate < fromVal) return false;
+        if (toVal && receiptDate > toVal) return false;
+        // 상태 필터
+        if (status) {
+            var payStatus = getPaymentStatus(d);
+            if (payStatus !== status) return false;
+        }
+        return true;
+    });
+
+    renderTable();
+    updateSummary();
+}
+
+function getTotalFee(d) {
+    return Number(d.totalFee || d.totalAmount || 0);
+}
+
+function getPaidAmount(d) {
+    var payments = d.payments || [];
+    var sum = 0;
+    payments.forEach(function(p) { sum += Number(p.amount || 0); });
+    return sum;
+}
+
+function getPaymentStatus(d) {
+    var total = getTotalFee(d);
+    var paid = getPaidAmount(d);
+    if (total <= 0) return '입금완료';
+    if (paid <= 0) return '미입금';
+    if (paid >= total) return '입금완료';
+    return '부분입금';
+}
+
+function getBadgeClass(status) {
+    if (status === '미입금') return 'badge-unpaid';
+    if (status === '부분입금') return 'badge-partial';
+    return 'badge-paid';
+}
+
+function renderTable() {
+    var tbody = document.getElementById('table-body');
+    if (filteredList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">데이터가 없습니다</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filteredList.map(function(r) {
+        var d = r.data;
+        var total = getTotalFee(d);
+        var paid = getPaidAmount(d);
+        var remain = Math.max(0, total - paid);
+        var status = getPaymentStatus(d);
+        var badgeCls = getBadgeClass(status);
+
+        return '<tr>' +
+            '<td>' + (d.receiptNo || r.id) + '</td>' +
+            '<td>' + (d.receiptDate || '-') + '</td>' +
+            '<td>' + (d.companyName || d.company || '-') + '</td>' +
+            '<td>' + (d.productName || '-') + '</td>' +
+            '<td class="text-right">' + formatMoney(total) + '</td>' +
+            '<td class="text-right">' + formatMoney(paid) + '</td>' +
+            '<td class="text-right" style="font-weight:700;color:' + (remain > 0 ? '#ef4444' : '#10b981') + '">' + formatMoney(remain) + '</td>' +
+            '<td class="text-center"><span class="badge ' + badgeCls + '">' + status + '</span></td>' +
+            '<td class="text-center"><button class="btn btn-sm btn-primary" onclick="openModal(\'' + r.id + '\')">입금</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+function updateSummary() {
+    var totalSum = 0, paidSum = 0;
+    filteredList.forEach(function(r) {
+        totalSum += getTotalFee(r.data);
+        paidSum += getPaidAmount(r.data);
+    });
+    document.getElementById('sum-total').textContent = formatMoney(totalSum);
+    document.getElementById('sum-paid').textContent = formatMoney(paidSum);
+    document.getElementById('sum-unpaid').textContent = formatMoney(Math.max(0, totalSum - paidSum));
+}
+
+function openModal(receiptId) {
+    currentReceiptId = receiptId;
+    var r = allReceipts.find(function(x) { return x.id === receiptId; });
+    if (!r) return;
+
+    var d = r.data;
+    var total = getTotalFee(d);
+    var paid = getPaidAmount(d);
+    var remain = Math.max(0, total - paid);
+
+    document.getElementById('modal-receipt-no').textContent = d.receiptNo || receiptId;
+    document.getElementById('modal-company').textContent = d.companyName || d.company || '-';
+    document.getElementById('modal-total').textContent = formatMoney(total);
+    document.getElementById('modal-remain').textContent = formatMoney(remain);
+    document.getElementById('pay-amount').value = remain > 0 ? remain.toLocaleString() : '';
+    document.getElementById('pay-memo').value = '';
+    document.getElementById('modal-title').textContent = '입금 처리 - ' + (d.receiptNo || '');
+
+    // 입금 이력 렌더
+    renderPayHistory(d.payments || []);
+
+    document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('show');
+    currentReceiptId = null;
+}
+
+function renderPayHistory(payments) {
+    var el = document.getElementById('pay-history');
+    if (!payments || payments.length === 0) {
+        el.innerHTML = '<div style="padding:12px;color:#9ca3af;text-align:center;font-size:12px">입금 이력이 없습니다</div>';
+        return;
+    }
+
+    el.innerHTML = payments.map(function(p, idx) {
+        var methodCls = p.method === '카드' ? 'method-card' : p.method === '현금' ? 'method-cash' : 'method-transfer';
+        return '<div class="pay-history-item">' +
+            '<span class="date">' + (p.date || '-') + '</span>' +
+            '<span class="method ' + methodCls + '">' + (p.method || '-') + '</span>' +
+            (p.memo ? '<span style="color:#6b7280;font-size:11px">' + p.memo + '</span>' : '') +
+            '<span class="amount">' + formatMoney(p.amount) + '</span>' +
+            '<button class="del-btn" onclick="deletePayment(' + idx + ')" title="삭제">✕</button>' +
+            '</div>';
+    }).join('');
+}
+
+async function processPayment() {
+    if (!currentReceiptId) return;
+
+    var amountStr = document.getElementById('pay-amount').value.replace(/[^\d]/g, '');
+    var amount = Number(amountStr);
+    if (!amount || amount <= 0) { showToast('입금액을 입력하세요'); return; }
+
+    var method = document.getElementById('pay-method').value;
+    var date = document.getElementById('pay-date').value;
+    var memo = document.getElementById('pay-memo').value.trim();
+
+    if (!date) { showToast('입금일자를 선택하세요'); return; }
+
+    var payment = { amount: amount, method: method, date: date, memo: memo, createdAt: new Date().toISOString() };
+
+    try {
+        await db.collection('receipts').doc(currentReceiptId).update({
+            payments: firebase.firestore.FieldValue.arrayUnion(payment),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // 로컬 데이터 갱신
+        var r = allReceipts.find(function(x) { return x.id === currentReceiptId; });
+        if (r) {
+            if (!r.data.payments) r.data.payments = [];
+            r.data.payments.push(payment);
+        }
+
+        // UI 갱신
+        var d = r.data;
+        var total = getTotalFee(d);
+        var paid = getPaidAmount(d);
+        var remain = Math.max(0, total - paid);
+        document.getElementById('modal-remain').textContent = formatMoney(remain);
+        document.getElementById('pay-amount').value = remain > 0 ? remain.toLocaleString() : '';
+        renderPayHistory(d.payments);
+        renderTable();
+        updateSummary();
+
+        showToast('입금 처리 완료 (' + formatMoney(amount) + ')');
+    } catch(e) {
+        console.error('입금 처리 실패:', e);
+        showToast('입금 처리 실패: ' + e.message);
+    }
+}
+
+async function deletePayment(idx) {
+    if (!currentReceiptId) return;
+    var r = allReceipts.find(function(x) { return x.id === currentReceiptId; });
+    if (!r || !r.data.payments || !r.data.payments[idx]) return;
+
+    var p = r.data.payments[idx];
+    if (!confirm(p.date + ' ' + p.method + ' ' + formatMoney(p.amount) + ' 삭제하시겠습니까?')) return;
+
+    try {
+        await db.collection('receipts').doc(currentReceiptId).update({
+            payments: firebase.firestore.FieldValue.arrayRemove(p),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        r.data.payments.splice(idx, 1);
+        var d = r.data;
+        var total = getTotalFee(d);
+        var paid = getPaidAmount(d);
+        var remain = Math.max(0, total - paid);
+        document.getElementById('modal-remain').textContent = formatMoney(remain);
+        renderPayHistory(d.payments);
+        renderTable();
+        updateSummary();
+
+        showToast('입금 이력 삭제 완료');
+    } catch(e) {
+        showToast('삭제 실패: ' + e.message);
+    }
+}
+
+// 모달 외부 클릭 닫기
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+function showToast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+</script>
+</body>
+</html>
