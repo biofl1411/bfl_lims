@@ -372,7 +372,11 @@ function formatMoney(n) { return (n || 0).toLocaleString() + '원'; }
 
 async function loadAllReceipts() {
     try {
-        var snap = await db.collection('receipts').orderBy('createdAt', 'desc').limit(1000).get();
+        // 공급자 정보 + 접수 데이터 병렬 로드
+        var [snap] = await Promise.all([
+            db.collection('receipts').orderBy('createdAt', 'desc').limit(1000).get(),
+            loadSupplierInfo()
+        ]);
         allReceipts = [];
         snap.forEach(function(doc) { allReceipts.push({ id: doc.id, data: doc.data() }); });
         loadUnissued();
@@ -531,10 +535,13 @@ function loadDateData() {
     if (!target) { showToast('날짜를 선택하세요'); return; }
 
     dateList = allReceipts.filter(function(r) {
-        return r.data.receiptDate === target;
+        var d = r.data;
+        if (d.taxCancelled) return false; // 취소된 건 제외
+        return d.receiptDate === target;
     });
     dateSelected = {};
-    setBadge('badge-date', dateList.length, dateList.length > 0 ? 'has-data' : '');
+    var unissuedCnt = dateList.filter(function(r) { return !r.data.taxInvoiceIssued; }).length;
+    setBadge('badge-date', unissuedCnt, unissuedCnt > 0 ? 'has-data' : '');
     renderDateTable();
 }
 
@@ -859,7 +866,7 @@ async function processCancelTax(receiptId) {
     }
 }
 
-/* === 공급자 정보 (바이오푸드랩) === */
+/* === 공급자 정보 (Firestore settings/companyInfo에서 로드) === */
 var SUPPLIER = {
     bizNo: '6588700076',
     name: '주식회사 바이오푸드랩',
@@ -874,6 +881,33 @@ var SUPPLIER = {
     contactName: '',
     phone: ''
 };
+
+// Firestore에서 공급자 정보 로드 (없으면 기본값 유지)
+async function loadSupplierInfo() {
+    try {
+        var doc = await db.collection('settings').doc('companyInfo').get();
+        if (doc.exists) {
+            var d = doc.data();
+            SUPPLIER.bizNo = d.bizNo || SUPPLIER.bizNo;
+            SUPPLIER.name = d.name || SUPPLIER.name;
+            SUPPLIER.ceo = d.ceo || SUPPLIER.ceo;
+            SUPPLIER.addr1 = d.addr1 || SUPPLIER.addr1;
+            SUPPLIER.addr2 = d.addr2 || SUPPLIER.addr2;
+            SUPPLIER.bizStatus = d.bizStatus || SUPPLIER.bizStatus;
+            SUPPLIER.bizType = d.bizType || SUPPLIER.bizType;
+            SUPPLIER.dept = d.dept || SUPPLIER.dept;
+            SUPPLIER.email = d.email || SUPPLIER.email;
+            SUPPLIER.mobile = d.mobile || SUPPLIER.mobile;
+            SUPPLIER.contactName = d.contactName || SUPPLIER.contactName;
+            SUPPLIER.phone = d.phone || SUPPLIER.phone;
+        } else {
+            // 최초 1회: 기본값을 Firestore에 저장
+            await db.collection('settings').doc('companyInfo').set(SUPPLIER);
+        }
+    } catch(e) {
+        console.warn('공급자 정보 로드 실패 (기본값 사용):', e.message);
+    }
+}
 
 /* === 더존 빌36524 엑셀 다운로드 === */
 function downloadBatchExcel() {

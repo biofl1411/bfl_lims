@@ -444,11 +444,11 @@ function renderDeferred() {
         tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">미발행 건이 없습니다</td></tr>';
         return;
     }
-    tbody.innerHTML = unissuedList.map(function(r, idx) {
+    tbody.innerHTML = unissuedList.map(function(r) {
         var d = r.data;
         var bdt = d.billingDateType || 'receipt';
         var statusLabel = bdt === 'deferred' ? (d.deferredIssueDate ? '<span class="badge badge-requested">발행요청 (' + d.deferredIssueDate + ')</span>' : '<span class="badge badge-deferred">추후발행</span>') : '<span class="badge" style="background:#f0f2f5;color:#5f6b7a">일반</span>';
-        return '<tr onclick="openBillModal(' + idx + ')">' +
+        return '<tr onclick="openBillModal(\'' + r.id + '\')">' +
             '<td>' + (d.receiptNo || r.id) + '</td>' +
             '<td>' + (d.receiptDate || '-') + '</td>' +
             '<td>' + (d.companyName || d.company || '-') + '</td>' +
@@ -484,12 +484,12 @@ function renderRequested() {
 }
 
 /* === 발행 정보 입력 모달 === */
-var currentModalIdx = -1;
+var currentModalDocId = null;
 
-function openBillModal(idx) {
-    var r = unissuedList[idx];
+function openBillModal(docId) {
+    var r = unissuedList.find(function(x) { return x.id === docId; });
     if (!r) return;
-    currentModalIdx = idx;
+    currentModalDocId = docId;
     var d = r.data;
 
     // 기본 정보 표시
@@ -538,7 +538,7 @@ function openBillModal(idx) {
 
 function closeBillModal() {
     document.getElementById('bill-modal').classList.remove('show');
-    currentModalIdx = -1;
+    currentModalDocId = null;
 }
 
 function onBillingDateTypeChange() {
@@ -562,8 +562,9 @@ function toggleBillEdit() {
 }
 
 async function saveBillInfo() {
-    if (currentModalIdx < 0) return;
-    var r = unissuedList[currentModalIdx];
+    if (!currentModalDocId) return;
+    var r = unissuedList.find(function(x) { return x.id === currentModalDocId; });
+    if (!r) { showToast('데이터를 찾을 수 없습니다'); return; }
     var d = r.data;
 
     var billingDateType = document.getElementById('m-billingDateType').value;
