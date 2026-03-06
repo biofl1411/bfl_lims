@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 접수 공지</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.content{flex:1;padding:24px;overflow-y:auto}
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-success{background:#10b981;color:#fff}.btn-success:hover{background:#059669}
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.card-bd{padding:20px}
+
+/* 목적 리스트 */
+.purpose-list{display:flex;flex-direction:column;gap:2px;margin-bottom:20px;max-height:300px;overflow-y:auto;border:1px solid #e2e6ed;border-radius:10px}
+.purpose-item{display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;transition:background .1s;border-bottom:1px solid #f0f2f5}
+.purpose-item:last-child{border-bottom:none}
+.purpose-item:hover{background:#f8f9fb}
+.purpose-item.active{background:#e8f0fe;border-left:3px solid #1a73e8}
+.purpose-item .name{font-size:13px;font-weight:500;color:#1a2332;flex:1}
+.purpose-item .badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+.badge-has{background:#e8f5e9;color:#2e7d32}
+.badge-empty{background:#f3f4f6;color:#9ca3af}
+
+/* 에디터 */
+.editor-area{margin-top:16px}
+.editor-label{font-size:13px;font-weight:600;color:#1a2332;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.editor-label .purpose-name{color:#1a73e8}
+.notice-textarea{width:100%;min-height:200px;padding:14px;border:1px solid #e2e6ed;border-radius:10px;font-size:13px;font-family:inherit;line-height:1.7;resize:vertical;transition:border-color .15s}
+.notice-textarea:focus{outline:none;border-color:#1a73e8;box-shadow:0 0 0 3px rgba(26,115,232,0.1)}
+.editor-actions{display:flex;gap:8px;margin-top:12px;align-items:center}
+.save-status{font-size:12px;color:#10b981;margin-left:8px;opacity:0;transition:opacity .3s}
+.save-status.show{opacity:1}
+
+/* 안내 */
+.empty-state{text-align:center;padding:60px 20px;color:#9ca3af}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.empty-state .msg{font-size:14px}
+
+/* 로딩 */
+.loading{text-align:center;padding:40px;color:#999;font-size:14px}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="js/sidebar.js?v=2"></script>
+</head>
+<body>
+<aside class="sidebar" id="sidebar"></aside>
+<div class="main">
+    <div class="topbar">
+        <span class="topbar-title">접수 관리</span>
+        <span class="topbar-sep">›</span>
+        <span class="topbar-sub">접수 공지</span>
+    </div>
+    <div class="content">
+        <div class="card">
+            <div class="card-hd">
+                <h3>접수 공지 관리</h3>
+                <div class="right">
+                    <button class="btn btn-secondary" onclick="loadData()">새로고침</button>
+                </div>
+            </div>
+            <div class="card-bd">
+                <p style="font-size:12px;color:#5f6b7a;margin-bottom:16px">
+                    검사목적별로 접수 시 표시할 공지 내용을 입력합니다. 접수등록에서 공지여부를 "예"로 선택하면 해당 검사목적의 공지가 표시됩니다.
+                </p>
+
+                <div style="display:grid;grid-template-columns:280px 1fr;gap:20px">
+                    <!-- 왼쪽: 검사목적 리스트 -->
+                    <div>
+                        <div style="font-size:12px;font-weight:600;color:#5f6b7a;margin-bottom:8px">검사목적 목록</div>
+                        <div class="purpose-list" id="purpose-list">
+                            <div class="loading">로딩 중...</div>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽: 공지 편집 -->
+                    <div id="editor-panel">
+                        <div class="empty-state" id="empty-state">
+                            <div class="icon">📋</div>
+                            <div class="msg">왼쪽에서 검사목적을 선택하세요</div>
+                        </div>
+                        <div class="editor-area" id="editor-area" style="display:none">
+                            <div class="editor-label">
+                                <span>공지 내용</span>
+                                <span class="purpose-name" id="selected-purpose-name"></span>
+                            </div>
+                            <textarea class="notice-textarea" id="notice-content" placeholder="이 검사목적의 접수 공지 내용을 입력하세요..."></textarea>
+                            <div class="editor-actions">
+                                <button class="btn btn-primary" onclick="saveNotice()">저장</button>
+                                <button class="btn btn-secondary" onclick="clearNotice()">내용 삭제</button>
+                                <span class="save-status" id="save-status">저장되었습니다</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// db는 firebase-init.js에서 이미 선언됨
+
+var purposes = [];       // 검사목적 목록 [{n, o, fields, c, ...}]
+var notices = {};         // 검사목적별 공지 {목적명: 내용}
+var selectedPurpose = ''; // 현재 선택된 검사목적
+
+// ============================================================================
+// 초기 로드
+// ============================================================================
+document.addEventListener('DOMContentLoaded', loadData);
+
+async function loadData() {
+    try {
+        // 검사목적 로드
+        const purposeDoc = await db.collection('settings').doc('inspectionPurposes').get();
+        if (purposeDoc.exists && purposeDoc.data().purposes) {
+            purposes = purposeDoc.data().purposes
+                .filter(p => p.o !== 0)  // 미정 제외
+                .sort((a, b) => (a.c || 999) - (b.c || 999));
+        }
+
+        // 공지 로드
+        const noticeDoc = await db.collection('settings').doc('receiptNotices').get();
+        if (noticeDoc.exists && noticeDoc.data().notices) {
+            notices = noticeDoc.data().notices;
+        }
+
+        renderPurposeList();
+    } catch (e) {
+        console.error('데이터 로드 실패:', e);
+        document.getElementById('purpose-list').innerHTML =
+            '<div style="padding:20px;color:#ef4444;font-size:12px">로드 실패: ' + e.message + '</div>';
+    }
+}
+
+// ============================================================================
+// 검사목적 리스트 렌더
+// ============================================================================
+function renderPurposeList() {
+    const list = document.getElementById('purpose-list');
+
+    if (purposes.length === 0) {
+        list.innerHTML = '<div style="padding:20px;color:#9ca3af;font-size:12px;text-align:center">등록된 검사목적이 없습니다</div>';
+        return;
+    }
+
+    list.innerHTML = purposes.map(p => {
+        const name = p.n;
+        const hasNotice = notices[name] && notices[name].trim();
+        const isActive = name === selectedPurpose;
+        return `<div class="purpose-item${isActive ? ' active' : ''}" onclick="selectPurpose('${name.replace(/'/g, "\\'")}')">
+            <span class="name">${name}</span>
+            <span class="badge ${hasNotice ? 'badge-has' : 'badge-empty'}">${hasNotice ? '공지있음' : '미등록'}</span>
+        </div>`;
+    }).join('');
+}
+
+// ============================================================================
+// 검사목적 선택
+// ============================================================================
+function selectPurpose(name) {
+    selectedPurpose = name;
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('editor-area').style.display = '';
+    document.getElementById('selected-purpose-name').textContent = name;
+    document.getElementById('notice-content').value = notices[name] || '';
+    renderPurposeList();
+}
+
+// ============================================================================
+// 저장
+// ============================================================================
+async function saveNotice() {
+    if (!selectedPurpose) return;
+
+    const content = document.getElementById('notice-content').value.trim();
+    notices[selectedPurpose] = content;
+
+    // 빈 값은 삭제
+    if (!content) {
+        delete notices[selectedPurpose];
+    }
+
+    try {
+        await db.collection('settings').doc('receiptNotices').set(
+            { notices: notices, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
+            { merge: true }
+        );
+
+        // 저장 표시
+        const status = document.getElementById('save-status');
+        status.classList.add('show');
+        setTimeout(() => status.classList.remove('show'), 2000);
+
+        renderPurposeList();
+    } catch (e) {
+        alert('저장 실패: ' + e.message);
+    }
+}
+
+// ============================================================================
+// 내용 삭제
+// ============================================================================
+function clearNotice() {
+    if (!selectedPurpose) return;
+    if (!confirm(selectedPurpose + '의 공지 내용을 삭제하시겠습니까?')) return;
+    document.getElementById('notice-content').value = '';
+    saveNotice();
+}
+</script>
+</body>
+</html>
