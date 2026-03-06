@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 세금계산서 미발행</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.content{flex:1;padding:24px;overflow-y:auto}
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-success{background:#10b981;color:#fff}.btn-success:hover{background:#059669}
+.btn-warning{background:#f59e0b;color:#fff}.btn-warning:hover{background:#d97706}
+.btn-sm{padding:5px 10px;font-size:11px}
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .badge-count{background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.card-bd{padding:20px}
+
+/* 탭 */
+.tabs{display:flex;gap:2px;margin-bottom:20px;background:#f3f4f6;border-radius:10px;padding:3px}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-radius:8px;transition:all .15s;position:relative}
+.tab.active{background:#fff;color:#1a73e8;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.tab:hover:not(.active){color:#374151}
+.tab .tab-badge{position:absolute;top:4px;right:12px;background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+.tbl-wrap{overflow-x:auto;border:1px solid #e2e6ed;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:#f8f9fb;position:sticky;top:0}
+th{padding:10px 12px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #f0f2f5;color:#1a2332}
+tr:hover{background:#f8f9fb}
+.text-right{text-align:right}
+.text-center{text-align:center}
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.badge-deferred{background:#fef3c7;color:#d97706}
+.badge-requested{background:#dbeafe;color:#2563eb}
+.empty-msg{text-align:center;padding:40px;color:#9ca3af}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;background:#1f2937;color:#fff;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;z-index:1100}
+.toast.show{opacity:1}
+
+/* 날짜 입력 inline */
+.date-input-inline{padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:130px}
+.date-input-inline:focus{outline:none;border-color:#1a73e8}
+
+.summary-row{display:flex;gap:16px;margin-bottom:16px}
+.summary-card{flex:1;padding:16px 20px;background:#fff;border:1px solid #e2e6ed;border-radius:10px;text-align:center}
+.summary-card .label{font-size:12px;color:#6b7280;margin-bottom:4px}
+.summary-card .value{font-size:20px;font-weight:700}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="js/sidebar.js?v=3"></script>
+</head>
+<body>
+<aside class="sidebar" id="sidebar"></aside>
+<div class="main">
+    <div class="topbar">
+        <span class="topbar-title">영업 관리</span>
+        <span class="topbar-sep">›</span>
+        <span class="topbar-sub">세금계산서 미발행</span>
+    </div>
+    <div class="content">
+        <div class="summary-row">
+            <div class="summary-card"><div class="label">미발행 (날짜미정)</div><div class="value" style="color:#d97706" id="sum-deferred">0건</div></div>
+            <div class="summary-card"><div class="label">발행 요청 (날짜지정)</div><div class="value" style="color:#2563eb" id="sum-requested">0건</div></div>
+            <div class="summary-card"><div class="label">미발행 합계금액</div><div class="value" style="color:#ef4444" id="sum-total">0원</div></div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('deferred')">미발행 (날짜미정) <span class="tab-badge" id="badge-deferred">0</span></div>
+            <div class="tab" onclick="switchTab('requested')">발행 요청 완료 <span class="tab-badge" id="badge-requested" style="background:#2563eb">0</span></div>
+        </div>
+
+        <!-- 탭1: 미발행 (날짜미정) -->
+        <div class="tab-panel active" id="panel-deferred">
+            <div class="card">
+                <div class="card-hd">
+                    <h3>추후발행 - 날짜 미정</h3>
+                    <div class="right">
+                        <button class="btn btn-secondary" onclick="loadData()">새로고침</button>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <p style="font-size:12px;color:#6b7280;margin-bottom:12px">발행 희망일을 입력하면 재무관리 &gt; 세금계산서 &gt; 발행 요청 탭으로 이동합니다.</p>
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>접수번호</th>
+                                    <th>접수일</th>
+                                    <th>업체명</th>
+                                    <th>제품명</th>
+                                    <th>검사목적</th>
+                                    <th>발행유형</th>
+                                    <th class="text-right">금액</th>
+                                    <th>발행 희망일 입력</th>
+                                    <th class="text-center">저장</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deferred-body">
+                                <tr><td colspan="9" class="empty-msg">로딩 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 탭2: 발행 요청 완료 -->
+        <div class="tab-panel" id="panel-requested">
+            <div class="card">
+                <div class="card-hd">
+                    <h3>발행 요청 완료 (날짜 지정됨)</h3>
+                    <div class="right">
+                        <button class="btn btn-secondary" onclick="loadData()">새로고침</button>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <p style="font-size:12px;color:#6b7280;margin-bottom:12px">날짜가 지정된 건은 재무관리 &gt; 세금계산서 &gt; 발행 요청 탭에서도 확인할 수 있습니다.</p>
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>접수번호</th>
+                                    <th>접수일</th>
+                                    <th>업체명</th>
+                                    <th>제품명</th>
+                                    <th>검사목적</th>
+                                    <th>발행유형</th>
+                                    <th class="text-right">금액</th>
+                                    <th>발행 희망일</th>
+                                    <th class="text-center">상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requested-body">
+                                <tr><td colspan="9" class="empty-msg">로딩 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var allReceipts = [];
+var deferredList = [];
+var requestedList = [];
+
+document.addEventListener('DOMContentLoaded', loadData);
+
+function formatMoney(n) { return (n || 0).toLocaleString() + '원'; }
+
+async function loadData() {
+    try {
+        // 추후발행 건 조회 (billingDateType === 'deferred' && 미발행)
+        var snap = await db.collection('receipts')
+            .where('billingDateType', '==', 'deferred')
+            .get();
+
+        allReceipts = [];
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            if (!d.taxInvoiceIssued) {
+                allReceipts.push({ id: doc.id, data: d });
+            }
+        });
+
+        // 분류: 날짜 미정 vs 날짜 지정(발행요청)
+        deferredList = allReceipts.filter(function(r) { return !r.data.deferredIssueDate; });
+        requestedList = allReceipts.filter(function(r) { return !!r.data.deferredIssueDate; });
+
+        renderDeferred();
+        renderRequested();
+        updateSummary();
+    } catch(e) {
+        console.error('로드 실패:', e);
+    }
+}
+
+function updateSummary() {
+    document.getElementById('sum-deferred').textContent = deferredList.length + '건';
+    document.getElementById('sum-requested').textContent = requestedList.length + '건';
+    document.getElementById('badge-deferred').textContent = deferredList.length;
+    document.getElementById('badge-requested').textContent = requestedList.length;
+
+    var total = 0;
+    allReceipts.forEach(function(r) { total += Number(r.data.feeTotal || r.data.totalFee || r.data.totalAmount || 0); });
+    document.getElementById('sum-total').textContent = formatMoney(total);
+}
+
+function getTotalFee(d) { return Number(d.feeTotal || d.totalFee || d.totalAmount || 0); }
+
+function getBillingTypeLabel(v) {
+    if (v === 'byPurpose') return '목적별';
+    if (v === 'combined') return '합산';
+    if (v === 'byDate') return '접수일별';
+    return v || '-';
+}
+
+function renderDeferred() {
+    var tbody = document.getElementById('deferred-body');
+    if (deferredList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">미발행 건이 없습니다</td></tr>';
+        return;
+    }
+    tbody.innerHTML = deferredList.map(function(r, idx) {
+        var d = r.data;
+        return '<tr>' +
+            '<td>' + (d.receiptNo || r.id) + '</td>' +
+            '<td>' + (d.receiptDate || '-') + '</td>' +
+            '<td>' + (d.companyName || d.company || '-') + '</td>' +
+            '<td>' + (d.productName || (d.samples && d.samples[0] ? d.samples[0].productName : '') || '-') + '</td>' +
+            '<td>' + (d.testPurpose || '-') + '</td>' +
+            '<td>' + getBillingTypeLabel(d.billingType) + '</td>' +
+            '<td class="text-right" style="font-weight:700">' + formatMoney(getTotalFee(d)) + '</td>' +
+            '<td><input type="date" class="date-input-inline" id="defer-date-' + idx + '"></td>' +
+            '<td class="text-center"><button class="btn btn-warning btn-sm" onclick="setIssueDate(' + idx + ')">발행요청</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+function renderRequested() {
+    var tbody = document.getElementById('requested-body');
+    if (requestedList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">발행 요청된 건이 없습니다</td></tr>';
+        return;
+    }
+    tbody.innerHTML = requestedList.map(function(r) {
+        var d = r.data;
+        return '<tr>' +
+            '<td>' + (d.receiptNo || r.id) + '</td>' +
+            '<td>' + (d.receiptDate || '-') + '</td>' +
+            '<td>' + (d.companyName || d.company || '-') + '</td>' +
+            '<td>' + (d.productName || (d.samples && d.samples[0] ? d.samples[0].productName : '') || '-') + '</td>' +
+            '<td>' + (d.testPurpose || '-') + '</td>' +
+            '<td>' + getBillingTypeLabel(d.billingType) + '</td>' +
+            '<td class="text-right" style="font-weight:700">' + formatMoney(getTotalFee(d)) + '</td>' +
+            '<td style="font-weight:600;color:#2563eb">' + d.deferredIssueDate + '</td>' +
+            '<td class="text-center"><span class="badge badge-requested">요청완료</span></td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function setIssueDate(idx) {
+    var r = deferredList[idx];
+    var dateInput = document.getElementById('defer-date-' + idx);
+    var date = dateInput.value;
+    if (!date) { showToast('발행 희망일을 선택하세요'); return; }
+
+    try {
+        await db.collection('receipts').doc(r.id).update({
+            deferredIssueDate: date,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        r.data.deferredIssueDate = date;
+        // 목록 이동
+        deferredList.splice(idx, 1);
+        requestedList.push(r);
+        renderDeferred();
+        renderRequested();
+        updateSummary();
+        showToast('발행 요청 완료 (' + date + ')');
+    } catch(e) {
+        showToast('저장 실패: ' + e.message);
+    }
+}
+
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(function(t, i) {
+        var tabs = ['deferred','requested'];
+        t.classList.toggle('active', tabs[i] === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('panel-' + name).classList.add('active');
+}
+
+function showToast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+</script>
+</body>
+</html>

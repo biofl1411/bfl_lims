@@ -120,7 +120,7 @@ const SIDEBAR_MENU = [
       { label: '계산서 발행 승인',   href: 'salesMgmt.html#invoice',      page: 'invoice',      internalPage: 'invoice' },
       { label: '업체조회',          href: 'salesMgmt.html#bizSearch',    page: 'bizSearch',    internalPage: 'bizSearch' },
       { label: '긴급 협조',         href: 'salesMgmt.html#urgent',       page: 'urgent',       internalPage: 'urgent' },
-      { label: '세금계산서미발행',    href: 'salesMgmt.html#arManage',     page: 'arManage',     internalPage: 'arManage' },
+      { label: '세금계산서 미발행',   href: 'taxUnissued.html',            page: 'tax-unissued' },
       { label: '영업통계',          disabled: true },
       { label: '영업 설정',         disabled: true },
       { label: 'API 설정',         href: 'salesMgmt.html#apiSettings',  page: 'apiSettings',  internalPage: 'apiSettings' }
