@@ -27,9 +27,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
 /* 탭 */
 .tabs{display:flex;gap:2px;margin-bottom:20px;background:#f3f4f6;border-radius:10px;padding:3px}
-.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-radius:8px;transition:all .15s}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-radius:8px;transition:all .15s;position:relative}
 .tab.active{background:#fff;color:#1a73e8;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .tab:hover:not(.active){color:#374151}
+.tab .tab-badge{display:inline-block;min-width:18px;padding:1px 6px;border-radius:9px;font-size:10px;font-weight:700;color:#fff;background:#9ca3af;margin-left:4px;vertical-align:middle}
+.tab .tab-badge.has-data{background:#1a73e8}
+.tab .tab-badge.issued{background:#10b981}
+.tab .tab-badge.danger{background:#ef4444}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
 
@@ -91,12 +95,12 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
     <div class="content">
         <!-- 탭 -->
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('batch')">일괄발행</div>
-            <div class="tab" onclick="switchTab('date')">특정일 일괄발행</div>
-            <div class="tab" onclick="switchTab('request')">발행 요청</div>
-            <div class="tab" onclick="switchTab('issued')">발행완료</div>
-            <div class="tab" onclick="switchTab('unissued')">미발행 계산서</div>
-            <div class="tab" onclick="switchTab('cancel')">계산서 취소</div>
+            <div class="tab active" onclick="switchTab('batch')">일괄발행 <span class="tab-badge" id="badge-batch">0</span></div>
+            <div class="tab" onclick="switchTab('date')">특정일 일괄발행 <span class="tab-badge" id="badge-date">0</span></div>
+            <div class="tab" onclick="switchTab('request')">발행 요청 <span class="tab-badge" id="badge-request">0</span></div>
+            <div class="tab" onclick="switchTab('issued')">발행완료 <span class="tab-badge issued" id="badge-issued">0</span></div>
+            <div class="tab" onclick="switchTab('unissued')">미발행 계산서 <span class="tab-badge danger" id="badge-unissued">0</span></div>
+            <div class="tab" onclick="switchTab('cancel')">계산서 취소 <span class="tab-badge" id="badge-cancel">0</span></div>
         </div>
 
         <!-- 탭1: 일괄발행 -->
@@ -372,9 +376,49 @@ async function loadAllReceipts() {
         allReceipts = [];
         snap.forEach(function(doc) { allReceipts.push({ id: doc.id, data: doc.data() }); });
         loadUnissued();
+        updateAllBadges();
     } catch(e) {
         console.error('로드 실패:', e);
     }
+}
+
+function updateAllBadges() {
+    var today = formatDate(new Date());
+    var thisMonth = today.substring(0,7);
+
+    // 발행 요청 (미발행 전체)
+    var requestCnt = allReceipts.filter(function(r) {
+        var d = r.data;
+        return !d.taxInvoiceIssued && !d.taxCancelled && getTotalFee(d) > 0;
+    }).length;
+
+    // 발행완료 (이번 달)
+    var issuedCnt = allReceipts.filter(function(r) {
+        var d = r.data;
+        return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === thisMonth;
+    }).length;
+
+    // 미발행 계산서
+    var unissuedCnt = allReceipts.filter(function(r) {
+        return !r.data.taxInvoiceIssued && getTotalFee(r.data) > 0;
+    }).length;
+
+    // 계산서 취소
+    var cancelCnt = allReceipts.filter(function(r) {
+        return r.data.taxCancelRequested && !r.data.taxCancelled;
+    }).length;
+
+    setBadge('badge-request', requestCnt, 'has-data');
+    setBadge('badge-issued', issuedCnt, 'issued');
+    setBadge('badge-unissued', unissuedCnt, 'danger');
+    setBadge('badge-cancel', cancelCnt, cancelCnt > 0 ? 'danger' : '');
+}
+
+function setBadge(id, count, cls) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = count;
+    el.className = 'tab-badge' + (count > 0 && cls ? ' ' + cls : '');
 }
 
 function getTotalFee(d) { return Number(d.feeTotal || d.totalFee || d.totalAmount || 0); }
@@ -416,6 +460,7 @@ function loadBatchData() {
         return false;
     });
     batchSelected = {};
+    setBadge('badge-batch', batchList.length, batchList.length > 0 ? 'has-data' : '');
     renderBatchTable();
 }
 
@@ -476,6 +521,7 @@ async function issueBatch() {
     batchSelected = {};
     renderBatchTable();
     loadUnissuedCount();
+    updateAllBadges();
     showToast(idxs.length + '건 발행처리 완료');
 }
 
@@ -488,6 +534,7 @@ function loadDateData() {
         return r.data.receiptDate === target;
     });
     dateSelected = {};
+    setBadge('badge-date', dateList.length, dateList.length > 0 ? 'has-data' : '');
     renderDateTable();
 }
 
@@ -547,6 +594,7 @@ async function issueDate() {
     dateSelected = {};
     renderDateTable();
     loadUnissuedCount();
+    updateAllBadges();
     showToast(idxs.length + '건 발행처리 완료');
 }
 
@@ -618,6 +666,7 @@ async function issueUnissued() {
     idxs.forEach(function(i) { unissuedList[i].data.taxInvoiceIssued = true; unissuedList[i].data.taxInvoiceDate = new Date().toISOString().substring(0,10); });
     unissuedSelected = {};
     loadUnissued();
+    updateAllBadges();
     showToast(idxs.length + '건 발행처리 완료');
 }
 
@@ -713,6 +762,7 @@ async function issueRequest() {
     requestSelected = {};
     renderRequestTable();
     loadUnissuedCount();
+    updateAllBadges();
     showToast(idxs.length + '건 발행처리 완료');
 }
 
@@ -802,6 +852,7 @@ async function processCancelTax(receiptId) {
             r.data.taxCancelledDate = new Date().toISOString().substring(0,10);
         }
         loadCancelData();
+        updateAllBadges();
         showToast('계산서 취소 처리 완료');
     } catch(e) {
         showToast('취소 실패: ' + e.message);
