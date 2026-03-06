@@ -112,6 +112,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 .team-memo-lock{font-size:12px;color:#999}
 .team-memo textarea{width:100%;min-height:80px;resize:vertical}
 .team-memo textarea:disabled{background:#fafafa;cursor:not-allowed}
+/* 파일 업로드 */
+.file-upload-box{border:1px solid #e2e6ed;border-radius:10px;overflow:hidden;background:#fff}
+.file-upload-header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8f9fb;border-bottom:1px solid #eef0f4}
+.file-upload-title{font-size:12px;font-weight:700;color:#1a2332}
+.file-upload-hint{font-size:10px;color:#9ca3af}
+.file-upload-drop{padding:12px;min-height:50px;transition:background .15s}
+.file-upload-drop.dragover{background:#e8f0fe}
+.file-upload-placeholder{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px;color:#9ca3af;font-size:12px;cursor:pointer;border:1px dashed #d0d5dd;border-radius:6px;transition:all .15s}
+.file-upload-placeholder:hover{border-color:#1a73e8;color:#1a73e8;background:#f8faff}
+.file-list{max-height:120px;overflow-y:auto}
+.file-item{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;border-top:1px solid #f0f2f5}
+.file-item .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#333}
+.file-item .fsize{color:#9ca3af;font-size:10px;white-space:nowrap}
+.file-item .fprog{width:40px;height:4px;background:#e2e6ed;border-radius:2px;overflow:hidden}
+.file-item .fprog-bar{height:100%;background:#1a73e8;border-radius:2px;transition:width .2s}
+.file-item .fdel{background:none;border:none;color:#d0d5dd;cursor:pointer;font-size:14px;padding:2px}
+.file-item .fdel:hover{color:#ef4444}
+.file-item .flink{color:#1a73e8;text-decoration:none;font-size:11px}
+.file-item .flink:hover{text-decoration:underline}
 .toast{position:fixed;top:20px;right:20px;background:#4caf50;color:white;padding:16px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:none;z-index:2000;min-width:250px}
 .toast.active{display:block;animation:slideIn 0.3s}
 .toast.error{background:#f44336}
@@ -144,6 +163,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
 <script src="js/mfds-fee-mapping.js"></script>
@@ -653,6 +673,51 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                             <option value="예">예</option>
                             <option value="아니오">아니오</option>
                         </select>
+                    </div>
+                </div>
+                <!-- 파일 첨부 영역 -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+                    <div class="file-upload-box" id="file-box-report">
+                        <div class="file-upload-header">
+                            <span class="file-upload-title">품목제조보고서</span>
+                            <span class="file-upload-hint">PDF, 이미지</span>
+                        </div>
+                        <div class="file-upload-drop" ondrop="handleFileDrop(event,'report')" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')">
+                            <input type="file" id="file-input-report" accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp" multiple onchange="handleFileSelect(this.files,'report')" style="display:none">
+                            <div class="file-upload-placeholder" onclick="document.getElementById('file-input-report').click()">
+                                <span style="font-size:20px">📄</span>
+                                <span>클릭 또는 드래그</span>
+                            </div>
+                        </div>
+                        <div class="file-list" id="file-list-report"></div>
+                    </div>
+                    <div class="file-upload-box" id="file-box-photo">
+                        <div class="file-upload-header">
+                            <span class="file-upload-title">시료사진</span>
+                            <span class="file-upload-hint">이미지</span>
+                        </div>
+                        <div class="file-upload-drop" ondrop="handleFileDrop(event,'photo')" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')">
+                            <input type="file" id="file-input-photo" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp" multiple onchange="handleFileSelect(this.files,'photo')" style="display:none">
+                            <div class="file-upload-placeholder" onclick="document.getElementById('file-input-photo').click()">
+                                <span style="font-size:20px">📷</span>
+                                <span>클릭 또는 드래그</span>
+                            </div>
+                        </div>
+                        <div class="file-list" id="file-list-photo"></div>
+                    </div>
+                    <div class="file-upload-box" id="file-box-etc">
+                        <div class="file-upload-header">
+                            <span class="file-upload-title">기타</span>
+                            <span class="file-upload-hint">모든 파일</span>
+                        </div>
+                        <div class="file-upload-drop" ondrop="handleFileDrop(event,'etc')" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')">
+                            <input type="file" id="file-input-etc" multiple onchange="handleFileSelect(this.files,'etc')" style="display:none">
+                            <div class="file-upload-placeholder" onclick="document.getElementById('file-input-etc').click()">
+                                <span style="font-size:20px">📎</span>
+                                <span>클릭 또는 드래그</span>
+                            </div>
+                        </div>
+                        <div class="file-list" id="file-list-etc"></div>
                     </div>
                 </div>
                 <div class="form-row">
@@ -4596,8 +4661,11 @@ async function saveReceipt() {
         return;
     }
     try {
+        // 파일 업로드 (미업로드 파일이 있으면 먼저 처리)
+        await uploadAllFiles();
         var data = collectReceiptData();
         data.status = '접수중';
+        data.files = collectFileData();
         await fsSaveReceipt(data);
         // 업체별 발송방법 저장
         saveCompanyReportSendPrefs();
@@ -4611,6 +4679,129 @@ async function saveReceipt() {
         console.error('저장 실패:', err);
         showToast('저장 중 오류가 발생했습니다.', 'error');
     }
+}
+
+// ============================================================================
+// 파일 첨부 (품목제조보고서 / 시료사진 / 기타)
+// ============================================================================
+var _attachedFiles = { report: [], photo: [], etc: [] }; // [{file, name, size, url, path, uploading}]
+
+function handleFileDrop(e, category) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+        handleFileSelect(e.dataTransfer.files, category);
+    }
+}
+
+function handleFileSelect(files, category) {
+    if (!files || files.length === 0) return;
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        // 중복 체크
+        var dup = _attachedFiles[category].some(function(a) { return a.name === f.name && a.size === f.size; });
+        if (dup) continue;
+        _attachedFiles[category].push({
+            file: f, name: f.name, size: f.size, url: '', path: '', uploading: false, progress: 0
+        });
+    }
+    renderFileList(category);
+    markAsModified();
+    // input 초기화
+    var input = document.getElementById('file-input-' + category);
+    if (input) input.value = '';
+}
+
+function renderFileList(category) {
+    var listEl = document.getElementById('file-list-' + category);
+    var items = _attachedFiles[category];
+    if (items.length === 0) { listEl.innerHTML = ''; return; }
+
+    listEl.innerHTML = items.map(function(item, idx) {
+        var sizeStr = item.size < 1024 ? item.size + 'B' :
+            item.size < 1048576 ? (item.size / 1024).toFixed(1) + 'KB' :
+            (item.size / 1048576).toFixed(1) + 'MB';
+        var statusHtml = '';
+        if (item.uploading) {
+            statusHtml = '<div class="fprog"><div class="fprog-bar" style="width:' + item.progress + '%"></div></div>';
+        } else if (item.url) {
+            statusHtml = '<a href="' + item.url + '" target="_blank" class="flink">보기</a>';
+        }
+        return '<div class="file-item">' +
+            '<span class="fname" title="' + item.name + '">' + item.name + '</span>' +
+            '<span class="fsize">' + sizeStr + '</span>' +
+            statusHtml +
+            '<button class="fdel" onclick="removeFile(\'' + category + '\',' + idx + ')" title="삭제">✕</button>' +
+            '</div>';
+    }).join('');
+}
+
+function removeFile(category, idx) {
+    var item = _attachedFiles[category][idx];
+    // Storage에 이미 업로드된 경우 삭제
+    if (item.path && item.url) {
+        fsDeleteFile(item.path).catch(function(e) { console.warn('파일 삭제 실패:', e); });
+    }
+    _attachedFiles[category].splice(idx, 1);
+    renderFileList(category);
+    markAsModified();
+}
+
+async function uploadAllFiles() {
+    var receiptNo = document.getElementById('receipt-no').value;
+    if (!receiptNo) return;
+
+    var categories = ['report', 'photo', 'etc'];
+    var promises = [];
+
+    categories.forEach(function(cat) {
+        _attachedFiles[cat].forEach(function(item, idx) {
+            if (item.url || item.uploading) return; // 이미 업로드됨 또는 진행중
+            item.uploading = true;
+            renderFileList(cat);
+
+            var path = 'receipts/' + receiptNo + '/' + cat + '/' + item.name;
+            var p = fsUploadFile(item.file, path, function(pct) {
+                item.progress = pct;
+                renderFileList(cat);
+            }).then(function(url) {
+                item.url = url;
+                item.path = path;
+                item.uploading = false;
+                item.file = null; // 메모리 해제
+                renderFileList(cat);
+            }).catch(function(e) {
+                console.error('업로드 실패:', item.name, e);
+                item.uploading = false;
+                renderFileList(cat);
+            });
+            promises.push(p);
+        });
+    });
+
+    if (promises.length > 0) {
+        await Promise.all(promises);
+    }
+}
+
+function collectFileData() {
+    var result = {};
+    ['report', 'photo', 'etc'].forEach(function(cat) {
+        result[cat] = _attachedFiles[cat].map(function(item) {
+            return { name: item.name, size: item.size, url: item.url || '', path: item.path || '' };
+        });
+    });
+    return result;
+}
+
+function loadFileData(files) {
+    if (!files) return;
+    ['report', 'photo', 'etc'].forEach(function(cat) {
+        _attachedFiles[cat] = (files[cat] || []).map(function(f) {
+            return { file: null, name: f.name, size: f.size, url: f.url, path: f.path, uploading: false, progress: 0 };
+        });
+        renderFileList(cat);
+    });
 }
 
 // ============================================================================
