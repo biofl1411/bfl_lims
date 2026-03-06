@@ -742,7 +742,7 @@ function searchForCancel() {
             '<td style="color:#10b981;font-weight:600">' + (d.taxInvoiceDate || '-') + '</td>' +
             '<td>' + (d.companyName || d.company || '-') + '</td>' +
             '<td class="text-right" style="font-weight:700">' + formatMoney(getTotalFee(d)) + '</td>' +
-            '<td><input type="text" id="cancel-reason-' + idx + '" placeholder="취소 사유 입력" style="width:100%;padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px"></td>' +
+            '<td><input type="text" id="cancel-reason-' + idx + '" placeholder="구체적으로 기록" style="width:100%;min-width:280px;padding:8px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px"></td>' +
             '<td class="text-center"><button class="btn btn-sm" style="background:#ef4444;color:#fff" onclick="submitCancelRequest(' + idx + ')">취소요청</button></td>' +
             '</tr>';
     }).join('');
@@ -752,6 +752,16 @@ async function submitCancelRequest(idx) {
     var r = cancelSearchResults[idx];
     var reason = document.getElementById('cancel-reason-' + idx).value.trim();
     if (!reason) { showToast('취소 사유를 입력하세요'); return; }
+
+    // 짧은/모호한 사유 감지
+    var vague = ['업체요청','업체 요청','익월발행','익월발행요청','익월 발행','익월 발행요청','합산발행','합산 발행','합산발행요청','합산 발행요청','취소요청','취소 요청','요청','기타','변경','수정'];
+    var reasonLower = reason.replace(/\s+/g, '');
+    var isVague = vague.some(function(v) { return reasonLower === v.replace(/\s+/g, ''); });
+    if (isVague || reason.length < 6) {
+        showToast('사유를 구체적으로 작성바랍니다. (예: 업체 담당자 홍길동 요청, 3월분 합산발행 필요 등)');
+        document.getElementById('cancel-reason-' + idx).focus();
+        return;
+    }
 
     try {
         var today = new Date().toISOString().substring(0,10);
