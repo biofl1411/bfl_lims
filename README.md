@@ -2729,6 +2729,46 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 
 ## 변경 이력
 
+### 2026-03-06 (세금계산서 하드코딩 수정 + 서버 교체 식약처 MAC 연동)
+
+#### ⚠️ 주의사항 (반드시 준수)
+- **하드코딩 절대 금지**: 공급자 정보, 세율, 업체 정보 등 변경 가능한 데이터는 반드시 Firestore에서 로드할 것
+- **영업관리 ↔ 재무관리 연결 확인**: 세금계산서 관련 데이터는 양쪽 페이지가 동일 Firestore 컬렉션(`receipts`)을 공유하므로, 한쪽 수정 시 반드시 다른 페이지 영향도 확인할 것
+- **필드명 통일**: Firestore 필드명은 `feeTotal` 사용 (`totalFee`, `totalAmount`는 하위호환 폴백만)
+- **서버 교체 시**: 네트워크 인터페이스명 변경 여부 확인 필수 (`ip link show`), Tomcat `clientEthName` 설정도 변경 필요
+
+#### 세금계산서 하드코딩/UI 이슈 수정 (`taxInvoice.html`, `taxUnissued.html`)
+- **SUPPLIER 공급자 정보 Firestore 연동**: 하드코딩 → `settings/companyInfo` 문서에서 로드, 최초 실행 시 기본값 자동 저장
+- **모달 클릭 핸들러 안정화**: 배열 인덱스(`idx`) 기반 → Firestore doc ID 기반으로 변경 (목록 재정렬 시 잘못된 데이터 표시 방지)
+- **loadDateData() 필터 개선**: 취소된 건(`taxCancelled`) 제외, 배지에 미발행 건수만 표시
+- **취소 요청 검색 정상화**: `allReceipts`에 전체 접수건 포함되어 발행완료 건 검색 가능
+- **취소 사유 입력 UI 개선**: placeholder "구체적으로 기록", 입력 필드 너비 확대(min-width:280px)
+- **짧은/모호한 사유 감지**: "업체요청", "익월발행요청", "합산발행" 등 모호한 사유 + 6자 미만 입력 시 토스트 경고 → 구체적 작성 유도
+
+#### 서버 교체에 따른 식약처 MAC 주소 설정
+- **서버(192.168.0.96)**: MAC `8C-B0-E9-91-C4-99`, 인터페이스 `enp2s0` (구: `enp4s0`)
+- **개발PC**: MAC `30-56-0F-70-6A-C1` (Realtek PCIe GbE)
+- **Tomcat 설정 수정** (2곳):
+  - `/home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/config/application.properties`
+  - `/home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/classes/application.properties`
+  - `keyStore.clientEthName=enp4s0` → `keyStore.clientEthName=enp2s0`
+- **Java 파일 수정**: `DirectApiTest.java`, `MacTest.java` → `ethName="enp2s0"`
+- **식약처 MAC 등록 완료** → API 공통코드 조회(`selectListCmmnCode`) 정상 응답 확인
+
+#### 세금계산서 데이터 흐름 (영업 ↔ 재무 연동 구조)
+```
+[접수등록] → Firestore receipts 컬렉션
+     ↓
+[영업관리 taxUnissued.html]          [재무관리 taxInvoice.html]
+├── 미발행 전체 (모달로 발행정보 입력) ├── 일괄발행 (날짜별)
+├── 발행완료 (재무팀 발행 내역 확인)   ├── 특정일 일괄발행
+├── 발행 요청 (추후발행+날짜지정)      ├── 발행 요청 (미발행 전체)
+└── 취소 요청 (발행완료 건 검색→요청)  ├── 발행완료
+                                      ├── 미발행 계산서
+                                      └── 계산서 취소 (취소요청 처리)
+※ 양쪽 모두 같은 receipts 컬렉션 조회 → 실시간 데이터 동기화
+```
+
 ### 2026-03-02 (참고용 매핑 분류/추가 기능)
 
 #### 참고용 매핑 코드 분류 시스템 (`inspectionMgmt.html`)

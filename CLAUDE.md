@@ -28,10 +28,15 @@
 - **sudo 명령어**: `echo "bphsk*1411**" | sudo -S ...` 형태로 root 권한 실행 허용
 - **서버 패키지 설치/제거**: apt install, apt remove 등 전체 허용
 - **서버 서비스 관리**: systemctl start/stop/restart/enable 전체 허용
+- **Tomcat 관리**: `/home/biofl/tomcat/bin/shutdown.sh`, `startup.sh` 실행 허용
+- **Tomcat 설정 변경**: `application.properties`, `web.xml`, `applicationContext.xml` 등 수정 허용
 - **nginx 설정 변경**: /etc/nginx/ 설정 파일 수정, 인증서 생성/교체 허용
 - **cron 등록/수정**: crontab 편집 허용
 - **서버 파일 권한 변경**: chmod, chown 전체 허용
 - **프로세스 관리**: kill, nohup 실행/종료 허용
+- **Java 컴파일/실행**: javac, java 명령어 서버에서 실행 허용 (식약처 API 테스트 등)
+- **SFTP 파일 전송**: paramiko SFTP로 서버 파일 업로드/다운로드 허용
+- **sed 명령어**: 서버 설정 파일 일괄 치환 (`sed -i`) 허용
 
 ### 파일 읽기/편집/생성 (전체 허용)
 - 프로젝트 내 모든 파일 읽기/수정/생성/삭제 허용
@@ -111,6 +116,14 @@
 ### 식약처 수집기 cron 복구
 - venv python 심볼릭 링크 복구: `ln -sf /usr/bin/python3.12 .../venv/bin/python3`
 - cron 등록: `0 18 * * * cd /home/biofl/fss_collector && .../venv/bin/python collector.py --auto`
+
+### 식약처 MAC 주소 + 네트워크 인터페이스 변경 (서버/개발PC 교체)
+- 서버 MAC: `8C-B0-E9-91-C4-99` (인터페이스: `enp2s0`, 구서버: `enp4s0`)
+- 개발PC MAC: `30-56-0F-70-6A-C1` (Realtek PCIe GbE)
+- Tomcat `clientEthName`: `enp4s0` → `enp2s0` (2곳 수정)
+  - `/home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/config/application.properties`
+  - `/home/biofl/tomcat/webapps/LMS_CLIENT_API/WEB-INF/classes/application.properties`
+- 식약처 MAC 등록 완료, API 연결 테스트 성공 확인
 
 ---
 
