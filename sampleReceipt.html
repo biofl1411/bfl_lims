@@ -675,14 +675,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <textarea id="remarks" rows="3" placeholder="비고 사항을 입력하세요..." oninput="markAsModified()" style="width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:13px;resize:vertical"></textarea>
                     </div>
                 </div>
-                <!-- 공지 양식 로드 영역 -->
+                <!-- 공지 선택 영역 -->
                 <div id="notice-template-area" style="display:none;margin-top:12px;padding:14px;background:#fff8e1;border:1px solid #ffe082;border-radius:10px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                        <label style="font-weight:600;font-size:14px;color:#f57f17">📢 접수 공지</label>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                        <label style="font-weight:600;font-size:14px;color:#f57f17">접수 공지</label>
                         <span id="notice-purpose-label" style="font-size:12px;color:#8d6e63"></span>
                     </div>
-                    <div id="notice-template-content" style="font-size:13px;color:#5d4037;line-height:1.7;white-space:pre-wrap;padding:10px;background:#fffde7;border-radius:6px;border:1px solid #fff9c4;min-height:60px">
-                        공지 내용이 없습니다.
+                    <div id="notice-items-list" style="display:flex;flex-direction:column;gap:6px">
+                        <!-- 공지 항목들이 여기 렌더됨 -->
+                    </div>
+                    <!-- 선택된 공지의 비고 입력 -->
+                    <div id="notice-remark-area" style="display:none;margin-top:12px;padding:12px;background:#fffde7;border-radius:8px;border:1px solid #fff9c4">
+                        <label style="font-size:12px;font-weight:600;color:#8d6e63;margin-bottom:6px;display:block">
+                            선택 공지 비고 <span style="font-weight:400;color:#bbb">(성적서 "비고 또는 기타"에 기재)</span>
+                        </label>
+                        <textarea id="notice-remark-input" rows="2" placeholder="추가 기재할 내용을 입력하세요..." oninput="markAsModified()" style="width:100%;padding:8px 12px;border:1px solid #ffe082;border-radius:6px;font-size:13px;resize:vertical;font-family:inherit"></textarea>
                     </div>
                 </div>
             </div>
@@ -3926,29 +3933,70 @@ function calcExpiryDate() {
 // ============================================================================
 // 공지 양식 로드 (검사목적별 Firestore settings/receiptNotices)
 // ============================================================================
+var _noticeItems = []; // Firestore에서 로드한 공지 항목 [{text, common}]
+var _selectedNotices = []; // 선택된 공지 인덱스 배열
+
 async function loadNoticeTemplate() {
     var area = document.getElementById('notice-template-area');
-    var content = document.getElementById('notice-template-content');
+    var listEl = document.getElementById('notice-items-list');
     var label = document.getElementById('notice-purpose-label');
     var noticeReq = document.getElementById('notice-required');
     if (!area) return;
 
     var testPurpose = (document.getElementById('test-purpose').value || '').trim();
-    // 공지여부가 "예"이고 검사목적이 있을 때만 표시
-    if (noticeReq && noticeReq.value === '예' && testPurpose) {
+    // 공지여부가 "예"일 때만 표시
+    if (noticeReq && noticeReq.value === '예') {
         area.style.display = '';
-        label.textContent = testPurpose;
+        label.textContent = testPurpose || '';
         try {
             var doc = await db.collection('settings').doc('receiptNotices').get();
-            var notices = doc.exists ? (doc.data().notices || {}) : {};
-            var text = notices[testPurpose] || '';
-            content.textContent = text || '해당 검사목적의 공지 내용이 없습니다.';
+            if (doc.exists && doc.data().items) {
+                _noticeItems = doc.data().items;
+            } else {
+                _noticeItems = [];
+            }
+            renderNoticeItems();
         } catch(e) {
-            content.textContent = '공지 로드 실패: ' + e.message;
+            listEl.innerHTML = '<div style="color:#ef4444;font-size:12px">공지 로드 실패: ' + e.message + '</div>';
         }
     } else {
         area.style.display = 'none';
+        _selectedNotices = [];
     }
+}
+
+function renderNoticeItems() {
+    var listEl = document.getElementById('notice-items-list');
+    if (_noticeItems.length === 0) {
+        listEl.innerHTML = '<div style="color:#9ca3af;font-size:12px;padding:8px">등록된 공지가 없습니다. 접수관리 > 접수공지에서 등록하세요.</div>';
+        return;
+    }
+
+    listEl.innerHTML = _noticeItems.map(function(item, idx) {
+        var isSelected = _selectedNotices.indexOf(idx) >= 0;
+        var badge = item.common ? '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#e3f2fd;color:#1565c0;font-weight:600;margin-left:6px">공통</span>' : '';
+        return '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:' + (isSelected ? '#fff8e1' : '#fff') + ';border:1px solid ' + (isSelected ? '#ffe082' : '#eee') + ';border-radius:8px;cursor:pointer;transition:all .15s">' +
+            '<input type="checkbox" onchange="toggleNoticeItem(' + idx + ',this.checked)" ' + (isSelected ? 'checked' : '') + ' style="accent-color:#f57f17;width:16px;height:16px">' +
+            '<span style="font-weight:600;color:#f57f17;min-width:24px">' + (idx + 1) + '.</span>' +
+            '<span style="flex:1;font-size:13px;color:#5d4037">' + (item.text || '') + '</span>' +
+            badge +
+            '</label>';
+    }).join('');
+
+    // 비고 영역 토글
+    var remarkArea = document.getElementById('notice-remark-area');
+    remarkArea.style.display = _selectedNotices.length > 0 ? '' : 'none';
+}
+
+function toggleNoticeItem(idx, checked) {
+    if (checked) {
+        if (_selectedNotices.indexOf(idx) < 0) _selectedNotices.push(idx);
+    } else {
+        _selectedNotices = _selectedNotices.filter(function(i) { return i !== idx; });
+    }
+    _selectedNotices.sort(function(a, b) { return a - b; });
+    renderNoticeItems();
+    markAsModified();
 }
 
 // 공지여부 드롭다운 변경 시 호출
@@ -4501,6 +4549,12 @@ function collectReceiptData() {
         memoSales: document.getElementById('memo-sales')?.value || '',
         // 처리기한
         processingDeadline: document.getElementById('processing-deadline')?.value || '',
+        // 접수 공지
+        noticeRequired: document.getElementById('notice-required')?.value || '',
+        selectedNotices: _selectedNotices.map(function(idx) {
+            return { idx: idx, text: (_noticeItems[idx] || {}).text || '' };
+        }),
+        noticeRemark: document.getElementById('notice-remark-input')?.value || '',
         // 수수료/결제 정보
         feeOriginal: window._feeGrandTotal || 0,
         discountRate: parseFloat(document.getElementById('discount-rate')?.value) || 0,
