@@ -77,7 +77,8 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/firestore-helpers.js"></script>
-<script src="js/sidebar.js?v=2"></script>
+<script src="js/sidebar.js?v=3"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <aside class="sidebar" id="sidebar"></aside>
@@ -100,10 +101,11 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
         <div class="tab-panel active" id="panel-batch">
             <div class="card">
                 <div class="card-hd">
-                    <h3>월별 일괄발행</h3>
+                    <h3>일자별 일괄발행</h3>
                     <div class="right">
-                        <input type="month" id="batch-month" style="padding:6px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
+                        <input type="date" id="batch-date" style="padding:6px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
                         <button class="btn btn-primary" onclick="loadBatchData()">조회</button>
+                        <button class="btn btn-secondary" onclick="downloadBatchExcel()" title="더존 빌36524 양식">📥 엑셀 다운로드</button>
                     </div>
                 </div>
                 <div class="card-bd">
@@ -128,7 +130,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                                 </tr>
                             </thead>
                             <tbody id="batch-body">
-                                <tr><td colspan="9" class="empty-msg">월을 선택 후 조회하세요</td></tr>
+                                <tr><td colspan="9" class="empty-msg">날짜를 선택 후 조회하세요</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -275,7 +277,7 @@ var unissuedSelected = {};
 
 document.addEventListener('DOMContentLoaded', function() {
     var today = new Date();
-    document.getElementById('batch-month').value = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
+    document.getElementById('batch-date').value = formatDate(today);
     document.getElementById('date-target').value = formatDate(today);
     loadAllReceipts();
 });
@@ -313,12 +315,24 @@ function switchTab(name) {
 
 /* === 탭1: 일괄발행 === */
 function loadBatchData() {
-    var month = document.getElementById('batch-month').value; // YYYY-MM
-    if (!month) { showToast('월을 선택하세요'); return; }
+    var target = document.getElementById('batch-date').value; // YYYY-MM-DD
+    if (!target) { showToast('날짜를 선택하세요'); return; }
 
+    // 해당일에 발행해야 할 건: 월말발행(해당월 마지막일) + 접수일발행(해당일) + 특정일발행(해당일)
     batchList = allReceipts.filter(function(r) {
         var d = r.data;
-        return (d.receiptDate || '').substring(0,7) === month;
+        if (d.taxInvoiceIssued) return false; // 이미 발행됨
+        var bdt = d.billingDateType || 'receipt';
+        if (bdt === 'deferred') return false; // 추후발행은 발행요청탭
+        if (bdt === 'receipt') return d.receiptDate === target;
+        if (bdt === 'specific') return d.billingDate === target;
+        if (bdt === 'monthEnd') {
+            // 월말발행: target이 해당월 마지막 날인지 확인
+            var dt = new Date(target);
+            var lastDay = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+            return dt.getDate() === lastDay && (d.receiptDate || '').substring(0,7) === target.substring(0,7);
+        }
+        return false;
     });
     batchSelected = {};
     renderBatchTable();
@@ -607,6 +621,136 @@ async function issueRequest() {
     renderRequestTable();
     loadUnissuedCount();
     showToast(idxs.length + '건 발행처리 완료');
+}
+
+/* === 공급자 정보 (바이오푸드랩) === */
+var SUPPLIER = {
+    bizNo: '6588700076',
+    name: '주식회사 바이오푸드랩',
+    ceo: '이용표',
+    addr1: '서울특별시 구로구 디지털로30길 28',
+    addr2: '1408호,1410호~1414호 (구로동, 마리오 타워)',
+    bizStatus: '서비스,도매 및 소매업,전문, 과학 및 기술서비스업',
+    bizType: '물질성분검사및분석업,의료용품 도매업,기타 통신 판매업',
+    dept: '',
+    email: '',
+    mobile: '',
+    contactName: '',
+    phone: ''
+};
+
+/* === 더존 빌36524 엑셀 다운로드 === */
+function downloadBatchExcel() {
+    // 선택된 건만 (없으면 전체 미발행 건)
+    var idxs = Object.keys(batchSelected).map(Number);
+    var list = idxs.length > 0 ? idxs.map(function(i) { return batchList[i]; }) :
+        batchList.filter(function(r) { return !r.data.taxInvoiceIssued; });
+
+    if (list.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+
+    var targetDate = document.getElementById('batch-date').value.replace(/-/g, '');
+
+    // 헤더 행 (Row 1: 번호, Row 2: 카테고리, Row 3: 필드명)
+    var row1 = [];
+    for (var i = 1; i <= 84; i++) row1.push(i);
+
+    var row2 = ['발송시스템_고유번호','결과_고유번호','청구유형코드','거래구분코드','사용자구분코드','과세구분코드',
+        '책번호_권','책번호_호','일련번호',
+        '공급자정보','','','','','','','','','','','','','',
+        '공급받는자정보','','','','','','','','','','','','','',
+        '작성일자','공급가액','세액',
+        '품목1','','','','','','','',
+        '품목2','','','','','','','',
+        '품목3','','','','','','','',
+        '품목4','','','','','','','',
+        '합계금액','현금','수표','어음','외상미수금',
+        '비고1','비고2','비고3',
+        '수정세금계산서여부','수정코드','원천세금계산서 고유번호','원천세금계산서 승인번호',
+        '협력업체코드','종료'];
+
+    var row3 = ['','','','','','','','','',
+        '등록번호','상호','대표자명','주소','주소상세','종사업장번호','업태','종목','부서명','담당자이메일','담당자휴대번호','담당자명','담당자전화번호',
+        '등록번호','상호','대표자명','주소','주소상세','종사업장번호','업태','종목','부서명','담당자이메일','담당자휴대번호','담당자명','담당자전화번호',
+        '','','',
+        '일자','품목','규격','수량','단가','공급가액','세액','비고',
+        '일자','품목','규격','수량','단가','공급가액','세액','비고',
+        '일자','품목','규격','수량','단가','공급가액','세액','비고',
+        '일자','품목','규격','수량','단가','공급가액','세액','비고',
+        '','','','','','','','','','','','','',''];
+
+    // 데이터 행
+    var dataRows = list.map(function(r, idx) {
+        var d = r.data;
+        var total = getTotalFee(d);
+        var supply = getSupplyAmount(d);
+        var tax = getTaxAmount(d);
+
+        // 공급받는자 정보 (수정 체크 시 수정 정보 우선)
+        var buyer = {};
+        if (d.billEditEnabled && d.billEdit) {
+            buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g, '');
+            buyer.name = d.billEdit.company || '';
+            buyer.ceo = d.billEdit.ceo || '';
+            buyer.addr1 = d.billEdit.address || '';
+            buyer.addr2 = '';
+            buyer.bizStatus = d.billEdit.bizType || '';
+            buyer.bizType = d.billEdit.bizItem || '';
+            buyer.email = d.billEdit.email || '';
+            buyer.contactName = d.billEdit.name || '';
+            buyer.phone = d.billEdit.phone || '';
+            buyer.mobile = d.billEdit.mobile || '';
+        } else {
+            buyer.bizNo = (d.bizNo || '').replace(/-/g, '');
+            buyer.name = d.billCompany || d.companyName || '';
+            buyer.ceo = d.ceo || '';
+            buyer.addr1 = d.companyAddress || '';
+            buyer.addr2 = '';
+            buyer.bizStatus = '';
+            buyer.bizType = '';
+            buyer.email = d.billEmail || '';
+            buyer.contactName = d.billName || '';
+            buyer.phone = d.billPhone || '';
+            buyer.mobile = d.billMobile || '';
+        }
+
+        var row = [
+            '', 'EXCEL', 2, 1, 1, 1, '', '', '',
+            // 공급자
+            SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
+            '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
+            SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
+            // 공급받는자
+            buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
+            '', buyer.bizStatus, buyer.bizType, '', buyer.email,
+            buyer.mobile, buyer.contactName, buyer.phone,
+            // 작성일자, 공급가액, 세액
+            parseInt(targetDate), supply, tax,
+            // 품목1
+            parseInt(targetDate), d.testPurpose || '검사수수료', '', 1, supply, supply, tax, '',
+            // 품목2~4 (빈값)
+            '','','','','','','','',
+            '','','','','','','','',
+            '','','','','','','','',
+            // 합계, 현금, 수표, 어음, 외상미수금
+            total, 0, 0, 0, total,
+            // 비고
+            d.receiptNo || '', '', '',
+            // 수정
+            'N', '', '', '', '',
+            'END'
+        ];
+        return row;
+    });
+
+    // SheetJS로 엑셀 생성
+    var wsData = [row1, row2, row3].concat(dataRows);
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '세금계산서');
+
+    var filename = '세금계산서_' + targetDate + '_' + list.length + '건.xlsx';
+    XLSX.writeFile(wb, filename);
+    showToast(list.length + '건 엑셀 다운로드 완료');
 }
 
 function showToast(msg) {
