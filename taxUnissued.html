@@ -58,6 +58,39 @@ tr:hover{background:#f8f9fb}
 .summary-card{flex:1;padding:16px 20px;background:#fff;border:1px solid #e2e6ed;border-radius:10px;text-align:center}
 .summary-card .label{font-size:12px;color:#6b7280;margin-bottom:4px}
 .summary-card .value{font-size:20px;font-weight:700}
+
+/* 행 클릭 가능 */
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#eef6ff !important}
+
+/* 모달 */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:1000;justify-content:center;align-items:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:600px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.modal-header{padding:18px 24px;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;z-index:1}
+.modal-header h3{font-size:16px;font-weight:700;color:#1a2332}
+.modal-close{width:32px;height:32px;border:none;background:#f3f4f6;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#6b7280}
+.modal-close:hover{background:#e5e7eb}
+.modal-body{padding:24px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:#5f6b7a;margin-bottom:6px}
+.form-group input,.form-group select{width:100%;padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#1a73e8}
+.form-group input[readonly]{background:#f8f9fb;color:#6b7280}
+.form-row{display:flex;gap:12px}
+.form-row .form-group{flex:1}
+.info-box{background:#f8f9fb;border:1px solid #e2e6ed;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.info-box .info-row{display:flex;gap:8px;margin-bottom:6px;font-size:13px}
+.info-box .info-row:last-child{margin-bottom:0}
+.info-box .info-label{color:#6b7280;min-width:70px;font-weight:600}
+.info-box .info-value{color:#1a2332;font-weight:500}
+.section-title{font-size:14px;font-weight:700;color:#1a2332;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #e2e6ed}
+.modal-footer{padding:16px 24px;border-top:1px solid #e2e6ed;display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:#fff;border-radius:0 0 14px 14px}
+.check-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.check-row input[type="checkbox"]{width:16px;height:16px}
+.check-row label{font-size:13px;font-weight:600;color:#1a2332}
+.bill-edit-fields{display:none;border:1px solid #dbeafe;background:#f8faff;border-radius:10px;padding:16px;margin-top:8px}
+.bill-edit-fields.show{display:block}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -216,6 +249,88 @@ tr:hover{background:#f8f9fb}
     </div>
 </div>
 
+<!-- 발행정보 입력 모달 -->
+<div class="modal-overlay" id="bill-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>발행 정보 입력</h3>
+            <button class="modal-close" onclick="closeBillModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <!-- 접수 기본 정보 -->
+            <div class="info-box">
+                <div class="info-row"><span class="info-label">접수번호</span><span class="info-value" id="m-receiptNo"></span></div>
+                <div class="info-row"><span class="info-label">접수일</span><span class="info-value" id="m-receiptDate"></span></div>
+                <div class="info-row"><span class="info-label">업체명</span><span class="info-value" id="m-company"></span></div>
+                <div class="info-row"><span class="info-label">제품명</span><span class="info-value" id="m-product"></span></div>
+                <div class="info-row"><span class="info-label">금액</span><span class="info-value" id="m-fee" style="color:#ef4444;font-weight:700"></span></div>
+            </div>
+
+            <!-- 발행 구분 -->
+            <div class="section-title">발행 설정</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>발행 구분</label>
+                    <select id="m-billingDateType" onchange="onBillingDateTypeChange()">
+                        <option value="receipt">접수일 발행</option>
+                        <option value="specific">특정일 발행</option>
+                        <option value="monthEnd">월말 발행</option>
+                        <option value="deferred">추후발행</option>
+                    </select>
+                </div>
+                <div class="form-group" id="m-dateGroup" style="display:none">
+                    <label id="m-dateLabel">발행 희망일</label>
+                    <input type="date" id="m-billingDate">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>청구 유형</label>
+                <select id="m-billingType">
+                    <option value="byPurpose">목적별 구분 발행</option>
+                    <option value="combined">합산 발행</option>
+                    <option value="byDate">접수일자별 구분 발행</option>
+                </select>
+            </div>
+
+            <!-- 청구정보 수정 -->
+            <div style="margin-top:20px">
+                <div class="section-title">청구정보</div>
+                <div class="check-row">
+                    <input type="checkbox" id="m-billEditCheck" onchange="toggleBillEdit()">
+                    <label for="m-billEditCheck">청구정보 수정 (기본: 접수 시 등록된 정보)</label>
+                </div>
+                <div class="bill-edit-fields" id="m-billEditFields">
+                    <div class="form-row">
+                        <div class="form-group"><label>업체명</label><input type="text" id="m-be-company"></div>
+                        <div class="form-group"><label>사업자번호</label><input type="text" id="m-be-bizNo"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>대표자</label><input type="text" id="m-be-ceo"></div>
+                        <div class="form-group"><label>담당자명</label><input type="text" id="m-be-name"></div>
+                    </div>
+                    <div class="form-group"><label>주소</label><input type="text" id="m-be-address"></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>이메일</label><input type="email" id="m-be-email"></div>
+                        <div class="form-group"><label>전화번호</label><input type="text" id="m-be-phone"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>업태</label><input type="text" id="m-be-bizType"></div>
+                        <div class="form-group"><label>종목</label><input type="text" id="m-be-bizItem"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>팩스</label><input type="text" id="m-be-fax"></div>
+                        <div class="form-group"><label>휴대폰</label><input type="text" id="m-be-mobile"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeBillModal()">취소</button>
+            <button class="btn btn-primary" onclick="saveBillInfo()">저장</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -282,11 +397,11 @@ function renderDeferred() {
         tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">미발행 건이 없습니다</td></tr>';
         return;
     }
-    tbody.innerHTML = unissuedList.map(function(r) {
+    tbody.innerHTML = unissuedList.map(function(r, idx) {
         var d = r.data;
         var bdt = d.billingDateType || 'receipt';
         var statusLabel = bdt === 'deferred' ? (d.deferredIssueDate ? '<span class="badge badge-requested">발행요청 (' + d.deferredIssueDate + ')</span>' : '<span class="badge badge-deferred">추후발행</span>') : '<span class="badge" style="background:#f0f2f5;color:#5f6b7a">일반</span>';
-        return '<tr>' +
+        return '<tr onclick="openBillModal(' + idx + ')">' +
             '<td>' + (d.receiptNo || r.id) + '</td>' +
             '<td>' + (d.receiptDate || '-') + '</td>' +
             '<td>' + (d.companyName || d.company || '-') + '</td>' +
@@ -321,7 +436,159 @@ function renderRequested() {
     }).join('');
 }
 
-/* 발행 요청 기능은 추후발행(deferred) 건에서만 사용 - 미발행 전체 목록에서 확인 */
+/* === 발행 정보 입력 모달 === */
+var currentModalIdx = -1;
+
+function openBillModal(idx) {
+    var r = unissuedList[idx];
+    if (!r) return;
+    currentModalIdx = idx;
+    var d = r.data;
+
+    // 기본 정보 표시
+    document.getElementById('m-receiptNo').textContent = d.receiptNo || r.id;
+    document.getElementById('m-receiptDate').textContent = d.receiptDate || '-';
+    document.getElementById('m-company').textContent = d.companyName || d.company || '-';
+    document.getElementById('m-product').textContent = d.productName || (d.samples && d.samples[0] ? d.samples[0].productName : '') || '-';
+    document.getElementById('m-fee').textContent = formatMoney(getTotalFee(d));
+
+    // 발행 설정 복원
+    document.getElementById('m-billingDateType').value = d.billingDateType || 'receipt';
+    document.getElementById('m-billingType').value = d.billingType || 'byPurpose';
+
+    // 날짜 복원
+    var bdt = d.billingDateType || 'receipt';
+    if (bdt === 'specific') {
+        document.getElementById('m-billingDate').value = d.billingDate || '';
+    } else if (bdt === 'deferred') {
+        document.getElementById('m-billingDate').value = d.deferredIssueDate || '';
+    } else {
+        document.getElementById('m-billingDate').value = '';
+    }
+    onBillingDateTypeChange();
+
+    // 청구정보 수정 체크박스
+    var editEnabled = d.billEditEnabled || false;
+    document.getElementById('m-billEditCheck').checked = editEnabled;
+    toggleBillEdit();
+
+    // 청구정보 필드 복원
+    var be = d.billEdit || {};
+    document.getElementById('m-be-company').value = be.company || d.billCompany || d.companyName || d.company || '';
+    document.getElementById('m-be-bizNo').value = be.bizNo || d.bizNo || '';
+    document.getElementById('m-be-ceo').value = be.ceo || d.ceo || '';
+    document.getElementById('m-be-name').value = be.name || d.billName || '';
+    document.getElementById('m-be-address').value = be.address || d.companyAddress || '';
+    document.getElementById('m-be-email').value = be.email || d.billEmail || '';
+    document.getElementById('m-be-phone').value = be.phone || d.billPhone || '';
+    document.getElementById('m-be-bizType').value = be.bizType || '';
+    document.getElementById('m-be-bizItem').value = be.bizItem || '';
+    document.getElementById('m-be-fax').value = be.fax || '';
+    document.getElementById('m-be-mobile').value = be.mobile || d.billMobile || '';
+
+    document.getElementById('bill-modal').classList.add('show');
+}
+
+function closeBillModal() {
+    document.getElementById('bill-modal').classList.remove('show');
+    currentModalIdx = -1;
+}
+
+function onBillingDateTypeChange() {
+    var val = document.getElementById('m-billingDateType').value;
+    var dateGroup = document.getElementById('m-dateGroup');
+    var dateLabel = document.getElementById('m-dateLabel');
+    if (val === 'specific') {
+        dateGroup.style.display = '';
+        dateLabel.textContent = '발행일';
+    } else if (val === 'deferred') {
+        dateGroup.style.display = '';
+        dateLabel.textContent = '발행 희망일';
+    } else {
+        dateGroup.style.display = 'none';
+    }
+}
+
+function toggleBillEdit() {
+    var checked = document.getElementById('m-billEditCheck').checked;
+    document.getElementById('m-billEditFields').classList.toggle('show', checked);
+}
+
+async function saveBillInfo() {
+    if (currentModalIdx < 0) return;
+    var r = unissuedList[currentModalIdx];
+    var d = r.data;
+
+    var billingDateType = document.getElementById('m-billingDateType').value;
+    var billingType = document.getElementById('m-billingType').value;
+    var billingDate = document.getElementById('m-billingDate').value;
+    var billEditEnabled = document.getElementById('m-billEditCheck').checked;
+
+    // 업데이트 객체 구성
+    var updateData = {
+        billingDateType: billingDateType,
+        billingType: billingType,
+        billEditEnabled: billEditEnabled,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    // 발행구분에 따른 날짜 설정
+    if (billingDateType === 'specific') {
+        if (!billingDate) { showToast('발행일을 선택하세요'); return; }
+        updateData.billingDate = billingDate;
+    } else if (billingDateType === 'deferred') {
+        updateData.deferredIssueDate = billingDate || '';
+    }
+
+    // 청구정보 수정
+    if (billEditEnabled) {
+        updateData.billEdit = {
+            company: document.getElementById('m-be-company').value.trim(),
+            bizNo: document.getElementById('m-be-bizNo').value.trim(),
+            ceo: document.getElementById('m-be-ceo').value.trim(),
+            name: document.getElementById('m-be-name').value.trim(),
+            address: document.getElementById('m-be-address').value.trim(),
+            email: document.getElementById('m-be-email').value.trim(),
+            phone: document.getElementById('m-be-phone').value.trim(),
+            bizType: document.getElementById('m-be-bizType').value.trim(),
+            bizItem: document.getElementById('m-be-bizItem').value.trim(),
+            fax: document.getElementById('m-be-fax').value.trim(),
+            mobile: document.getElementById('m-be-mobile').value.trim()
+        };
+    }
+
+    try {
+        await db.collection('receipts').doc(r.id).update(updateData);
+
+        // 로컬 데이터 갱신
+        Object.keys(updateData).forEach(function(k) {
+            if (k !== 'updatedAt') d[k] = updateData[k];
+        });
+
+        // 목록 재분류
+        unissuedList = allReceipts.filter(function(r) {
+            var d = r.data;
+            return !d.taxInvoiceIssued && !d.taxCancelled && getTotalFee(d) > 0;
+        });
+        deferredRequestedList = allReceipts.filter(function(r) {
+            var d = r.data;
+            return d.billingDateType === 'deferred' && d.deferredIssueDate && !d.taxInvoiceIssued && !d.taxCancelled;
+        });
+
+        renderDeferred();
+        renderRequested();
+        updateSummary();
+        closeBillModal();
+        showToast('발행 정보 저장 완료');
+    } catch(e) {
+        showToast('저장 실패: ' + e.message);
+    }
+}
+
+// ESC로 모달 닫기
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeBillModal();
+});
 
 function switchTab(name) {
     document.querySelectorAll('.tab').forEach(function(t, i) {
