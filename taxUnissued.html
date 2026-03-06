@@ -105,18 +105,19 @@ tbody tr:hover{background:#eef6ff !important}
     <div class="topbar">
         <span class="topbar-title">영업 관리</span>
         <span class="topbar-sep">›</span>
-        <span class="topbar-sub">세금계산서 미발행</span>
+        <span class="topbar-sub">세금계산서</span>
     </div>
     <div class="content">
         <div class="summary-row">
             <div class="summary-card"><div class="label">미발행 건수</div><div class="value" style="color:#d97706" id="sum-deferred">0건</div></div>
-            <div class="summary-card"><div class="label">발행 요청 (추후발행)</div><div class="value" style="color:#2563eb" id="sum-requested">0건</div></div>
+            <div class="summary-card"><div class="label">발행완료 (이번달)</div><div class="value" style="color:#10b981" id="sum-issued">0건</div></div>
             <div class="summary-card"><div class="label">미발행 합계금액</div><div class="value" style="color:#ef4444" id="sum-total">0원</div></div>
         </div>
 
         <div class="tabs">
             <div class="tab active" onclick="switchTab('deferred')">미발행 전체 <span class="tab-badge" id="badge-deferred">0</span></div>
-            <div class="tab" onclick="switchTab('requested')">발행 요청 완료 <span class="tab-badge" id="badge-requested" style="background:#2563eb">0</span></div>
+            <div class="tab" onclick="switchTab('issuedSales')">발행완료 <span class="tab-badge" id="badge-issued" style="background:#10b981">0</span></div>
+            <div class="tab" onclick="switchTab('requested')">발행 요청 <span class="tab-badge" id="badge-requested" style="background:#2563eb">0</span></div>
             <div class="tab" onclick="switchTab('cancelReq')">취소 요청 <span class="tab-badge" id="badge-cancel" style="background:#ef4444">0</span></div>
         </div>
 
@@ -154,7 +155,44 @@ tbody tr:hover{background:#eef6ff !important}
             </div>
         </div>
 
-        <!-- 탭2: 발행 요청 완료 -->
+        <!-- 탭2: 발행완료 -->
+        <div class="tab-panel" id="panel-issuedSales">
+            <div class="card">
+                <div class="card-hd">
+                    <h3>발행완료</h3>
+                    <div class="right">
+                        <input type="month" id="issued-sales-month" style="padding:6px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
+                        <button class="btn btn-primary" onclick="loadIssuedSalesData()">조회</button>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <div class="summary-row">
+                        <div class="summary-card"><div class="label">발행 건수</div><div class="value" style="color:#10b981" id="issued-sales-count">0건</div></div>
+                        <div class="summary-card"><div class="label">발행 합계</div><div class="value" style="color:#10b981" id="issued-sales-total">0원</div></div>
+                    </div>
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>접수번호</th>
+                                    <th>접수일</th>
+                                    <th>발행일</th>
+                                    <th>업체명</th>
+                                    <th>제품명</th>
+                                    <th class="text-right">금액</th>
+                                    <th class="text-center">상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="issued-sales-body">
+                                <tr><td colspan="7" class="empty-msg">월을 선택 후 조회하세요</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 탭3: 발행 요청 완료 -->
         <div class="tab-panel" id="panel-requested">
             <div class="card">
                 <div class="card-hd">
@@ -372,9 +410,18 @@ async function loadData() {
 }
 
 function updateSummary() {
+    var thisMonth = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
+
+    // 이번달 발행완료
+    var issuedThisMonth = allReceipts.filter(function(r) {
+        var d = r.data;
+        return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === thisMonth;
+    });
+
     document.getElementById('sum-deferred').textContent = unissuedList.length + '건';
-    document.getElementById('sum-requested').textContent = deferredRequestedList.length + '건';
+    document.getElementById('sum-issued').textContent = issuedThisMonth.length + '건';
     document.getElementById('badge-deferred').textContent = unissuedList.length;
+    document.getElementById('badge-issued').textContent = issuedThisMonth.length;
     document.getElementById('badge-requested').textContent = deferredRequestedList.length;
 
     var total = 0;
@@ -592,12 +639,52 @@ document.addEventListener('keydown', function(e) {
 
 function switchTab(name) {
     document.querySelectorAll('.tab').forEach(function(t, i) {
-        var tabs = ['deferred','requested','cancelReq'];
+        var tabs = ['deferred','issuedSales','requested','cancelReq'];
         t.classList.toggle('active', tabs[i] === name);
     });
     document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
     document.getElementById('panel-' + name).classList.add('active');
+    if (name === 'issuedSales') loadIssuedSalesData();
     if (name === 'cancelReq') loadCancelReqData();
+}
+
+/* === 발행완료 (영업관리에서 재무팀 발행 내역 확인) === */
+function loadIssuedSalesData() {
+    var month = document.getElementById('issued-sales-month').value;
+    if (!month) {
+        var today = new Date();
+        month = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
+        document.getElementById('issued-sales-month').value = month;
+    }
+
+    var issuedList = allReceipts.filter(function(r) {
+        var d = r.data;
+        return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === month;
+    });
+
+    var tbody = document.getElementById('issued-sales-body');
+    var totalSum = 0;
+
+    if (issuedList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
+    } else {
+        tbody.innerHTML = issuedList.map(function(r) {
+            var d = r.data;
+            var total = getTotalFee(d);
+            totalSum += total;
+            return '<tr>' +
+                '<td>' + (d.receiptNo || r.id) + '</td>' +
+                '<td>' + (d.receiptDate || '-') + '</td>' +
+                '<td style="color:#10b981;font-weight:600">' + (d.taxInvoiceDate || '-') + '</td>' +
+                '<td>' + (d.companyName || d.company || '-') + '</td>' +
+                '<td>' + (d.productName || (d.samples && d.samples[0] ? d.samples[0].productName : '') || '-') + '</td>' +
+                '<td class="text-right" style="font-weight:700">' + formatMoney(total) + '</td>' +
+                '<td class="text-center"><span class="badge" style="background:#ecfdf5;color:#10b981">발행완료</span></td>' +
+                '</tr>';
+        }).join('');
+    }
+    document.getElementById('issued-sales-count').textContent = issuedList.length + '건';
+    document.getElementById('issued-sales-total').textContent = formatMoney(totalSum);
 }
 
 /* === 취소 요청 === */
