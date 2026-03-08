@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 시험일지</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="js/mfds-api.js"></script>
+<script src="js/mfds_diary_form.js"></script>
+<style>
+:root{--primary:#2563eb;--primary-light:#dbeafe;--success:#10b981;--success-light:#d1fae5;--warning:#f59e0b;--warning-light:#fef3c7;--danger:#ef4444;--danger-light:#fee2e2;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-600:#4b5563;--gray-700:#374151;--gray-900:#111827;--accent:#667eea;--accent2:#764ba2}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;background:#f5f5f5;color:#1a1a1a}
+.app-layout{display:flex;height:100vh}
+
+/* ====== UNIFIED SIDEBAR STYLES ====== */
+.sidebar{width:250px;background:#1a2332;color:white;position:fixed;left:0;top:0;bottom:0;z-index:1000;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
+.logo{padding:20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0}
+.logo-icon{width:40px;height:40px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo-text{display:flex;flex-direction:column}
+.logo-title{font-size:18px;font-weight:700}
+.logo-subtitle{font-size:11px;color:#94a3b8}
+.sidebar-nav{flex:1;padding:8px 0;overflow-y:auto}
+.nav-group{margin-bottom:2px}
+.nav-parent{padding:10px 20px;display:flex;align-items:center;gap:10px;color:#8ea4c0;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;transition:all .15s;border:none;background:none;width:100%}
+.nav-parent:hover{background:rgba(255,255,255,0.05);color:#c8d6e5}
+.nav-parent.active{color:#4fc3f7;background:rgba(79,195,247,0.1);font-weight:600}
+.nav-parent.disabled{color:#4a6785;cursor:default}
+.nav-parent.disabled:hover{background:transparent;color:#4a6785}
+.nav-icon{font-size:16px;width:22px;text-align:center;flex-shrink:0}
+.nav-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-arrow{font-size:10px;color:#5a6a7e;transition:transform .2s;margin-left:auto}
+.nav-group.expanded .nav-arrow{transform:rotate(180deg)}
+.nav-submenu{list-style:none;max-height:0;overflow:hidden;transition:max-height .25s ease;margin-left:32px;border-left:2px solid rgba(79,195,247,0.15);padding-left:10px}
+.nav-group.expanded .nav-submenu{max-height:500px}
+.nav-sub-item{display:block;padding:7px 12px;font-size:12px;color:#6b7d93;text-decoration:none;border-radius:6px;cursor:pointer;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-sub-item:hover{color:#8ea4c0;background:rgba(255,255,255,0.03)}
+.nav-sub-item.active{color:#4fc3f7;font-weight:600;background:rgba(79,195,247,0.08)}
+.nav-sub-item.disabled{color:#3d5068;cursor:default}
+.nav-sub-item.disabled:hover{background:transparent;color:#3d5068}
+/* ====== END UNIFIED SIDEBAR STYLES ====== */
+
+.main-container{flex:1;margin-left:250px;display:flex;flex-direction:column;overflow:hidden}
+.top-header{background:white;padding:16px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+.breadcrumb{display:flex;align-items:center;gap:8px;font-size:14px;color:#64748b}
+.breadcrumb-current{color:#1e293b;font-weight:600}
+.server-status{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 12px;border-radius:20px;background:#f1f5f9}
+.server-status.online{color:#16a34a;background:#f0fdf4}
+.server-status.offline{color:#dc2626;background:#fef2f2}
+.main-content{flex:1;overflow-y:auto;padding:20px}
+
+/* Toolbar */
+.toolbar{background:white;padding:16px 20px;border-radius:12px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.toolbar-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.toolbar-row:last-child{margin-bottom:0}
+.search-box{position:relative;flex:1;min-width:200px}
+.search-box input{width:100%;padding:9px 14px 9px 36px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px}
+.search-box input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.search-box::before{content:'';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px}
+.form-select{padding:8px 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;background:white}
+.form-select:focus{outline:none;border-color:var(--primary)}
+input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:12px}
+
+/* 3-panel layout */
+.three-panel{display:grid;grid-template-columns:300px 1fr 380px;gap:16px;height:calc(100vh - 180px);min-height:500px}
+.panel{background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1);overflow:hidden;display:flex;flex-direction:column}
+.panel-header{padding:14px 18px;border-bottom:1px solid var(--gray-200);font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center;background:var(--gray-50);flex-shrink:0}
+.panel-header .count{font-size:12px;font-weight:500;color:var(--gray-600);background:var(--gray-200);padding:2px 8px;border-radius:10px}
+.panel-body{overflow-y:auto;flex:1}
+
+/* Sample list */
+.sample-row{padding:12px 16px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background .15s}
+.sample-row:hover{background:var(--gray-50)}
+.sample-row.active{background:var(--primary-light);border-left:3px solid var(--primary)}
+.sample-row .row-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.sample-row .row-no{font-weight:600;font-size:13px;color:var(--gray-900)}
+.sample-row .row-status{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+.sample-row .row-bottom{font-size:11px;color:var(--gray-600);display:flex;gap:6px;flex-wrap:wrap}
+.badge-progress{background:var(--warning-light);color:#b45309}
+.badge-done{background:var(--success-light);color:#047857}
+.badge-wait{background:var(--gray-200);color:var(--gray-600)}
+
+/* Test item list - middle panel */
+.item-row{padding:10px 16px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background .15s}
+.item-row:hover{background:var(--gray-50)}
+.item-row.active{background:#eef2ff;border-left:3px solid var(--accent)}
+.item-row .item-name{font-weight:600;font-size:13px;margin-bottom:4px}
+.item-row .item-meta{display:flex;gap:8px;font-size:11px;color:var(--gray-600);flex-wrap:wrap}
+.item-row .item-code{font-family:monospace;font-size:11px;color:var(--primary);background:var(--primary-light);padding:1px 6px;border-radius:4px}
+.item-row .item-std{font-size:11px;color:#6d28d9;background:#f5f3ff;padding:1px 6px;border-radius:4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diary-badge{font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600}
+.diary-badge.registered{background:var(--success-light);color:#047857}
+.diary-badge.empty{background:var(--gray-200);color:var(--gray-600)}
+
+/* Right panel - diary editor */
+.diary-section{padding:16px}
+.diary-section h4{font-size:14px;font-weight:700;margin-bottom:12px;color:var(--gray-900);display:flex;align-items:center;gap:8px}
+.diary-section h4 .icon{font-size:16px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.form-row{display:flex;gap:12px}
+.form-row .form-group{flex:1}
+
+/* Standard spec box */
+.spec-box{background:#f8f7ff;border:1px solid #e0dbff;border-radius:8px;padding:12px;margin-bottom:14px}
+.spec-box .spec-title{font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.spec-table{width:100%;font-size:12px;border-collapse:collapse}
+.spec-table th{text-align:left;padding:4px 8px;color:var(--gray-600);font-weight:600;background:#ede9fe;border-radius:4px}
+.spec-table td{padding:4px 8px;color:var(--gray-900)}
+.spec-select{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.spec-chip{padding:4px 10px;border-radius:14px;font-size:11px;cursor:pointer;border:1.5px solid var(--gray-300);background:white;transition:all .2s;font-weight:500}
+.spec-chip:hover{border-color:var(--accent);color:var(--accent)}
+.spec-chip.selected{background:var(--accent);color:white;border-color:var(--accent)}
+
+/* Buttons */
+.btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.btn-primary{background:var(--primary);color:white}
+.btn-success{background:var(--success);color:white}
+.btn-danger{background:var(--danger);color:white}
+.btn-outline{background:white;color:var(--gray-700);border:1px solid var(--gray-300)}
+.btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+/* Empty state */
+.empty-state{padding:40px 20px;text-align:center;color:#999;font-size:14px}
+.empty-state .icon{font-size:40px;margin-bottom:12px}
+
+/* Diary content area */
+.diary-content-area{border:1px solid var(--gray-300);border-radius:8px;min-height:180px;padding:12px;font-size:13px;white-space:pre-wrap;background:white}
+.diary-content-area:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+
+/* Calc section */
+.calc-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+.calc-grid input{padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;text-align:center}
+.calc-grid label{font-size:10px;color:var(--gray-600);text-align:center;display:block}
+
+/* Toast */
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;transition:transform .3s;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+.toast.active{transform:translateX(-50%) translateY(0)}
+.toast.success{background:#10b981;color:white}
+.toast.error{background:#ef4444;color:white}
+.toast.info{background:#3b82f6;color:white}
+
+/* Method/Form selector */
+.method-list{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto}
+.method-item{padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gray-200);transition:all .15s;display:flex;justify-content:space-between}
+.method-item:hover{border-color:var(--primary);background:var(--primary-light)}
+.method-item.selected{border-color:var(--primary);background:var(--primary-light);font-weight:600}
+.method-item .method-code{font-family:monospace;font-size:11px;color:var(--gray-600)}
+
+/* Loading */
+.loading{display:flex;align-items:center;justify-content:center;padding:20px;gap:8px;color:var(--gray-600);font-size:13px}
+.spinner{width:18px;height:18px;border:2px solid var(--gray-300);border-top-color:var(--primary);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:2000;display:none;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:white;border-radius:16px;width:90%;max-width:600px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center}
+.modal-header h3{font-size:18px;font-weight:700}
+.modal-close{background:none;border:none;font-size:24px;cursor:pointer;color:var(--gray-600)}
+.modal-body{padding:20px 24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:8px}
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <!-- Main -->
+  <div class="main-container">
+    <div class="top-header">
+      <div class="breadcrumb">
+        <span>시험관리</span> <span>/</span> <span class="breadcrumb-current">시험일지</span>
+      </div>
+      <div class="server-status" id="server-status">
+        <span id="server-status-icon">...</span>
+        <span id="server-status-text">확인 중</span>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <label style="font-size:12px;font-weight:600;color:#64748b">접수기간</label>
+          <input type="date" id="date-from" />
+          <span style="color:#999">~</span>
+          <input type="date" id="date-to" />
+          <select class="form-select" id="progress-filter">
+            <option value="">진행상황 전체</option>
+            <option value="IM04000001">접수</option>
+            <option value="IM04000002">시험중</option>
+            <option value="IM04000003">완료</option>
+            <option value="IM04000004">결재</option>
+          </select>
+          <select class="form-select" id="job-filter">
+            <option value="IM18000001">자체의뢰</option>
+            <option value="IM18000002">외부의뢰</option>
+            <option value="IM18000003">수거</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="searchSamples()">조회</button>
+          <button class="btn btn-outline btn-sm" onclick="searchFromFirestore()">Firestore 조회</button>
+        </div>
+      </div>
+
+      <!-- 3-Panel Layout -->
+      <div class="three-panel">
+        <!-- Left: 시료 목록 -->
+        <div class="panel">
+          <div class="panel-header">
+            시료 목록
+            <span class="count" id="sample-count">0건</span>
+          </div>
+          <div class="panel-body" id="sample-list">
+            <div class="empty-state"><div class="icon">🧪</div>조회 버튼을 클릭하세요</div>
+          </div>
+        </div>
+
+        <!-- Middle: 시험항목 목록 -->
+        <div class="panel">
+          <div class="panel-header">
+            시험항목
+            <span class="count" id="item-count">0건</span>
+          </div>
+          <div class="panel-body" id="item-list">
+            <div class="empty-state"><div class="icon">🔬</div>시료를 선택하세요</div>
+          </div>
+        </div>
+
+        <!-- Right: 시험일지 편집 -->
+        <div class="panel">
+          <div class="panel-header">
+            시험일지 작성
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-sm btn-outline" onclick="loadDiaryDetail()" title="식약처 일지 조회">조회</button>
+              <button class="btn btn-sm btn-primary" onclick="saveDiary()" title="일지 등록/수정">저장</button>
+            </div>
+          </div>
+          <div class="panel-body" id="diary-panel">
+            <div class="empty-state"><div class="icon">📓</div>시험항목을 선택하세요</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span id="toast-msg"></span></div>
+
+<!-- 기준규격 선택 모달 -->
+<div class="modal-overlay" id="spec-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>기준규격 선택</h3>
+      <button class="modal-close" onclick="closeSpecModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="spec-modal-body">
+      <div class="loading"><div class="spinner"></div>기준규격 조회 중...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeSpecModal()">닫기</button>
+      <button class="btn btn-primary" onclick="applySelectedSpec()">적용</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/sidebar.js?v=3"></script>
+<script>
+/* ============================================================
+   전역 변수
+   ============================================================ */
+var allSamples = [];           // 시료 목록 (API 또는 Firestore)
+var currentSample = null;      // 선택된 시료
+var allExprItems = [];         // 현재 시료의 시험항목 목록
+var currentExprItem = null;    // 선택된 시험항목
+var currentExprItemIdx = -1;
+var currentDiaryData = {};     // 현재 일지 데이터
+var _specResults = [];         // 기준규격 조회 결과
+var _selectedSpecIdx = -1;     // 선택된 기준규격 인덱스
+
+/* ============================================================
+   초기화
+   ============================================================ */
+window.addEventListener('firebase-ready', function() {
+  initDiary();
+});
+
+function initDiary() {
+  checkMfdsStatus();
+  setDefaultDates();
+}
+
+function setDefaultDates() {
+  var today = new Date();
+  var ago30 = new Date();
+  ago30.setDate(ago30.getDate() - 30);
+  document.getElementById('date-to').value = formatDate(today);
+  document.getElementById('date-from').value = formatDate(ago30);
+}
+
+function formatDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function formatDateCompact(d) {
+  return String(d).replace(/-/g, '');
+}
+
+function checkMfdsStatus() {
+  var el = document.getElementById('server-status');
+  var icon = document.getElementById('server-status-icon');
+  var text = document.getElementById('server-status-text');
+  if (typeof MFDS !== 'undefined' && MFDS.testConnection) {
+    MFDS.testConnection().then(function(ok) {
+      if (ok) { el.className='server-status online'; icon.textContent='🟢'; text.textContent='API 온라인'; }
+      else { el.className='server-status offline'; icon.textContent='🔴'; text.textContent='API 오프라인'; }
+    }).catch(function() { el.className='server-status offline'; icon.textContent='🔴'; text.textContent='API 오프라인'; });
+  } else {
+    el.className='server-status offline'; icon.textContent='⚪'; text.textContent='MFDS 모듈 없음';
+  }
+}
+
+/* ============================================================
+   시료 목록 조회 (식약처 API - 0201)
+   ============================================================ */
+async function searchSamples() {
+  var fromVal = document.getElementById('date-from').value;
+  var toVal = document.getElementById('date-to').value;
+  var progress = document.getElementById('progress-filter').value;
+  var job = document.getElementById('job-filter').value;
+
+  if (!fromVal || !toVal) { showToast('조회 기간을 입력하세요', 'error'); return; }
+
+  document.getElementById('sample-list').innerHTML = '<div class="loading"><div class="spinner"></div>시료 목록 조회 중...</div>';
+
+  try {
+    var params = {
+      rceptDeStart: formatDateCompact(fromVal),
+      rceptDeEnd: formatDateCompact(toVal),
+      jobSeCode: job || 'IM18000001',
+      exprIemProgrsSittnCode: progress || 'IM04000004'
+    };
+    var res = await MFDS.selectListExprDiarySplore(params);
+    if (res && res.resultFlag === '1' && res.resultData) {
+      allSamples = Array.isArray(res.resultData) ? res.resultData : [res.resultData];
+      renderSampleList();
+      showToast(allSamples.length + '건 조회 완료', 'success');
+    } else {
+      allSamples = [];
+      renderSampleList();
+      showToast('조회 결과 없음: ' + (res.errorMessage || ''), 'info');
+    }
+  } catch(e) {
+    console.error('시료 조회 오류:', e);
+    showToast('API 오류: ' + (e.message || e), 'error');
+    document.getElementById('sample-list').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div>API 연결 실패<br><small>Firestore 조회를 사용하세요</small></div>';
+  }
+}
+
+/* Firestore 기반 조회 (API 불가 시 대체) */
+async function searchFromFirestore() {
+  document.getElementById('sample-list').innerHTML = '<div class="loading"><div class="spinner"></div>Firestore 조회 중...</div>';
+  try {
+    var snap = await db.collection('receipts').orderBy('createdAt','desc').limit(200).get();
+    allSamples = snap.docs.map(function(d) {
+      var data = d.data();
+      return {
+        _firestoreId: d.id,
+        sploreRceptNo: data.receiptNo || d.id,
+        sploreNm: data.productName || data.sampleName || '-',
+        prductNm: data.productName || '-',
+        prdlstNm: data.foodType || data.testField || '-',
+        entrpsNm: data.companyName || '-',
+        rceptDe: (data.receiptDate || '').replace(/-/g, ''),
+        rceptDeStr: data.receiptDate || '-',
+        progrsSittnCode: data.status || '-',
+        exprIemJnlCnt: '0',
+        totExprIemCnt: String((data.testItems || []).length),
+        _firestore: true,
+        _data: data
+      };
+    });
+    renderSampleList();
+    showToast('Firestore ' + allSamples.length + '건 조회', 'success');
+  } catch(e) {
+    showToast('Firestore 조회 실패: ' + e.message, 'error');
+  }
+}
+
+function renderSampleList() {
+  var el = document.getElementById('sample-list');
+  document.getElementById('sample-count').textContent = allSamples.length + '건';
+
+  if (!allSamples.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div>조회 결과가 없습니다</div>';
+    return;
+  }
+
+  var html = '';
+  allSamples.forEach(function(s, i) {
+    var jnlCnt = parseInt(s.exprIemJnlCnt) || 0;
+    var totCnt = parseInt(s.totExprIemCnt) || 0;
+    var statusCls = jnlCnt > 0 ? (jnlCnt >= totCnt ? 'badge-done' : 'badge-progress') : 'badge-wait';
+    var statusTxt = jnlCnt > 0 ? (jnlCnt >= totCnt ? '완료' : jnlCnt+'/'+totCnt) : '미작성';
+
+    html += '<div class="sample-row" onclick="selectSample('+i+')" id="sample-'+i+'">';
+    html += '<div class="row-top"><span class="row-no">' + (s.sploreRceptNo || '-') + '</span>';
+    html += '<span class="row-status '+statusCls+'">' + statusTxt + '</span></div>';
+    html += '<div class="row-bottom">';
+    html += '<span>' + (s.sploreNm || s.prductNm || '-') + '</span>';
+    html += '<span>' + (s.entrpsNm || '') + '</span>';
+    html += '<span>' + (s.rceptDeStr || s.rceptDe || '') + '</span>';
+    html += '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+/* ============================================================
+   시료 선택 → 시험항목 조회 (0202)
+   ============================================================ */
+async function selectSample(idx) {
+  currentSample = allSamples[idx];
+  currentExprItem = null;
+  currentExprItemIdx = -1;
+
+  // UI 활성화
+  document.querySelectorAll('.sample-row').forEach(function(el) { el.classList.remove('active'); });
+  var row = document.getElementById('sample-'+idx);
+  if (row) row.classList.add('active');
+
+  // 일지 패널 초기화
+  document.getElementById('diary-panel').innerHTML = '<div class="empty-state"><div class="icon">📓</div>시험항목을 선택하세요</div>';
+
+  // 시험항목 조회
+  document.getElementById('item-list').innerHTML = '<div class="loading"><div class="spinner"></div>시험항목 조회 중...</div>';
+
+  if (currentSample._firestore) {
+    // Firestore 데이터 → 로컬 항목
+    var items = currentSample._data.testItems || currentSample._data.samples || [];
+    if (items.length === 0 && currentSample._data.samples) {
+      items = [];
+      (currentSample._data.samples || []).forEach(function(s) {
+        (s.testItems || []).forEach(function(t) { items.push(t); });
+      });
+    }
+    allExprItems = items.map(function(t, i) {
+      return {
+        exprIemSn: String(i+1),
+        exprIemNm: t.testItemName || t.name || '-',
+        exprIemCode: t.testItemCode || '',
+        stndrdValue: t.standard || t.stndrdValue || '',
+        resultValue: t.measuredValue || '',
+        diaryCn: '',
+        jnlRegistAt: '',
+        exprDiarySn: '',
+        _local: true
+      };
+    });
+    renderExprItems();
+  } else {
+    // 식약처 API (0202)
+    try {
+      var params = {
+        sploreReqestNo: currentSample.sploreReqestNo || currentSample.sploreRceptNo,
+        sploreSn: currentSample.sploreSn || '1'
+      };
+      var res = await MFDS.selectListExprDiaryExprIem(params);
+      if (res && res.resultFlag === '1' && res.resultData) {
+        allExprItems = Array.isArray(res.resultData) ? res.resultData : [res.resultData];
+      } else {
+        allExprItems = [];
+      }
+      renderExprItems();
+    } catch(e) {
+      console.error('항목 조회 오류:', e);
+      document.getElementById('item-list').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div>항목 조회 실패</div>';
+    }
+  }
+}
+
+function renderExprItems() {
+  var el = document.getElementById('item-list');
+  document.getElementById('item-count').textContent = allExprItems.length + '건';
+
+  if (!allExprItems.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📋</div>시험항목이 없습니다</div>';
+    return;
+  }
+
+  var html = '';
+  allExprItems.forEach(function(item, i) {
+    var hasDiary = item.jnlRegistAt === 'Y' || item.exprDiarySn;
+    var diaryBadge = hasDiary ? '<span class="diary-badge registered">등록</span>' : '<span class="diary-badge empty">미등록</span>';
+    var codeTag = item.exprIemCode ? '<span class="item-code">' + item.exprIemCode + '</span>' : '';
+    var stdTag = item.stndrdValue ? '<span class="item-std" title="'+item.stndrdValue+'">' + item.stndrdValue + '</span>' : '';
+
+    html += '<div class="item-row" onclick="selectExprItem('+i+')" id="item-'+i+'">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<span class="item-name">' + (item.exprIemNm || '-') + '</span>';
+    html += diaryBadge;
+    html += '</div>';
+    html += '<div class="item-meta">';
+    html += codeTag;
+    html += stdTag;
+    if (item.resultValue) html += '<span>결과: ' + item.resultValue + '</span>';
+    html += '<span>순번: ' + (item.exprIemSn || (i+1)) + '</span>';
+    html += '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+/* ============================================================
+   시험항목 선택 → 일지 편집 패널 렌더링
+   ============================================================ */
+async function selectExprItem(idx) {
+  currentExprItem = allExprItems[idx];
+  currentExprItemIdx = idx;
+
+  document.querySelectorAll('.item-row').forEach(function(el) { el.classList.remove('active'); });
+  var row = document.getElementById('item-'+idx);
+  if (row) row.classList.add('active');
+
+  renderDiaryPanel();
+
+  // 시험방법 자동 조회 (항목코드가 있으면)
+  if (currentExprItem.exprIemCode) {
+    loadTestMethods(currentExprItem.exprIemCode);
+  }
+}
+
+function renderDiaryPanel() {
+  var item = currentExprItem;
+  if (!item) return;
+
+  var html = '<div class="diary-section">';
+
+  // 시험항목 정보
+  html += '<h4><span class="icon">🔬</span> ' + (item.exprIemNm || '-') + '</h4>';
+
+  // 항목코드 + 기준규격 영역
+  html += '<div class="spec-box">';
+  html += '<div class="spec-title"><span>📐</span> 시험항목 코드 & 기준규격</div>';
+  html += '<div class="form-row">';
+  html += '<div class="form-group"><label>항목코드</label>';
+  html += '<input type="text" id="diary-item-code" value="' + (item.exprIemCode || '') + '" placeholder="B70004" style="font-family:monospace">';
+  html += '</div>';
+  html += '<div class="form-group"><label>기준규격</label>';
+  html += '<div style="display:flex;gap:6px">';
+  html += '<input type="text" id="diary-standard" value="' + (item.stndrdValue || '') + '" placeholder="규격값" style="flex:1">';
+  html += '<button class="btn btn-sm btn-outline" onclick="openSpecModal()" title="기준규격 조회/선택">선택</button>';
+  html += '</div></div>';
+  html += '</div>'; // form-row
+
+  // 단위, 판정형식
+  html += '<div class="form-row">';
+  html += '<div class="form-group"><label>단위</label><input type="text" id="diary-unit" value="' + (item.unitNm || item.unitCode || '') + '" placeholder="mg/kg"></div>';
+  html += '<div class="form-group"><label>판정형식</label><select id="diary-judge-form">';
+  html += '<option value="">선택</option>';
+  html += '<option value="IM15000001"' + (item.jdgmntFomCode==='IM15000001'?' selected':'') + '>범위판정</option>';
+  html += '<option value="IM15000002"' + (item.jdgmntFomCode==='IM15000002'?' selected':'') + '>적부판정</option>';
+  html += '<option value="IM15000003"' + (item.jdgmntFomCode==='IM15000003'?' selected':'') + '>정량판정</option>';
+  html += '<option value="IM15000004"' + (item.jdgmntFomCode==='IM15000004'?' selected':'') + '>정성판정</option>';
+  html += '</select></div>';
+  html += '</div>'; // form-row
+  html += '</div>'; // spec-box
+
+  // 시험방법 선택
+  html += '<div class="form-group">';
+  html += '<label>시험방법 <button class="btn btn-sm btn-outline" onclick="loadTestMethods(document.getElementById(\'diary-item-code\').value)" style="margin-left:8px;padding:2px 8px;font-size:11px">조회</button></label>';
+  html += '<div id="method-list" class="method-list"><div style="font-size:12px;color:#999">항목코드 입력 후 조회하세요</div></div>';
+  html += '</div>';
+
+  // 일지 양식 선택
+  html += '<div class="form-group">';
+  html += '<label>일지 양식</label>';
+  html += '<select id="diary-form-select" onchange="onFormSelect(this.value)" style="width:100%">';
+  html += '<option value="">-- 양식 선택 --</option>';
+  html += '<option value="general">일반 시험일지</option>';
+  html += '<option value="chem">이화학 시험일지</option>';
+  html += '<option value="micro">미생물 시험일지</option>';
+  html += '<option value="metal">중금속 시험일지</option>';
+  html += '<option value="memo">간이 메모</option>';
+  html += '</select>';
+  html += '</div>';
+
+  // 일지 내용
+  html += '<div class="form-group">';
+  html += '<label>시험일지 내용</label>';
+  html += '<div class="diary-content-area" contenteditable="true" id="diary-content">' + (item.diaryCn || '') + '</div>';
+  html += '</div>';
+
+  // 계산식 영역
+  html += '<div class="form-group">';
+  html += '<label>계산식 <small style="color:#999">(수식: ' + (item.nomfrmCn || '미설정') + ')</small></label>';
+  html += '<div class="form-row">';
+  html += '<div class="form-group"><label style="font-size:10px">수식</label><input type="text" id="calc-formula" value="' + (item.nomfrmCn || '') + '" placeholder="X1+X2"></div>';
+  html += '<div class="form-group"><label style="font-size:10px">유효자리수</label><input type="text" id="calc-valid" value="' + (item.validCphr || '3') + '" placeholder="3"></div>';
+  html += '<div class="form-group"><label style="font-size:10px">결과값</label><input type="text" id="calc-result" value="' + (item.resultValue || '') + '" placeholder="자동계산" readonly style="background:#f0f0f0"></div>';
+  html += '</div>';
+  html += '<div class="calc-grid" id="calc-grid">';
+  for (var xi = 1; xi <= 5; xi++) {
+    html += '<div><label>X'+xi+'</label><input type="text" id="calc-x'+xi+'" placeholder="X'+xi+'" onchange="calculateResult()"></div>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // 버튼
+  html += '<div class="btn-group">';
+  html += '<button class="btn btn-primary" onclick="saveDiary()">식약처 등록</button>';
+  html += '<button class="btn btn-outline" onclick="saveDiaryLocal()">Firestore 저장</button>';
+  if (item.exprDiarySn || item.jnlRegistAt === 'Y') {
+    html += '<button class="btn btn-outline" onclick="loadDiaryDetail()">상세조회</button>';
+    html += '<button class="btn btn-danger btn-sm" onclick="deleteDiary()">삭제</button>';
+    html += '<button class="btn btn-outline btn-sm" onclick="copyDiary()">복사</button>';
+  }
+  html += '</div>';
+
+  html += '</div>'; // diary-section
+  document.getElementById('diary-panel').innerHTML = html;
+}
+
+/* ============================================================
+   시험방법 조회 (I-LMS-0241)
+   ============================================================ */
+async function loadTestMethods(exprIemCode) {
+  if (!exprIemCode) { showToast('항목코드를 입력하세요', 'error'); return; }
+
+  var el = document.getElementById('method-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>시험방법 조회 중...</div>';
+
+  try {
+    var res = await MFDS.selectListExprMth({ exprIemCode: exprIemCode });
+    if (res && res.resultData) {
+      var methods = Array.isArray(res.resultData) ? res.resultData : [res.resultData];
+      if (methods.length === 0) {
+        el.innerHTML = '<div style="font-size:12px;color:#999">시험방법 없음</div>';
+        return;
+      }
+      var html = '';
+      methods.forEach(function(m, i) {
+        html += '<div class="method-item" onclick="selectMethod(this,'+i+',\''+m.codeNo+'\')" data-sn="'+m.codeNo+'">';
+        html += '<span>' + (m.codeName || '-') + '</span>';
+        html += '<span class="method-code">' + (m.codeNo || '') + '</span>';
+        html += '</div>';
+      });
+      el.innerHTML = html;
+      // 첫번째 자동 선택하여 양식 드롭다운 업데이트
+      if (methods.length > 0) {
+        loadDiaryFormsForMethod(methods[0].codeNo);
+      }
+    } else {
+      el.innerHTML = '<div style="font-size:12px;color:#999">시험방법 없음</div>';
+    }
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:#e44">조회 실패: ' + (e.message || e) + '</div>';
+  }
+}
+
+function selectMethod(el, idx, sn) {
+  document.querySelectorAll('.method-item').forEach(function(m) { m.classList.remove('selected'); });
+  el.classList.add('selected');
+  loadDiaryFormsForMethod(sn);
+}
+
+/* ============================================================
+   일지 양식 조회 (I-LMS-0242) - 시험방법순번 기반
+   ============================================================ */
+async function loadDiaryFormsForMethod(exprMthSn) {
+  var sel = document.getElementById('diary-form-select');
+  if (!sel) return;
+
+  try {
+    // 사용범위: 개인 → 부서 → 기관 순서
+    var scopes = ['SY05000003','SY05000002','SY05000001'];
+    var allForms = [];
+    for (var i = 0; i < scopes.length; i++) {
+      var res = await MFDS.selectListExprDiaryForm({ exprMthSn: String(exprMthSn), useScopeCode: scopes[i] });
+      if (res && res.resultData) {
+        var forms = Array.isArray(res.resultData) ? res.resultData : [res.resultData];
+        forms.forEach(function(f) { f._scope = scopes[i]; allForms.push(f); });
+      }
+    }
+
+    // 기본 내장 양식 유지 + API 양식 추가
+    var html = '<option value="">-- 양식 선택 --</option>';
+    html += '<optgroup label="기본 양식">';
+    html += '<option value="general">일반 시험일지</option>';
+    html += '<option value="chem">이화학 시험일지</option>';
+    html += '<option value="micro">미생물 시험일지</option>';
+    html += '<option value="metal">중금속 시험일지</option>';
+    html += '<option value="memo">간이 메모</option>';
+    html += '</optgroup>';
+    if (allForms.length > 0) {
+      html += '<optgroup label="식약처 양식 ('+allForms.length+'건)">';
+      allForms.forEach(function(f, i) {
+        html += '<option value="mfds_'+i+'" data-idx="'+i+'">' + (f.codename || '양식 '+(i+1)) + '</option>';
+      });
+      html += '</optgroup>';
+    }
+    sel.innerHTML = html;
+    sel._mfdsForms = allForms;
+  } catch(e) {
+    console.warn('양식 조회 실패:', e);
+  }
+}
+
+/* ============================================================
+   양식 선택 시 일지 내용에 적용
+   ============================================================ */
+function onFormSelect(val) {
+  var contentEl = document.getElementById('diary-content');
+  if (!contentEl) return;
+
+  var templates = {
+    'general': '1. 시험 목적\n\n2. 시험 방법\n\n3. 시험 과정\n\n4. 시험 결과\n\n5. 고찰',
+    'chem': '1. 시험 목적\n\n2. 시약 및 기구\n  - 시약:\n  - 기구:\n\n3. 시험 방법\n  - 전처리:\n  - 분석:\n\n4. 시험 결과\n  - 측정값:\n  - 계산:\n\n5. 판정',
+    'micro': '1. 시험 목적\n\n2. 배지 및 기구\n  - 배지:\n  - 기구:\n\n3. 시험 방법\n  - 검체 조제:\n  - 접종:\n  - 배양 조건:\n\n4. 시험 결과\n  - 집락수:\n  - 계산:\n\n5. 판정',
+    'metal': '1. 시험 목적\n\n2. 시약 및 기구\n  - 표준용액:\n  - 기기: ICP / AAS\n\n3. 전처리\n  - 습식분해 / 건식회화 / 마이크로웨이브\n\n4. 분석 조건\n  - 파장:\n  - 검량선:\n\n5. 시험 결과\n  - 측정값:\n  - 환산값:\n\n6. 판정',
+    'memo': ''
+  };
+
+  if (templates[val] !== undefined) {
+    contentEl.innerText = templates[val];
+  } else if (val.startsWith('mfds_')) {
+    var sel = document.getElementById('diary-form-select');
+    var forms = sel._mfdsForms || [];
+    var fidx = parseInt(val.replace('mfds_',''));
+    if (forms[fidx] && forms[fidx].codename2) {
+      contentEl.innerHTML = forms[fidx].codename2;
+    }
+  }
+}
+
+/* ============================================================
+   기준규격 선택 모달 (I-LMS-0708)
+   ============================================================ */
+async function openSpecModal() {
+  var modal = document.getElementById('spec-modal');
+  var body = document.getElementById('spec-modal-body');
+  modal.classList.add('active');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div>기준규격 조회 중...</div>';
+
+  _specResults = [];
+  _selectedSpecIdx = -1;
+
+  try {
+    // 1) 공통기준규격종류 조회 (0113) - 업무분야별
+    var kndRes = await MFDS.selectListCmmnStdrStndrdKnd({
+      jobRealmCode: 'IM36000001', // 식품
+      useAt: 'Y'
+    });
+    var kndList = [];
+    if (kndRes && kndRes.resultData) {
+      kndList = Array.isArray(kndRes.resultData) ? kndRes.resultData : [kndRes.resultData];
+    }
+
+    // 2) 시험항목공통기준규격 조회 (0708)
+    var specRes = await MFDS.selectListExprIemCmmnStdrStndrd({
+      jobRealmCode: 'IM36000001',
+      useAt: 'Y'
+    });
+    var specList = [];
+    if (specRes && specRes.resultData) {
+      specList = Array.isArray(specRes.resultData) ? specRes.resultData : [specRes.resultData];
+    }
+
+    // 현재 항목명으로 필터링
+    var itemName = currentExprItem ? (currentExprItem.exprIemNm || '') : '';
+    if (itemName) {
+      var filtered = specList.filter(function(s) {
+        return (s.exprIemNm || '').indexOf(itemName) >= 0;
+      });
+      if (filtered.length > 0) specList = filtered;
+    }
+
+    _specResults = specList;
+
+    // 렌더링
+    var html = '';
+
+    // 규격종류 선택 (필터)
+    if (kndList.length > 0) {
+      html += '<div class="form-group"><label>규격종류 필터</label>';
+      html += '<select id="spec-knd-filter" onchange="filterSpecByKnd(this.value)" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">';
+      html += '<option value="">전체 (' + specList.length + '건)</option>';
+      kndList.forEach(function(k) {
+        html += '<option value="'+k.cmmnKndCode+'">'+k.cmmnKndNm+' ('+k.prdlstCode+')</option>';
+      });
+      html += '</select></div>';
+    }
+
+    html += '<div id="spec-table-wrap">';
+    html += renderSpecTable(specList);
+    html += '</div>';
+
+    body.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999">기준규격 데이터가 없습니다</div>';
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px;text-align:center;color:#e44">조회 실패: ' + (e.message||e) + '</div>';
+  }
+}
+
+function renderSpecTable(list) {
+  if (!list || !list.length) return '<div style="padding:12px;color:#999;text-align:center">해당 항목 없음</div>';
+
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">';
+  html += '<thead><tr style="background:#f0f0f0">';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd;width:30px"></th>';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd">시험항목</th>';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd">규격값</th>';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd">최소값</th>';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd">최대값</th>';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd">단위</th>';
+  html += '<th style="padding:6px 8px;border:1px solid #ddd">종류</th>';
+  html += '</tr></thead><tbody>';
+
+  list.forEach(function(s, i) {
+    html += '<tr style="cursor:pointer;' + (_selectedSpecIdx===i?'background:#dbeafe':'') + '" onclick="selectSpecRow('+i+')" id="spec-row-'+i+'">';
+    html += '<td style="padding:4px 8px;border:1px solid #eee;text-align:center"><input type="radio" name="spec-radio" ' + (_selectedSpecIdx===i?'checked':'') + '></td>';
+    html += '<td style="padding:4px 8px;border:1px solid #eee">' + (s.exprIemNm||'-') + '</td>';
+    html += '<td style="padding:4px 8px;border:1px solid #eee;font-weight:600">' + (s.sdspcValue||'-') + '</td>';
+    html += '<td style="padding:4px 8px;border:1px solid #eee">' + (s.mummValue||'-') + '</td>';
+    html += '<td style="padding:4px 8px;border:1px solid #eee">' + (s.mxmmValue||'-') + '</td>';
+    html += '<td style="padding:4px 8px;border:1px solid #eee">' + (s.unitCode||'-') + '</td>';
+    html += '<td style="padding:4px 8px;border:1px solid #eee;font-size:11px">' + (s.cmmnKndNm||'-') + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function selectSpecRow(idx) {
+  _selectedSpecIdx = idx;
+  document.querySelectorAll('[id^="spec-row-"]').forEach(function(r) { r.style.background=''; });
+  var row = document.getElementById('spec-row-'+idx);
+  if (row) row.style.background = '#dbeafe';
+  var radios = document.querySelectorAll('input[name="spec-radio"]');
+  if (radios[idx]) radios[idx].checked = true;
+}
+
+function filterSpecByKnd(kndCode) {
+  var filtered = kndCode ? _specResults.filter(function(s) { return s.cmmnKndCode === kndCode; }) : _specResults;
+  document.getElementById('spec-table-wrap').innerHTML = renderSpecTable(filtered);
+}
+
+function applySelectedSpec() {
+  if (_selectedSpecIdx < 0) { showToast('규격을 선택하세요', 'error'); return; }
+  var spec = _specResults[_selectedSpecIdx];
+  if (!spec) return;
+
+  var stdInput = document.getElementById('diary-standard');
+  var unitInput = document.getElementById('diary-unit');
+  if (stdInput) stdInput.value = spec.sdspcValue || '';
+  if (unitInput) unitInput.value = spec.unitCode || '';
+
+  // 현재 항목에도 반영
+  if (currentExprItem) {
+    currentExprItem.stndrdValue = spec.sdspcValue || '';
+    currentExprItem.unitCode = spec.unitCode || '';
+    currentExprItem.mummValue = spec.mummValue || '';
+    currentExprItem.mxmmValue = spec.mxmmValue || '';
+    currentExprItem.jdgmntFomCode = spec.jdgmntFomCode || '';
+    currentExprItem.validCphr = spec.validCphr || '';
+  }
+
+  closeSpecModal();
+  showToast('기준규격 적용: ' + (spec.exprIemNm || '') + ' / ' + (spec.sdspcValue || ''), 'success');
+}
+
+function closeSpecModal() {
+  document.getElementById('spec-modal').classList.remove('active');
+}
+
+/* ============================================================
+   계산식 결과 계산
+   ============================================================ */
+function calculateResult() {
+  var formula = (document.getElementById('calc-formula') || {}).value || '';
+  if (!formula) return;
+
+  var vals = {};
+  for (var i = 1; i <= 15; i++) {
+    var inp = document.getElementById('calc-x'+i);
+    vals['X'+i] = inp ? parseFloat(inp.value) || 0 : 0;
+    vals['x'+i] = vals['X'+i];
+  }
+
+  try {
+    var expr = formula;
+    Object.keys(vals).forEach(function(k) {
+      expr = expr.replace(new RegExp(k, 'g'), vals[k]);
+    });
+    var result = eval(expr);
+    var validCphr = parseInt((document.getElementById('calc-valid') || {}).value) || 3;
+    result = parseFloat(result.toFixed(validCphr));
+    document.getElementById('calc-result').value = result;
+  } catch(e) {
+    document.getElementById('calc-result').value = 'ERR';
+  }
+}
+
+/* ============================================================
+   시험일지 등록 (식약처 API - 0208/0209)
+   ============================================================ */
+async function saveDiary() {
+  if (!currentSample || !currentExprItem) { showToast('시료와 시험항목을 선택하세요', 'error'); return; }
+
+  var contentEl = document.getElementById('diary-content');
+  var diaryCn = contentEl ? contentEl.innerText : '';
+  if (!diaryCn.trim()) { showToast('일지 내용을 입력하세요', 'error'); return; }
+
+  try {
+    showToast('식약처 일지 등록 중...', 'info');
+
+    var sploreReqestNo = currentSample.sploreReqestNo || currentSample.sploreRceptNo;
+    var sploreSn = currentSample.sploreSn || '1';
+    var exprIemSn = currentExprItem.exprIemSn || String(currentExprItemIdx + 1);
+
+    var params = {
+      sploreReqestNo: sploreReqestNo,
+      sploreSn: sploreSn,
+      diaryCn: diaryCn,
+      oldExprDiarySn: currentExprItem.exprDiarySn || '',
+      exprIemLst: [{ exprIemSn: exprIemSn }]
+    };
+
+    var res = await MFDS.insertExprDiary(params);
+    if (res && (res.resultFlag === '1')) {
+      var sn = (res.resultData && res.resultData.exprdiarysn) || (res.resultData && res.resultData[0] && res.resultData[0].exprdiarysn) || '';
+      currentExprItem.exprDiarySn = sn;
+      currentExprItem.jnlRegistAt = 'Y';
+      currentExprItem.diaryCn = diaryCn;
+
+      // 계산식 결과도 있으면 등록
+      var calcResult = (document.getElementById('calc-result') || {}).value;
+      var calcFormula = (document.getElementById('calc-formula') || {}).value;
+      if (calcResult && calcResult !== 'ERR' && calcFormula) {
+        await saveCalcResult(sploreReqestNo, sploreSn, exprIemSn, sn, calcFormula, calcResult);
+      }
+
+      renderExprItems(); // 목록 갱신
+      showToast('시험일지 등록 완료' + (sn ? ' (SN: '+sn+')' : ''), 'success');
+    } else {
+      showToast('등록 실패: ' + (res.errorMessage || ''), 'error');
+    }
+  } catch(e) {
+    console.error('일지 등록 오류:', e);
+    showToast('일지 등록 실패: ' + (e.message || e), 'error');
+  }
+}
+
+/* Firestore에 로컬 저장 */
+async function saveDiaryLocal() {
+  if (!currentSample || !currentExprItem) { showToast('선택 필요', 'error'); return; }
+
+  var contentEl = document.getElementById('diary-content');
+  var diaryCn = contentEl ? contentEl.innerText : '';
+  var itemCode = (document.getElementById('diary-item-code') || {}).value || '';
+  var standard = (document.getElementById('diary-standard') || {}).value || '';
+  var unit = (document.getElementById('diary-unit') || {}).value || '';
+
+  var docId = (currentSample.sploreRceptNo || currentSample._firestoreId || 'unknown') + '_diary_' + currentExprItemIdx;
+
+  try {
+    await db.collection('testDiaries').doc(docId).set({
+      sampleId: currentSample.sploreRceptNo || currentSample._firestoreId,
+      sampleName: currentSample.sploreNm || currentSample.prductNm,
+      exprIemIdx: currentExprItemIdx,
+      exprIemNm: currentExprItem.exprIemNm || '',
+      exprIemCode: itemCode,
+      stndrdValue: standard,
+      unitCode: unit,
+      diaryCn: diaryCn,
+      calcFormula: (document.getElementById('calc-formula') || {}).value || '',
+      calcResult: (document.getElementById('calc-result') || {}).value || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    showToast('Firestore 저장 완료', 'success');
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+  }
+}
+
+/* ============================================================
+   계산식 결과 등록 (I-LMS-0210)
+   ============================================================ */
+async function saveCalcResult(sploreReqestNo, sploreSn, exprIemSn, exprDiarySn, formula, result) {
+  var xVals = {};
+  for (var i = 1; i <= 15; i++) {
+    var inp = document.getElementById('calc-x'+i);
+    xVals['x'+i] = inp ? (inp.value || '') : '';
+  }
+
+  var params = {
+    sploreReqestNo: sploreReqestNo,
+    sploreSn: sploreSn,
+    value: {
+      sploreReqestNo: sploreReqestNo,
+      sploreSn: sploreSn,
+      exprIemSn: exprIemSn,
+      calcLawSn: '',
+      resultValue: String(result),
+      nomfrmNm: '',
+      nomfrmCn: formula,
+      validCphr: (document.getElementById('calc-valid') || {}).value || '3'
+    },
+    insertList: [xVals],
+    exprDiarySn: exprDiarySn || ''
+  };
+
+  try {
+    await MFDS.insertExprDiaryCalcFrmlaResult(params);
+  } catch(e) {
+    console.warn('계산식 등록 실패:', e);
+  }
+}
+
+/* ============================================================
+   시험일지 상세조회 (I-LMS-0243)
+   ============================================================ */
+async function loadDiaryDetail() {
+  if (!currentSample || !currentExprItem) { showToast('항목을 선택하세요', 'error'); return; }
+
+  try {
+    showToast('일지 상세 조회 중...', 'info');
+    var params = {
+      sploreReqestNo: currentSample.sploreReqestNo || currentSample.sploreRceptNo,
+      sploreSn: currentSample.sploreSn || '1',
+      exprIemSn: currentExprItem.exprIemSn || String(currentExprItemIdx + 1)
+    };
+    var res = await MFDS.selectExprDiary(params);
+    if (res && res.resultFlag === '1' && res.resultData) {
+      var data = Array.isArray(res.resultData) ? res.resultData[0] : res.resultData;
+      if (data) {
+        var contentEl = document.getElementById('diary-content');
+        if (contentEl && data.diaryCn) contentEl.innerText = data.diaryCn;
+        if (data.nomfrmCn) {
+          var fEl = document.getElementById('calc-formula');
+          if (fEl) fEl.value = data.nomfrmCn;
+        }
+        if (data.resultValue) {
+          var rEl = document.getElementById('calc-result');
+          if (rEl) rEl.value = data.resultValue;
+        }
+        currentExprItem.exprDiarySn = data.exprDiarySn || '';
+        showToast('일지 조회 완료', 'success');
+      } else {
+        showToast('등록된 일지 없음', 'info');
+      }
+    } else {
+      showToast('일지 없음', 'info');
+    }
+  } catch(e) {
+    showToast('조회 실패: ' + (e.message || e), 'error');
+  }
+}
+
+/* ============================================================
+   시험일지 삭제 (I-LMS-0211)
+   ============================================================ */
+async function deleteDiary() {
+  if (!currentSample || !currentExprItem) return;
+  if (!confirm('이 시험항목의 일지를 삭제합니까?')) return;
+
+  try {
+    var params = {
+      sploreReqestNo: currentSample.sploreReqestNo || currentSample.sploreRceptNo,
+      sploreSn: currentSample.sploreSn || '1',
+      exprIemLst: [{ exprIemSn: currentExprItem.exprIemSn || String(currentExprItemIdx + 1) }]
+    };
+    var res = await MFDS.deleteExprDiary(params);
+    if (res && res.resultFlag === '1') {
+      currentExprItem.exprDiarySn = '';
+      currentExprItem.jnlRegistAt = '';
+      currentExprItem.diaryCn = '';
+      renderExprItems();
+      renderDiaryPanel();
+      showToast('일지 삭제 완료', 'success');
+    } else {
+      showToast('삭제 실패: ' + (res.errorMessage || ''), 'error');
+    }
+  } catch(e) {
+    showToast('삭제 오류: ' + (e.message || e), 'error');
+  }
+}
+
+/* ============================================================
+   시험일지 복사 (I-LMS-0212)
+   ============================================================ */
+async function copyDiary() {
+  if (!currentExprItem || !currentExprItem.exprDiarySn) {
+    showToast('등록된 일지가 없어 복사할 수 없습니다', 'error');
+    return;
+  }
+  var target = prompt('복사할 대상 시험항목 순번을 입력하세요 (예: 2)');
+  if (!target) return;
+
+  try {
+    var params = {
+      exprDiarySn: currentExprItem.exprDiarySn,
+      exprIemLst: [{
+        sploreReqestNo: currentSample.sploreReqestNo || currentSample.sploreRceptNo,
+        sploreSn: currentSample.sploreSn || '1',
+        exprIemSn: target
+      }]
+    };
+    var res = await MFDS.saveExprDiaryCopy(params);
+    if (res && res.resultFlag === '1') {
+      showToast('일지 복사 완료 (항목 ' + target + ')', 'success');
+    } else {
+      showToast('복사 실패: ' + (res.errorMessage || ''), 'error');
+    }
+  } catch(e) {
+    showToast('복사 오류: ' + (e.message || e), 'error');
+  }
+}
+
+/* ============================================================
+   유틸리티
+   ============================================================ */
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  var m = document.getElementById('toast-msg');
+  m.textContent = msg;
+  t.className = 'toast active ' + (type || 'success');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() { t.classList.remove('active'); }, 3500);
+}
+</script>
+</body>
+</html>

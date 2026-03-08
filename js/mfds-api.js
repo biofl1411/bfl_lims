@@ -411,6 +411,37 @@ MFDS.selectListEmp = function(params) {
 };
 
 // ============================================================
+// 7-2. 주요 API 래퍼 함수 — 시험항목/기준규격 관리 (06xx/07xx)
+// ============================================================
+
+/**
+ * 시험항목 목록조회 (I-LMS-0610)
+ * @param {Object} params - { value: { jobRealmCode, exprIemNm, exprIemLclasCode, ... } }
+ * @returns {Promise<Object>} resultData: [{ exprIemNm, exprIemAbrvNm, exprIemEngNm, koreanNm, jobRealmCode }]
+ */
+MFDS.selectListExprIem = function(params) {
+  return MFDS.callApi('selectListExprIem', params);
+};
+
+/**
+ * 시험항목공통기준규격 목록조회 (I-LMS-0708)
+ * @param {Object} params - { cmmnKndCode, jobRealmCode, prdlstCode, useAt }
+ * @returns {Promise<Object>} resultData: [{ exprIemNm, sdspcValue, mummValue, mxmmValue, unitCode, ... }]
+ */
+MFDS.selectListExprIemCmmnStdrStndrd = function(params) {
+  return MFDS.callApi('selectListExprIemCmmnStdrStndrd', params);
+};
+
+/**
+ * 품목기준시험항목 목록조회 (I-LMS-0112)
+ * @param {Object} params - { jobRealmCode, prdlstCodeLst: [{prdlstCode}] }
+ * @returns {Promise<Object>} resultData: [{ exprIemNm, stndrdValue, unitNm, exprIemCode, ... }]
+ */
+MFDS.selectListPrdlstStdrExprIem = function(params) {
+  return MFDS.callApi('selectListPrdlstStdrExprIem', params);
+};
+
+// ============================================================
 // 8. 주요 API 래퍼 함수 — 공통 조회 (08xx)
 // ============================================================
 
