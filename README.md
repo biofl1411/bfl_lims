@@ -117,6 +117,7 @@ bfl_lims/
 │   └── bfl_logo.svg                 # BFL 로고
 ├── api_server.py                    # Flask REST API 서버 (식약처 데이터, port 5003)
 ├── collector.py                     # 식약처 데이터 수집기 (cron)
+├── testDiary.html                     # 시험결재 > 시험일지 (MFDS API 연동)
 ├── mfdsTest.html                    # ★ 식약처 API 연결 테스트 페이지
 └── deploy.ps1                       # 배포 스크립트
 ```
@@ -132,7 +133,7 @@ bfl_lims/
 | 1 | 대시보드 | — | 구현됨 | `index.html` |
 | 2 | 영업 관리 | 12개 | 부분 구현 | `salesMgmt.html` |
 | 3 | 접수 관리 | 7개 | 부분 구현 | `inspectionMgmt.html`, `sampleReceipt.html` |
-| 4 | 시험 결재 | 9개 | 부분 구현 | `itemAssign.html` |
+| 4 | 시험 결재 | 9개 | 부분 구현 | `itemAssign.html`, `testResultInput.html`, `testDiary.html` |
 | 5 | 성적 관리 | — | 미구현 | — |
 | 6 | 재무 관리 | — | 미구현 | — |
 | 7 | 통계 분석 | — | 미구현 | — |
@@ -881,8 +882,8 @@ git add . && git commit -m "작업 내용" && git push origin main
 | 탭 전환 | `showPage()` 감지 → salesMgmt.html 내부 탭 자동 전환 |
 | 아코디언 | `toggleMenu()` 등록 |
 
-**사용하는 HTML 파일** (8개):
-- `index.html`, `salesMgmt.html`, `companyRegForm_v2.html`, `sampleReceipt.html`, `itemAssign.html`, `userMgmt.html`, `inspectionMgmt.html`, `adminSettings.html`
+**사용하는 HTML 파일** (9개):
+- `index.html`, `salesMgmt.html`, `companyRegForm_v2.html`, `sampleReceipt.html`, `itemAssign.html`, `testResultInput.html`, `testDiary.html`, `userMgmt.html`, `inspectionMgmt.html`, `adminSettings.html`
 
 **메뉴 변경 시**: `js/sidebar.js`의 `SIDEBAR_MENU` 배열만 수정 → 8개 HTML 전체 자동 반영.
 
@@ -2889,3 +2890,32 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 - 영문명 컬럼에 영문 표시 개선 (현재 일부 비어있음)
 - testItemCode 없는 항목의 사용 체크박스 연동 완성
 - 참고용 칩 추가: 영양성분 칩 만들기 + 항목 구현
+
+### 2026-03-09
+
+#### 시험일지 전용 페이지 신규 생성 (`testDiary.html`)
+
+**수정 파일**: `testDiary.html` (신규), `js/mfds-api.js`, `js/sidebar.js`
+
+##### testDiary.html — 시험일지 관리 페이지
+- **3패널 레이아웃**: 시료목록(좌, 300px) / 시험항목(중, 유동) / 일지편집(우, 380px)
+- **시료 검색**: MFDS API(0201) 또는 Firestore `testResults` 폴백
+- **시험항목 목록**: 항목코드, 기준규격, 일지등록 상태 뱃지 표시
+- **일지편집기**:
+  - 시험항목코드 입력 + 기준규격 선택 모달 (0708 API)
+  - 시험방법 조회 (0241 API) → 양식 목록 (0242 API) + 내장 양식 5종
+  - ContentEditable 일지 내용 편집 영역
+  - 계산식 섹션 (x1~x5 변수 + 자동계산)
+- **기준규격 선택 모달**: 0708 API 조회 → 0113 규격종류 필터 → 라디오 선택 테이블
+  - 컬럼: 시험항목/규격값/최소값/최대값/단위/종류
+  - 선택 시 현재 항목에 자동 적용
+- **CRUD**: 저장(0208), 신규(0209), 상세(0243), 삭제(0211), 복사(0212)
+- **Firestore 저장**: 로컬 저장 기능 (MFDS API 미연결 시)
+
+##### mfds-api.js — API 래퍼 3개 추가
+- `MFDS.selectListExprIem()`: 시험항목 목록조회 (0610)
+- `MFDS.selectListExprIemCmmnStdrStndrd()`: 시험항목공통기준규격 목록조회 (0708)
+- `MFDS.selectListPrdlstStdrExprIem()`: 품목기준시험항목 목록조회 (0112)
+
+##### sidebar.js — 메뉴 추가
+- 시험결재 그룹에 "시험일지" 메뉴 추가 (`testDiary.html`, page: `testing-diary`)
