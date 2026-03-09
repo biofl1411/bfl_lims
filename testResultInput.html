@@ -232,6 +232,20 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .form-method-select{padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:white}
 .form-viewer-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
 .form-viewer-info{font-size:12px;color:#666;margin-left:auto}
+/* ====== 시험기록서 입력폼 스타일 ====== */
+.rec-type-tabs{display:flex;gap:6px;margin-bottom:12px}
+.rec-type-tab{padding:6px 14px;border-radius:18px;font-size:12px;background:#f1f5f9;border:2px solid transparent;cursor:pointer;transition:all .15s}
+.rec-type-tab:hover{background:#e2e8f0}
+.rec-type-tab.active{background:#2563eb;color:white;border-color:#2563eb}
+.rec-form{background:#f0f4ff;border:1px solid #d0d8f0;border-radius:8px;padding:14px;margin-top:8px}
+.rec-form-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.rec-form label{font-size:11px;color:#475569;display:block;margin-bottom:3px}
+.rec-form input{width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px}
+.rec-formula-box{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#334155;margin-top:6px;font-family:monospace}
+.rec-result-box{display:flex;gap:10px;align-items:center;margin-top:8px;padding:8px;background:#ecfdf5;border-radius:6px;border:1px solid #bbf7d0}
+.rec-result-label{font-size:12px;font-weight:600;color:#065f46}
+.rec-result-value{font-size:20px;font-weight:700;color:#059669}
+.rec-std-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 </style>
 </head>
 <body>
@@ -654,6 +668,64 @@ function renderRightPanel() {
   html += '<div class="form-group"><label>시험자</label><input type="text" id="diary-tester" value="' + (currentDiary.testerName || '') + '" placeholder="시험자명 입력" onchange="markModified()"></div>';
   html += '</div>';
   html += '<div class="form-group"><label>시험 메모</label><textarea id="diary-memo" rows="2" placeholder="시험 진행 관련 메모..." onchange="markModified()">' + (currentDiary.diaryMemo || '') + '</textarea></div>';
+
+  // ── 시험기록서 입력 패널 ──
+  html += '<div style="margin-top:10px;border-top:1px dashed #cbd5e1;padding-top:10px">';
+  html += '<strong style="font-size:13px;color:#1e3a5f;">📝 시험기록서 입력</strong>';
+  html += '<div class="rec-type-tabs" style="margin-top:8px">';
+  html += '<label class="rec-type-tab" onclick="switchRecType(\'heavymetal\',this)"><input type="radio" name="rec-type" value="heavymetal" style="display:none"> 중금속(Pb/Cd/As/Hg)</label>';
+  html += '<label class="rec-type-tab" onclick="switchRecType(\'micro\',this)"><input type="radio" name="rec-type" value="micro" style="display:none"> 미생물</label>';
+  html += '<label class="rec-type-tab" onclick="switchRecType(\'chem\',this)"><input type="radio" name="rec-type" value="chem" style="display:none"> 이화학</label>';
+  html += '<label class="rec-type-tab active" onclick="switchRecType(\'free\',this)"><input type="radio" name="rec-type" value="free" style="display:none" checked> 기타/자유입력</label>';
+  html += '</div>';
+  // 기타/자유입력 (기존 textarea — 숨겨진 상태가 아닌 기본 표시)
+  html += '<div id="rec-form-free"></div>';
+  // 중금속 폼
+  html += '<div id="rec-form-heavymetal" style="display:none" class="rec-form">';
+  html += '<div class="rec-form-row">';
+  html += '<div><label>검사자</label><input type="text" id="rec-tester" placeholder="검사자명" oninput="calcHeavyMetal()"></div>';
+  html += '<div><label>시험시작일</label><input type="date" id="rec-start-date" oninput="calcHeavyMetal()"></div>';
+  html += '<div><label>시험완료일</label><input type="date" id="rec-end-date" oninput="calcHeavyMetal()"></div>';
+  html += '</div>';
+  html += '<div class="rec-form-row">';
+  html += '<div><label>표준용액 제조일</label><input type="date" id="rec-std-date"></div>';
+  html += '<div><label>검체채취량(g)</label><input type="number" step="0.0001" id="rec-sample-weight" placeholder="예) 1.0384" oninput="calcHeavyMetal()"></div>';
+  html += '<div><label>최종볼륨(mL)</label><input type="number" id="rec-final-volume" value="50" oninput="calcHeavyMetal()"></div>';
+  html += '</div>';
+  html += '<div class="rec-form-row">';
+  html += '<div><label>시료 측정농도(µg/L)</label><input type="number" step="0.001" id="rec-sample-conc" placeholder="예) 0.023" oninput="calcHeavyMetal()"></div>';
+  html += '<div><label>Blank 측정농도(µg/L)</label><input type="number" step="0.001" id="rec-blank-conc" placeholder="예) 0.000" oninput="calcHeavyMetal()"></div>';
+  html += '<div><label>희석배수</label><input type="number" id="rec-dilution" value="1" oninput="calcHeavyMetal()"></div>';
+  html += '</div>';
+  html += '<div class="rec-form-row" style="grid-template-columns:1fr">';
+  html += '<div><label>음용희석배수</label><input type="number" id="rec-drink-dilution" value="1" style="max-width:200px" oninput="calcHeavyMetal()"></div>';
+  html += '</div>';
+  // 표준용액 측정값
+  html += '<div style="margin-top:6px"><label style="font-size:11px;color:#475569;margin-bottom:4px;display:block">표준용액 측정값 (µg/L)</label>';
+  html += '<div class="rec-std-row">';
+  html += '<div><label style="font-size:10px;text-align:center">STD</label><input type="number" id="rec-std0" placeholder="100.3"></div>';
+  html += '<div><label style="font-size:10px;text-align:center">STD1</label><input type="number" id="rec-std1" placeholder=""></div>';
+  html += '<div><label style="font-size:10px;text-align:center">STD2</label><input type="number" id="rec-std2" placeholder=""></div>';
+  html += '<div><label style="font-size:10px;text-align:center">STD3</label><input type="number" id="rec-std3" placeholder=""></div>';
+  html += '<div><label style="font-size:10px;text-align:center">STD4</label><input type="number" id="rec-std4" placeholder=""></div>';
+  html += '<div><label style="font-size:10px;text-align:center">STD5</label><input type="number" id="rec-std5" placeholder=""></div>';
+  html += '<div><label style="font-size:10px;text-align:center">단위</label><div style="padding:6px 0;font-size:11px;text-align:center">µg/L</div></div>';
+  html += '</div></div>';
+  // 수식 미리보기
+  html += '<div class="rec-formula-box" id="rec-formula-preview">값을 입력하면 계산식이 표시됩니다</div>';
+  // 결과
+  html += '<div class="rec-result-box">';
+  html += '<span class="rec-result-label">결과(mg/kg):</span>';
+  html += '<input type="text" id="rec-result-value" readonly style="font-size:20px;font-weight:700;color:#059669;border:none;background:transparent;width:100px;text-align:center">';
+  html += '<span class="rec-result-label" style="margin-left:auto">판정:</span>';
+  html += '<input type="text" id="rec-judgment" readonly style="font-size:16px;font-weight:700;border:none;background:transparent;width:60px;text-align:center">';
+  html += '</div>';
+  html += '</div>'; // rec-form-heavymetal
+  // 미생물/이화학 (추후 구현 — 현재는 안내문)
+  html += '<div id="rec-form-micro" style="display:none" class="rec-form"><div style="color:#666;font-size:12px">미생물 기록서 양식은 추후 구현 예정입니다. 기타/자유입력을 사용해주세요.</div></div>';
+  html += '<div id="rec-form-chem" style="display:none" class="rec-form"><div style="color:#666;font-size:12px">이화학 기록서 양식은 추후 구현 예정입니다. 기타/자유입력을 사용해주세요.</div></div>';
+  html += '</div>'; // 시험기록서 입력 패널 끝
+
   if (currentDiary.exprDiarySn) {
     html += '<div class="mfds-info submitted">식약처 시험일지 등록 완료 (SN: ' + currentDiary.exprDiarySn + ')</div>';
   }
@@ -1303,13 +1375,15 @@ async function confirmMfdsSubmit() {
     var exprDiarySn = diary.exprDiarySn;
 
     if (!exprDiarySn) {
-      // 일지 내용: 양식 내용 + 사용자 메모 결합
-      var diaryCn = '';
-      if (_selectedDiaryForm && (_selectedDiaryForm.codename2 || _selectedDiaryForm.formContent)) {
-        diaryCn = _selectedDiaryForm.codename2 || _selectedDiaryForm.formContent;
-        if (diary.diaryMemo) diaryCn += '\n\n' + diary.diaryMemo;
-      } else {
-        diaryCn = diary.diaryMemo || '시험 진행';
+      // 일지 내용: 시험기록서 또는 양식 내용 + 사용자 메모
+      var diaryCn = generateDiaryCn();
+      if (!diaryCn || diaryCn.trim() === '') {
+        if (_selectedDiaryForm && (_selectedDiaryForm.codename2 || _selectedDiaryForm.formContent)) {
+          diaryCn = _selectedDiaryForm.codename2 || _selectedDiaryForm.formContent;
+          if (diary.diaryMemo) diaryCn += '\n\n' + diary.diaryMemo;
+        } else {
+          diaryCn = diary.diaryMemo || '시험 진행';
+        }
       }
 
       // 시험항목 목록 구성
@@ -2004,6 +2078,139 @@ async function copyDiary() {
     console.error('일지 복사 오류:', e);
     showToast('복사 실패: ' + (e.message || e), 'error');
   }
+}
+
+/* ============================================================
+   시험기록서 — 유형 탭 전환
+   ============================================================ */
+function switchRecType(type, el) {
+  // 탭 active 전환
+  var tabs = document.querySelectorAll('.rec-type-tab');
+  tabs.forEach(function(t) { t.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  // radio 체크
+  var radio = el ? el.querySelector('input[type=radio]') : null;
+  if (radio) radio.checked = true;
+  // 폼 표시/숨기기
+  ['heavymetal','micro','chem','free'].forEach(function(t) {
+    var form = document.getElementById('rec-form-' + t);
+    if (form) form.style.display = (t === type) ? 'block' : 'none';
+  });
+}
+
+/* ============================================================
+   시험기록서 — 중금속 자동계산
+   ============================================================ */
+function calcHeavyMetal() {
+  var sampleConc = parseFloat(document.getElementById('rec-sample-conc').value) || 0;
+  var blankConc = parseFloat(document.getElementById('rec-blank-conc').value) || 0;
+  var finalVolume = parseFloat(document.getElementById('rec-final-volume').value) || 50;
+  var dilution = parseFloat(document.getElementById('rec-dilution').value) || 1;
+  var sampleWeight = parseFloat(document.getElementById('rec-sample-weight').value) || 0;
+  var drinkDilution = parseFloat(document.getElementById('rec-drink-dilution').value) || 1;
+  if (sampleWeight <= 0) return;
+
+  var result = (sampleConc - blankConc) * finalVolume * dilution / sampleWeight * (1/1000) / drinkDilution;
+  result = Math.max(0, result);
+
+  var resultStr = result < 0.01 ? '0.0' : result.toFixed(2);
+
+  document.getElementById('rec-result-value').value = resultStr;
+
+  // 수식 미리보기
+  var preview = '(' + sampleConc + ' - ' + blankConc + ') × ' + finalVolume + ' × ' + dilution + ' / ' + sampleWeight + ' × 1/1000 ÷ ' + drinkDilution;
+  var previewEl = document.getElementById('rec-formula-preview');
+  if (previewEl) previewEl.textContent = preview + ' = ' + resultStr + ' mg/kg';
+
+  // 판정 (기준규격)
+  var maxVal = 0.3;
+  try { maxVal = parseFloat((currentTestItems[currentSampleIdx] || [{}])[0].maxValue) || 0.3; } catch(e) {}
+  var judgmentEl = document.getElementById('rec-judgment');
+  if (judgmentEl) {
+    judgmentEl.value = (result <= maxVal || resultStr === '0.0') ? '적합' : '부적합';
+    judgmentEl.style.color = (result <= maxVal || resultStr === '0.0') ? '#10b981' : '#ef4444';
+  }
+
+  markModified();
+}
+
+/* ============================================================
+   시험기록서 — diaryCn HTML 생성 (식약처 전송용)
+   ============================================================ */
+function generateDiaryCn() {
+  var recType = document.querySelector('input[name="rec-type"]:checked');
+  if (!recType || recType.value !== 'heavymetal') {
+    return (document.getElementById('diary-memo') || {}).value || '';
+  }
+
+  var r = currentReceipt || {};
+  var samples = r.samples || [{}];
+  var sample = samples[currentSampleIdx] || {};
+  var tester = (document.getElementById('rec-tester') || {}).value || '';
+  var startDate = (document.getElementById('rec-start-date') || {}).value || '';
+  var endDate = (document.getElementById('rec-end-date') || {}).value || '';
+  var stdDate = (document.getElementById('rec-std-date') || {}).value || '';
+  var sampleWeight = (document.getElementById('rec-sample-weight') || {}).value || '';
+  var sampleConc = (document.getElementById('rec-sample-conc') || {}).value || '';
+  var blankConc = (document.getElementById('rec-blank-conc') || {}).value || '';
+  var finalVolume = (document.getElementById('rec-final-volume') || {}).value || '50';
+  var dilution = (document.getElementById('rec-dilution') || {}).value || '1';
+  var drinkDilution = (document.getElementById('rec-drink-dilution') || {}).value || '1';
+  var resultVal = (document.getElementById('rec-result-value') || {}).value || '';
+  var judgment = (document.getElementById('rec-judgment') || {}).value || '';
+
+  var stdVals = [];
+  for (var i = 0; i <= 5; i++) {
+    stdVals.push((document.getElementById('rec-std' + i) || {}).value || '');
+  }
+
+  var html = '<div style="font-family:\'Malgun Gothic\',sans-serif;font-size:12px;max-width:800px">';
+  html += '<h2 style="text-align:center;font-size:18px;margin-bottom:20px">\uc2dc \ud5d8 \uac80 \uc0ac \uae30 \ub85d \uc11c</h2>';
+
+  html += '<h3>1. \uc2dc\ub8cc\uc815\ubcf4</h3>';
+  html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">\uac80\uc0ac\ud56d\ubaa9</td><td style="padding:4px 8px">\ub0a9</td>';
+  html += '<td style="padding:4px 8px;background:#f0f0f0">\uac80\uccb4\ubc88\ud638</td><td style="padding:4px 8px">' + (r.receiptNo || '') + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">\uac80\uc0ac\uc790</td><td style="padding:4px 8px">' + tester + '</td>';
+  html += '<td style="padding:4px 8px;background:#f0f0f0">\uc811\uc218\uc77c</td><td style="padding:4px 8px">' + (r.receiptDate || '') + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">\uc2dc\ub8cc\uba85</td><td colspan="3" style="padding:4px 8px">' + (sample.productName || sample.prductNm || '') + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">\uac80\uc0ac\ubaa9\uc801</td><td colspan="3" style="padding:4px 8px">\uc790\uac00\ud488\uc9c8\uc704\ud0c1\uac80\uc0ac\uc6a9</td></tr>';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">\uc2dc\ud5d8\ubc95\uadfc\uac70</td><td colspan="3" style="padding:4px 8px">\uc2dd\ud488\uacf5\uc804 \uc81c8. \uc77c\ubc18\uc2dc\ud5d8\ubc95 9.1.2 \ub0a9</td></tr>';
+  html += '</table>';
+
+  html += '<h3 style="margin-top:12px">2. \uac80\uc0ac\ubc29\ubc95 (BFL-KQI-360 \uc911\uae08\uc18d\ub958(\uc720\ud574\ubb3c\uc9c8) SOP)</h3>';
+  html += '<div style="background:#f9f9f9;padding:8px;border:1px solid #ddd;font-size:11px">';
+  html += '\ucc44\ucde8\ud55c \uac80\uccb4\ub97c \uc218\uae30\uc5d0 \ub2f4\uc740\ud6c4 \u2192 \uc9c8\uc0b0 9mL\uc744 \ub123\uace0 Microwave\ub97c \uc774\uc6a9 \uc2dc\ub8cc \ubd84\ud574(BFL-C-001)';
+  html += ' \u2192 \ubd84\ud574\uc561\uc744 \uc99d\ub958\uc218\ub85c 50mL\ub85c \ub9de\ucd98\ud6c4 \uc2dc\ud5d8\uc6a9\uc561\uc73c\ub85c \ud55c\ub2e4 \u2192 ICP-MS\ub85c \ubd84\uc11d(BFL-C-099)';
+  html += '</div>';
+
+  html += '<h3 style="margin-top:12px">3. \uac80\uc0ac\uacb0\uacfc</h3>';
+  html += '<div style="background:#f9f9f9;padding:8px;border:1px solid #ddd;font-size:11px;margin-bottom:8px">';
+  html += '\ub0a9 = (\uc2dc\ub8cc\uce21\uc815\ub18d\ub3c4(' + sampleConc + ' \xb5g/L) - Blank(' + blankConc + ' \xb5g/L)) \xd7 ' + finalVolume + 'mL \xd7 \ud76c\uc11d\ubc30\uc218(' + dilution + ')';
+  html += ' / \uac80\uccb4\ucc44\ucde8\ub7c9(' + sampleWeight + 'g) \xd7 1/1000 \xf7 \uc74c\uc6a9\ud76c\uc11d\ubc30\uc218(' + drinkDilution + ')';
+  html += ' = <strong>' + resultVal + ' mg/kg</strong>';
+  html += '</div>';
+
+  html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<tr style="background:#f0f0f0"><td>STD</td><td>STD1</td><td>STD2</td><td>STD3</td><td>STD4</td><td>STD5</td><td>\ub2e8\uc704</td></tr>';
+  html += '<tr><td>' + stdVals[0] + '</td><td>' + stdVals[1] + '</td><td>' + stdVals[2] + '</td>';
+  html += '<td>' + stdVals[3] + '</td><td>' + stdVals[4] + '</td><td>' + stdVals[5] + '</td><td>\xb5g/L</td></tr>';
+  html += '</table>';
+
+  html += '<p style="margin-top:8px;font-size:11px">\uc2dc\ud5d8\uc2dc\uc791\uc77c: ' + startDate + ' / \uc2dc\ud5d8\uc644\ub8cc\uc77c: ' + endDate + ' / \ud45c\uc900\uc6a9\uc561 \uc81c\uc870\uc77c: ' + stdDate + ' / \uac80\uccb4\ucc44\ucde8\ub7c9: ' + sampleWeight + 'g</p>';
+
+  html += '<h3 style="margin-top:12px">4. \ud310\uc815</h3>';
+  html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<tr style="background:#f0f0f0"><td style="padding:4px 8px">\ubd84\uc11d\ud56d\ubaa9</td><td style="padding:4px 8px">\uae30\uc900\uaddc\uaca9(mg/kg)</td><td style="padding:4px 8px">\uacb0\uacfc(mg/kg)</td><td style="padding:4px 8px">\ud310\uc815</td></tr>';
+  html += '<tr><td style="padding:4px 8px;text-align:center">\ub0a9</td><td style="padding:4px 8px;text-align:center">0.3 \uc774\ud558</td>';
+  html += '<td style="padding:4px 8px;text-align:center">' + resultVal + '</td>';
+  html += '<td style="padding:4px 8px;text-align:center;color:' + (judgment==='\uc801\ud569'?'green':'red') + '">' + judgment + '</td></tr>';
+  html += '</table>';
+
+  html += '<p style="margin-top:8px;font-size:10px;color:#666">BFL-KQP-08-F02 (\uc8fc)\ubc14\uc774\uc624\ud478\ub4dc\ub7a9</p>';
+  html += '</div>';
+
+  return html;
 }
 </script>
 </body>
