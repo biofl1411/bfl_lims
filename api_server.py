@@ -12,7 +12,8 @@ BioFoodLab 식약처 수집 트리거 서버
 import os
 import json
 import subprocess
-from flask import Flask, request, jsonify
+import requests as req_lib
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -67,6 +68,64 @@ def trigger_collect():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+
+# ============================================================
+# Claude AI 프록시 (브라우저 CORS 우회용)
+# POST /api/claude  →  Anthropic API 중계
+# ============================================================
+
+ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
+ANTHROPIC_VERSION = '2023-06-01'
+
+def _load_env():
+    """프로젝트 .env 에서 환경변수 로드"""
+    env = os.environ.copy()
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if os.path.exists(env_file):
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    line = line.replace('export ', '')
+                    k, v = line.split('=', 1)
+                    env[k.strip()] = v.strip()
+    return env
+
+@app.route('/api/claude', methods=['POST'])
+def claude_proxy():
+    """
+    Anthropic API 프록시.
+    브라우저에서 직접 호출하면 CORS 차단되므로 서버가 중계.
+    .env 파일의 ANTHROPIC_API_KEY 사용.
+    """
+    env = _load_env()
+    api_key = env.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'error': 'ANTHROPIC_API_KEY가 .env에 없습니다'}), 500
+
+    body = request.get_json(force=True)
+    if not body:
+        return jsonify({'error': '요청 본문이 없습니다'}), 400
+
+    # model 강제 지정 (비용 제어)
+    body.setdefault('model', 'claude-sonnet-4-20250514')
+    body.setdefault('max_tokens', 3000)
+
+    headers = {
+        'x-api-key': api_key,
+        'anthropic-version': ANTHROPIC_VERSION,
+        'content-type': 'application/json',
+    }
+
+    try:
+        resp = req_lib.post(ANTHROPIC_API_URL, json=body, headers=headers, timeout=120)
+        return Response(resp.content, status=resp.status_code,
+                        mimetype='application/json')
+    except req_lib.exceptions.Timeout:
+        return jsonify({'error': 'Anthropic API 타임아웃 (120s)'}), 504
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================

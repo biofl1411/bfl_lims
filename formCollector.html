@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BFL LIMS - 시험기록서 양식 수집</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<style>
+:root{
+  --pri:#2563eb;--pri-l:#dbeafe;--pri-d:#1d4ed8;
+  --ok:#10b981;--ok-l:#d1fae5;--warn:#f59e0b;--warn-l:#fef3c7;
+  --err:#ef4444;--err-l:#fee2e2;
+  --g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;
+  --g400:#9ca3af;--g600:#4b5563;--g900:#111827;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background:#eef2ff;color:#1a1a2e;min-height:100vh}
+
+/* ─── 헤더 ─── */
+.topbar{background:linear-gradient(135deg,#1e3a5f,#2563eb);height:58px;padding:0 24px;
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 2px 12px rgba(37,99,235,.3)}
+.tl{display:flex;align-items:center;gap:11px}
+.tlogo{width:32px;height:32px;background:rgba(255,255,255,.2);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:16px}
+.ttitle{color:#fff;font-size:16px;font-weight:800}
+.tsub{color:rgba(255,255,255,.6);font-size:11px;margin-top:1px}
+.tbadges{display:flex;gap:6px}
+.tbadge{background:rgba(255,255,255,.18);color:#fff;padding:3px 10px;border-radius:14px;font-size:11px;font-weight:600}
+.tbadge.amber{background:rgba(245,158,11,.35)}
+
+/* ─── 랩 ─── */
+.wrap{max-width:1020px;margin:0 auto;padding:22px 16px}
+
+/* ─── 카드 ─── */
+.card{background:#fff;border-radius:13px;box-shadow:0 2px 10px rgba(0,0,0,.07);overflow:hidden;margin-bottom:16px}
+.ch{padding:13px 20px;border-bottom:1px solid var(--g100);background:var(--g50);
+  display:flex;align-items:center;justify-content:space-between}
+.ct{font-size:14px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:7px}
+.cb{padding:20px}
+
+/* ─── 흐름 표시기 ─── */
+.flow{display:flex;align-items:center;gap:0;padding:0 4px;margin-bottom:20px}
+.fn{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;transition:all .25s}
+.fn.idle{background:var(--g200);color:var(--g600)}
+.fn.now{background:var(--pri);color:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+.fn.done{background:var(--ok);color:#fff}
+.fl{font-size:11px;font-weight:600;color:var(--g400);margin:0 6px;transition:color .25s;white-space:nowrap}
+.fl.now{color:var(--pri)}.fl.done{color:var(--ok)}
+.fdiv{height:2px;flex:1;background:var(--g200);transition:background .25s}
+.fdiv.done{background:var(--ok)}
+
+/* ─── STEP1: 검사분야 버튼 ─── */
+.field-btns{display:flex;flex-wrap:wrap;gap:9px}
+.fbt{padding:9px 18px;border-radius:9px;border:2px solid var(--g200);background:#fff;
+  font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;
+  transition:all .18s;color:var(--g600)}
+.fbt:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(0,0,0,.1)}
+.fbt.on{color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.15)}
+.fdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* ─── STEP2: 검사목적 그리드 ─── */
+.pur-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-top:10px}
+.pcard{border:2px solid var(--g200);border-radius:9px;padding:11px 14px;cursor:pointer;
+  transition:all .18s;background:#fff}
+.pcard:hover{border-color:var(--pri);background:var(--pri-l);transform:translateY(-1px)}
+.pcard.on{border-color:var(--pri);background:var(--pri-l)}
+.pcard-prefix{display:inline-block;background:var(--pri);color:#fff;border-radius:4px;
+  padding:1px 7px;font-size:10px;font-weight:700;margin-bottom:5px}
+.pcard-name{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:5px}
+.pcard-fields{display:flex;gap:4px;flex-wrap:wrap}
+.pf-tag{padding:1px 7px;border-radius:8px;font-size:10px;font-weight:600}
+
+/* ─── STEP3: 검사항목 ─── */
+.item-wrap{border:1px solid var(--g200);border-radius:9px;overflow:hidden}
+.item-search{display:flex;align-items:center;gap:7px;padding:8px 12px;
+  background:var(--g50);border-bottom:1px solid var(--g200)}
+.item-search input{border:none;outline:none;background:transparent;font-size:13px;flex:1;font-family:inherit}
+.item-list{max-height:230px;overflow-y:auto}
+.irow{padding:9px 14px;border-bottom:1px solid var(--g100);cursor:pointer;
+  display:flex;justify-content:space-between;align-items:center;font-size:13px;transition:background .12s}
+.irow:last-child{border-bottom:none}
+.irow:hover{background:var(--pri-l)}
+.irow.on{background:var(--pri-l);color:var(--pri-d)}
+.irow-name{font-weight:600}
+.irow-code{font-size:11px;color:var(--g400);font-family:monospace}
+.ichk{width:17px;height:17px;border-radius:50%;border:2px solid var(--g300);
+  display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .12s;flex-shrink:0}
+.irow.on .ichk{background:var(--pri);border-color:var(--pri);color:#fff}
+
+/* ─── 공통 사용 안내 배너 ─── */
+.share-box{background:linear-gradient(135deg,#eff6ff,#ecfdf5);border:1px solid #bfdbfe;
+  border-radius:9px;padding:11px 14px;margin-top:9px;font-size:12px;color:#1e40af;display:none}
+.share-box strong{display:block;font-size:13px;margin-bottom:3px;color:#1d4ed8}
+.share-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.share-tag{padding:2px 8px;border-radius:7px;font-size:11px;font-weight:600;
+  background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
+
+/* ─── STEP4: 업로드 ─── */
+.up-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:16px}
+.uzone{border:2px dashed var(--g300);border-radius:10px;padding:22px 14px;text-align:center;
+  cursor:pointer;transition:all .18s;background:var(--g50);position:relative;
+  min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.uzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.uzone:hover,.uzone.drag{border-color:var(--pri);background:var(--pri-l)}
+.uzone.ok{border-color:var(--ok);background:var(--ok-l)}
+.uicon{font-size:28px;margin-bottom:7px}
+.ulabel{font-size:13px;font-weight:700;color:#334155;margin-bottom:3px}
+.udesc{font-size:11px;color:var(--g400);line-height:1.5}
+.ufile{font-size:11px;font-weight:600;color:var(--ok);margin-top:5px;word-break:break-all}
+
+/* ─── 폼 입력 ─── */
+.frow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:11px}
+.fgp label{display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px}
+.fgp input,.fgp select{width:100%;padding:8px 11px;border:1px solid var(--g300);
+  border-radius:7px;font-size:13px;font-family:inherit;transition:border .15s}
+.fgp input:focus,.fgp select:focus{outline:none;border-color:var(--pri);
+  box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+
+/* ─── 진행 바 ─── */
+.prog{display:none;background:var(--g50);border:1px solid var(--g200);
+  border-radius:9px;padding:13px 16px;margin-bottom:12px}
+.pstep{display:flex;align-items:center;gap:8px;padding:6px 0;
+  border-bottom:1px solid var(--g100);font-size:12px;color:var(--g600)}
+.pstep:last-child{border-bottom:none}
+.pi{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;flex-shrink:0}
+.pi.idle{background:var(--g100);color:var(--g400)}
+.pi.run{background:var(--pri-l);color:var(--pri);animation:blink 1s infinite}
+.pi.done{background:var(--ok-l);color:var(--ok)}
+.pi.err{background:var(--err-l);color:var(--err)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.45}}
+.ps-lbl{flex:1}.ps-stat{font-size:11px;font-weight:600}
+
+/* ─── 결과 미리보기 ─── */
+.preview{display:none;background:var(--g50);border:1px solid var(--g200);
+  border-radius:9px;padding:13px;margin-top:10px}
+.pb-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.pb{padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600;
+  background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8}
+.pfields{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+.pfield{background:#fff;border:1px solid var(--g200);border-radius:6px;padding:6px 9px}
+.pfl{font-size:10px;color:var(--g400);margin-bottom:1px}
+.pfv{font-size:12px;font-weight:600;color:#1e293b}
+.pcalc{background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;
+  padding:8px 11px;margin-top:7px;font-size:12px;color:#1d4ed8}
+.pcalc code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px;
+  font-family:monospace;font-size:11px}
+
+/* ─── 버튼 ─── */
+.btn{padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-weight:600;
+  cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:6px}
+.btn-pri{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;
+  box-shadow:0 3px 10px rgba(37,99,235,.25)}
+.btn-pri:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(37,99,235,.35)}
+.btn-pri:disabled{background:#94a3b8;box-shadow:none;transform:none;cursor:not-allowed}
+.btn-out{background:#fff;color:#334155;border:1.5px solid var(--g300)}
+.btn-out:hover{border-color:var(--pri);color:var(--pri)}
+.btn-ok{background:var(--ok);color:#fff}
+.btn-sm{padding:5px 11px;font-size:11px}
+
+/* ─── 현황 테이블 ─── */
+.stbl{width:100%;border-collapse:collapse;font-size:12px}
+.stbl th{padding:9px 11px;text-align:left;background:var(--g50);font-weight:600;
+  color:#475569;border-bottom:2px solid var(--g200);white-space:nowrap}
+.stbl td{padding:8px 11px;border-bottom:1px solid var(--g100);vertical-align:middle}
+.stbl tr:hover td{background:#f8faff}
+.impl{padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600}
+.impl.done{background:var(--ok-l);color:#065f46}
+.impl.wait{background:var(--warn-l);color:#92400e}
+.abt{padding:4px 9px;border-radius:6px;border:1.5px solid var(--g300);
+  background:#fff;font-size:11px;cursor:pointer;color:#334155;transition:all .12s;font-weight:500}
+.abt:hover{border-color:var(--pri);color:var(--pri)}
+.abt.del:hover{border-color:var(--err);color:var(--err)}
+.ftag{display:inline-block;padding:2px 7px;border-radius:6px;font-size:11px;font-weight:700}
+.ptag{display:inline-block;padding:2px 7px;border-radius:6px;font-size:11px;
+  font-weight:700;background:#eff6ff;color:#1d4ed8}
+
+/* ─── 모달 ─── */
+.mbg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;
+  align-items:center;justify-content:center}
+.mbg.on{display:flex}
+.modal{background:#fff;border-radius:13px;width:92%;max-width:760px;
+  max-height:87vh;overflow:hidden;display:flex;flex-direction:column}
+.mhd{padding:15px 20px;border-bottom:1px solid var(--g200);
+  display:flex;justify-content:space-between;align-items:center}
+.mtitle{font-size:14px;font-weight:700}
+.mclose{background:none;border:none;font-size:17px;cursor:pointer;color:var(--g400)}
+.mbody{padding:17px 20px;overflow-y:auto;flex:1}
+.mfooter{padding:11px 20px;border-top:1px solid var(--g200);
+  display:flex;justify-content:flex-end;gap:7px}
+.codebox{background:#0f172a;color:#86efac;padding:13px;border-radius:8px;
+  font-family:monospace;font-size:11px;line-height:1.7;
+  overflow-x:auto;white-space:pre-wrap;max-height:360px;overflow-y:auto}
+
+/* ─── 기타 ─── */
+.info-bar{background:linear-gradient(135deg,#eff6ff,#ecfdf5);border:1px solid #bfdbfe;
+  border-radius:9px;padding:11px 15px;display:flex;gap:10px;margin-bottom:16px}
+.ib-icon{font-size:19px;flex-shrink:0;margin-top:1px}
+.ib-t h3{font-size:12px;font-weight:700;color:#1e40af;margin-bottom:2px}
+.ib-t p{font-size:11px;color:#475569;line-height:1.6}
+.sec-lbl{font-size:12px;font-weight:700;color:#334155;margin-bottom:8px;
+  display:flex;align-items:center;gap:7px}
+.sec-lbl::after{content:'';flex:1;height:1px;background:var(--g200);margin-left:6px}
+.loading-dot{display:inline-flex;gap:3px;align-items:center}
+.loading-dot span{width:5px;height:5px;border-radius:50%;background:var(--pri);
+  animation:ld .9s infinite}
+.loading-dot span:nth-child(2){animation-delay:.2s}
+.loading-dot span:nth-child(3){animation-delay:.4s}
+@keyframes ld{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+.empty{text-align:center;padding:36px 20px;color:#94a3b8}
+.empty-i{font-size:36px;margin-bottom:8px}
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:9px;
+  font-size:12px;font-weight:600;color:#fff;z-index:9999;
+  transform:translateY(60px);opacity:0;transition:all .3s;max-width:320px}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{background:var(--ok)}.toast.err{background:var(--err)}
+.toast.info{background:var(--pri)}.toast.warn{background:var(--warn)}
+@media(max-width:600px){
+  .up-grid,.frow{grid-template-columns:1fr}
+  .pur-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .flow .fl{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tl">
+    <div class="tlogo">🧪</div>
+    <div>
+      <div class="ttitle">시험기록서 양식 수집기</div>
+      <div class="tsub">BioFoodLab LIMS · 담당자용</div>
+    </div>
+  </div>
+  <div class="tbadges">
+    <span class="tbadge" id="cnt-total">수집 0건</span>
+    <span class="tbadge amber" id="cnt-pending">미반영 0건</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- 안내 -->
+  <div class="info-bar">
+    <div class="ib-icon">💡</div>
+    <div class="ib-t">
+      <h3>사용 방법</h3>
+      <p>
+        ① <b>검사분야 → 검사목적 → 검사항목</b> 순서로 선택하세요.<br>
+        ② 같은 계산식을 사용하는 항목은 <b>대표 항목 하나만</b> 선택하면 나머지에도 공통 적용됩니다.<br>
+        ③ 빈 양식 PDF + 작성 완료 PDF 2개 업로드 후 <b>"분석 후 저장"</b>을 누르세요.
+      </p>
+    </div>
+  </div>
+
+  <!-- 등록 카드 -->
+  <div class="card">
+    <div class="ch">
+      <div class="ct">📄 기록서 양식 등록</div>
+      <!-- 흐름 표시기 -->
+      <div class="flow" id="flow-bar">
+        <span class="fn now" id="fn1">1</span>
+        <span class="fl now" id="fl1">분야 선택</span>
+        <div class="fdiv" id="fd1"></div>
+        <span class="fn idle" id="fn2">2</span>
+        <span class="fl" id="fl2">검사목적</span>
+        <div class="fdiv" id="fd2"></div>
+        <span class="fn idle" id="fn3">3</span>
+        <span class="fl" id="fl3">검사항목</span>
+        <div class="fdiv" id="fd3"></div>
+        <span class="fn idle" id="fn4">4</span>
+        <span class="fl" id="fl4">PDF 업로드</span>
+        <div class="fdiv" id="fd4"></div>
+        <span class="fn idle" id="fn5">5</span>
+        <span class="fl" id="fl5">분석·저장</span>
+      </div>
+    </div>
+    <div class="cb">
+
+      <!-- ★ STEP 1: 검사분야 -->
+      <div class="sec-lbl">① 검사분야 선택</div>
+      <div class="field-btns" id="field-btns">
+        <div style="color:#94a3b8;font-size:13px;padding:6px">
+          <div class="loading-dot"><span></span><span></span><span></span></div>
+          불러오는 중...
+        </div>
+      </div>
+
+      <!-- ★ STEP 2: 검사목적 -->
+      <div id="sec-purpose" style="display:none;margin-top:18px">
+        <div class="sec-lbl">② 검사목적 선택</div>
+        <div class="pur-grid" id="pur-grid"></div>
+      </div>
+
+      <!-- ★ STEP 3: 검사항목 -->
+      <div id="sec-items" style="display:none;margin-top:18px">
+        <div class="sec-lbl">
+          ③ 검사항목 선택
+          <span style="font-size:11px;font-weight:400;color:var(--g400)">
+            — 대표 1개만 선택하면 동일 계산식 항목 전체에 공통 적용
+          </span>
+        </div>
+        <div class="item-wrap">
+          <div class="item-search">
+            <span style="font-size:14px">🔍</span>
+            <input type="text" id="item-kw" placeholder="항목명 검색..."
+                   oninput="filterItems(this.value)">
+            <span id="item-count" style="font-size:11px;color:var(--g400)"></span>
+          </div>
+          <div class="item-list" id="item-list">
+            <div class="empty"><div class="empty-i">📋</div><p>검사목적을 선택하세요</p></div>
+          </div>
+        </div>
+        <!-- 공통 사용 안내 -->
+        <div class="share-box" id="share-box">
+          <strong>✅ 선택된 대표 항목: <span id="share-rep" style="color:var(--pri)"></span></strong>
+          <span id="share-desc"></span>
+          <div class="share-tags" id="share-tags"></div>
+        </div>
+      </div>
+
+      <!-- ★ STEP 4: PDF 업로드 + 정보 -->
+      <div id="sec-upload" style="display:none;margin-top:18px">
+        <div class="sec-lbl">④ PDF 업로드 및 담당자 정보</div>
+        <div class="up-grid">
+          <div class="uzone" id="uz-blank"
+               ondragover="onDg(event,'blank')" ondragleave="onDl('blank')" ondrop="onDp(event,'blank')">
+            <input type="file" accept=".pdf" onchange="onFile(this,'blank')">
+            <div class="uicon" id="ui-blank">📋</div>
+            <div class="ulabel">빈 양식 PDF</div>
+            <div class="udesc">값이 없는 기록서 양식<br>(항목만 있는 것)</div>
+            <div class="ufile" id="uf-blank"></div>
+          </div>
+          <div class="uzone" id="uz-filled"
+               ondragover="onDg(event,'filled')" ondragleave="onDl('filled')" ondrop="onDp(event,'filled')">
+            <input type="file" accept=".pdf" onchange="onFile(this,'filled')">
+            <div class="uicon" id="ui-filled">✅</div>
+            <div class="ulabel">작성 완료 PDF</div>
+            <div class="udesc">실제 측정값이 있는 완성본<br>(결과·판정 있는 것)</div>
+            <div class="ufile" id="uf-filled"></div>
+          </div>
+        </div>
+        <div class="frow">
+          <div class="fgp">
+            <label>담당자 이름 *</label>
+            <input type="text" id="inp-person" placeholder="예) 김대성">
+          </div>
+          <div class="fgp">
+            <label>SOP 코드</label>
+            <input type="text" id="inp-sop" placeholder="예) BFL-KQI-360">
+          </div>
+          <div class="fgp">
+            <label>메모 (선택)</label>
+            <input type="text" id="inp-memo" placeholder="특이사항 등">
+          </div>
+        </div>
+      </div>
+
+      <!-- 진행 상태 -->
+      <div class="prog" id="prog">
+        <div class="pstep">
+          <div class="pi idle" id="pi1">1</div>
+          <div class="ps-lbl">PDF 파일 읽기</div>
+          <div class="ps-stat" id="ps1"></div>
+        </div>
+        <div class="pstep">
+          <div class="pi idle" id="pi2">2</div>
+          <div class="ps-lbl">Claude AI 분석 (입력 필드 · 계산식 · 판정기준 추출)</div>
+          <div class="ps-stat" id="ps2"></div>
+        </div>
+        <div class="pstep">
+          <div class="pi idle" id="pi3">3</div>
+          <div class="ps-lbl">Firestore 저장</div>
+          <div class="ps-stat" id="ps3"></div>
+        </div>
+      </div>
+
+      <!-- 결과 미리보기 -->
+      <div class="preview" id="preview">
+        <div style="font-size:13px;font-weight:700;margin-bottom:9px">✅ 분석 완료 미리보기</div>
+        <div class="pb-row" id="pv-badges"></div>
+        <div class="pfields" id="pv-fields"></div>
+        <div id="pv-calcs"></div>
+      </div>
+
+      <!-- 버튼 영역 -->
+      <div id="btn-area" style="display:none;justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn btn-out" onclick="doReset()">🔄 초기화</button>
+        <button class="btn btn-pri" id="btn-go" onclick="doAnalyze()">🚀 분석 후 저장</button>
+      </div>
+
+    </div><!-- /cb -->
+  </div><!-- /card -->
+
+  <!-- 현황 카드 -->
+  <div class="card">
+    <div class="ch">
+      <div class="ct">📊 수집된 양식 현황</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-out btn-sm" onclick="loadList()">🔃 새로고침</button>
+        <button class="btn btn-ok btn-sm" onclick="openPromptModal()">💻 Claude Code 프롬프트</button>
+      </div>
+    </div>
+    <div class="cb" style="padding:0" id="tbl-wrap">
+      <div class="empty"><div class="empty-i">📂</div><p>로딩 중...</p></div>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<!-- 상세 모달 -->
+<div class="mbg" id="m-detail">
+  <div class="modal">
+    <div class="mhd">
+      <div class="mtitle" id="m-detail-title">상세</div>
+      <button class="mclose" onclick="closeM('m-detail')">✕</button>
+    </div>
+    <div class="mbody" id="m-detail-body"></div>
+    <div class="mfooter"><button class="btn btn-out" onclick="closeM('m-detail')">닫기</button></div>
+  </div>
+</div>
+
+<!-- 프롬프트 모달 -->
+<div class="mbg" id="m-prompt">
+  <div class="modal" style="max-width:800px">
+    <div class="mhd">
+      <div class="mtitle">💻 Claude Code Desktop 프롬프트</div>
+      <button class="mclose" onclick="closeM('m-prompt')">✕</button>
+    </div>
+    <div class="mbody">
+      <div style="background:var(--warn-l);border:1px solid #fde68a;border-radius:7px;
+                  padding:9px 12px;font-size:12px;color:#92400e;margin-bottom:10px">
+        ⚠️ 아래 전체를 복사 → <b>Claude Code Desktop</b>에 붙여넣기 → 자동 반영
+      </div>
+      <button onclick="doCopy()" style="background:#334155;color:#fff;border:none;
+        padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;
+        float:right;margin-bottom:6px">📋 복사</button>
+      <div class="codebox" id="prompt-box">생성 중...</div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-out" onclick="closeM('m-prompt')">닫기</button>
+      <button class="btn btn-pri" onclick="doCopy()">📋 복사</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =============================================================
+   전역 상태
+============================================================= */
+var FIELDS = [];       // {id, name, code, color}
+var PURPOSES = [];     // Firestore inspectionPurposes P 배열 전체
+var ALL_ITEMS = [];    // 현재 목적 전체 항목
+var F_ITEMS = [];      // 검색 필터된 항목
+
+var selField = null;   // 선택된 분야
+var selPurpose = null; // 선택된 목적
+var selItem = null;    // 선택된 대표 항목
+
+var b64Blank = null, b64Filled = null;
+var nameBlank = '', nameFilled = '';
+var templates = [];
+var dbOk = false;
+
+/* =============================================================
+   Firebase 준비 (3초 타임아웃 — 연결 안 돼도 기본값으로 진행)
+============================================================= */
+function waitDb() {
+  return new Promise(function(res) {
+    // 이미 db 객체가 존재하면 즉시
+    if (typeof db !== 'undefined' && db) { dbOk = true; res(); return; }
+    var done = false;
+    // firebase-ready 이벤트 대기
+    window.addEventListener('firebase-ready', function() {
+      if (done) return; done = true;
+      dbOk = true; res();
+    }, { once: true });
+    // 3초 타임아웃 — Firebase 없어도 기본 데이터로 진행
+    setTimeout(function() {
+      if (done) return; done = true;
+      console.warn('[formCollector] Firebase 연결 타임아웃 → 기본 데이터로 진행');
+      dbOk = false; res();
+    }, 3000);
+  });
+}
+
+// 페이지 로드 즉시 기본 데이터 먼저 표시 (Firebase 기다리지 않음)
+(function initImmediate() {
+  var defFields = [
+    {id:'F', name:'식품', code:'F', color:'#4361ee'},
+    {id:'L', name:'축산', code:'L', color:'#ff6b6b'},
+    {id:'E', name:'기타', code:'E', color:'#43a047'}
+  ];
+  FIELDS = defFields;
+  renderFieldBtns();  // 버튼 즉시 표시
+})();
+
+// Firebase 준비 완료 후 Firestore 데이터로 갱신
+waitDb().then(function() {
+  loadMasterData();   // Firestore에서 실제 데이터 로드 → 버튼 갱신
+  loadList();
+});
+
+/* =============================================================
+   마스터 데이터 로드 (분야 + 목적)
+   ─ Firestore settings/inspectionFields
+   ─ Firestore settings/inspectionPurposes
+============================================================= */
+async function loadMasterData() {
+  // ── 폴백 기본값 ──
+  var defFields = [
+    {id:'F', name:'식품',   code:'F', color:'#4361ee'},
+    {id:'L', name:'축산',   code:'L', color:'#ff6b6b'},
+    {id:'E', name:'기타',   code:'E', color:'#43a047'}
+  ];
+  var defPurposes = [
+    {c:1, n:'자가품질위탁검사용', prefix:'QC', fields:['F','L'], o:1, i:42},
+    {c:2, n:'참고용(기준규격외)', prefix:'RE', fields:['F'],     o:1, i:38},
+    {c:4, n:'참고용(유통기한설정)', prefix:'SL', fields:['F'],   o:1, i:28},
+    {c:6, n:'참고용(영양성분)',   prefix:'NU', fields:['F'],     o:1, i:14},
+    {c:10,n:'정도관리',           prefix:'QA', fields:['F','L'], o:1, i:8 },
+    {c:13,n:'방사능(HPGe)',       prefix:'RA', fields:['F'],     o:1, i:4 },
+    {c:14,n:'Allergen(ELISA)',    prefix:'AE', fields:['F'],     o:1, i:6 },
+    {c:15,n:'Halal food(RT_PCR)',prefix:'HL', fields:['F'],     o:1, i:5 },
+    {c:16,n:'Vegan food(RT-PCR)',prefix:'VG', fields:['F'],     o:1, i:5 },
+    {c:17,n:'물질검사',           prefix:'MT', fields:['F'],     o:1, i:10},
+    {c:18,n:'Allergen(RT-PCR)',   prefix:'AR', fields:['F'],     o:1, i:6 },
+    {c:116,n:'연구용역',          prefix:'RD', fields:['F','L'], o:1, i:20},
+    {c:119,n:'잔류농약(인증용)',  prefix:'PC', fields:['F'],     o:1, i:12},
+    {c:120,n:'잔류농약(참고용)',  prefix:'PR', fields:['F'],     o:1, i:12},
+    {c:121,n:'항생물질(인증용)',  prefix:'AC', fields:['L'],     o:1, i:8 },
+    {c:122,n:'항생물질(참고용)',  prefix:'AT', fields:['L'],     o:1, i:8 },
+    {c:123,n:'참고용(소비기한설정)',prefix:'SE',fields:['F'],    o:1, i:28}
+  ];
+
+  FIELDS   = defFields;
+  PURPOSES = defPurposes;
+
+  try {
+    if (dbOk) {
+      var fd = await db.collection('settings').doc('inspectionFields').get();
+      if (fd.exists && (fd.data().fields || []).length)
+        FIELDS = fd.data().fields;
+
+      var pd = await db.collection('settings').doc('inspectionPurposes').get();
+      if (pd.exists && (pd.data().purposes || []).length) {
+        // o:1 = 사용중, o:0 = 미사용 → 사용 중인 것만
+        PURPOSES = pd.data().purposes
+          .filter(function(p){ return p.o === 1; })
+          .sort(function(a,b){ return (a.c||999)-(b.c||999); });
+      }
+    }
+  } catch(e) {
+    console.warn('[MasterData] 폴백 사용:', e.message);
+  }
+
+  renderFieldBtns();
+}
+
+/* =============================================================
+   STEP 1 ─ 검사분야 버튼 렌더
+============================================================= */
+function renderFieldBtns() {
+  var html = '';
+  FIELDS.forEach(function(f) {
+    html += '<button class="fbt" data-id="'+f.id+'" onclick="pickField(this,\''+f.id+'\')"'+
+      ' style="color:'+f.color+';border-color:'+f.color+'30">'+
+      '<span class="fdot" style="background:'+f.color+'"></span>'+f.name+'</button>';
+  });
+  document.getElementById('field-btns').innerHTML = html;
+}
+
+/* =============================================================
+   STEP 1 ─ 분야 선택
+============================================================= */
+function pickField(btn, fid) {
+  // 버튼 스타일 토글
+  document.querySelectorAll('.fbt').forEach(function(b) {
+    b.classList.remove('on');
+    var f = FIELDS.find(function(x){ return x.id===b.dataset.id; });
+    if (f) { b.style.background='#fff'; b.style.color=f.color; }
+  });
+  btn.classList.add('on');
+  selField = FIELDS.find(function(f){ return f.id===fid; }) || null;
+  if (selField) { btn.style.background=selField.color; btn.style.color='#fff'; }
+
+  // 해당 분야에 속한 목적 필터
+  var list = PURPOSES.filter(function(p){
+    return (p.fields||[]).includes(fid);
+  });
+  renderPurposes(list);
+  goStep(2);
+
+  // 하위 초기화
+  selPurpose=null; selItem=null;
+  hide('sec-items'); hide('sec-upload'); hide('btn-area'); hide('share-box');
+}
+
+/* =============================================================
+   STEP 2 ─ 검사목적 렌더 + 선택
+============================================================= */
+var _purList = [];
+
+function renderPurposes(list) {
+  _purList = list;
+  if (!list.length) {
+    document.getElementById('pur-grid').innerHTML =
+      '<div style="color:var(--g400);font-size:13px;padding:8px">해당 분야의 검사목적이 없습니다</div>';
+    document.getElementById('sec-purpose').style.display = 'block';
+    return;
+  }
+  var html = list.map(function(p, i) {
+    var tags = (p.fields||[]).map(function(fid) {
+      var f = FIELDS.find(function(x){ return x.id===fid; });
+      return f ? '<span class="pf-tag" style="background:'+f.color+'18;color:'+f.color+'">'
+                 +f.name+'</span>' : '';
+    }).join('');
+    return '<div class="pcard" data-i="'+i+'" onclick="pickPurpose(this,'+i+')">'
+      +'<div class="pcard-prefix">'+(p.prefix||'')+'</div>'
+      +'<div class="pcard-name">'+(p.n||'')+'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<div class="pcard-fields">'+tags+'</div>'
+      +'<span style="font-size:10px;color:var(--g400)">'+(p.i||'')+'개</span>'
+      +'</div></div>';
+  }).join('');
+  document.getElementById('pur-grid').innerHTML = html;
+  document.getElementById('sec-purpose').style.display = 'block';
+}
+
+async function pickPurpose(el, idx) {
+  document.querySelectorAll('.pcard').forEach(function(c){ c.classList.remove('on'); });
+  el.classList.add('on');
+  selPurpose = _purList[idx];
+  selItem = null;
+  hide('share-box'); hide('sec-upload'); hide('btn-area');
+  document.getElementById('sec-items').style.display = 'block';
+  goStep(3);
+
+  // 항목 로딩
+  document.getElementById('item-list').innerHTML =
+    '<div class="empty" style="padding:14px">'
+    +'<div class="loading-dot"><span></span><span></span><span></span></div>'
+    +'<p style="margin-top:5px">항목 불러오는 중...</p></div>';
+  document.getElementById('item-kw').value = '';
+
+  ALL_ITEMS = await fetchItems(selPurpose);
+  F_ITEMS = ALL_ITEMS.slice();
+  document.getElementById('item-count').textContent = ALL_ITEMS.length + '개';
+  renderItems(F_ITEMS);
+}
+
+/* =============================================================
+   STEP 2 ─ 검사항목 로딩
+   ─ Firestore itemGroups 컬렉션에서 purposePrefix로 필터
+============================================================= */
+async function fetchItems(p) {
+  var items = [];
+
+  // 1) Firestore itemGroups 조회 시도
+  if (dbOk) {
+    try {
+      var snap = await db.collection('itemGroups').get();
+      snap.forEach(function(doc) {
+        var d = doc.data();
+        // purpose 또는 prefix 매칭
+        var match = (d.prefix === p.prefix)
+          || (d.purposeCode === p.prefix)
+          || ((d.purpose||'').includes(p.prefix))
+          || ((d.purposeName||'') === p.n);
+        if (match) {
+          var itArr = d.items || (d['항목명'] ? [d] : []);
+          itArr.forEach(function(it) {
+            var nm = it['항목명'] || it.name || it.testItemName || it.itmNm || '';
+            var cd = it.code || it.testItemCode || it['항목코드'] || it.itmCd || '';
+            if (nm) items.push({ name: nm, code: cd, fee: it['수수료'] || it.fee || 0 });
+          });
+        }
+      });
+    } catch(e) { console.warn('[itemGroups] 로드 실패:', e.message); }
+  }
+
+  // 2) 항목이 없으면 목적별 기본 항목 사용
+  if (!items.length) items = getDefaultItems(p);
+
+  // 중복 제거
+  var seen = {}; 
+  return items.filter(function(it) {
+    var k = it.name + it.code;
+    if (!it.name || seen[k]) return false;
+    seen[k] = true; return true;
+  });
+}
+
+/* 목적별 기본 항목 (Firestore 없을 때 폴백) */
+function getDefaultItems(p) {
+  var map = {
+    'QC': [
+      {name:'납(Pb)',code:'B10001'},{name:'카드뮴(Cd)',code:'B10002'},
+      {name:'비소(As)',code:'B10003'},{name:'수은(Hg)',code:'B10004'},
+      {name:'대장균',code:'M10001'},{name:'살모넬라',code:'M10002'},
+      {name:'황색포도상구균',code:'M10003'},{name:'세균수',code:'M10004'},
+      {name:'수분',code:'P10001'},{name:'산도',code:'P10002'},
+      {name:'당도',code:'P10003'},{name:'보존료',code:'A10001'},
+      {name:'타르색소',code:'A10002'},{name:'잔류농약',code:'R10001'}
+    ],
+    'RE': [
+      {name:'납(Pb)',code:'B10001'},{name:'카드뮴(Cd)',code:'B10002'},
+      {name:'비소(As)',code:'B10003'},{name:'수분',code:'P10001'},
+      {name:'조단백',code:'P10005'},{name:'조지방',code:'P10006'},
+      {name:'회분',code:'P10007'},{name:'산가',code:'P10008'}
+    ],
+    'RA': [
+      {name:'세슘-134',code:'RA001'},{name:'세슘-137',code:'RA002'},
+      {name:'요오드-131',code:'RA003'},{name:'스트론튬-90',code:'RA004'}
+    ],
+    'AE': [
+      {name:'글루텐',code:'AL001'},{name:'우유',code:'AL002'},
+      {name:'달걀',code:'AL003'},{name:'땅콩',code:'AL004'},
+      {name:'대두',code:'AL005'},{name:'밀',code:'AL006'}
+    ],
+    'AR': [
+      {name:'글루텐(RT-PCR)',code:'AR001'},{name:'우유(RT-PCR)',code:'AR002'},
+      {name:'달걀(RT-PCR)',code:'AR003'},{name:'땅콩(RT-PCR)',code:'AR004'}
+    ],
+    'AC': [
+      {name:'테트라사이클린',code:'AC001'},{name:'옥시테트라사이클린',code:'AC002'},
+      {name:'클로르테트라사이클린',code:'AC003'},{name:'독시사이클린',code:'AC004'},
+      {name:'설파메타진',code:'AC005'},{name:'암피실린',code:'AC006'},
+      {name:'암록시실린',code:'AC007'},{name:'에리스로마이신',code:'AC008'}
+    ],
+    'PC': [
+      {name:'잔류농약(다성분)',code:'PC001'},{name:'클로르피리포스',code:'PC002'},
+      {name:'다이아지논',code:'PC003'},{name:'프로피코나졸',code:'PC004'}
+    ],
+    'NU': [
+      {name:'열량',code:'NU001'},{name:'탄수화물',code:'NU002'},
+      {name:'단백질',code:'NU003'},{name:'지방',code:'NU004'},
+      {name:'나트륨',code:'NU005'},{name:'당류',code:'NU006'},
+      {name:'식이섬유',code:'NU007'},{name:'포화지방',code:'NU008'}
+    ]
+  };
+  var prefix = p.prefix || '';
+  return map[prefix] || [{name:'(직접 입력)', code:''}];
+}
+
+/* =============================================================
+   STEP 3 ─ 항목 렌더 + 검색
+============================================================= */
+function renderItems(list) {
+  if (!list.length) {
+    document.getElementById('item-list').innerHTML =
+      '<div class="empty" style="padding:16px"><div class="empty-i" style="font-size:22px">🔍</div><p>검색 결과 없음</p></div>';
+    return;
+  }
+  document.getElementById('item-list').innerHTML = list.map(function(it, i) {
+    var on = selItem && selItem.name === it.name ? ' on' : '';
+    return '<div class="irow'+on+'" onclick="pickItem(this,'+i+')">'
+      +'<div><div class="irow-name">'+it.name+'</div>'
+      +(it.code ? '<div class="irow-code">'+it.code+'</div>' : '')
+      +'</div>'
+      +'<div class="ichk">'+(on ? '✓' : '')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function filterItems(kw) {
+  if (!kw.trim()) { F_ITEMS = ALL_ITEMS.slice(); }
+  else {
+    var k = kw.trim().toLowerCase();
+    F_ITEMS = ALL_ITEMS.filter(function(it) {
+      return it.name.toLowerCase().includes(k) || (it.code||'').toLowerCase().includes(k);
+    });
+  }
+  renderItems(F_ITEMS);
+}
+
+function pickItem(el, idx) {
+  document.querySelectorAll('.irow').forEach(function(r) {
+    r.classList.remove('on');
+    var c = r.querySelector('.ichk');
+    if (c) c.textContent = '';
+  });
+  el.classList.add('on');
+  var c = el.querySelector('.ichk');
+  if (c) c.textContent = '✓';
+
+  selItem = F_ITEMS[idx];
+
+  // ── 공통 적용 항목 계산 ──
+  var shared = getSharedGroup(selItem, ALL_ITEMS);
+  document.getElementById('share-rep').textContent = selItem.name;
+  document.getElementById('share-desc').textContent =
+    (selPurpose ? '['+selPurpose.n+']' : '') +
+    ' 에서 동일 계산식 항목 ' + shared.length + '개에 공통 적용됩니다.';
+  document.getElementById('share-tags').innerHTML = shared.map(function(it) {
+    return '<span class="share-tag">'+it.name+'</span>';
+  }).join('');
+  document.getElementById('share-box').style.display = 'block';
+
+  // 다음 단계 표시
+  document.getElementById('sec-upload').style.display = 'block';
+  document.getElementById('btn-area').style.display = 'flex';
+  goStep(4);
+}
+
+/* 동일 계산식 그룹 추론 */
+function getSharedGroup(item, allItems) {
+  var groups = [
+    ['납','카드뮴','비소','수은','Pb','Cd','As','Hg','중금속'],
+    ['대장균','살모넬라','황색포도','세균','리스테리아','장염비브리오','클로스트리디움','리스','세균수'],
+    ['세슘','요오드','스트론튬','플루토늄','방사능'],
+    ['글루텐','우유','달걀','땅콩','대두','밀','메밀','알레르겐','Allergen'],
+    ['수분','조단백','조지방','회분','산가','과산화물','이화학'],
+    ['테트라사이클린','설파','암피실린','에리스로','항생','항균'],
+    ['잔류농약','농약','클로르피리','다이아지'],
+    ['열량','탄수화물','단백질','지방','나트륨','당류','영양성분']
+  ];
+  var nm = (item.name||'').toLowerCase();
+  for (var i=0; i<groups.length; i++) {
+    var g = groups[i];
+    if (g.some(function(k){ return nm.includes(k.toLowerCase()); })) {
+      return allItems.filter(function(it) {
+        var n = (it.name||'').toLowerCase();
+        return g.some(function(k){ return n.includes(k.toLowerCase()); });
+      });
+    }
+  }
+  return [item];
+}
+
+/* =============================================================
+   흐름 표시기 갱신
+============================================================= */
+function goStep(n) {
+  for (var i=1; i<=5; i++) {
+    var fni = document.getElementById('fn'+i);
+    var fli = document.getElementById('fl'+i);
+    var fdi = document.getElementById('fd'+i);
+    if (!fni) continue;
+    if (i < n) {
+      fni.className='fn done'; fni.textContent='✓';
+      if (fli) { fli.className='fl done'; }
+      if (fdi) fdi.className='fdiv done';
+    } else if (i === n) {
+      fni.className='fn now'; fni.textContent=String(i);
+      if (fli) { fli.className='fl now'; }
+    } else {
+      fni.className='fn idle'; fni.textContent=String(i);
+      if (fli) { fli.className='fl'; }
+    }
+  }
+}
+
+/* =============================================================
+   STEP 4 ─ 파일 업로드
+============================================================= */
+function toB64(file) {
+  return new Promise(function(res,rej) {
+    var r = new FileReader();
+    r.onload = function(){ res(r.result.split(',')[1]); };
+    r.onerror = function(){ rej(new Error('읽기 실패')); };
+    r.readAsDataURL(file);
+  });
+}
+async function onFile(inp, t) {
+  var file = inp.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') { toast('PDF 파일만 가능합니다','err'); return; }
+  var b64 = await toB64(file);
+  setFile(t, b64, file.name);
+}
+function setFile(t, b64, nm) {
+  if (t==='blank') {
+    b64Blank=b64; nameBlank=nm;
+    document.getElementById('ui-blank').textContent='📎';
+    document.getElementById('uf-blank').textContent='✓ '+nm;
+    document.getElementById('uz-blank').classList.add('ok');
+  } else {
+    b64Filled=b64; nameFilled=nm;
+    document.getElementById('ui-filled').textContent='📎';
+    document.getElementById('uf-filled').textContent='✓ '+nm;
+    document.getElementById('uz-filled').classList.add('ok');
+  }
+}
+function onDg(e,t){e.preventDefault();document.getElementById('uz-'+t).classList.add('drag');}
+function onDl(t){document.getElementById('uz-'+t).classList.remove('drag');}
+async function onDp(e,t){
+  e.preventDefault(); document.getElementById('uz-'+t).classList.remove('drag');
+  var file=e.dataTransfer.files[0];
+  if (!file || file.type!=='application/pdf'){toast('PDF만 가능합니다','err');return;}
+  setFile(t, await toB64(file), file.name);
+}
+
+/* =============================================================
+   STEP 5 ─ 분석 + 저장
+============================================================= */
+function pi(n, state, txt) {
+  var el = document.getElementById('pi'+n);
+  var st = document.getElementById('ps'+n);
+  el.className='pi '+state;
+  el.textContent = state==='done'?'✓':state==='err'?'✕':String(n);
+  if (st) st.textContent = txt||'';
+}
+
+async function doAnalyze() {
+  if (!b64Blank||!b64Filled){ toast('PDF 2개를 모두 업로드하세요','err'); return; }
+  if (!selItem){ toast('검사항목을 선택하세요','err'); return; }
+  var person = document.getElementById('inp-person').value.trim();
+  if (!person){ toast('담당자 이름을 입력하세요','err'); return; }
+
+  var btn = document.getElementById('btn-go');
+  btn.disabled=true; btn.textContent='⏳ 분석 중...';
+  document.getElementById('prog').style.display='block';
+  document.getElementById('preview').style.display='none';
+  goStep(5);
+
+  pi(1,'run'); await sleep(200);
+  pi(1,'done','완료');
+
+  pi(2,'run','AI 분석 중...');
+  var analyzed = null;
+  try {
+    analyzed = await callClaude();
+    var fc = (analyzed.sections||[]).reduce(function(s,sec){return s+(sec.fields||[]).length;},0);
+    pi(2,'done', fc+'개 필드 추출');
+  } catch(e) {
+    pi(2,'err','실패: '+e.message);
+    toast('AI 분석 실패: '+e.message,'err');
+    btn.disabled=false; btn.textContent='🚀 분석 후 저장'; return;
+  }
+
+  pi(3,'run','저장 중...');
+  try {
+    if (!dbOk) throw new Error('Firebase 미연결');
+    var shared = getSharedGroup(selItem, ALL_ITEMS);
+    var docId = (selField?selField.id:'X')+'_'
+      +(selPurpose?selPurpose.prefix:'P')+'_'
+      +(selItem.code||selItem.name).replace(/[^a-zA-Z0-9가-힣]/g,'_')
+      +'_'+Date.now();
+
+    var row = {
+      docId: docId,
+      // ── 분야·목적·항목 연결 ──
+      fieldId:   selField ? selField.id   : null,
+      fieldName: selField ? selField.name : '전체',
+      fieldColor:selField ? selField.color: '#94a3b8',
+      purposeCode:  selPurpose ? (selPurpose.prefix||String(selPurpose.c)) : null,
+      purposeName:  selPurpose ? selPurpose.n : null,
+      representativeItem:     selItem.name,
+      representativeItemCode: selItem.code||'',
+      sharedItems: shared.map(function(it){ return {name:it.name, code:it.code||''}; }),
+      // ── 제출 정보 ──
+      submitter: person,
+      sopCode:   document.getElementById('inp-sop').value.trim(),
+      memo:      document.getElementById('inp-memo').value.trim(),
+      blankFile: nameBlank,
+      filledFile:nameFilled,
+      // ── AI 분석 결과 ──
+      analyzed: analyzed,
+      appliedToLims: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdAtStr: new Date().toLocaleString('ko-KR')
+    };
+
+    await db.collection('formTemplates').doc(docId).set(row);
+    pi(3,'done','저장 완료');
+    toast('✅ 저장 완료! 개발팀이 LIMS에 반영합니다.','ok');
+    renderPreview(analyzed, row);
+    loadList();
+  } catch(e) {
+    pi(3,'err','실패: '+e.message);
+    toast('저장 실패: '+e.message,'err');
+  }
+  btn.disabled=false; btn.textContent='🚀 분석 후 저장';
+}
+
+/* =============================================================
+   Claude API 호출 (로컬 프록시 경유 — CORS 우회)
+   서버: api_server.py  POST /api/claude
+============================================================= */
+// 프록시 서버 주소 (api_server.py 포트 5003)
+var PROXY_URL = (location.protocol === 'https:' ? 'https://' : 'http://')
+  + location.hostname + ':5003/api/claude';
+
+async function callClaude() {
+  var testType = guessType(selItem ? selItem.name : '');
+  var prompt = '당신은 식품 시험 검사 기록서 분석 전문가입니다.\n'
+    + '첨부 PDF 2개:\n- document1: 빈 양식\n- document2: 작성 완료 기록서\n\n'
+    + '검사분야: ' + (selField ? selField.name : '')
+    + '\n검사목적: ' + (selPurpose ? selPurpose.n : '')
+    + '\n대표 검사항목: ' + (selItem ? selItem.name : '')
+    + '\n시험유형: ' + testType + '\n\n'
+    + '아래 JSON만 응답하세요 (마크다운·주석 금지):\n\n'
+    + '{\n'
+    + '  "formTitle": "기록서제목",\n'
+    + '  "testItem": "대표검사항목명",\n'
+    + '  "testType": "' + testType + '",\n'
+    + '  "sop": "SOP코드 또는 null",\n'
+    + '  "sections": [\n'
+    + '    {\n'
+    + '      "title": "섹션명",\n'
+    + '      "fields": [\n'
+    + '        {\n'
+    + '          "id": "camelCase영문ID",\n'
+    + '          "label": "한국어라벨",\n'
+    + '          "type": "text|number|date|textarea|readonly",\n'
+    + '          "unit": "단위 또는 null",\n'
+    + '          "exampleValue": "완성본실제값",\n'
+    + '          "placeholder": "입력힌트",\n'
+    + '          "required": true\n'
+    + '        }\n'
+    + '      ]\n'
+    + '    }\n'
+    + '  ],\n'
+    + '  "calculations": [\n'
+    + '    {\n'
+    + '      "id": "결과ID",\n'
+    + '      "label": "결과라벨",\n'
+    + '      "formula": "JS eval 가능한 수식 (변수명=field id 그대로)",\n'
+    + '      "formulaText": "한국어 수식 설명",\n'
+    + '      "unit": "단위",\n'
+    + '      "decimalPlaces": 2,\n'
+    + '      "exampleResult": "완성본결과값"\n'
+    + '    }\n'
+    + '  ],\n'
+    + '  "judgmentRule": {\n'
+    + '    "resultFieldId": "계산결과ID",\n'
+    + '    "standardText": "기준규격텍스트",\n'
+    + '    "maxValue": 0.3,\n'
+    + '    "unit": "mg/kg"\n'
+    + '  },\n'
+    + '  "equipment": ["장비목록"],\n'
+    + '  "reagents": ["시약목록"]\n'
+    + '}';
+
+  var body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 3000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Blank } },
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Filled } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  var resp = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    var errTxt = await resp.text().catch(function() { return resp.statusText; });
+    throw new Error('프록시 오류 ' + resp.status + ': ' + errTxt.substring(0, 120));
+  }
+
+  var d = await resp.json();
+
+  // 오류 응답 처리
+  if (d.error) throw new Error(d.error.message || d.error);
+
+  var raw = (d.content || []).find(function(b) { return b.type === 'text'; });
+  if (!raw) throw new Error('Claude 응답에 텍스트 없음');
+
+  var jsonStr = raw.text.replace(/```json|```/g, '').trim();
+  return JSON.parse(jsonStr);
+}
+
+function guessType(nm) {
+  nm = (nm||'').toLowerCase();
+  if (/납|카드뮴|비소|수은|pb|cd|as|hg/.test(nm)) return '중금속';
+  if (/대장균|살모넬라|황색포도|세균|미생물/.test(nm)) return '미생물';
+  if (/세슘|요오드|스트론튬|방사능/.test(nm)) return '방사능';
+  if (/잔류농약|농약/.test(nm)) return '잔류농약';
+  if (/테트라|설파|암피|에리스로|항생/.test(nm)) return '항생물질';
+  if (/알레르겐|allergen|글루텐|대두|땅콩/.test(nm)) return '알레르겐';
+  if (/열량|탄수화물|단백질|지방|나트륨/.test(nm)) return '영양성분';
+  return '이화학';
+}
+
+/* =============================================================
+   결과 미리보기
+============================================================= */
+function renderPreview(data, row) {
+  document.getElementById('preview').style.display='block';
+  var fc = (data.sections||[]).reduce(function(s,sec){return s+(sec.fields||[]).length;},0);
+  var badges = [
+    {k:'분야',     v:row.fieldName},
+    {k:'목적',     v:row.purposeName||'-'},
+    {k:'대표항목', v:row.representativeItem},
+    {k:'공통적용', v:(row.sharedItems||[]).length+'개'},
+    {k:'필드수',   v:fc+'개'},
+    {k:'계산식',   v:(data.calculations||[]).length+'개'},
+    {k:'SOP',      v:data.sop||'-'}
+  ];
+  document.getElementById('pv-badges').innerHTML = badges.map(function(b) {
+    return '<span class="pb"><span style="opacity:.6">'+b.k+': </span>'+b.v+'</span>';
+  }).join('');
+
+  var allF = [];
+  (data.sections||[]).forEach(function(s){(s.fields||[]).forEach(function(f){if(f.exampleValue)allF.push(f);});});
+  document.getElementById('pv-fields').innerHTML = allF.slice(0,8).map(function(f) {
+    return '<div class="pfield"><div class="pfl">'+f.label+(f.unit?' ('+f.unit+')':'')+'</div>'
+      +'<div class="pfv">'+f.exampleValue+'</div></div>';
+  }).join('');
+
+  document.getElementById('pv-calcs').innerHTML = (data.calculations||[]).map(function(c) {
+    return '<div class="pcalc"><strong>'+c.label+'</strong>: <code>'+(c.formulaText||c.formula)+'</code>'
+      +(c.exampleResult?' = <strong>'+c.exampleResult+' '+(c.unit||'')+'</strong>':'')+'</div>';
+  }).join('');
+}
+
+/* =============================================================
+   현황 테이블
+============================================================= */
+async function loadList() {
+  if (!dbOk) {
+    document.getElementById('tbl-wrap').innerHTML =
+      '<div class="empty"><div class="empty-i">⚠️</div>'
+      +'<p style="color:#f59e0b">Firebase 연결 안 됨<br>저장 기능을 사용하려면 네트워크를 확인하세요</p></div>';
+    return;
+  }
+  try {
+    var snap = await db.collection('formTemplates').get();
+    templates = [];
+    snap.forEach(function(doc){ templates.push(Object.assign({_id:doc.id}, doc.data())); });
+    templates.sort(function(a,b){ return (b.createdAtStr||'')>(a.createdAtStr||'')?1:-1; });
+    renderList(); updateCnts();
+  } catch(e){ console.warn('목록 오류:',e); }
+}
+
+function updateCnts() {
+  var p = templates.filter(function(t){return !t.appliedToLims;}).length;
+  document.getElementById('cnt-total').textContent  = '수집 '+templates.length+'건';
+  document.getElementById('cnt-pending').textContent= '미반영 '+p+'건';
+}
+
+function renderList() {
+  if (!templates.length) {
+    document.getElementById('tbl-wrap').innerHTML =
+      '<div class="empty"><div class="empty-i">📂</div><p>수집된 양식이 없습니다.</p></div>';
+    return;
+  }
+  var rows = templates.map(function(t, i) {
+    var fc = t.fieldColor||'#94a3b8';
+    var sc = (t.sharedItems||[]).length;
+    return '<tr>'
+      +'<td><span class="ftag" style="background:'+fc+'18;color:'+fc+'">'+( t.fieldName||'-')+'</span></td>'
+      +'<td><span class="ptag">'+(t.purposeCode||'')+'</span>&nbsp;'+(t.purposeName||'-')+'</td>'
+      +'<td><b>'+(t.representativeItem||t.itemName||'-')+'</b>'
+        +(sc>1?'<br><span style="font-size:10px;color:#64748b">공통 '+sc+'개</span>':'')+'</td>'
+      +'<td>'+(t.submitter||'-')+'</td>'
+      +'<td>'+(t.createdAtStr?t.createdAtStr.substring(0,16):'-')+'</td>'
+      +'<td><span class="impl '+(t.appliedToLims?'done':'wait')+'">'
+        +(t.appliedToLims?'✅ 반영완료':'⏳ 대기중')+'</span></td>'
+      +'<td style="display:flex;gap:4px;flex-wrap:wrap">'
+        +'<button class="abt" onclick="openDetail('+i+')">상세</button>'
+        +'<button class="abt" onclick="toggleApplied('+i+')">'+(t.appliedToLims?'미반영':'반영완료')+'</button>'
+        +'<button class="abt del" onclick="doDelete('+i+')">삭제</button>'
+      +'</td>'
+      +'</tr>';
+  }).join('');
+  document.getElementById('tbl-wrap').innerHTML =
+    '<table class="stbl"><thead><tr>'
+    +'<th>분야</th><th>검사목적</th><th>대표항목</th>'
+    +'<th>담당자</th><th>등록일시</th><th>상태</th><th>관리</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+/* =============================================================
+   상세 모달
+============================================================= */
+function openDetail(i) {
+  var t = templates[i];
+  if (!t) return;
+  document.getElementById('m-detail-title').textContent =
+    '['+(t.fieldName||'')+'] '+(t.purposeName||'')+' — '+(t.representativeItem||t.itemName||'');
+  var a = t.analyzed||{}, html='';
+
+  // 연결 정보
+  html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:11px 13px;margin-bottom:13px;font-size:12px">';
+  html+='<div style="font-weight:700;color:#1d4ed8;margin-bottom:6px">📌 분야·목적·항목 연결</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">';
+  [['검사분야',t.fieldName||'-'],['검사목적',(t.purposeName||'-')+'  ('+( t.purposeCode||'')+')'],
+   ['대표항목',t.representativeItem||'-']].forEach(function(r){
+    html+='<div style="background:#fff;border-radius:6px;padding:7px 10px">'
+      +'<div style="font-size:10px;color:#64748b">'+r[0]+'</div>'
+      +'<div style="font-weight:600;font-size:12px">'+r[1]+'</div></div>';
+  });
+  html+='</div>';
+  if ((t.sharedItems||[]).length>1) {
+    html+='<div style="margin-top:8px"><div style="font-size:10px;color:#64748b;margin-bottom:3px">공통 적용 항목</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:4px">'
+      +(t.sharedItems||[]).map(function(it){
+        return '<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:7px;font-size:11px">'+it.name+'</span>';
+      }).join('')+'</div></div>';
+  }
+  html+='</div>';
+
+  // 섹션·필드
+  (a.sections||[]).forEach(function(sec) {
+    html+='<div style="margin-bottom:11px">'
+      +'<div style="font-size:12px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:5px;padding:5px 9px;margin-bottom:5px">'+sec.title+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:5px">';
+    (sec.fields||[]).forEach(function(f){
+      html+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:5px 9px">'
+        +'<div style="font-size:10px;color:#64748b">'+f.label+(f.unit?' ('+f.unit+')':'')+'</div>'
+        +'<div style="font-size:12px;font-weight:600;color:'+(f.type==='readonly'?'#059669':'#1e293b')+'">'+( f.exampleValue||'—')+'</div></div>';
+    });
+    html+='</div></div>';
+  });
+
+  // 계산식
+  (a.calculations||[]).forEach(function(c){
+    html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:8px 11px;margin-bottom:5px;font-size:12px">'
+      +'<strong>'+c.label+'</strong>: '
+      +'<code style="background:#dbeafe;padding:1px 5px;border-radius:3px;font-family:monospace">'+(c.formulaText||c.formula)+'</code>'
+      +(c.exampleResult?' = <strong style="color:#059669">'+c.exampleResult+' '+(c.unit||'')+'</strong>':'')+'</div>';
+  });
+
+  if (a.judgmentRule)
+    html+='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:8px 11px;font-size:12px;color:#065f46">'
+      +'<strong>판정기준:</strong> '+a.judgmentRule.standardText+' '+(a.judgmentRule.unit||'')+'</div>';
+
+  document.getElementById('m-detail-body').innerHTML = html;
+  document.getElementById('m-detail').classList.add('on');
+}
+
+/* =============================================================
+   반영완료 / 삭제
+============================================================= */
+async function toggleApplied(i) {
+  var t = templates[i];
+  if (!t||!dbOk) return;
+  var v = !t.appliedToLims;
+  await db.collection('formTemplates').doc(t._id).update({appliedToLims:v});
+  templates[i].appliedToLims = v;
+  renderList(); updateCnts();
+  toast(v?'반영완료 처리됐습니다':'미반영으로 변경됐습니다','ok');
+}
+async function doDelete(i) {
+  var t = templates[i];
+  if (!confirm('['+( t.representativeItem||t.itemName)+'] 삭제할까요?')) return;
+  await db.collection('formTemplates').doc(t._id).delete();
+  templates.splice(i,1); renderList(); updateCnts();
+  toast('삭제됐습니다','ok');
+}
+
+/* =============================================================
+   Claude Code 프롬프트 생성
+============================================================= */
+function openPromptModal() {
+  var pending = templates.filter(function(t){return !t.appliedToLims;});
+  if (!pending.length){ toast('미반영 양식이 없습니다','warn'); return; }
+  document.getElementById('prompt-box').textContent = buildPrompt(pending);
+  document.getElementById('m-prompt').classList.add('on');
+}
+
+function buildPrompt(items) {
+  var L = ['# BFL LIMS 시험기록서 입력폼 자동 반영 요청',''];
+  L.push('testResultInput.html 과 testDiary.html 에 아래 분석된 기록서 입력폼을 추가해주세요.');
+  L.push('▶ 기존 코드·기능은 절대 수정하지 말 것. 새 탭과 폼만 추가.');
+  L.push('▶ 각 필드 id는 rec-{id} 형식으로 사용.','');
+
+  // 분야 > 목적 그룹핑
+  var groups = {};
+  items.forEach(function(t) {
+    var k = (t.fieldName||'전체')+' > '+(t.purposeName||'기타');
+    if (!groups[k]) groups[k]=[];
+    groups[k].push(t);
+  });
+
+  Object.keys(groups).forEach(function(gk) {
+    L.push('## '+gk,'');
+    groups[gk].forEach(function(t, n) {
+      var a = t.analyzed||{};
+      L.push('### '+(n+1)+'. 대표항목: '+t.representativeItem
+        +(t.representativeItemCode?' ('+t.representativeItemCode+')':''));
+      L.push('- 담당자: '+t.submitter+' | SOP: '+(t.sopCode||a.sop||'미확인'));
+      L.push('- 공통 적용 항목: '+(t.sharedItems||[]).map(function(x){return x.name;}).join(', '));
+      if (t.memo) L.push('- 메모: '+t.memo);
+      L.push('');
+
+      (a.sections||[]).forEach(function(sec) {
+        L.push('**['+sec.title+']**');
+        (sec.fields||[]).forEach(function(f) {
+          L.push('- `rec-'+f.id+'` '+f.label+' | '+f.type
+            +(f.unit?' | 단위:'+f.unit:'')
+            +(f.exampleValue?' | 예시:'+f.exampleValue:'')
+            +(f.placeholder?' | hint:'+f.placeholder:''));
+        });
+        L.push('');
+      });
+
+      if ((a.calculations||[]).length) {
+        L.push('**계산식**');
+        (a.calculations||[]).forEach(function(c) {
+          L.push('- '+c.label);
+          L.push('  한국어: '+( c.formulaText||'-'));
+          L.push('  JS수식: `'+c.formula+'`');
+          L.push('  단위: '+(c.unit||'-')+' | 소수점: '+(c.decimalPlaces??2)+'자리');
+          if (c.exampleResult) L.push('  검증값: '+c.exampleResult);
+        });
+        L.push('');
+      }
+
+      if (a.judgmentRule)
+        L.push('**판정기준**: '+a.judgmentRule.standardText+' '+(a.judgmentRule.unit||''),'');
+    });
+    L.push('---','');
+  });
+
+  L.push('## 구현 지침','');
+  L.push('1. testResultInput.html 시험일지 섹션에 [검사유형 탭] 추가');
+  L.push('   - 탭 목록: '+[...new Set(items.map(function(t){return t.purposeName||'기타';}))].join(', '));
+  L.push('2. 탭 선택 시 해당 입력폼 표시 (위 필드 정의 기반)');
+  L.push('3. oninput 이벤트 → calcResult_{유형}() 함수 실행 → 결과 자동 계산');
+  L.push('4. generateDiaryCn() 함수: 선택된 탭에 따라 분기하여 HTML 기록서 생성');
+  L.push('5. testDiary.html 에도 동일 폼 추가 + saveDiary() 에서 generateDiaryCn() 사용');
+  L.push('6. 반영 후 아래 문서 ID의 appliedToLims 를 true 로 업데이트:');
+  items.forEach(function(t){ L.push('   - '+t._id); });
+
+  return L.join('\n');
+}
+
+function doCopy() {
+  var txt = document.getElementById('prompt-box').textContent;
+  navigator.clipboard.writeText(txt)
+    .then(function(){ toast('복사됐습니다!','ok'); })
+    .catch(function() {
+      var ta=document.createElement('textarea');
+      ta.value=txt; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      toast('복사됐습니다','ok');
+    });
+}
+
+/* =============================================================
+   초기화 + 유틸
+============================================================= */
+function doReset() {
+  b64Blank=null; b64Filled=null; nameBlank=''; nameFilled='';
+  selField=null; selPurpose=null; selItem=null;
+  document.querySelectorAll('.fbt').forEach(function(b){
+    b.classList.remove('on');
+    var f=FIELDS.find(function(x){return x.id===b.dataset.id;});
+    if(f){b.style.background='#fff';b.style.color=f.color;}
+  });
+  ['sec-purpose','sec-items','sec-upload','btn-area','prog','preview','share-box']
+    .forEach(function(id){ hide(id); });
+  document.getElementById('uz-blank').classList.remove('ok');
+  document.getElementById('uz-filled').classList.remove('ok');
+  document.getElementById('ui-blank').textContent='📋';
+  document.getElementById('ui-filled').textContent='✅';
+  document.getElementById('uf-blank').textContent='';
+  document.getElementById('uf-filled').textContent='';
+  ['inp-person','inp-sop','inp-memo'].forEach(function(id){
+    document.getElementById(id).value='';
+  });
+  goStep(1);
+  toast('초기화됐습니다','info');
+}
+
+function closeM(id) { document.getElementById(id).classList.remove('on'); }
+function hide(id) { var el=document.getElementById(id); if(el) el.style.display='none'; }
+function sleep(ms) { return new Promise(function(r){ setTimeout(r,ms); }); }
+
+function toast(msg, type) {
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast '+(type||'info');
+  setTimeout(function(){ el.classList.add('show'); },10);
+  clearTimeout(el._t);
+  el._t=setTimeout(function(){ el.classList.remove('show'); },3500);
+}
+</script>
+</body>
+</html>
