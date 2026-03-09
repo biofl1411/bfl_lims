@@ -198,13 +198,6 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
       <div class="breadcrumb">
         <span>시험관리</span> <span>/</span> <span class="breadcrumb-current">시험일지</span>
       </div>
-      <div id="user-login-area" style="display:flex;align-items:center;gap:6px;margin-right:12px">
-        <span style="font-size:14px">👤</span>
-        <span id="user-display" style="font-size:13px;font-weight:600;color:#1e40af;cursor:pointer" onclick="toggleUserSelect()"></span>
-        <select id="current-user-select" style="display:none;padding:4px 8px;border:1px solid #2563eb;border-radius:6px;font-size:12px;min-width:120px;background:#fff" onchange="onCurrentUserChange()">
-          <option value="">사용자 선택</option>
-        </select>
-      </div>
       <div class="server-status" id="server-status">
         <span id="server-status-icon">...</span>
         <span id="server-status-text">확인 중</span>
@@ -321,11 +314,9 @@ var currentDiaryData = {};     // 현재 일지 데이터
 var _specResults = [];         // 기준규격 조회 결과
 var _selectedSpecIdx = -1;     // 선택된 기준규격 인덱스
 
-// 마스터 데이터 + 사용자
+// 마스터 데이터
 var masterPurposes = [];           // settings/inspectionPurposes
 var masterItemsByPurpose = {};     // { purposeName: [item1, item2, ...] }
-var allUsers = [];
-var currentUserName = localStorage.getItem('bfl_currentUser') || '';
 
 /* ============================================================
    초기화
@@ -337,70 +328,12 @@ window.addEventListener('firebase-ready', function() {
 async function initDiary() {
   checkMfdsStatus();
   setDefaultDates();
-  setupUserLogin();
   // 데이터 먼저 로드
   searchFromFirestore();
   // 마스터 데이터 백그라운드 로드
   loadMasterData().then(function() {
     populateDiaryFilterDropdowns();
   });
-}
-
-/* 사용자 로그인 */
-function setupUserLogin() {
-  var display = document.getElementById('user-display');
-  var sel = document.getElementById('current-user-select');
-  if (currentUserName) {
-    display.textContent = currentUserName;
-    display.style.display = '';
-    sel.style.display = 'none';
-  } else {
-    display.textContent = '로그인';
-    display.style.color = '#ef4444';
-    display.style.display = '';
-    sel.style.display = 'none';
-  }
-  fsGetUsers().then(function(users) {
-    allUsers = users;
-    sel.innerHTML = '<option value="">사용자 선택</option>';
-    users.forEach(function(u) {
-      if (u.leaveDate) return;
-      var label = u.name + (u.department ? ' (' + u.department + ')' : '');
-      sel.innerHTML += '<option value="' + u.name + '">' + label + '</option>';
-    });
-    if (currentUserName) sel.value = currentUserName;
-  }).catch(function() {});
-}
-
-function toggleUserSelect() {
-  var sel = document.getElementById('current-user-select');
-  var display = document.getElementById('user-display');
-  if (sel.style.display === 'none') {
-    sel.style.display = '';
-    display.style.display = 'none';
-    sel.focus();
-  } else {
-    sel.style.display = 'none';
-    display.style.display = '';
-  }
-}
-
-function onCurrentUserChange() {
-  var sel = document.getElementById('current-user-select');
-  var display = document.getElementById('user-display');
-  currentUserName = sel.value;
-  if (currentUserName) {
-    localStorage.setItem('bfl_currentUser', currentUserName);
-    display.textContent = currentUserName;
-    display.style.color = '#1e40af';
-  } else {
-    localStorage.removeItem('bfl_currentUser');
-    display.textContent = '로그인';
-    display.style.color = '#ef4444';
-  }
-  sel.style.display = 'none';
-  display.style.display = '';
-  renderSampleList();
 }
 
 /* 마스터 데이터 로드 (검사목적, 검사항목 연동) */
@@ -606,11 +539,6 @@ function getFilteredSamples() {
 
   var result = [];
   allSamples.forEach(function(s, i) {
-    // 현재 사용자 필터 (로그인 사용자 기준)
-    if (currentUserName) {
-      var tester = s.testerName || (s._data && s._data.testerName) || '';
-      if (tester !== currentUserName) return;
-    }
     // 텍스트 검색 (접수번호, 시료명, 거래처)
     if (q) {
       var haystack = ((s.sploreRceptNo || '') + ' ' + (s.sploreNm || '') + ' ' + (s.prductNm || '') + ' ' + (s.entrpsNm || '')).toLowerCase();

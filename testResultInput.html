@@ -258,13 +258,6 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         <span>시험 결재</span><span style="color:#cbd5e1">›</span>
         <span class="breadcrumb-current">결과 입력</span>
       </div>
-      <div id="user-login-area" style="display:flex;align-items:center;gap:6px;margin-right:12px">
-        <span style="font-size:14px">👤</span>
-        <span id="user-display" style="font-size:13px;font-weight:600;color:#1e40af;cursor:pointer" onclick="toggleUserSelect()"></span>
-        <select id="current-user-select" style="display:none;padding:4px 8px;border:1px solid #2563eb;border-radius:6px;font-size:12px;min-width:120px;background:#fff" onchange="onCurrentUserChange()">
-          <option value="">사용자 선택</option>
-        </select>
-      </div>
       <div class="server-status" id="server-status">
         <span id="server-status-icon">⏳</span>
         <span id="server-status-text">연결 확인중...</span>
@@ -427,11 +420,9 @@ var MFDS_ENABLED = false;       // 기본: 비활성화 (안전)
 var filters = { field: '전체', status: '전체', purpose: '', testItem: '', search: '', dateFrom: '', dateTo: '' };
 var searchTimer = null;
 
-// 마스터 데이터 + 사용자
+// 마스터 데이터
 var masterPurposes = [];           // settings/inspectionPurposes
 var masterItemsByPurpose = {};     // { purposeName: [item1, item2, ...] }
-var allUsers = [];
-var currentUserName = localStorage.getItem('bfl_currentUser') || '';
 
 // MFDS Templates 캐시
 var _mfdsTemplatesCache = null;
@@ -452,8 +443,6 @@ window.addEventListener('firebase-ready', function() {
 async function init() {
   checkMfdsStatus();
   loadMfdsEnabled();
-  setupUserLogin();
-  // 데이터 먼저 로드 (마스터 데이터는 백그라운드)
   await loadMfdsTemplatesData();
   await loadReceipts();
   handleUrlParams();
@@ -461,64 +450,6 @@ async function init() {
   loadMasterData().then(function() {
     populateFilterDropdowns();
   });
-}
-
-/* 사용자 로그인 */
-function setupUserLogin() {
-  var display = document.getElementById('user-display');
-  var sel = document.getElementById('current-user-select');
-  if (currentUserName) {
-    display.textContent = currentUserName;
-    display.style.display = '';
-    sel.style.display = 'none';
-  } else {
-    display.textContent = '로그인';
-    display.style.color = '#ef4444';
-    display.style.display = '';
-    sel.style.display = 'none';
-  }
-  // 사용자 목록 로드
-  fsGetUsers().then(function(users) {
-    allUsers = users;
-    sel.innerHTML = '<option value="">사용자 선택</option>';
-    users.forEach(function(u) {
-      if (u.leaveDate) return;
-      var label = u.name + (u.department ? ' (' + u.department + ')' : '');
-      sel.innerHTML += '<option value="' + u.name + '">' + label + '</option>';
-    });
-    if (currentUserName) sel.value = currentUserName;
-  }).catch(function() {});
-}
-
-function toggleUserSelect() {
-  var sel = document.getElementById('current-user-select');
-  var display = document.getElementById('user-display');
-  if (sel.style.display === 'none') {
-    sel.style.display = '';
-    display.style.display = 'none';
-    sel.focus();
-  } else {
-    sel.style.display = 'none';
-    display.style.display = '';
-  }
-}
-
-function onCurrentUserChange() {
-  var sel = document.getElementById('current-user-select');
-  var display = document.getElementById('user-display');
-  currentUserName = sel.value;
-  if (currentUserName) {
-    localStorage.setItem('bfl_currentUser', currentUserName);
-    display.textContent = currentUserName;
-    display.style.color = '#1e40af';
-  } else {
-    localStorage.removeItem('bfl_currentUser');
-    display.textContent = '로그인';
-    display.style.color = '#ef4444';
-  }
-  sel.style.display = 'none';
-  display.style.display = '';
-  applyFilters();
 }
 
 /* 마스터 데이터 로드 (검사목적, 검사항목 연동) */
@@ -658,8 +589,6 @@ function applyFilters() {
   filters.dateTo = document.getElementById('filter-to').value;
 
   filteredReceipts = allReceipts.filter(function(r) {
-    // 로그인 사용자 기준 (선택된 경우)
-    if (currentUserName && (r.testerName || '') !== currentUserName) return false;
     // 분야
     if (filters.field !== '전체' && r.testField !== filters.field) return false;
     // 상태
