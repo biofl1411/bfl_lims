@@ -156,7 +156,8 @@ const SIDEBAR_MENU = [
       { label: '일정관리',          disabled: true },
       { label: '지부관리',          disabled: true },
       { label: '실적보고',          disabled: true },
-      { label: 'LIMS 연동',        disabled: true }
+      { label: 'LIMS 연동',        disabled: true },
+      { label: '기록서 양식 수집',  href: 'formCollector.html',  page: 'testing-formCollector' }
     ]
   },
   { id: 'results',       icon: '📄', label: '성적 관리',      disabled: true },
