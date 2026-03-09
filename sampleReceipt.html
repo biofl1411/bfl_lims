@@ -4916,6 +4916,15 @@ function collectReceiptData() {
             document.querySelectorAll('.cc-email-field').forEach(function(el){ if(el.value) cc.push(el.value); });
             return cc;
         })(),
+        // 제품명 검색용 배열 (Firestore array-contains 쿼리)
+        productNames: (function() {
+            var names = [];
+            _sampleData.forEach(function(s) {
+                var pn = (s['product-name'] || '').trim();
+                if (pn && names.indexOf(pn) < 0) names.push(pn);
+            });
+            return names;
+        })(),
         // 시료 데이터 배열
         samples: _sampleData.map(function(s, i) {
             return {
@@ -5448,12 +5457,13 @@ async function searchProductHistory() {
     panel.innerHTML = '<div style="padding:16px;text-align:center;color:#888"><span class="loading-spinner" style="display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#5b67f5;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span> 조회 중...</div>';
     panel.style.display = '';
     try {
+        // productNames 배열 필드로 검색 (array-contains)
         var snap = await db.collection('receipts')
-            .where('productName', '==', pn)
+            .where('productNames', 'array-contains', pn)
             .limit(50)
             .get();
         if (snap.empty) {
-            panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">📭 "' + pn + '" 접수 이력이 없습니다.</div>';
+            panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">"' + pn + '" 접수 이력이 없습니다.</div>';
             return;
         }
         // 클라이언트 정렬 (최신순)
@@ -5462,32 +5472,37 @@ async function searchProductHistory() {
             var tb = b.data().createdAt?.toDate?.() || new Date(0);
             return tb - ta;
         }).slice(0, 20);
-        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">📋 접수이력 <span style="color:#5b67f5">' + docs.length + '건</span><span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
+        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">접수이력 <span style="color:#5b67f5">' + docs.length + '건</span><span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
         docs.forEach(function(doc) {
             var r = doc.data();
             var dt = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toISOString().slice(0,10) : '';
             var rno = r.receiptNo || '-';
-            var ft = r.foodType || '';
             var co = r.companyName || '';
             var tf = r.testField || '';
             var tp = r.testPurpose || '';
-            html += '<div class="product-history-item" onclick="fillFromHistory(\'' + doc.id + '\')" style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;transition:background 0.15s"';
+            // samples 배열에서 해당 제품명의 시료 정보 추출
+            var s0 = null;
+            if (r.samples) {
+                s0 = r.samples.find(function(s) { return s.productName === pn; }) || r.samples[0];
+            }
+            var ft = (s0 && s0.foodType) || '';
+            html += '<div class="product-history-item" onclick="fillFromHistory(\'' + doc.id + '\',\'' + pn.replace(/'/g, "\\'") + '\')" style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;transition:background 0.15s"';
             html += ' onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'">';
             html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">';
             html += '<span style="font-weight:600;color:#1565c0;font-family:monospace">' + rno + '</span>';
             html += '<span style="color:#888;font-size:11px">' + dt + '</span>';
             html += '</div>';
-            html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+            if (co) html += '<span style="color:#333;font-weight:600;font-size:11px">' + co + '</span>';
             if (tf) html += '<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:4px;font-size:10px">' + tf + '</span>';
             if (tp) html += '<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:4px;font-size:10px">' + tp + '</span>';
             if (ft) html += '<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:4px;font-size:10px">' + ft + '</span>';
-            if (co) html += '<span style="color:#666;font-size:11px">🏢 ' + co + '</span>';
             html += '</div></div>';
         });
         panel.innerHTML = html;
     } catch(e) {
         console.warn('[제품이력 조회 실패]', e);
-        panel.innerHTML = '<div style="padding:16px;text-align:center;color:#e53935;font-size:13px">⚠️ 조회 실패: ' + (e.message || '') + '</div>';
+        panel.innerHTML = '<div style="padding:16px;text-align:center;color:#e53935;font-size:13px">조회 실패: ' + (e.message || '') + '</div>';
     }
 }
 
@@ -5495,39 +5510,74 @@ function closeProductHistory() {
     document.getElementById('product-history-panel').style.display = 'none';
 }
 
-async function fillFromHistory(docId) {
+async function fillFromHistory(docId, productName) {
     try {
         var doc = await db.collection('receipts').doc(docId).get();
         if (!doc.exists) { showToast('문서를 찾을 수 없습니다.', 'error'); return; }
         var r = doc.data();
-        // 시료정보 자동 채움
-        if (r.foodType) {
-            document.getElementById('food-type-input').value = r.foodType;
-            document.getElementById('food-type-value').value = r.foodType;
+
+        // ── 업체 정보 복원 ──
+        if (r.companyName) {
+            // Firestore companies에서 업체 조회 후 selectCompany 호출
+            var compSnap = await db.collection('companies')
+                .where('company', '==', r.companyName)
+                .limit(5)
+                .get();
+            if (!compSnap.empty) {
+                // 인허가번호가 일치하는 업체 우선, 없으면 첫번째
+                var matched = null;
+                compSnap.docs.forEach(function(cd) {
+                    var c = cd.data(); c.id = cd.id;
+                    if (!matched) matched = c;
+                    if (r.licNo && c.licenses) {
+                        c.licenses.forEach(function(l, li) {
+                            if ((l.licNo || l.licenseNo) === r.licNo) {
+                                c._preferLicIdx = li;
+                                matched = c;
+                            }
+                        });
+                    }
+                });
+                if (matched) selectCompany(matched);
+            } else {
+                // companies에 없으면 receipt 데이터로 직접 채움
+                document.getElementById('company-search').value = r.companyName;
+                if (r.licNo) document.getElementById('lic-no').value = r.licNo;
+                if (r.licBizForm) document.getElementById('lic-biz-form').value = r.licBizForm;
+                if (r.companyPhone) document.getElementById('company-phone').value = r.companyPhone;
+                if (r.companyFax) document.getElementById('company-fax').value = r.companyFax;
+                if (r.companyMobile) document.getElementById('company-mobile').value = r.companyMobile;
+                if (r.companyAddress) document.getElementById('company-address').value = r.companyAddress;
+                if (r.salesRep) document.getElementById('sales-rep').value = r.salesRep;
+            }
         }
-        if (r.sampleAmount) document.getElementById('sample-amount').value = r.sampleAmount;
-        if (r.sampleCount) document.getElementById('sample-count').value = r.sampleCount;
-        if (r.packageUnit) document.getElementById('package-unit').value = r.packageUnit;
-        if (r.sampleReceiveMethod) document.getElementById('sample-receive-method').value = r.sampleReceiveMethod;
-        if (r.receiptFormType) document.getElementById('receipt-form-type').value = r.receiptFormType;
-        if (r.transportStatus) document.getElementById('transport-status').value = r.transportStatus;
-        if (r.noticeRequired) document.getElementById('notice-required').value = r.noticeRequired;
-        if (r.manufactureDate) document.getElementById('manufacture-date').value = r.manufactureDate;
-        if (r.expiryDate) document.getElementById('expiry-date').value = r.expiryDate;
-        if (r.expiryDays) document.getElementById('expiry-days').value = r.expiryDays;
-        if (r.lotNo) document.getElementById('lot-no').value = r.lotNo;
-        if (r.disposalDate) document.getElementById('disposal-date').value = r.disposalDate;
-        // 식약처 품목코드 복원 (시료 배열 첫 번째에서)
-        if (r.samples && r.samples[0]) {
-            var s0 = r.samples[0];
+
+        // ── 시료 정보 복원 (samples 배열에서 해당 제품명 매칭) ──
+        var s0 = null;
+        if (r.samples) {
+            s0 = r.samples.find(function(s) { return s.productName === productName; }) || r.samples[0];
+        }
+        if (s0) {
+            if (s0.foodType) {
+                document.getElementById('food-type-input').value = s0.foodType;
+                document.getElementById('food-type-value').value = s0.foodTypeValue || s0.foodType;
+            }
+            if (s0.sampleAmount) document.getElementById('sample-amount').value = s0.sampleAmount;
+            if (s0.sampleAmountUnit) document.getElementById('sample-amount-unit').value = s0.sampleAmountUnit;
+            if (s0.sampleCount) document.getElementById('sample-count').value = s0.sampleCount;
+            if (s0.packageUnit) document.getElementById('package-unit').value = s0.packageUnit;
+            if (s0.sampleReceiveMethod) document.getElementById('sample-receive-method').value = s0.sampleReceiveMethod;
+            if (s0.receiptFormType) document.getElementById('receipt-form-type').value = s0.receiptFormType;
+            if (s0.transportStatus) document.getElementById('transport-status').value = s0.transportStatus;
             if (s0.mfdsProductCode) {
                 document.getElementById('mfds-product-code').value = s0.mfdsProductCode;
                 document.getElementById('mfds-product-name').value = s0.mfdsProductName || '';
                 restoreMfdsProductDisplay();
             }
         }
+
         closeProductHistory();
-        showToast('📋 이전 접수 정보를 불러왔습니다.', 'info');
+        showToast('이전 접수 정보를 불러왔습니다. (' + r.receiptNo + ')', 'info');
     } catch(e) {
         console.warn('[이력 불러오기 실패]', e);
         showToast('불러오기 실패', 'error');
