@@ -258,6 +258,12 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         <span>시험 결재</span><span style="color:#cbd5e1">›</span>
         <span class="breadcrumb-current">결과 입력</span>
       </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-right:12px">
+        <span style="font-size:12px;color:#64748b;white-space:nowrap">현재 사용자</span>
+        <select id="current-user-select" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;min-width:100px;background:#fff" onchange="onCurrentUserChange()">
+          <option value="">선택하세요</option>
+        </select>
+      </div>
       <div class="server-status" id="server-status">
         <span id="server-status-icon">⏳</span>
         <span id="server-status-text">연결 확인중...</span>
@@ -426,6 +432,12 @@ var MFDS_ENABLED = false;       // 기본: 비활성화 (안전)
 var filters = { field: '전체', status: '전체', tester: '', purpose: '', testItem: '', search: '', dateFrom: '', dateTo: '' };
 var searchTimer = null;
 
+// 마스터 데이터
+var masterPurposes = [];   // settings/inspectionPurposes에서 로드
+var masterItems = [];      // itemGroups에서 로드한 고유 항목명
+var allUsers = [];         // Firestore users 컬렉션
+var currentUserName = localStorage.getItem('bfl_currentUser') || '';
+
 // MFDS Templates 캐시
 var _mfdsTemplatesCache = null;
 var _mfdsTemplatesLoaded = false;
@@ -445,9 +457,74 @@ window.addEventListener('firebase-ready', function() {
 async function init() {
   checkMfdsStatus();
   loadMfdsEnabled();
+  await loadMasterData();
   await loadMfdsTemplatesData();
   await loadReceipts();
   handleUrlParams();
+}
+
+/* 마스터 데이터 로드 (검사목적, 검사항목, 사용자) */
+async function loadMasterData() {
+  // 1. 검사목적 (settings/inspectionPurposes)
+  try {
+    var doc = await db.collection('settings').doc('inspectionPurposes').get();
+    if (doc.exists && doc.data().purposes) {
+      masterPurposes = doc.data().purposes.filter(function(p) { return p.o === 1; });
+      masterPurposes.sort(function(a,b) { return (a.c||999) - (b.c||999); });
+    }
+  } catch(e) { console.warn('검사목적 마스터 로드 실패:', e); }
+
+  // 2. 검사항목 (itemGroups + mfdsTemplates)
+  try {
+    var itemSet = {};
+    var snap = await db.collection('itemGroups').get();
+    snap.docs.forEach(function(d) {
+      var data = d.data();
+      if (data['항목명']) itemSet[data['항목명']] = true;
+    });
+    var tmplSnap = await db.collection('mfdsTemplates').get();
+    tmplSnap.docs.forEach(function(d) {
+      var data = d.data();
+      if (data.testItems && data.testItems.length) {
+        data.testItems.forEach(function(ti) {
+          if (ti.testItemName) itemSet[ti.testItemName] = true;
+        });
+      }
+    });
+    masterItems = Object.keys(itemSet).sort();
+  } catch(e) { console.warn('검사항목 마스터 로드 실패:', e); }
+
+  // 3. 사용자 목록
+  try {
+    allUsers = await fsGetUsers();
+    populateUserSelector();
+  } catch(e) { console.warn('사용자 목록 로드 실패:', e); }
+}
+
+function populateUserSelector() {
+  var sel = document.getElementById('current-user-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">전체 (사용자 선택)</option>';
+  allUsers.forEach(function(u) {
+    if (u.leaveDate) return;
+    var label = u.name + (u.department ? ' (' + u.department + ')' : '');
+    sel.innerHTML += '<option value="' + u.name + '"' + (u.name === currentUserName ? ' selected' : '') + '>' + label + '</option>';
+  });
+}
+
+function onCurrentUserChange() {
+  var sel = document.getElementById('current-user-select');
+  currentUserName = sel.value;
+  if (currentUserName) {
+    localStorage.setItem('bfl_currentUser', currentUserName);
+  } else {
+    localStorage.removeItem('bfl_currentUser');
+  }
+  // 담당자 필터 동기화
+  var testerSel = document.getElementById('filter-tester');
+  if (testerSel) testerSel.value = currentUserName;
+  filters.tester = currentUserName;
+  applyFilters();
 }
 
 function checkMfdsStatus() {
@@ -599,51 +676,72 @@ function getTestItemNames(r) {
 }
 
 function populateFilterDropdowns() {
-  // 검사목적 드롭다운
-  var purposes = {};
-  allReceipts.forEach(function(r) {
-    if (r.testPurpose) purposes[r.testPurpose] = true;
-  });
+  // 검사목적 드롭다운 (마스터 데이터 기반)
   var purposeSel = document.getElementById('filter-purpose');
   var prevPurpose = purposeSel.value;
+  var addedP = {};
   purposeSel.innerHTML = '<option value="">전체</option>';
-  Object.keys(purposes).sort().forEach(function(p) {
-    purposeSel.innerHTML += '<option value="' + p + '">' + p + '</option>';
+  masterPurposes.forEach(function(p) {
+    purposeSel.innerHTML += '<option value="' + p.n + '">' + p.n + '</option>';
+    addedP[p.n] = true;
+  });
+  // 데이터에만 있는 목적도 추가
+  allReceipts.forEach(function(r) {
+    if (r.testPurpose && !addedP[r.testPurpose]) {
+      purposeSel.innerHTML += '<option value="' + r.testPurpose + '">' + r.testPurpose + '</option>';
+      addedP[r.testPurpose] = true;
+    }
   });
   purposeSel.value = prevPurpose;
 
-  // 검사항목 드롭다운
-  var items = {};
-  allReceipts.forEach(function(r) {
-    if (r.testItems && r.testItems.length) {
-      r.testItems.forEach(function(ti) { if (ti.itemName) items[ti.itemName] = true; });
-    }
-    if (r.samples && r.samples.length) {
-      r.samples.forEach(function(s) {
-        if (s.testItems && s.testItems.length) {
-          s.testItems.forEach(function(ti) { if (ti.itemName) items[ti.itemName] = true; });
-        }
-      });
-    }
-  });
+  // 검사항목 드롭다운 (마스터 데이터 기반)
   var itemSel = document.getElementById('filter-test-item');
   var prevItem = itemSel.value;
+  var addedI = {};
   itemSel.innerHTML = '<option value="">전체</option>';
-  Object.keys(items).sort().forEach(function(n) {
+  masterItems.forEach(function(n) {
     itemSel.innerHTML += '<option value="' + n + '">' + n + '</option>';
+    addedI[n] = true;
+  });
+  // 데이터에만 있는 항목도 추가
+  allReceipts.forEach(function(r) {
+    var extractItems = function(arr) {
+      if (!arr) return;
+      arr.forEach(function(ti) {
+        if (ti.itemName && !addedI[ti.itemName]) {
+          itemSel.innerHTML += '<option value="' + ti.itemName + '">' + ti.itemName + '</option>';
+          addedI[ti.itemName] = true;
+        }
+      });
+    };
+    extractItems(r.testItems);
+    if (r.samples) r.samples.forEach(function(s) { extractItems(s.testItems); });
   });
   itemSel.value = prevItem;
 
-  // 담당자 드롭다운
-  var testers = {};
-  allReceipts.forEach(function(r) { if (r.testerName) testers[r.testerName] = true; });
+  // 담당자 드롭다운 (사용자 목록 기반)
   var testerSel = document.getElementById('filter-tester');
   var prevTester = testerSel.value;
+  var addedT = {};
   testerSel.innerHTML = '<option value="">전체</option>';
-  Object.keys(testers).sort().forEach(function(t) {
-    testerSel.innerHTML += '<option value="' + t + '">' + t + '</option>';
+  allUsers.forEach(function(u) {
+    if (u.leaveDate) return;
+    testerSel.innerHTML += '<option value="' + u.name + '">' + u.name + '</option>';
+    addedT[u.name] = true;
   });
-  testerSel.value = prevTester;
+  allReceipts.forEach(function(r) {
+    if (r.testerName && !addedT[r.testerName]) {
+      testerSel.innerHTML += '<option value="' + r.testerName + '">' + r.testerName + '</option>';
+      addedT[r.testerName] = true;
+    }
+  });
+  // 현재 사용자 자동 선택 (첫 로드 시)
+  if (currentUserName && !prevTester) {
+    testerSel.value = currentUserName;
+    filters.tester = currentUserName;
+  } else {
+    testerSel.value = prevTester;
+  }
 }
 
 /* ============================================================
