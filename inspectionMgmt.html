@@ -687,13 +687,14 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <div style="padding:24px;">
         <!-- 기본 정보 -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px;">식품유형명 *</label>
-            <input type="text" id="tmpl-ed-name" placeholder="예: 코코아분말" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+          <div style="position:relative;">
+            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px;">식품유형명 * <span style="font-weight:400;color:#999;">(입력 시 품목코드 자동 검색)</span></label>
+            <input type="text" id="tmpl-ed-name" placeholder="예: 코코아분말" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;" oninput="searchTmplFoodType()">
+            <div id="tmpl-ed-name-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;border:1px solid #ddd;border-radius:8px;max-height:200px;overflow-y:auto;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.1);margin-top:2px;"></div>
           </div>
           <div>
             <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px;">품목코드 *</label>
-            <input type="text" id="tmpl-ed-code" placeholder="예: C0103010300000" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:monospace;">
+            <input type="text" id="tmpl-ed-code" placeholder="자동 입력 또는 직접 입력" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:monospace;" readonly>
           </div>
         </div>
 
@@ -30628,6 +30629,52 @@ function searchTemplates() {
 var _tmplEditorIdx = -1;        // -1이면 신규, 0이상이면 편집 인덱스
 var _tmplEditorItems = [];      // 편집 중인 시험항목 배열
 var _tmplSearchResultsTimer = null;
+var _tmplFoodTypeTimer = null;
+
+function searchTmplFoodType() {
+  clearTimeout(_tmplFoodTypeTimer);
+  _tmplFoodTypeTimer = setTimeout(async function() {
+    var q = (document.getElementById('tmpl-ed-name').value || '').trim().toLowerCase();
+    var panel = document.getElementById('tmpl-ed-name-results');
+    if (!q || q.length < 1) { panel.style.display = 'none'; return; }
+
+    // 품목코드 데이터 로드
+    if (!_pcAllItems) {
+      try { _pcAllItems = await MFDS_CODES.loadProductCodes(); } catch(e) { panel.style.display = 'none'; return; }
+    }
+
+    // 소분류(수준 3)에서 검색 — 실제 식품유형에 해당
+    var matches = _pcAllItems.filter(function(item) {
+      var name = (item['한글 명'] || '').toLowerCase();
+      var code = (item['품목 코드'] || '').toLowerCase();
+      return (name.indexOf(q) >= 0 || code.indexOf(q) >= 0) && (item['수준'] === 3 || item['수준'] === '3');
+    }).slice(0, 30);
+
+    if (!matches.length) {
+      panel.innerHTML = '<div style="padding:10px;color:#999;font-size:12px;">검색 결과 없음 (소분류 품목코드에서 검색)</div>';
+      panel.style.display = 'block';
+      return;
+    }
+
+    var html = '';
+    matches.forEach(function(item) {
+      var code = item['품목 코드'] || '';
+      var name = item['한글 명'] || '';
+      html += '<div onclick="selectTmplFoodType(\'' + escAttr(code) + '\',\'' + escAttr(name) + '\')" style="padding:8px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12px;" onmouseover="this.style.background=\'#f0f4f8\'" onmouseout="this.style.background=\'\'">';
+      html += '<span style="font-family:monospace;color:#1565c0;min-width:130px;font-size:11px;">' + code + '</span>';
+      html += '<span>' + name + '</span>';
+      html += '</div>';
+    });
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+  }, 200);
+}
+
+function selectTmplFoodType(code, name) {
+  document.getElementById('tmpl-ed-name').value = name;
+  document.getElementById('tmpl-ed-code').value = code;
+  document.getElementById('tmpl-ed-name-results').style.display = 'none';
+}
 
 function openTmplEditor(idx) {
   _tmplEditorIdx = (typeof idx === 'number') ? idx : -1;
@@ -30638,6 +30685,7 @@ function openTmplEditor(idx) {
   var codeInput = document.getElementById('tmpl-ed-code');
   document.getElementById('tmpl-ed-item-search').value = '';
   document.getElementById('tmpl-ed-search-results').style.display = 'none';
+  document.getElementById('tmpl-ed-name-results').style.display = 'none';
 
   if (_tmplEditorIdx >= 0) {
     // 편집 모드
