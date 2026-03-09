@@ -172,7 +172,14 @@ const SIDEBAR_MENU = [
   },
   { id: 'stats',         icon: '📈', label: '통계 분석',      disabled: true },
   { id: 'docs',          icon: '📁', label: '문서 관리',      disabled: true },
-  { id: 'inventory',     icon: '🧪', label: '재고/시약 관리', disabled: true },
+  {
+    id: 'inventory',
+    icon: '🧪',
+    label: '재고/시약 관리',
+    sub: [
+      { label: '재고/시약 관리', href: 'inventoryMgmt.html', page: 'inventory-main' }
+    ]
+  },
   { id: 'notice',        icon: '📢', label: '공지',           disabled: true },
   {
     id: 'admin',
