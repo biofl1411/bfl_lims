@@ -5462,9 +5462,24 @@ async function searchProductHistory() {
             .where('productNames', 'array-contains', pn)
             .limit(50)
             .get();
+        // 폴백: 기존 데이터(productNames 없음) → 최근 접수에서 samples[].productName 클라이언트 검색
         if (snap.empty) {
-            panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">"' + pn + '" 접수 이력이 없습니다.</div>';
-            return;
+            var fallback = await db.collection('receipts')
+                .orderBy('createdAt', 'desc')
+                .limit(200)
+                .get();
+            var matched = [];
+            fallback.docs.forEach(function(d) {
+                var rd = d.data();
+                if (rd.samples && rd.samples.some(function(s) { return s.productName === pn; })) {
+                    matched.push(d);
+                }
+            });
+            if (matched.length === 0) {
+                panel.innerHTML = '<div style="padding:16px;text-align:center;color:#999;font-size:13px">"' + pn + '" 접수 이력이 없습니다.</div>';
+                return;
+            }
+            snap = { docs: matched, empty: false };
         }
         // 클라이언트 정렬 (최신순)
         var docs = snap.docs.sort(function(a, b) {
