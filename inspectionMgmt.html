@@ -30674,6 +30674,29 @@ function selectTmplFoodType(code, name) {
   document.getElementById('tmpl-ed-name').value = name;
   document.getElementById('tmpl-ed-code').value = code;
   document.getElementById('tmpl-ed-name-results').style.display = 'none';
+
+  // 기존 데이터에서 동일 품목코드의 시험항목 자동 일괄 추가
+  var allData = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
+  var matched = allData.find(function(t) { return t.foodTypeCode === code; });
+  if (matched && matched.testItems && matched.testItems.length > 0) {
+    var existCodes = {};
+    _tmplEditorItems.forEach(function(ei) { if (ei.testItemCode) existCodes[ei.testItemCode] = true; });
+    var added = 0;
+    matched.testItems.forEach(function(ti) {
+      if (!existCodes[ti.testItemCode]) {
+        _tmplEditorItems.push({
+          testItemName: ti.testItemName || '', testItemCode: ti.testItemCode || '',
+          standard: ti.standard || '', unit: ti.unit || '', fee: ti.fee || 0,
+          proviso: ti.proviso || '', maxValue: ti.maxValue || '', maxValueCode: ti.maxValueCode || ''
+        });
+        added++;
+      }
+    });
+    if (added > 0) {
+      renderTmplEditorItems();
+      showToast('"' + name + '" 시험항목 ' + added + '건 자동 추가', 'success');
+    }
+  }
 }
 
 function openTmplEditor(idx) {
