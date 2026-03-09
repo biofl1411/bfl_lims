@@ -227,6 +227,16 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
           <button class="btn btn-primary btn-sm" onclick="searchSamples()">조회</button>
           <button class="btn btn-outline btn-sm" onclick="searchFromFirestore()">Firestore 조회</button>
         </div>
+        <div class="toolbar-row" style="gap:8px;flex-wrap:wrap">
+          <input type="text" id="diary-search-input" placeholder="접수번호, 시료명, 거래처 검색..." style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;width:220px" oninput="filterDiarySamples()">
+          <select class="form-select" id="diary-filter-purpose" style="width:150px" onchange="filterDiarySamples()">
+            <option value="">검사목적 전체</option>
+          </select>
+          <select class="form-select" id="diary-filter-item" style="width:130px" onchange="filterDiarySamples()">
+            <option value="">검사항목 전체</option>
+          </select>
+          <span style="font-size:12px;color:#999;margin-left:auto" id="diary-filter-count"></span>
+        </div>
       </div>
 
       <!-- 3-Panel Layout -->
@@ -403,6 +413,7 @@ async function searchFromFirestore() {
         progrsSittnCode: data.status || '-',
         exprIemJnlCnt: '0',
         totExprIemCnt: String((data.testItems || []).length),
+        testPurpose: data.testPurpose || '',
         _firestore: true,
         _data: data
       };
@@ -416,15 +427,26 @@ async function searchFromFirestore() {
 
 function renderSampleList() {
   var el = document.getElementById('sample-list');
-  document.getElementById('sample-count').textContent = allSamples.length + '건';
+  var displayed = getFilteredSamples();
+  document.getElementById('sample-count').textContent = displayed.length + '건';
+  var countEl = document.getElementById('diary-filter-count');
+  if (countEl) {
+    if (displayed.length !== allSamples.length) {
+      countEl.textContent = '필터: ' + displayed.length + '/' + allSamples.length + '건';
+    } else {
+      countEl.textContent = '';
+    }
+  }
 
-  if (!allSamples.length) {
+  if (!displayed.length) {
     el.innerHTML = '<div class="empty-state"><div class="icon">📭</div>조회 결과가 없습니다</div>';
     return;
   }
 
   var html = '';
-  allSamples.forEach(function(s, i) {
+  displayed.forEach(function(item) {
+    var s = item.sample;
+    var i = item.idx;
     var jnlCnt = parseInt(s.exprIemJnlCnt) || 0;
     var totCnt = parseInt(s.totExprIemCnt) || 0;
     var statusCls = jnlCnt > 0 ? (jnlCnt >= totCnt ? 'badge-done' : 'badge-progress') : 'badge-wait';
@@ -440,6 +462,102 @@ function renderSampleList() {
     html += '</div></div>';
   });
   el.innerHTML = html;
+
+  // 필터 드롭다운 채우기
+  populateDiaryFilterDropdowns();
+}
+
+function getFilteredSamples() {
+  var searchVal = (document.getElementById('diary-search-input') || {}).value || '';
+  var purposeVal = (document.getElementById('diary-filter-purpose') || {}).value || '';
+  var itemVal = (document.getElementById('diary-filter-item') || {}).value || '';
+  var q = searchVal.trim().toLowerCase();
+
+  var result = [];
+  allSamples.forEach(function(s, i) {
+    // 텍스트 검색 (접수번호, 시료명, 거래처)
+    if (q) {
+      var haystack = ((s.sploreRceptNo || '') + ' ' + (s.sploreNm || '') + ' ' + (s.prductNm || '') + ' ' + (s.entrpsNm || '')).toLowerCase();
+      if (haystack.indexOf(q) === -1) return;
+    }
+    // 검사목적 필터
+    if (purposeVal) {
+      var purpose = '';
+      if (s._data && s._data.testPurpose) purpose = s._data.testPurpose;
+      if (purpose !== purposeVal) return;
+    }
+    // 검사항목 필터
+    if (itemVal) {
+      var itemNames = getDiaryTestItemNames(s);
+      if (itemNames.toLowerCase().indexOf(itemVal.toLowerCase()) === -1) return;
+    }
+    result.push({ sample: s, idx: i });
+  });
+  return result;
+}
+
+function getDiaryTestItemNames(s) {
+  var names = [];
+  if (s._data) {
+    if (s._data.testItems && s._data.testItems.length) {
+      s._data.testItems.forEach(function(ti) { if (ti.itemName) names.push(ti.itemName); });
+    }
+    if (s._data.samples && s._data.samples.length) {
+      s._data.samples.forEach(function(sam) {
+        if (sam.testItems && sam.testItems.length) {
+          sam.testItems.forEach(function(ti) { if (ti.itemName) names.push(ti.itemName); });
+        }
+      });
+    }
+  }
+  return names.join(' ');
+}
+
+function filterDiarySamples() {
+  renderSampleList();
+}
+
+function populateDiaryFilterDropdowns() {
+  // 검사목적 드롭다운
+  var purposes = {};
+  allSamples.forEach(function(s) {
+    if (s._data && s._data.testPurpose) purposes[s._data.testPurpose] = true;
+  });
+  var purposeSel = document.getElementById('diary-filter-purpose');
+  if (purposeSel) {
+    var prev = purposeSel.value;
+    var opts = '<option value="">검사목적 전체</option>';
+    Object.keys(purposes).sort().forEach(function(p) {
+      opts += '<option value="' + p + '"' + (p === prev ? ' selected' : '') + '>' + p + '</option>';
+    });
+    purposeSel.innerHTML = opts;
+  }
+
+  // 검사항목 드롭다운
+  var items = {};
+  allSamples.forEach(function(s) {
+    if (s._data) {
+      if (s._data.testItems && s._data.testItems.length) {
+        s._data.testItems.forEach(function(ti) { if (ti.itemName) items[ti.itemName] = true; });
+      }
+      if (s._data.samples && s._data.samples.length) {
+        s._data.samples.forEach(function(sam) {
+          if (sam.testItems && sam.testItems.length) {
+            sam.testItems.forEach(function(ti) { if (ti.itemName) items[ti.itemName] = true; });
+          }
+        });
+      }
+    }
+  });
+  var itemSel = document.getElementById('diary-filter-item');
+  if (itemSel) {
+    var prev2 = itemSel.value;
+    var opts2 = '<option value="">검사항목 전체</option>';
+    Object.keys(items).sort().forEach(function(n) {
+      opts2 += '<option value="' + n + '"' + (n === prev2 ? ' selected' : '') + '>' + n + '</option>';
+    });
+    itemSel.innerHTML = opts2;
+  }
 }
 
 /* ============================================================

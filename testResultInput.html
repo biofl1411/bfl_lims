@@ -312,7 +312,19 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         <div class="toolbar-row">
           <div class="filter-group">
             <div class="filter-label">담당자</div>
-            <select id="filter-tester" class="form-select" style="width:160px" onchange="applyFilters()">
+            <select id="filter-tester" class="form-select" style="width:120px" onchange="applyFilters()">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <div class="filter-label">검사목적</div>
+            <select id="filter-purpose" class="form-select" style="width:150px" onchange="applyFilters()">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <div class="filter-label">검사항목</div>
+            <select id="filter-test-item" class="form-select" style="width:130px" onchange="applyFilters()">
               <option value="">전체</option>
             </select>
           </div>
@@ -411,7 +423,7 @@ var isModified = false;
 var MFDS_ENABLED = false;       // 기본: 비활성화 (안전)
 
 // 필터 상태
-var filters = { field: '전체', status: '전체', tester: '', search: '', dateFrom: '', dateTo: '' };
+var filters = { field: '전체', status: '전체', tester: '', purpose: '', testItem: '', search: '', dateFrom: '', dateTo: '' };
 var searchTimer = null;
 
 // MFDS Templates 캐시
@@ -497,6 +509,7 @@ async function loadReceipts() {
     allReceipts = snap.docs.map(function(d) {
       return Object.assign({ id: d.id }, d.data());
     });
+    populateFilterDropdowns();
     applyFilters();
     updateStats();
   } catch(e) {
@@ -527,6 +540,8 @@ function debounceSearch() {
 
 function applyFilters() {
   filters.tester = document.getElementById('filter-tester').value;
+  filters.purpose = document.getElementById('filter-purpose').value;
+  filters.testItem = document.getElementById('filter-test-item').value;
   filters.dateFrom = document.getElementById('filter-from').value;
   filters.dateTo = document.getElementById('filter-to').value;
 
@@ -539,7 +554,14 @@ function applyFilters() {
     if (filters.status !== '전체' && r.status !== filters.status) return false;
     // 담당자
     if (filters.tester && r.testerName !== filters.tester) return false;
-    // 텍스트 검색
+    // 검사목적
+    if (filters.purpose && (r.testPurpose || '') !== filters.purpose) return false;
+    // 검사항목
+    if (filters.testItem) {
+      var items = getTestItemNames(r);
+      if (items.toLowerCase().indexOf(filters.testItem.toLowerCase()) === -1) return false;
+    }
+    // 텍스트 검색 (접수번호, 거래처, 제품명)
     if (filters.search) {
       var q = filters.search;
       var haystack = ((r.receiptNo || '') + ' ' + (r.companyName || '') + ' ' + getSampleNames(r)).toLowerCase();
@@ -559,6 +581,69 @@ function applyFilters() {
 function getSampleNames(r) {
   if (!r.samples || !r.samples.length) return '';
   return r.samples.map(function(s) { return s.productName || ''; }).join(' ');
+}
+
+function getTestItemNames(r) {
+  var names = [];
+  if (r.testItems && r.testItems.length) {
+    r.testItems.forEach(function(ti) { if (ti.itemName) names.push(ti.itemName); });
+  }
+  if (r.samples && r.samples.length) {
+    r.samples.forEach(function(s) {
+      if (s.testItems && s.testItems.length) {
+        s.testItems.forEach(function(ti) { if (ti.itemName) names.push(ti.itemName); });
+      }
+    });
+  }
+  return names.join(' ');
+}
+
+function populateFilterDropdowns() {
+  // 검사목적 드롭다운
+  var purposes = {};
+  allReceipts.forEach(function(r) {
+    if (r.testPurpose) purposes[r.testPurpose] = true;
+  });
+  var purposeSel = document.getElementById('filter-purpose');
+  var prevPurpose = purposeSel.value;
+  purposeSel.innerHTML = '<option value="">전체</option>';
+  Object.keys(purposes).sort().forEach(function(p) {
+    purposeSel.innerHTML += '<option value="' + p + '">' + p + '</option>';
+  });
+  purposeSel.value = prevPurpose;
+
+  // 검사항목 드롭다운
+  var items = {};
+  allReceipts.forEach(function(r) {
+    if (r.testItems && r.testItems.length) {
+      r.testItems.forEach(function(ti) { if (ti.itemName) items[ti.itemName] = true; });
+    }
+    if (r.samples && r.samples.length) {
+      r.samples.forEach(function(s) {
+        if (s.testItems && s.testItems.length) {
+          s.testItems.forEach(function(ti) { if (ti.itemName) items[ti.itemName] = true; });
+        }
+      });
+    }
+  });
+  var itemSel = document.getElementById('filter-test-item');
+  var prevItem = itemSel.value;
+  itemSel.innerHTML = '<option value="">전체</option>';
+  Object.keys(items).sort().forEach(function(n) {
+    itemSel.innerHTML += '<option value="' + n + '">' + n + '</option>';
+  });
+  itemSel.value = prevItem;
+
+  // 담당자 드롭다운
+  var testers = {};
+  allReceipts.forEach(function(r) { if (r.testerName) testers[r.testerName] = true; });
+  var testerSel = document.getElementById('filter-tester');
+  var prevTester = testerSel.value;
+  testerSel.innerHTML = '<option value="">전체</option>';
+  Object.keys(testers).sort().forEach(function(t) {
+    testerSel.innerHTML += '<option value="' + t + '">' + t + '</option>';
+  });
+  testerSel.value = prevTester;
 }
 
 /* ============================================================
