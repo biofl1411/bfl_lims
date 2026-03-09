@@ -671,9 +671,67 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <span class="search-icon" style="cursor:pointer" onclick="searchTemplates()">🔍</span>
       </div>
       <span id="tmpl-count" style="font-size:12px;color:var(--sub);white-space:nowrap;"></span>
+      <button onclick="openTmplEditor()" style="padding:6px 14px;border:none;background:#1565c0;color:#fff;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">+ 식품유형 추가</button>
       <button onclick="importMfdsTemplatesToFirestore()" style="padding:6px 14px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">📥 Firestore 임포트</button>
     </div>
     <div id="tmpl-list" style="font-size:13px;"></div>
+  </div>
+
+  <!-- 식품유형 편집 모달 -->
+  <div id="tmpl-editor-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:2000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;width:900px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="padding:20px 24px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px;">
+        <h3 id="tmpl-editor-title" style="font-size:16px;font-weight:700;flex:1;">식품유형 추가</h3>
+        <button onclick="closeTmplEditor()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+      </div>
+      <div style="padding:24px;">
+        <!-- 기본 정보 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px;">식품유형명 *</label>
+            <input type="text" id="tmpl-ed-name" placeholder="예: 코코아분말" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px;">품목코드 *</label>
+            <input type="text" id="tmpl-ed-code" placeholder="예: C0103010300000" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:monospace;">
+          </div>
+        </div>
+
+        <!-- 시험항목 목록 -->
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:13px;font-weight:700;">시험항목</span>
+          <span id="tmpl-ed-item-count" style="font-size:11px;color:#1565c0;font-weight:600;">0건</span>
+          <span style="flex:1"></span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" id="tmpl-ed-item-search" placeholder="시험항목 코드/이름 검색..." style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;width:220px;" oninput="searchTmplTestItems()">
+            <button onclick="addTmplTestItemRow()" style="padding:6px 12px;border:none;background:#10b981;color:#fff;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">+ 항목 추가</button>
+          </div>
+        </div>
+        <!-- 시험항목 검색 결과 -->
+        <div id="tmpl-ed-search-results" style="display:none;border:1px solid #ddd;border-radius:8px;max-height:200px;overflow-y:auto;margin-bottom:12px;background:#fff;"></div>
+        <!-- 시험항목 테이블 -->
+        <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="background:#f0f4f8;">
+              <th style="padding:8px;text-align:left;font-weight:600;width:30px;">No</th>
+              <th style="padding:8px;text-align:left;font-weight:600;">시험항목명</th>
+              <th style="padding:8px;text-align:left;font-weight:600;width:120px;">시험항목코드</th>
+              <th style="padding:8px;text-align:left;font-weight:600;">기준규격</th>
+              <th style="padding:8px;text-align:left;font-weight:600;width:80px;">단위</th>
+              <th style="padding:8px;text-align:right;font-weight:600;width:90px;">수수료</th>
+              <th style="padding:8px;text-align:center;font-weight:600;width:40px;"></th>
+            </tr></thead>
+            <tbody id="tmpl-ed-items-body">
+              <tr><td colspan="7" style="padding:20px;text-align:center;color:#999;">시험항목을 추가하세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #eee;display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeTmplEditor()" style="padding:8px 20px;border:1px solid #ddd;background:#fff;border-radius:8px;font-size:13px;cursor:pointer;">취소</button>
+        <button onclick="saveTmplEditor()" style="padding:8px 20px;border:none;background:#1565c0;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">💾 저장</button>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ 패널 4: 시험항목 (식약처 시험항목 브라우저) ═══ -->
@@ -30507,15 +30565,20 @@ function renderTemplates() {
 
   // 테이블 형태로 렌더링 (식품유형별 아코디언)
   var html = '';
+  // 원본 데이터에서의 실제 인덱스를 찾기 위한 맵
+  var allData = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
   filtered.forEach(function(tmpl, idx) {
+    var realIdx = allData.indexOf(tmpl);
     var totalFee = tmpl.testItems.reduce(function(s, ti) { return s + (ti.fee || 0); }, 0);
     html += '<div style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden;">';
-    html += '<div onclick="toggleTmplDetail(this)" style="padding:12px 16px;background:#f8fafc;cursor:pointer;display:flex;align-items:center;gap:10px;">';
-    html += '<span style="font-size:11px;color:#999;">▶</span>';
-    html += '<strong style="font-size:13px;">' + tmpl.templateName + '</strong>';
+    html += '<div style="padding:12px 16px;background:#f8fafc;display:flex;align-items:center;gap:10px;">';
+    html += '<span onclick="toggleTmplDetail(this.parentElement)" style="font-size:11px;color:#999;cursor:pointer;">▶</span>';
+    html += '<strong onclick="toggleTmplDetail(this.parentElement)" style="font-size:13px;cursor:pointer;flex:0 0 auto;">' + tmpl.templateName + '</strong>';
     html += '<span style="font-size:11px;color:#1565c0;font-family:monospace;background:#e3f2fd;padding:2px 6px;border-radius:4px;">' + tmpl.foodTypeCode + '</span>';
     html += '<span style="font-size:11px;color:#667085;">' + tmpl.testItems.length + '개 항목</span>';
     html += '<span style="margin-left:auto;font-size:12px;font-weight:600;color:#1a1a2e;">' + totalFee.toLocaleString() + '원</span>';
+    html += '<button onclick="event.stopPropagation();openTmplEditor(' + realIdx + ')" style="padding:3px 8px;border:1px solid #ddd;background:#fff;border-radius:5px;font-size:11px;cursor:pointer;color:#555;" title="수정">수정</button>';
+    html += '<button onclick="event.stopPropagation();deleteTmpl(' + realIdx + ')" style="padding:3px 8px;border:1px solid #fecaca;background:#fff;border-radius:5px;font-size:11px;cursor:pointer;color:#ef4444;" title="삭제">삭제</button>';
     html += '</div>';
     html += '<div style="display:none;padding:0 16px 12px;">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">';
@@ -30559,6 +30622,225 @@ function toggleTmplDetail(el) {
 function searchTemplates() {
   clearTimeout(_tmplSearchTimer);
   _tmplSearchTimer = setTimeout(renderTemplates, 200);
+}
+
+// ── 식품유형 CRUD (추가/수정/삭제) ──
+var _tmplEditorIdx = -1;        // -1이면 신규, 0이상이면 편집 인덱스
+var _tmplEditorItems = [];      // 편집 중인 시험항목 배열
+var _tmplSearchResultsTimer = null;
+
+function openTmplEditor(idx) {
+  _tmplEditorIdx = (typeof idx === 'number') ? idx : -1;
+  _tmplEditorItems = [];
+  var overlay = document.getElementById('tmpl-editor-overlay');
+  var title = document.getElementById('tmpl-editor-title');
+  var nameInput = document.getElementById('tmpl-ed-name');
+  var codeInput = document.getElementById('tmpl-ed-code');
+  document.getElementById('tmpl-ed-item-search').value = '';
+  document.getElementById('tmpl-ed-search-results').style.display = 'none';
+
+  if (_tmplEditorIdx >= 0) {
+    // 편집 모드
+    var allData = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
+    var tmpl = allData[_tmplEditorIdx];
+    if (!tmpl) { showToast('식품유형을 찾을 수 없습니다.', 'error'); return; }
+    title.textContent = '식품유형 수정';
+    nameInput.value = tmpl.templateName || tmpl.foodTypeName || '';
+    codeInput.value = tmpl.foodTypeCode || '';
+    _tmplEditorItems = (tmpl.testItems || []).map(function(ti) {
+      return { testItemName: ti.testItemName, testItemCode: ti.testItemCode, standard: ti.standard || '', unit: ti.unit || '', fee: ti.fee || 0, proviso: ti.proviso || '', maxValue: ti.maxValue || '', maxValueCode: ti.maxValueCode || '' };
+    });
+  } else {
+    title.textContent = '식품유형 추가';
+    nameInput.value = '';
+    codeInput.value = '';
+    _tmplEditorItems = [];
+  }
+  renderTmplEditorItems();
+  overlay.style.display = 'flex';
+}
+
+function closeTmplEditor() {
+  document.getElementById('tmpl-editor-overlay').style.display = 'none';
+  _tmplEditorIdx = -1;
+  _tmplEditorItems = [];
+}
+
+function renderTmplEditorItems() {
+  var tbody = document.getElementById('tmpl-ed-items-body');
+  var countEl = document.getElementById('tmpl-ed-item-count');
+  if (countEl) countEl.textContent = _tmplEditorItems.length + '건';
+  if (!_tmplEditorItems.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#999;">시험항목을 추가하세요</td></tr>';
+    return;
+  }
+  var html = '';
+  _tmplEditorItems.forEach(function(ti, i) {
+    html += '<tr style="border-top:1px solid #f0f0f0;">';
+    html += '<td style="padding:6px 8px;color:#999;">' + (i + 1) + '</td>';
+    html += '<td style="padding:6px 8px;"><input type="text" value="' + escAttr(ti.testItemName) + '" onchange="_tmplEditorItems[' + i + '].testItemName=this.value" style="width:100%;padding:4px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:12px;"></td>';
+    html += '<td style="padding:6px 8px;"><input type="text" value="' + escAttr(ti.testItemCode) + '" onchange="_tmplEditorItems[' + i + '].testItemCode=this.value" style="width:100%;padding:4px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:12px;font-family:monospace;"></td>';
+    html += '<td style="padding:6px 8px;"><input type="text" value="' + escAttr(ti.standard) + '" onchange="_tmplEditorItems[' + i + '].standard=this.value" style="width:100%;padding:4px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:12px;"></td>';
+    html += '<td style="padding:6px 8px;"><input type="text" value="' + escAttr(ti.unit) + '" onchange="_tmplEditorItems[' + i + '].unit=this.value" style="width:60px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:12px;"></td>';
+    html += '<td style="padding:6px 8px;text-align:right;"><input type="number" value="' + (ti.fee || 0) + '" onchange="_tmplEditorItems[' + i + '].fee=parseInt(this.value)||0" style="width:80px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:12px;text-align:right;"></td>';
+    html += '<td style="padding:6px 8px;text-align:center;"><button onclick="removeTmplTestItem(' + i + ')" style="border:none;background:none;color:#ef4444;font-size:14px;cursor:pointer;">✕</button></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function escAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function addTmplTestItemRow() {
+  _tmplEditorItems.push({ testItemName: '', testItemCode: '', standard: '', unit: '', fee: 0, proviso: '', maxValue: '', maxValueCode: '' });
+  renderTmplEditorItems();
+}
+
+function removeTmplTestItem(idx) {
+  _tmplEditorItems.splice(idx, 1);
+  renderTmplEditorItems();
+}
+
+async function searchTmplTestItems() {
+  clearTimeout(_tmplSearchResultsTimer);
+  _tmplSearchResultsTimer = setTimeout(async function() {
+    var q = (document.getElementById('tmpl-ed-item-search').value || '').trim().toLowerCase();
+    var panel = document.getElementById('tmpl-ed-search-results');
+    if (!q || q.length < 1) { panel.style.display = 'none'; return; }
+
+    // _mfdsTestItems 미로드 시 로드
+    if (!_mfdsTestItems || !_mfdsTestItems.length) {
+      try {
+        var results = await Promise.all([MFDS_CODES.loadTestItems(), MFDS_CODES.loadItemMappings(), MFDS_CODES.loadUnits()]);
+        _mfdsTestItems = results[0]; _mfdsItemMappings = results[1]; _mfdsUnits = results[2]; _mfdsTestLoaded = true;
+      } catch(e) { panel.innerHTML = '<div style="padding:12px;color:#dc3545;">시험항목 로드 실패</div>'; panel.style.display = 'block'; return; }
+    }
+
+    var matches = _mfdsTestItems.filter(function(t) {
+      var code = (t['시험항목코드'] || '').toLowerCase();
+      var name = (t['시험항목명'] || '').toLowerCase();
+      return code.indexOf(q) >= 0 || name.indexOf(q) >= 0;
+    }).slice(0, 50);
+
+    if (!matches.length) {
+      panel.innerHTML = '<div style="padding:12px;color:#999;font-size:12px;">검색 결과 없음</div>';
+      panel.style.display = 'block';
+      return;
+    }
+
+    var html = '';
+    matches.forEach(function(t) {
+      var code = t['시험항목코드'] || '';
+      var name = t['시험항목명'] || '';
+      var already = _tmplEditorItems.some(function(ei) { return ei.testItemCode === code; });
+      html += '<div onclick="addTmplTestItemFromSearch(\'' + escAttr(code) + '\',\'' + escAttr(name) + '\')" style="padding:8px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12px;' + (already ? 'opacity:0.5;' : '') + '" onmouseover="this.style.background=\'#f0f4f8\'" onmouseout="this.style.background=\'\'">';
+      html += '<span style="font-family:monospace;color:#1565c0;min-width:80px;">' + code + '</span>';
+      html += '<span>' + name + '</span>';
+      if (already) html += '<span style="color:#999;margin-left:auto;">추가됨</span>';
+      html += '</div>';
+    });
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+  }, 200);
+}
+
+function addTmplTestItemFromSearch(code, name) {
+  if (_tmplEditorItems.some(function(ei) { return ei.testItemCode === code; })) return;
+  _tmplEditorItems.push({ testItemName: name, testItemCode: code, standard: '', unit: '', fee: 0, proviso: '', maxValue: '', maxValueCode: '' });
+  renderTmplEditorItems();
+  searchTmplTestItems(); // 검색결과 갱신 (추가됨 표시)
+}
+
+async function saveTmplEditor() {
+  var nameVal = (document.getElementById('tmpl-ed-name').value || '').trim();
+  var codeVal = (document.getElementById('tmpl-ed-code').value || '').trim();
+  if (!nameVal) { showToast('식품유형명을 입력하세요.', 'error'); return; }
+  if (!codeVal) { showToast('품목코드를 입력하세요.', 'error'); return; }
+
+  var tmplObj = {
+    templateName: nameVal,
+    foodTypeCode: codeVal,
+    foodTypeName: nameVal,
+    department: '',
+    person: '',
+    testItems: _tmplEditorItems.map(function(ti) {
+      return {
+        testItemName: ti.testItemName || '',
+        testItemCode: ti.testItemCode || '',
+        standard: ti.standard || '',
+        unit: ti.unit || '',
+        fee: parseInt(ti.fee) || 0,
+        proviso: ti.proviso || '',
+        maxValue: ti.maxValue || '',
+        maxValueCode: ti.maxValueCode || ''
+      };
+    })
+  };
+
+  // mfdsTemplateData 업데이트
+  var allData = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES.slice() : []);
+  if (_tmplEditorIdx >= 0 && _tmplEditorIdx < allData.length) {
+    allData[_tmplEditorIdx] = tmplObj; // 수정
+  } else {
+    allData.push(tmplObj); // 신규 추가
+  }
+  mfdsTemplateData = allData;
+
+  // Firestore 저장
+  try {
+    showToast('저장 중...', 'info');
+    await saveMfdsTemplatesToFirestore(mfdsTemplateData);
+    showToast('식품유형 "' + nameVal + '" 저장 완료!', 'success');
+  } catch(e) {
+    showToast('Firestore 저장 실패: ' + e.message, 'error');
+    console.error('[식품유형 저장 실패]', e);
+  }
+
+  closeTmplEditor();
+  renderTemplates();
+}
+
+async function deleteTmpl(idx) {
+  var allData = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES.slice() : []);
+  if (idx < 0 || idx >= allData.length) return;
+  var tmpl = allData[idx];
+  if (!confirm('"' + tmpl.templateName + '" 식품유형을 삭제하시겠습니까?\n(시험항목 ' + tmpl.testItems.length + '건 포함)')) return;
+
+  allData.splice(idx, 1);
+  mfdsTemplateData = allData;
+
+  try {
+    showToast('삭제 중...', 'info');
+    await saveMfdsTemplatesToFirestore(mfdsTemplateData);
+    showToast('"' + tmpl.templateName + '" 삭제 완료', 'success');
+  } catch(e) {
+    showToast('Firestore 저장 실패: ' + e.message, 'error');
+    console.error('[식품유형 삭제 실패]', e);
+  }
+  renderTemplates();
+}
+
+async function saveMfdsTemplatesToFirestore(dataArr) {
+  var BATCH_SIZE = 400;
+  // 1) 기존 문서 삭제
+  var existing = await db.collection('mfdsTemplates').get();
+  if (existing.size > 0) {
+    for (var bi = 0; bi < existing.docs.length; bi += BATCH_SIZE) {
+      var batch = db.batch();
+      existing.docs.slice(bi, bi + BATCH_SIZE).forEach(function(d) { batch.delete(d.ref); });
+      await batch.commit();
+    }
+  }
+  // 2) 새 데이터 저장
+  for (var bi = 0; bi < dataArr.length; bi += BATCH_SIZE) {
+    var batch = db.batch();
+    dataArr.slice(bi, bi + BATCH_SIZE).forEach(function(tmpl, j) {
+      var docId = 'tmpl_' + String(bi + j).padStart(4, '0');
+      batch.set(db.collection('mfdsTemplates').doc(docId), tmpl);
+    });
+    await batch.commit();
+  }
+  console.log('[식품유형] Firestore 저장 완료: ' + dataArr.length + '개');
 }
 
 // ══════════════════════════════════════════════════════
