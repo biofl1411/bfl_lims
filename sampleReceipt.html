@@ -2573,9 +2573,9 @@ function _filterByLabelKey(items, key) {
 }
 
 /** 카테고리 라벨 클릭 — 해당 분류 항목을 드롭다운에 표시 */
-async function onRefCatLabelClick(cat) {
-    // 같은 카테고리 재클릭 → 해제
-    if (_refActiveCat === cat) {
+async function onRefCatLabelClick(cat, refresh) {
+    // 같은 카테고리 재클릭 → 해제 (refresh 모드에서는 토글 안 함)
+    if (!refresh && _refActiveCat === cat) {
         _refActiveCat = '';
         document.querySelectorAll('#ref-cat-labels .ref-cat-chip').forEach(function(c) { c.classList.remove('active'); });
         document.getElementById('food-type-list').classList.remove('active');
@@ -2711,7 +2711,7 @@ async function addAllRefCatItems(cat) {
         showToast(catLabel + ' ' + addCount + '건 일괄 추가 완료', 'success');
 
         // 드롭다운 갱신 (추가됨 표시 반영)
-        onRefCatLabelClick(cat);
+        onRefCatLabelClick(cat, true);
     } else {
         showToast('추가할 항목이 없습니다 (이미 모두 추가됨)', 'info');
     }
@@ -2986,12 +2986,16 @@ function selectRefTestItem(testItemCode) {
     // food-type-value 업데이트 (참고용 모드에서는 "참고용(기준규격외)" 저장)
     document.getElementById('food-type-value').value = '참고용(기준규격외)';
 
-    // 토스트 + 드롭다운 닫기
+    // 토스트
     showToast('시험항목 추가: ' + name + ' (' + code + ')', 'success');
-    document.getElementById('food-type-list').classList.remove('active');
 
-    // input 비우기 (다음 검색 가능하도록)
-    document.getElementById('food-type-input').value = '';
+    // 라벨 모드(카테고리 활성)이면 드롭다운 유지 + 목록 갱신
+    if (_refActiveCat) {
+        onRefCatLabelClick(_refActiveCat, true);
+    } else {
+        document.getElementById('food-type-list').classList.remove('active');
+        document.getElementById('food-type-input').value = '';
+    }
 
     saveSampleToArray();
     updateFeeSummary();
