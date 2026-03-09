@@ -2613,40 +2613,44 @@ async function onRefCatLabelClick(cat, refresh) {
         });
     }
 
-    // 전체 추가 바
+    // 전체 추가 / 전체 취소 바
     var notAdded = items.filter(function(t) { return !addedCodes.has(t['시험항목코드']); });
-    var html = '';
+    var addedInCat = items.length - notAdded.length;
+    var html = '<div style="display:flex;gap:0;border-bottom:2px solid #c7d2fe">';
     if (notAdded.length > 0) {
-        html += '<div class="ref-cat-addall" onclick="addAllRefCatItems(\'' + cat + '\')">'
-            + '<span>📋 ' + catName + ' 전체 추가 (' + notAdded.length + '건)</span>'
-            + '<span style="font-size:11px;color:#6941C6">클릭하여 일괄 추가 →</span>'
-            + '</div>';
+        html += '<div class="ref-cat-addall" style="flex:1;border-bottom:0" onclick="addAllRefCatItems(\'' + cat + '\')">'
+            + '<span>📋 전체 추가 (' + notAdded.length + '건)</span>'
+            + '<span style="font-size:10px;color:#6941C6">일괄 추가 →</span></div>';
     } else {
-        html += '<div style="padding:8px 12px;background:#f0fdf4;border-bottom:2px solid #86efac;font-size:12px;font-weight:600;color:#16a34a;text-align:center">'
-            + '✓ ' + catName + ' 전체 추가됨 (' + items.length + '건)</div>';
+        html += '<div style="flex:1;padding:6px 10px;background:#f0fdf4;font-size:11px;font-weight:600;color:#16a34a;text-align:center">'
+            + '✓ 전체 추가됨 (' + items.length + '건)</div>';
     }
+    if (addedInCat > 0) {
+        html += '<div style="padding:6px 10px;background:#fef2f2;cursor:pointer;font-size:11px;font-weight:600;color:#dc2626;white-space:nowrap" '
+            + 'onclick="removeRefCatItems(\'' + cat + '\')">'
+            + '✕ 취소 ' + addedInCat + '건</div>';
+    }
+    html += '</div>';
 
     // 항목 목록 (전체 표시 — 스크롤로 탐색)
     items.forEach(function(item) {
         var code = item['시험항목코드'] || '';
         var name = item['한글명'] || '';
-        var eng = item['영문명'] || '';
         var isAdded = addedCodes.has(code);
 
         var feeInfo = _refFeeMap ? _refFeeMap[code] : null;
         var feeHtml = feeInfo && feeInfo.fee > 0
-            ? ' <span style="font-size:11px;color:#6941C6;font-weight:600;margin-left:auto">' + feeInfo.fee.toLocaleString() + '원</span>'
+            ? ' <span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + feeInfo.fee.toLocaleString() + '원</span>'
             : '';
 
-        html += '<div class="autocomplete-item" style="padding:8px 12px;' + (isAdded ? 'opacity:0.4;' : '') + '"'
-            + ' onclick="' + (isAdded ? '' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')') + '">'
-            + '<div style="display:flex;align-items:center;gap:8px">'
-            + '<span style="font-family:monospace;font-size:11px;color:#1565c0;background:#e3f2fd;padding:1px 6px;border-radius:3px">' + code + '</span>'
-            + '<span style="font-weight:500">' + name + '</span>'
-            + (isAdded ? ' <span style="font-size:10px;color:#999;background:#f0f0f0;padding:1px 5px;border-radius:3px">추가됨</span>' : '')
+        html += '<div class="autocomplete-item" style="padding:5px 10px;font-size:12px;' + (isAdded ? 'opacity:0.4;' : '') + '"'
+            + ' onclick="' + (isAdded ? 'removeRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')') + '">'
+            + '<div style="display:flex;align-items:center;gap:6px">'
+            + '<span style="font-family:monospace;font-size:10px;color:#1565c0;background:#e3f2fd;padding:1px 4px;border-radius:3px">' + code + '</span>'
+            + '<span style="font-weight:500;font-size:12px">' + name + '</span>'
+            + (isAdded ? ' <span style="font-size:9px;color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:3px">✕ 취소</span>' : '')
             + feeHtml
             + '</div>'
-            + (eng ? '<div style="font-size:11px;color:#999;margin-top:2px">' + eng + '</div>' : '')
             + '</div>';
     });
 
@@ -2722,6 +2726,42 @@ async function addAllRefCatItems(cat) {
     } else {
         showToast('추가할 항목이 없습니다 (이미 모두 추가됨)', 'info');
     }
+}
+
+/** 카테고리 항목 일괄 취소 (테이블에서 제거) */
+function removeRefCatItems(cat) {
+    if (!_refTestItemsCache) return;
+    var items = _filterByLabelKey(_filterTestItemsByCats(_refTestItemsCache), cat);
+    var codes = new Set(items.map(function(t) { return t['시험항목코드']; }));
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var removed = 0;
+    tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
+        if (codes.has(tr.getAttribute('data-test-code'))) { tr.remove(); removed++; }
+    });
+    if (removed > 0) {
+        recalcInspectionTable();
+        saveSampleToArray();
+        updateFeeSummary();
+        var catLabel = (_refLabelMode === 'sub' ? _REF_SUBCAT_NAMES[cat] : _REF_CAT_NAMES[cat]) || cat;
+        showToast(catLabel + ' ' + removed + '건 일괄 취소', 'info');
+        onRefCatLabelClick(cat, true);
+    }
+}
+
+/** 개별 항목 취소 (테이블에서 제거) */
+function removeRefTestItem(code) {
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var tr = tbody.querySelector('tr[data-test-code="' + code + '"]');
+    if (!tr) return;
+    var name = tr.getAttribute('data-item-key') || code;
+    tr.remove();
+    recalcInspectionTable();
+    saveSampleToArray();
+    updateFeeSummary();
+    showToast(name + ' 취소', 'info');
+    if (_refActiveCat) onRefCatLabelClick(_refActiveCat, true);
 }
 
 // 공전규격 추가 검사 토글
@@ -3000,8 +3040,14 @@ function selectRefTestItem(testItemCode) {
     if (_refActiveCat) {
         onRefCatLabelClick(_refActiveCat, true);
     } else {
-        document.getElementById('food-type-list').classList.remove('active');
-        document.getElementById('food-type-input').value = '';
+        // 라벨 비활성이라도 검색 결과 갱신하여 드롭다운 유지
+        var inputVal = document.getElementById('food-type-input').value;
+        if (inputVal) {
+            searchRefTestItems(inputVal);
+        } else {
+            document.getElementById('food-type-list').classList.remove('active');
+            document.getElementById('food-type-input').value = '';
+        }
     }
 
     saveSampleToArray();
