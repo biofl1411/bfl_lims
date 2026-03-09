@@ -2255,12 +2255,14 @@ document.addEventListener('click', function(e) {
 // 검사목적 변경
 // ============================================================================
 var _fillingFromHistory = false; // 이력 불러오기 중 리셋 방지 플래그
+var _filledFromHistory = false;  // 이력 데이터 로드 완료 후 — 검사목적 변경 시 시료정보 보존
 function onTestPurposeChange() {
-    if (!_fillingFromHistory) {
+    if (!_fillingFromHistory && !_filledFromHistory) {
         document.getElementById('food-type-input').value = '';
         document.getElementById('food-type-value').value = '';
         clearInspectionItems();
     }
+    _filledFromHistory = false; // 한번만 보호 (다음 수동 변경은 정상 초기화)
     clearMfdsStandardItems();
     window._mfdsFeeTotal = 0;
 
@@ -5493,33 +5495,64 @@ async function searchProductHistory() {
             var tb = b.data().createdAt?.toDate?.() || new Date(0);
             return tb - ta;
         }).slice(0, 20);
-        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">접수이력 <span style="color:#5b67f5">' + docs.length + '건</span><span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
+
+        // ── 검사목적별 그룹핑 ──
+        var groups = {}; // key: "시험분야|검사목적", value: { tf, tp, docs: [{doc, s0, dt, rno, co, ft}] }
         docs.forEach(function(doc) {
             var r = doc.data();
-            var dt = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toISOString().slice(0,10) : '';
-            var rno = r.receiptNo || '-';
-            var co = r.companyName || '';
             var tf = r.testField || '';
             var tp = r.testPurpose || '';
-            // samples 배열에서 해당 제품명의 시료 정보 추출
+            var key = tf + '|' + tp;
+            if (!groups[key]) groups[key] = { tf: tf, tp: tp, items: [] };
+            var dt = r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toISOString().slice(0,10) : '';
             var s0 = null;
             if (r.samples) {
                 s0 = r.samples.find(function(s) { return s.productName === pn; }) || r.samples[0];
             }
-            var ft = (s0 && s0.foodType) || '';
-            html += '<div class="product-history-item" onclick="fillFromHistory(\'' + doc.id + '\',\'' + pn.replace(/'/g, "\\'") + '\')" style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;transition:background 0.15s"';
-            html += ' onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'">';
-            html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">';
-            html += '<span style="font-weight:600;color:#1565c0;font-family:monospace">' + rno + '</span>';
-            html += '<span style="color:#888;font-size:11px">' + dt + '</span>';
-            html += '</div>';
-            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-            if (co) html += '<span style="color:#333;font-weight:600;font-size:11px">' + co + '</span>';
-            if (tf) html += '<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:4px;font-size:10px">' + tf + '</span>';
-            if (tp) html += '<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:4px;font-size:10px">' + tp + '</span>';
-            if (ft) html += '<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:4px;font-size:10px">' + ft + '</span>';
-            html += '</div></div>';
+            groups[key].items.push({
+                docId: doc.id, rno: r.receiptNo || '-', co: r.companyName || '',
+                ft: (s0 && s0.foodType) || '', dt: dt
+            });
         });
+
+        var groupKeys = Object.keys(groups);
+        var html = '<div style="padding:8px 12px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#5f6b7a;display:flex;gap:4px;align-items:center">';
+        html += '접수이력 <span style="color:#5b67f5">' + docs.length + '건</span>';
+        if (groupKeys.length > 1) html += ' <span style="color:#888">(' + groupKeys.length + '개 검사목적)</span>';
+        html += '<span style="flex:1"></span><button type="button" onclick="closeProductHistory()" style="border:none;background:none;cursor:pointer;font-size:14px;color:#999">✕</button></div>';
+
+        // 검사목적이 1개면 바로 항목 표시, 여러개면 목적 선택 → 항목 표시
+        if (groupKeys.length > 1) {
+            html += '<div style="padding:8px 12px;font-size:11px;color:#7b1fa2;font-weight:600;background:#faf5ff;border-bottom:1px solid #f0e6ff">어떤 검사목적으로 불러올까요?</div>';
+        }
+
+        groupKeys.forEach(function(key) {
+            var g = groups[key];
+            // 검사목적 헤더 (여러 목적인 경우 강조)
+            if (groupKeys.length > 1) {
+                html += '<div style="padding:6px 12px;background:#f8f4ff;border-bottom:1px solid #f0e6ff;display:flex;gap:6px;align-items:center;font-size:11px">';
+                if (g.tf) html += '<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:4px;font-weight:600">' + g.tf + '</span>';
+                if (g.tp) html += '<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:4px;font-weight:600">' + g.tp + '</span>';
+                html += '<span style="color:#999;margin-left:auto">' + g.items.length + '건</span>';
+                html += '</div>';
+            }
+
+            g.items.forEach(function(item) {
+                html += '<div class="product-history-item" onclick="fillFromHistory(\'' + item.docId + '\',\'' + pn.replace(/'/g, "\\'") + '\')" style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;transition:background 0.15s"';
+                html += ' onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'">';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">';
+                html += '<span style="font-weight:600;color:#1565c0;font-family:monospace">' + item.rno + '</span>';
+                html += '<span style="color:#888;font-size:11px">' + item.dt + '</span>';
+                html += '</div>';
+                html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+                if (item.co) html += '<span style="color:#333;font-weight:600;font-size:11px">' + item.co + '</span>';
+                if (g.tf) html += '<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:4px;font-size:10px">' + g.tf + '</span>';
+                if (g.tp) html += '<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:4px;font-size:10px">' + g.tp + '</span>';
+                if (item.ft) html += '<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:4px;font-size:10px">' + item.ft + '</span>';
+                html += '</div></div>';
+            });
+        });
+
         panel.innerHTML = html;
     } catch(e) {
         console.warn('[제품이력 조회 실패]', e);
@@ -5559,6 +5592,7 @@ async function fillFromHistory(docId, productName) {
                 }
                 if (found) {
                     tpSelect.value = r.testPurpose;
+                    syncCustomSelect('test-purpose', r.testPurpose); // 커스텀 UI 동기화
                     onTestPurposeChange(); // 플래그로 food-type 리셋 방지
                 }
             }
@@ -5625,6 +5659,9 @@ async function fillFromHistory(docId, productName) {
                 restoreMfdsProductDisplay();
             }
         }
+
+        // 이력 데이터 로드 완료 — 다음 검사목적 변경 시 시료정보 보존
+        _filledFromHistory = true;
 
         closeProductHistory();
         showToast('이전 접수 정보를 불러왔습니다. (' + r.receiptNo + ')', 'info');
