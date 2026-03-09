@@ -258,10 +258,11 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         <span>시험 결재</span><span style="color:#cbd5e1">›</span>
         <span class="breadcrumb-current">결과 입력</span>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;margin-right:12px">
-        <span style="font-size:12px;color:#64748b;white-space:nowrap">현재 사용자</span>
-        <select id="current-user-select" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;min-width:100px;background:#fff" onchange="onCurrentUserChange()">
-          <option value="">선택하세요</option>
+      <div id="user-login-area" style="display:flex;align-items:center;gap:6px;margin-right:12px">
+        <span style="font-size:14px">👤</span>
+        <span id="user-display" style="font-size:13px;font-weight:600;color:#1e40af;cursor:pointer" onclick="toggleUserSelect()"></span>
+        <select id="current-user-select" style="display:none;padding:4px 8px;border:1px solid #2563eb;border-radius:6px;font-size:12px;min-width:120px;background:#fff" onchange="onCurrentUserChange()">
+          <option value="">사용자 선택</option>
         </select>
       </div>
       <div class="server-status" id="server-status">
@@ -317,20 +318,14 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         </div>
         <div class="toolbar-row">
           <div class="filter-group">
-            <div class="filter-label">담당자</div>
-            <select id="filter-tester" class="form-select" style="width:120px" onchange="applyFilters()">
-              <option value="">전체</option>
-            </select>
-          </div>
-          <div class="filter-group">
             <div class="filter-label">검사목적</div>
-            <select id="filter-purpose" class="form-select" style="width:150px" onchange="applyFilters()">
+            <select id="filter-purpose" class="form-select" style="width:180px" onchange="onPurposeFilterChange()">
               <option value="">전체</option>
             </select>
           </div>
           <div class="filter-group">
             <div class="filter-label">검사항목</div>
-            <select id="filter-test-item" class="form-select" style="width:130px" onchange="applyFilters()">
+            <select id="filter-test-item" class="form-select" style="width:160px" onchange="applyFilters()">
               <option value="">전체</option>
             </select>
           </div>
@@ -429,13 +424,13 @@ var isModified = false;
 var MFDS_ENABLED = false;       // 기본: 비활성화 (안전)
 
 // 필터 상태
-var filters = { field: '전체', status: '전체', tester: '', purpose: '', testItem: '', search: '', dateFrom: '', dateTo: '' };
+var filters = { field: '전체', status: '전체', purpose: '', testItem: '', search: '', dateFrom: '', dateTo: '' };
 var searchTimer = null;
 
-// 마스터 데이터
-var masterPurposes = [];   // settings/inspectionPurposes에서 로드
-var masterItems = [];      // itemGroups에서 로드한 고유 항목명
-var allUsers = [];         // Firestore users 컬렉션
+// 마스터 데이터 + 사용자
+var masterPurposes = [];           // settings/inspectionPurposes
+var masterItemsByPurpose = {};     // { purposeName: [item1, item2, ...] }
+var allUsers = [];
 var currentUserName = localStorage.getItem('bfl_currentUser') || '';
 
 // MFDS Templates 캐시
@@ -457,74 +452,114 @@ window.addEventListener('firebase-ready', function() {
 async function init() {
   checkMfdsStatus();
   loadMfdsEnabled();
-  await loadMasterData();
+  setupUserLogin();
+  // 데이터 먼저 로드 (마스터 데이터는 백그라운드)
   await loadMfdsTemplatesData();
   await loadReceipts();
   handleUrlParams();
+  // 마스터 데이터 백그라운드 로드 → 드롭다운 강화
+  loadMasterData().then(function() {
+    populateFilterDropdowns();
+  });
 }
 
-/* 마스터 데이터 로드 (검사목적, 검사항목, 사용자) */
+/* 사용자 로그인 */
+function setupUserLogin() {
+  var display = document.getElementById('user-display');
+  var sel = document.getElementById('current-user-select');
+  if (currentUserName) {
+    display.textContent = currentUserName;
+    display.style.display = '';
+    sel.style.display = 'none';
+  } else {
+    display.textContent = '로그인';
+    display.style.color = '#ef4444';
+    display.style.display = '';
+    sel.style.display = 'none';
+  }
+  // 사용자 목록 로드
+  fsGetUsers().then(function(users) {
+    allUsers = users;
+    sel.innerHTML = '<option value="">사용자 선택</option>';
+    users.forEach(function(u) {
+      if (u.leaveDate) return;
+      var label = u.name + (u.department ? ' (' + u.department + ')' : '');
+      sel.innerHTML += '<option value="' + u.name + '">' + label + '</option>';
+    });
+    if (currentUserName) sel.value = currentUserName;
+  }).catch(function() {});
+}
+
+function toggleUserSelect() {
+  var sel = document.getElementById('current-user-select');
+  var display = document.getElementById('user-display');
+  if (sel.style.display === 'none') {
+    sel.style.display = '';
+    display.style.display = 'none';
+    sel.focus();
+  } else {
+    sel.style.display = 'none';
+    display.style.display = '';
+  }
+}
+
+function onCurrentUserChange() {
+  var sel = document.getElementById('current-user-select');
+  var display = document.getElementById('user-display');
+  currentUserName = sel.value;
+  if (currentUserName) {
+    localStorage.setItem('bfl_currentUser', currentUserName);
+    display.textContent = currentUserName;
+    display.style.color = '#1e40af';
+  } else {
+    localStorage.removeItem('bfl_currentUser');
+    display.textContent = '로그인';
+    display.style.color = '#ef4444';
+  }
+  sel.style.display = 'none';
+  display.style.display = '';
+  applyFilters();
+}
+
+/* 마스터 데이터 로드 (검사목적, 검사항목 연동) */
 async function loadMasterData() {
-  // 1. 검사목적 (settings/inspectionPurposes)
+  // 1. 검사목적 목록
   try {
     var doc = await db.collection('settings').doc('inspectionPurposes').get();
     if (doc.exists && doc.data().purposes) {
       masterPurposes = doc.data().purposes.filter(function(p) { return p.o === 1; });
       masterPurposes.sort(function(a,b) { return (a.c||999) - (b.c||999); });
     }
-  } catch(e) { console.warn('검사목적 마스터 로드 실패:', e); }
+  } catch(e) { console.warn('검사목적 로드 실패:', e); }
 
-  // 2. 검사항목 (itemGroups + mfdsTemplates)
+  // 2. 검사항목을 목적별로 그룹핑
   try {
-    var itemSet = {};
+    // itemGroups: 검사목적 → 항목명 매핑
     var snap = await db.collection('itemGroups').get();
     snap.docs.forEach(function(d) {
       var data = d.data();
-      if (data['항목명']) itemSet[data['항목명']] = true;
+      var purpose = data['검사목적'] || '';
+      var item = data['항목명'] || '';
+      if (purpose && item) {
+        if (!masterItemsByPurpose[purpose]) masterItemsByPurpose[purpose] = [];
+        if (masterItemsByPurpose[purpose].indexOf(item) === -1) masterItemsByPurpose[purpose].push(item);
+      }
     });
+    // mfdsTemplates → 'mfdsTemplates' 소스인 목적에 연결
+    var tmplItems = [];
     var tmplSnap = await db.collection('mfdsTemplates').get();
     tmplSnap.docs.forEach(function(d) {
       var data = d.data();
-      if (data.testItems && data.testItems.length) {
-        data.testItems.forEach(function(ti) {
-          if (ti.testItemName) itemSet[ti.testItemName] = true;
-        });
+      if (data.testItems) data.testItems.forEach(function(ti) {
+        if (ti.testItemName && tmplItems.indexOf(ti.testItemName) === -1) tmplItems.push(ti.testItemName);
+      });
+    });
+    masterPurposes.forEach(function(p) {
+      if (p.itemSource === 'mfdsTemplates' && !masterItemsByPurpose[p.n]) {
+        masterItemsByPurpose[p.n] = tmplItems;
       }
     });
-    masterItems = Object.keys(itemSet).sort();
-  } catch(e) { console.warn('검사항목 마스터 로드 실패:', e); }
-
-  // 3. 사용자 목록
-  try {
-    allUsers = await fsGetUsers();
-    populateUserSelector();
-  } catch(e) { console.warn('사용자 목록 로드 실패:', e); }
-}
-
-function populateUserSelector() {
-  var sel = document.getElementById('current-user-select');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">전체 (사용자 선택)</option>';
-  allUsers.forEach(function(u) {
-    if (u.leaveDate) return;
-    var label = u.name + (u.department ? ' (' + u.department + ')' : '');
-    sel.innerHTML += '<option value="' + u.name + '"' + (u.name === currentUserName ? ' selected' : '') + '>' + label + '</option>';
-  });
-}
-
-function onCurrentUserChange() {
-  var sel = document.getElementById('current-user-select');
-  currentUserName = sel.value;
-  if (currentUserName) {
-    localStorage.setItem('bfl_currentUser', currentUserName);
-  } else {
-    localStorage.removeItem('bfl_currentUser');
-  }
-  // 담당자 필터 동기화
-  var testerSel = document.getElementById('filter-tester');
-  if (testerSel) testerSel.value = currentUserName;
-  filters.tester = currentUserName;
-  applyFilters();
+  } catch(e) { console.warn('검사항목 로드 실패:', e); }
 }
 
 function checkMfdsStatus() {
@@ -600,10 +635,11 @@ async function loadReceipts() {
    ============================================================ */
 function setFilter(type, value, el) {
   filters[type] = value;
-  // UI: 같은 그룹 내 칩 active 토글
   var parent = el.parentElement;
   parent.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
   el.classList.add('active');
+  // 분야 변경 시 검사목적 → 검사항목 연동
+  if (type === 'field') populateFilterDropdowns();
   applyFilters();
 }
 
@@ -616,21 +652,20 @@ function debounceSearch() {
 }
 
 function applyFilters() {
-  filters.tester = document.getElementById('filter-tester').value;
   filters.purpose = document.getElementById('filter-purpose').value;
   filters.testItem = document.getElementById('filter-test-item').value;
   filters.dateFrom = document.getElementById('filter-from').value;
   filters.dateTo = document.getElementById('filter-to').value;
 
   filteredReceipts = allReceipts.filter(function(r) {
+    // 로그인 사용자 기준 (선택된 경우)
+    if (currentUserName && (r.testerName || '') !== currentUserName) return false;
     // 분야
     if (filters.field !== '전체' && r.testField !== filters.field) return false;
-    // 상태: 접수완료, 시험중, 결과입력완료만 표시
+    // 상태
     var validStatuses = ['접수완료', '시험중', '결과입력완료'];
     if (!validStatuses.includes(r.status || '')) return false;
     if (filters.status !== '전체' && r.status !== filters.status) return false;
-    // 담당자
-    if (filters.tester && r.testerName !== filters.tester) return false;
     // 검사목적
     if (filters.purpose && (r.testPurpose || '') !== filters.purpose) return false;
     // 검사항목
@@ -638,11 +673,10 @@ function applyFilters() {
       var items = getTestItemNames(r);
       if (items.toLowerCase().indexOf(filters.testItem.toLowerCase()) === -1) return false;
     }
-    // 텍스트 검색 (접수번호, 거래처, 제품명)
+    // 텍스트 검색
     if (filters.search) {
-      var q = filters.search;
       var haystack = ((r.receiptNo || '') + ' ' + (r.companyName || '') + ' ' + getSampleNames(r)).toLowerCase();
-      if (haystack.indexOf(q) === -1) return false;
+      if (haystack.indexOf(filters.search) === -1) return false;
     }
     // 날짜
     var rd = r.receiptDate || '';
@@ -676,12 +710,16 @@ function getTestItemNames(r) {
 }
 
 function populateFilterDropdowns() {
-  // 검사목적 드롭다운 (마스터 데이터 기반)
+  var fieldCode = getFieldCode(filters.field);
+
+  // 검사목적 드롭다운 (분야 연동)
   var purposeSel = document.getElementById('filter-purpose');
   var prevPurpose = purposeSel.value;
   var addedP = {};
   purposeSel.innerHTML = '<option value="">전체</option>';
   masterPurposes.forEach(function(p) {
+    // 분야 필터: '전체'이면 모두, 아니면 해당 분야만
+    if (fieldCode && p.fields && p.fields.indexOf(fieldCode) === -1) return;
     purposeSel.innerHTML += '<option value="' + p.n + '">' + p.n + '</option>';
     addedP[p.n] = true;
   });
@@ -694,18 +732,49 @@ function populateFilterDropdowns() {
   });
   purposeSel.value = prevPurpose;
 
-  // 검사항목 드롭다운 (마스터 데이터 기반)
+  // 검사항목 드롭다운 (검사목적 연동)
+  populateItemDropdown();
+}
+
+function getFieldCode(name) {
+  if (name === '식품') return 'F';
+  if (name === '축산') return 'L';
+  if (name === '기타') return 'E';
+  return '';
+}
+
+function onPurposeFilterChange() {
+  populateItemDropdown();
+  applyFilters();
+}
+
+function populateItemDropdown() {
   var itemSel = document.getElementById('filter-test-item');
   var prevItem = itemSel.value;
+  var selectedPurpose = document.getElementById('filter-purpose').value;
   var addedI = {};
   itemSel.innerHTML = '<option value="">전체</option>';
-  masterItems.forEach(function(n) {
-    itemSel.innerHTML += '<option value="' + n + '">' + n + '</option>';
-    addedI[n] = true;
-  });
+
+  if (selectedPurpose && masterItemsByPurpose[selectedPurpose]) {
+    // 선택된 목적의 항목만 표시
+    masterItemsByPurpose[selectedPurpose].sort().forEach(function(n) {
+      itemSel.innerHTML += '<option value="' + n + '">' + n + '</option>';
+      addedI[n] = true;
+    });
+  } else if (!selectedPurpose) {
+    // 전체: 모든 항목 표시
+    Object.keys(masterItemsByPurpose).forEach(function(p) {
+      masterItemsByPurpose[p].forEach(function(n) {
+        if (!addedI[n]) {
+          itemSel.innerHTML += '<option value="' + n + '">' + n + '</option>';
+          addedI[n] = true;
+        }
+      });
+    });
+  }
   // 데이터에만 있는 항목도 추가
   allReceipts.forEach(function(r) {
-    var extractItems = function(arr) {
+    var extract = function(arr) {
       if (!arr) return;
       arr.forEach(function(ti) {
         if (ti.itemName && !addedI[ti.itemName]) {
@@ -714,34 +783,10 @@ function populateFilterDropdowns() {
         }
       });
     };
-    extractItems(r.testItems);
-    if (r.samples) r.samples.forEach(function(s) { extractItems(s.testItems); });
+    extract(r.testItems);
+    if (r.samples) r.samples.forEach(function(s) { extract(s.testItems); });
   });
-  itemSel.value = prevItem;
-
-  // 담당자 드롭다운 (사용자 목록 기반)
-  var testerSel = document.getElementById('filter-tester');
-  var prevTester = testerSel.value;
-  var addedT = {};
-  testerSel.innerHTML = '<option value="">전체</option>';
-  allUsers.forEach(function(u) {
-    if (u.leaveDate) return;
-    testerSel.innerHTML += '<option value="' + u.name + '">' + u.name + '</option>';
-    addedT[u.name] = true;
-  });
-  allReceipts.forEach(function(r) {
-    if (r.testerName && !addedT[r.testerName]) {
-      testerSel.innerHTML += '<option value="' + r.testerName + '">' + r.testerName + '</option>';
-      addedT[r.testerName] = true;
-    }
-  });
-  // 현재 사용자 자동 선택 (첫 로드 시)
-  if (currentUserName && !prevTester) {
-    testerSel.value = currentUserName;
-    filters.tester = currentUserName;
-  } else {
-    testerSel.value = prevTester;
-  }
+  itemSel.value = addedI[prevItem] ? prevItem : '';
 }
 
 /* ============================================================
