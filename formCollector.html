@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="js/firebase-init.js"></script>
+<script src="js/mfds-codes.js"></script>
 <style>
 :root{
   --pri:#2563eb;--pri-l:#dbeafe;--pri-d:#1d4ed8;
@@ -524,23 +525,23 @@ async function loadMasterData() {
     {id:'E', name:'기타',   code:'E', color:'#43a047'}
   ];
   var defPurposes = [
-    {c:1, n:'자가품질위탁검사용', prefix:'QC', fields:['F','L'], o:1, i:42},
-    {c:2, n:'참고용(기준규격외)', prefix:'RE', fields:['F'],     o:1, i:38},
-    {c:4, n:'참고용(유통기한설정)', prefix:'SL', fields:['F'],   o:1, i:28},
-    {c:6, n:'참고용(영양성분)',   prefix:'NU', fields:['F'],     o:1, i:14},
-    {c:10,n:'정도관리',           prefix:'QA', fields:['F','L'], o:1, i:8 },
-    {c:13,n:'방사능(HPGe)',       prefix:'RA', fields:['F'],     o:1, i:4 },
-    {c:14,n:'Allergen(ELISA)',    prefix:'AE', fields:['F'],     o:1, i:6 },
-    {c:15,n:'Halal food(RT_PCR)',prefix:'HL', fields:['F'],     o:1, i:5 },
-    {c:16,n:'Vegan food(RT-PCR)',prefix:'VG', fields:['F'],     o:1, i:5 },
-    {c:17,n:'물질검사',           prefix:'MT', fields:['F'],     o:1, i:10},
-    {c:18,n:'Allergen(RT-PCR)',   prefix:'AR', fields:['F'],     o:1, i:6 },
-    {c:116,n:'연구용역',          prefix:'RD', fields:['F','L'], o:1, i:20},
-    {c:119,n:'잔류농약(인증용)',  prefix:'PC', fields:['F'],     o:1, i:12},
-    {c:120,n:'잔류농약(참고용)',  prefix:'PR', fields:['F'],     o:1, i:12},
-    {c:121,n:'항생물질(인증용)',  prefix:'AC', fields:['L'],     o:1, i:8 },
-    {c:122,n:'항생물질(참고용)',  prefix:'AT', fields:['L'],     o:1, i:8 },
-    {c:123,n:'참고용(소비기한설정)',prefix:'SE',fields:['F'],    o:1, i:28}
+    {c:1, n:'자가품질위탁검사용', prefix:'QC', fields:['F','L'], o:1, i:42, itemSource:'mfdsTemplates'},
+    {c:2, n:'참고용(기준규격외)', prefix:'RE', fields:['F'],     o:1, i:38, itemSource:'mfdsTestItems'},
+    {c:4, n:'참고용(유통기한설정)', prefix:'SL', fields:['F'],   o:1, i:28, itemSource:'itemGroups'},
+    {c:6, n:'참고용(영양성분)',   prefix:'NU', fields:['F'],     o:1, i:14, itemSource:'itemGroups'},
+    {c:10,n:'정도관리',           prefix:'QA', fields:['F','L'], o:1, i:8,  itemSource:'mfdsTestItems'},
+    {c:13,n:'방사능(HPGe)',       prefix:'RA', fields:['F'],     o:1, i:4,  itemSource:'itemGroups'},
+    {c:14,n:'Allergen(ELISA)',    prefix:'AE', fields:['F'],     o:1, i:6,  itemSource:'itemGroups'},
+    {c:15,n:'Halal food(RT_PCR)',prefix:'HL', fields:['F'],     o:1, i:5,  itemSource:'itemGroups'},
+    {c:16,n:'Vegan food(RT-PCR)',prefix:'VG', fields:['F'],     o:1, i:5,  itemSource:'itemGroups'},
+    {c:17,n:'물질검사',           prefix:'MT', fields:['F'],     o:1, i:10, itemSource:'itemGroups'},
+    {c:18,n:'Allergen(RT-PCR)',   prefix:'AR', fields:['F'],     o:1, i:6,  itemSource:'itemGroups'},
+    {c:116,n:'연구용역',          prefix:'RD', fields:['F','L'], o:1, i:20, itemSource:'itemGroups'},
+    {c:119,n:'잔류농약(인증용)',  prefix:'PC', fields:['F'],     o:1, i:12, itemSource:'itemGroups'},
+    {c:120,n:'잔류농약(참고용)',  prefix:'PR', fields:['F'],     o:1, i:12, itemSource:'itemGroups'},
+    {c:121,n:'항생물질(인증용)',  prefix:'AC', fields:['L'],     o:1, i:8,  itemSource:'itemGroups'},
+    {c:122,n:'항생물질(참고용)',  prefix:'AT', fields:['L'],     o:1, i:8,  itemSource:'itemGroups'},
+    {c:123,n:'참고용(소비기한설정)',prefix:'SE',fields:['F'],    o:1, i:28, itemSource:'itemGroups'}
   ];
 
   FIELDS   = defFields;
@@ -558,6 +559,12 @@ async function loadMasterData() {
         PURPOSES = pd.data().purposes
           .filter(function(p){ return p.o === 1; })
           .sort(function(a,b){ return (a.c||999)-(b.c||999); });
+        // itemSource 기본값 보정 + 레거시 마이그레이션
+        PURPOSES.forEach(function(p) {
+          if (!p.itemSource) p.itemSource = (p.n === '자가품질위탁검사용') ? 'mfdsTemplates' : 'mfdsTestItems';
+          if (p.itemSource === 'foodTypesMapping') p.itemSource = 'itemGroups';
+          if (p.itemSource === 'refFeeMapping') p.itemSource = 'mfdsTestItems';
+        });
       }
     }
   } catch(e) {
@@ -619,14 +626,19 @@ function renderPurposes(list) {
     document.getElementById('sec-purpose').style.display = 'block';
     return;
   }
+  var srcLabels = {mfdsTemplates:'식품유형', mfdsTestItems:'시험항목', itemGroups:'항목그룹'};
+  var srcColors = {mfdsTemplates:'#1565c0', mfdsTestItems:'#7c3aed', itemGroups:'#0d9488'};
   var html = list.map(function(p, i) {
     var tags = (p.fields||[]).map(function(fid) {
       var f = FIELDS.find(function(x){ return x.id===fid; });
       return f ? '<span class="pf-tag" style="background:'+f.color+'18;color:'+f.color+'">'
                  +f.name+'</span>' : '';
     }).join('');
+    var src = p.itemSource || 'mfdsTestItems';
+    var srcTag = '<span style="font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700;background:'
+      +(srcColors[src]||'#888')+'18;color:'+(srcColors[src]||'#888')+'">'+(srcLabels[src]||src)+'</span>';
     return '<div class="pcard" data-i="'+i+'" onclick="pickPurpose(this,'+i+')">'
-      +'<div class="pcard-prefix">'+(p.prefix||'')+'</div>'
+      +'<div style="display:flex;gap:5px;align-items:center;margin-bottom:5px"><div class="pcard-prefix">'+(p.prefix||'')+'</div>'+srcTag+'</div>'
       +'<div class="pcard-name">'+(p.n||'')+'</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center">'
       +'<div class="pcard-fields">'+tags+'</div>'
@@ -646,11 +658,13 @@ async function pickPurpose(el, idx) {
   document.getElementById('sec-items').style.display = 'block';
   goStep(3);
 
-  // 항목 로딩
+  // 항목 로딩 (itemSource 표시)
+  var srcName = {mfdsTemplates:'식품유형(mfdsTemplates)', mfdsTestItems:'시험항목 DB', itemGroups:'항목그룹(itemGroups)'};
+  var src = selPurpose.itemSource || 'mfdsTestItems';
   document.getElementById('item-list').innerHTML =
     '<div class="empty" style="padding:14px">'
     +'<div class="loading-dot"><span></span><span></span><span></span></div>'
-    +'<p style="margin-top:5px">항목 불러오는 중...</p></div>';
+    +'<p style="margin-top:5px">'+(srcName[src]||src)+' 에서 불러오는 중...</p></div>';
   document.getElementById('item-kw').value = '';
 
   ALL_ITEMS = await fetchItems(selPurpose);
@@ -661,96 +675,112 @@ async function pickPurpose(el, idx) {
 
 /* =============================================================
    STEP 2 ─ 검사항목 로딩
-   ─ Firestore itemGroups 컬렉션에서 purposePrefix로 필터
+   ─ 검사목적의 itemSource에 따라 분기 (접수등록과 동일)
+   ─ mfdsTemplates: Firestore mfdsTemplates → 식품유형별 시험항목
+   ─ mfdsTestItems: Firestore mfds_test_items → 시험항목 전체 (2,940건)
+   ─ itemGroups:    Firestore itemGroups → 검체유형별 그룹 항목
 ============================================================= */
-async function fetchItems(p) {
-  var items = [];
+var _itemGroupsCache = null;
+var _mfdsTestItemsCache = null;
+var _mfdsTemplatesCache = null;
 
-  // 1) Firestore itemGroups 조회 시도
-  if (dbOk) {
-    try {
-      var snap = await db.collection('itemGroups').get();
-      snap.forEach(function(doc) {
-        var d = doc.data();
-        // purpose 또는 prefix 매칭
-        var match = (d.prefix === p.prefix)
-          || (d.purposeCode === p.prefix)
-          || ((d.purpose||'').includes(p.prefix))
-          || ((d.purposeName||'') === p.n);
-        if (match) {
-          var itArr = d.items || (d['항목명'] ? [d] : []);
-          itArr.forEach(function(it) {
-            var nm = it['항목명'] || it.name || it.testItemName || it.itmNm || '';
-            var cd = it.code || it.testItemCode || it['항목코드'] || it.itmCd || '';
-            if (nm) items.push({ name: nm, code: cd, fee: it['수수료'] || it.fee || 0 });
-          });
-        }
-      });
-    } catch(e) { console.warn('[itemGroups] 로드 실패:', e.message); }
+async function fetchItems(p) {
+  var src = p.itemSource || 'mfdsTestItems';
+  // 레거시 마이그레이션
+  if (src === 'foodTypesMapping') src = 'itemGroups';
+  if (src === 'refFeeMapping') src = 'mfdsTestItems';
+
+  var items = [];
+  if (!dbOk) return items;
+
+  try {
+    if (src === 'mfdsTestItems') {
+      items = await fetchFromMfdsTestItems(p);
+    } else if (src === 'mfdsTemplates') {
+      items = await fetchFromMfdsTemplates(p);
+    } else if (src === 'itemGroups') {
+      items = await fetchFromItemGroups(p);
+    }
+  } catch(e) {
+    console.warn('[fetchItems] ' + src + ' 로드 실패:', e.message);
   }
 
-  // 2) 항목이 없으면 목적별 기본 항목 사용
-  if (!items.length) items = getDefaultItems(p);
-
   // 중복 제거
-  var seen = {}; 
+  var seen = {};
   return items.filter(function(it) {
-    var k = it.name + it.code;
+    var k = it.name + (it.code||'');
     if (!it.name || seen[k]) return false;
     seen[k] = true; return true;
   });
 }
 
-/* 목적별 기본 항목 (Firestore 없을 때 폴백) */
-function getDefaultItems(p) {
-  var map = {
-    'QC': [
-      {name:'납(Pb)',code:'B10001'},{name:'카드뮴(Cd)',code:'B10002'},
-      {name:'비소(As)',code:'B10003'},{name:'수은(Hg)',code:'B10004'},
-      {name:'대장균',code:'M10001'},{name:'살모넬라',code:'M10002'},
-      {name:'황색포도상구균',code:'M10003'},{name:'세균수',code:'M10004'},
-      {name:'수분',code:'P10001'},{name:'산도',code:'P10002'},
-      {name:'당도',code:'P10003'},{name:'보존료',code:'A10001'},
-      {name:'타르색소',code:'A10002'},{name:'잔류농약',code:'R10001'}
-    ],
-    'RE': [
-      {name:'납(Pb)',code:'B10001'},{name:'카드뮴(Cd)',code:'B10002'},
-      {name:'비소(As)',code:'B10003'},{name:'수분',code:'P10001'},
-      {name:'조단백',code:'P10005'},{name:'조지방',code:'P10006'},
-      {name:'회분',code:'P10007'},{name:'산가',code:'P10008'}
-    ],
-    'RA': [
-      {name:'세슘-134',code:'RA001'},{name:'세슘-137',code:'RA002'},
-      {name:'요오드-131',code:'RA003'},{name:'스트론튬-90',code:'RA004'}
-    ],
-    'AE': [
-      {name:'글루텐',code:'AL001'},{name:'우유',code:'AL002'},
-      {name:'달걀',code:'AL003'},{name:'땅콩',code:'AL004'},
-      {name:'대두',code:'AL005'},{name:'밀',code:'AL006'}
-    ],
-    'AR': [
-      {name:'글루텐(RT-PCR)',code:'AR001'},{name:'우유(RT-PCR)',code:'AR002'},
-      {name:'달걀(RT-PCR)',code:'AR003'},{name:'땅콩(RT-PCR)',code:'AR004'}
-    ],
-    'AC': [
-      {name:'테트라사이클린',code:'AC001'},{name:'옥시테트라사이클린',code:'AC002'},
-      {name:'클로르테트라사이클린',code:'AC003'},{name:'독시사이클린',code:'AC004'},
-      {name:'설파메타진',code:'AC005'},{name:'암피실린',code:'AC006'},
-      {name:'암록시실린',code:'AC007'},{name:'에리스로마이신',code:'AC008'}
-    ],
-    'PC': [
-      {name:'잔류농약(다성분)',code:'PC001'},{name:'클로르피리포스',code:'PC002'},
-      {name:'다이아지논',code:'PC003'},{name:'프로피코나졸',code:'PC004'}
-    ],
-    'NU': [
-      {name:'열량',code:'NU001'},{name:'탄수화물',code:'NU002'},
-      {name:'단백질',code:'NU003'},{name:'지방',code:'NU004'},
-      {name:'나트륨',code:'NU005'},{name:'당류',code:'NU006'},
-      {name:'식이섬유',code:'NU007'},{name:'포화지방',code:'NU008'}
-    ]
-  };
-  var prefix = p.prefix || '';
-  return map[prefix] || [{name:'(직접 입력)', code:''}];
+/* ── mfdsTestItems: Firestore mfds_test_items (시험항목 DB) ── */
+async function fetchFromMfdsTestItems(p) {
+  if (typeof MFDS_CODES !== 'undefined' && MFDS_CODES.loadTestItems) {
+    if (!_mfdsTestItemsCache) _mfdsTestItemsCache = await MFDS_CODES.loadTestItems();
+    var filtered = _mfdsTestItemsCache;
+    // testItemCats 필터 적용
+    var cats = p.testItemCats || [];
+    var subs = p.testItemSubs || {};
+    if (cats.length > 0) {
+      filtered = filtered.filter(function(t) {
+        var code = (t['시험항목코드'] || '');
+        var major = code.charAt(0).toUpperCase();
+        if (cats.indexOf(major) < 0) return false;
+        var sub = subs[major];
+        if (sub && sub.length > 0) return sub.indexOf(code.charAt(1)) >= 0;
+        return true;
+      });
+    }
+    return filtered.map(function(t) {
+      return { name: t['한글명'] || '', code: t['시험항목코드'] || '' };
+    });
+  }
+  // MFDS_CODES 없으면 Firestore 직접 조회
+  var snap = await db.collection('mfds_test_items').get();
+  return snap.docs.map(function(d) {
+    var data = d.data();
+    return { name: data['한글명'] || '', code: data['시험항목코드'] || '' };
+  });
+}
+
+/* ── mfdsTemplates: Firestore mfdsTemplates (식품유형별 시험항목) ── */
+async function fetchFromMfdsTemplates(p) {
+  if (!_mfdsTemplatesCache) {
+    var snap = await db.collection('mfdsTemplates').get();
+    _mfdsTemplatesCache = snap.docs.map(function(d) { return d.data(); });
+  }
+  // 모든 식품유형의 시험항목을 수집 (중복은 상위에서 제거)
+  var items = [];
+  _mfdsTemplatesCache.forEach(function(t) {
+    (t.testItems || []).forEach(function(ti) {
+      var nm = ti.testItemName || ti['한글명'] || '';
+      var cd = ti.testItemCode || ti['시험항목코드'] || '';
+      if (nm) items.push({ name: nm, code: cd });
+    });
+  });
+  return items;
+}
+
+/* ── itemGroups: Firestore itemGroups (검체유형별 그룹 항목) ── */
+async function fetchFromItemGroups(p) {
+  if (!_itemGroupsCache) {
+    var snap = await db.collection('itemGroups').get();
+    _itemGroupsCache = snap.docs.map(function(d) { return d.data(); });
+  }
+  var groupNames = p.itemGroupNames || [];
+  var items = [];
+  _itemGroupsCache.forEach(function(d) {
+    var matchGroup = groupNames.length === 0
+      ? (d['검사목적'] === p.n || d.prefix === p.prefix || d.purposeCode === p.prefix)
+      : (groupNames.indexOf(d['검사목적']) >= 0);
+    if (matchGroup) {
+      var nm = d['항목명'] || d.name || '';
+      var cd = d.testItemCode || d.code || d['항목코드'] || '';
+      if (nm) items.push({ name: nm, code: cd });
+    }
+  });
+  return items;
 }
 
 /* =============================================================
