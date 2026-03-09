@@ -2321,10 +2321,8 @@ function onTestPurposeChange() {
         document.getElementById('prev-receipt-no').value = '';
     }
 
-    // 공지여부가 "예"이면 검사목적 변경 시 공지 다시 로드
-    if (document.getElementById('notice-required') && document.getElementById('notice-required').value === '예') {
-        loadNoticeTemplate();
-    }
+    // 검사목적 변경 시 항상 공지 확인 (등록된 공지가 있으면 자동 표시)
+    loadNoticeTemplate(true);
 }
 
 // ============================================================================
@@ -4361,7 +4359,7 @@ var _allNoticeItems = []; // Firestore 전체 공지 [{text, purpose}]
 var _filteredNotices = []; // 현재 검사목적에 해당하는 공지 (공통 + 목적별)
 var _selectedNoticeIdxs = []; // _filteredNotices 내 선택된 인덱스
 
-async function loadNoticeTemplate() {
+async function loadNoticeTemplate(autoCheck) {
     var area = document.getElementById('notice-template-area');
     var listEl = document.getElementById('notice-items-list');
     var label = document.getElementById('notice-purpose-label');
@@ -4369,25 +4367,42 @@ async function loadNoticeTemplate() {
     if (!area) return;
 
     var testPurpose = (document.getElementById('test-purpose').value || '').trim();
-    if (noticeReq && noticeReq.value === '예') {
-        area.style.display = '';
-        label.textContent = testPurpose || '';
-        try {
-            var doc = await db.collection('settings').doc('receiptNotices').get();
-            _allNoticeItems = (doc.exists && doc.data().items) ? doc.data().items : [];
-            // 필터: 공통 + 현재 검사목적
-            _filteredNotices = _allNoticeItems.filter(function(item) {
-                return item.purpose === '공통' || item.purpose === testPurpose;
-            });
-            _selectedNoticeIdxs = [];
-            renderNoticeItems();
-        } catch(e) {
-            listEl.innerHTML = '<div style="color:#ef4444;font-size:12px">공지 로드 실패: ' + e.message + '</div>';
-        }
-    } else {
+    if (!testPurpose) {
         area.style.display = 'none';
         _selectedNoticeIdxs = [];
         _filteredNotices = [];
+        return;
+    }
+
+    try {
+        var doc = await db.collection('settings').doc('receiptNotices').get();
+        _allNoticeItems = (doc.exists && doc.data().items) ? doc.data().items : [];
+        _filteredNotices = _allNoticeItems.filter(function(item) {
+            return item.purpose === '공통' || item.purpose === testPurpose;
+        });
+
+        // 등록된 공지가 있으면 자동으로 공지여부 "예" 설정 + 표시
+        if (_filteredNotices.length > 0) {
+            if (autoCheck && noticeReq && noticeReq.value !== '예') {
+                noticeReq.value = '예';
+            }
+            area.style.display = '';
+            label.textContent = testPurpose || '';
+            _selectedNoticeIdxs = [];
+            renderNoticeItems();
+        } else if (noticeReq && noticeReq.value === '예') {
+            // 공지 없어도 "예"이면 빈 영역 표시
+            area.style.display = '';
+            label.textContent = testPurpose || '';
+            _selectedNoticeIdxs = [];
+            renderNoticeItems();
+        } else {
+            area.style.display = 'none';
+            _selectedNoticeIdxs = [];
+            _filteredNotices = [];
+        }
+    } catch(e) {
+        listEl.innerHTML = '<div style="color:#ef4444;font-size:12px">공지 로드 실패: ' + e.message + '</div>';
     }
 }
 
