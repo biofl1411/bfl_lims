@@ -597,10 +597,22 @@ function applyFilters() {
     if (filters.status !== '전체' && r.status !== filters.status) return false;
     // 검사목적
     if (filters.purpose && (r.testPurpose || '') !== filters.purpose) return false;
-    // 검사항목
+    // 검사항목: 접수에 testItems 데이터가 있으면 매칭, 없으면 목적 기반으로 통과
     if (filters.testItem) {
       var items = getTestItemNames(r);
-      if (items.toLowerCase().indexOf(filters.testItem.toLowerCase()) === -1) return false;
+      if (items) {
+        // 접수에 항목 데이터가 있으면 직접 매칭
+        if (items.toLowerCase().indexOf(filters.testItem.toLowerCase()) === -1) return false;
+      } else {
+        // 접수에 항목 데이터가 없으면: 선택된 항목이 해당 목적에 속하는지 마스터 데이터로 확인
+        var purpose = r.testPurpose || '';
+        var purposeItems = masterItemsByPurpose[purpose] || [];
+        var found = purposeItems.some(function(pi) {
+          return pi.toLowerCase().indexOf(filters.testItem.toLowerCase()) !== -1
+            || filters.testItem.toLowerCase().indexOf(pi.toLowerCase()) !== -1;
+        });
+        if (!found) return false;
+      }
     }
     // 텍스트 검색
     if (filters.search) {
