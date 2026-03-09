@@ -2068,6 +2068,9 @@ function onTestFieldChange() {
     // 검사목적 드롭다운 업데이트
     updateTestPurposeOptions(testField);
 
+    // 이력 불러오기 중이면 초기화 건너뜀
+    if (_fillingFromHistory) return;
+
     // 검사목적 초기화
     document.getElementById('test-purpose').value = '';
 
@@ -2251,10 +2254,13 @@ document.addEventListener('click', function(e) {
 // ============================================================================
 // 검사목적 변경
 // ============================================================================
+var _fillingFromHistory = false; // 이력 불러오기 중 리셋 방지 플래그
 function onTestPurposeChange() {
-    document.getElementById('food-type-input').value = '';
-    document.getElementById('food-type-value').value = '';
-    clearInspectionItems();
+    if (!_fillingFromHistory) {
+        document.getElementById('food-type-input').value = '';
+        document.getElementById('food-type-value').value = '';
+        clearInspectionItems();
+    }
     clearMfdsStandardItems();
     window._mfdsFeeTotal = 0;
 
@@ -5530,6 +5536,36 @@ async function fillFromHistory(docId, productName) {
         var doc = await db.collection('receipts').doc(docId).get();
         if (!doc.exists) { showToast('문서를 찾을 수 없습니다.', 'error'); return; }
         var r = doc.data();
+
+        // ── 검사목적/시험분야 복원 (리셋 방지 플래그 ON) ──
+        _fillingFromHistory = true;
+        try {
+            // 시험분야 설정
+            if (r.testField) {
+                var radios = document.querySelectorAll('input[name="test-field"]');
+                radios.forEach(function(rd) {
+                    if (rd.value === r.testField) {
+                        rd.checked = true;
+                        onTestFieldChange(); // 검사목적 드롭다운 갱신
+                    }
+                });
+            }
+            // 검사목적 설정
+            if (r.testPurpose) {
+                var tpSelect = document.getElementById('test-purpose');
+                // 드롭다운에 해당 옵션이 있는지 확인
+                var found = false;
+                for (var i = 0; i < tpSelect.options.length; i++) {
+                    if (tpSelect.options[i].value === r.testPurpose) { found = true; break; }
+                }
+                if (found) {
+                    tpSelect.value = r.testPurpose;
+                    onTestPurposeChange(); // 플래그로 food-type 리셋 방지
+                }
+            }
+        } finally {
+            _fillingFromHistory = false;
+        }
 
         // ── 업체 정보 복원 ──
         if (r.companyName) {
