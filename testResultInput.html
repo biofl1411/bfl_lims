@@ -144,6 +144,28 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .quick-btn:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
 .override-select{padding:4px 6px;border:1px solid var(--warning);border-radius:6px;font-size:11px;background:var(--warning-light)}
 
+/* ====== 항목별 인라인 계산폼 ====== */
+.item-detail-row td{padding:0!important;border-bottom:2px solid var(--primary-light)!important}
+.item-detail-form{background:linear-gradient(135deg,#f0f4ff 0%,#f8faff 100%);padding:14px 16px;border-left:3px solid var(--primary);margin:0}
+.idf-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;font-weight:600;color:#1e3a5f}
+.idf-header .idf-badge{background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.idf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.idf-field{display:flex;flex-direction:column}
+.idf-field label{font-size:11px;color:#475569;margin-bottom:3px;font-weight:500}
+.idf-field input,.idf-field select{padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:white}
+.idf-field input:focus,.idf-field select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px rgba(37,99,235,0.15)}
+.idf-formula{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:11px;color:#334155;margin-top:8px;font-family:'Pretendard',monospace}
+.idf-result{display:flex;gap:12px;align-items:center;margin-top:8px;padding:8px 12px;background:#ecfdf5;border-radius:6px;border:1px solid #bbf7d0}
+.idf-result-label{font-size:12px;font-weight:600;color:#065f46}
+.idf-result-value{font-size:18px;font-weight:700;color:#059669}
+.idf-result-judge{font-size:14px;font-weight:700}
+.idf-std-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:6px}
+.idf-std-grid label{font-size:10px;text-align:center;color:#64748b}
+.idf-std-grid input{text-align:center;font-size:11px}
+.idf-toggle{background:none;border:1px solid #c7d2fe;border-radius:4px;cursor:pointer;font-size:11px;padding:1px 6px;color:#4f46e5;margin-left:4px}
+.idf-toggle:hover{background:#eef2ff}
+.idf-toggle.active{background:#4f46e5;color:white;border-color:#4f46e5}
+
 /* Sample tabs */
 .sample-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .sample-tab{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:500;background:var(--gray-100);color:var(--gray-700);cursor:pointer;border:2px solid transparent;transition:all 0.2s}
@@ -385,6 +407,7 @@ window.addEventListener('firebase-ready', function() {
 async function init() {
   checkMfdsStatus();
   loadMfdsEnabled();
+  await loadFormTemplates();
   await loadMfdsTemplatesData();
   await loadReceipts();
   handleUrlParams();
@@ -886,18 +909,30 @@ function loadAndRenderItems() {
       savedMarkValue = (typeof MFDS_RULES !== 'undefined') ? MFDS_RULES.generateMarkValue(mv, item) : mv;
     }
 
-    return '<tr>' +
+    var calcType = getCalcType(item.testItemName);
+    var toggleBtn = calcType ? '<button class="idf-toggle" onclick="toggleItemDetail(' + idx + ',this)" title="측정값 입력폼">▶ 상세</button>' : '';
+    var inputReadonly = calcType ? ' readonly style="background:#f0fdf4;cursor:pointer" onclick="toggleItemDetail(' + idx + ')"' : '';
+    var inputPlaceholder = calcType ? '상세 입력 클릭' : '입력';
+
+    var row = '<tr id="item-row-' + idx + '">' +
       '<td style="text-align:center">' + (idx+1) + '</td>' +
-      '<td>' + (item.testItemName || '-') + '</td>' +
+      '<td>' + (item.testItemName || '-') + toggleBtn + '</td>' +
       '<td style="font-size:11px;color:#888">' + (item.testItemCode || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.standard || '-') + '</td>' +
       '<td style="font-size:12px">' + (item.unit || '-') + '</td>' +
-      '<td><input type="text" class="result-input ' + inputClass + '" data-idx="' + idx + '" value="' + mv + '" placeholder="입력" oninput="onResultInput(' + idx + ',this)">' + quickBtns + '</td>' +
+      '<td><input type="text" class="result-input ' + inputClass + '" data-idx="' + idx + '" value="' + mv + '" placeholder="' + inputPlaceholder + '" oninput="onResultInput(' + idx + ',this)"' + (calcType && !mv ? inputReadonly : '') + '>' + quickBtns + '</td>' +
       '<td id="mark-' + idx + '" style="font-size:12px;color:#2563eb;font-weight:500">' + savedMarkValue + '</td>' +
       '<td id="judge-' + idx + '">' + judgeBadge + '</td>' +
       '<td>' + overrideHtml + '</td>' +
       '<td><input type="text" class="remark-input" data-idx="' + idx + '" value="' + rm + '" placeholder="비고" oninput="markModified()"></td>' +
       '</tr>';
+
+    // 인라인 계산폼 (숨김)
+    if (calcType) {
+      row += '<tr class="item-detail-row" id="item-detail-' + idx + '" style="display:none"><td colspan="10">' + renderCalcForm(idx, item, calcType, saved) + '</td></tr>';
+    }
+
+    return row;
   }).join('');
 
   calculateOverallResult();
@@ -1196,6 +1231,277 @@ function calculateOverallResult() {
 }
 
 /* ============================================================
+   formTemplates 기반 동적 계산폼
+   ============================================================ */
+// formTemplates 캐시: { itemCode_or_name: analyzed }
+var _formTemplatesCache = {};
+var _formTemplatesLoaded = false;
+// 항목별 원시 입력 데이터 캐시
+var _rawInputs = {};  // { sampleIdx_itemIdx: { fieldId: value, ... } }
+
+// formTemplates 로드 (init에서 호출)
+async function loadFormTemplates() {
+  try {
+    var snap = await db.collection('formTemplates').where('appliedToLims', '==', true).get();
+    snap.docs.forEach(function(d) {
+      var data = d.data();
+      if (!data.analyzed) return;
+      // 대표항목 + 공통항목 모두 캐시
+      var key = (data.representativeItem || '').trim();
+      if (key) _formTemplatesCache[key] = data.analyzed;
+      (data.sharedItems || []).forEach(function(si) {
+        var sk = (si.name || '').trim();
+        if (sk && !_formTemplatesCache[sk]) _formTemplatesCache[sk] = data.analyzed;
+      });
+    });
+    _formTemplatesLoaded = true;
+  } catch(e) {
+    console.warn('formTemplates 로드 실패:', e);
+    _formTemplatesLoaded = true;
+  }
+}
+
+// 항목명으로 양식 찾기
+function findFormTemplate(itemName) {
+  if (!itemName || !_formTemplatesLoaded) return null;
+  return _formTemplatesCache[itemName.trim()] || null;
+}
+
+function toggleItemDetail(idx, btn) {
+  var row = document.getElementById('item-detail-' + idx);
+  if (!row) return;
+  var visible = row.style.display !== 'none';
+  row.style.display = visible ? 'none' : 'table-row';
+  var toggleBtns = document.querySelectorAll('#item-row-' + idx + ' .idf-toggle');
+  toggleBtns.forEach(function(b) {
+    b.classList.toggle('active', !visible);
+    b.textContent = visible ? '▶ 상세' : '▼ 접기';
+  });
+}
+
+// formTemplates analyzed 데이터 기반 동적 폼 렌더링
+function renderCalcForm(idx, item, tmpl, saved) {
+  var key = currentSampleIdx + '_' + idx;
+  var raw = _rawInputs[key] || (saved && saved.rawInputs) || {};
+  var sections = tmpl.sections || [];
+  var calculations = tmpl.calculations || [];
+  var judgment = tmpl.judgmentRule || {};
+
+  var h = '<div class="item-detail-form">';
+  h += '<div class="idf-header"><span>🔬 ' + (tmpl.formTitle || item.testItemName || '') + '</span>';
+  if (judgment.standardText) {
+    h += '<span class="idf-badge">기준: ' + judgment.standardText + '</span>';
+  }
+  if (tmpl.sop) {
+    h += '<span class="idf-badge">' + tmpl.sop + '</span>';
+  }
+  h += '</div>';
+
+  // 섹션별 입력 필드
+  sections.forEach(function(sec) {
+    if (sec.title) h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px">' + sec.title + '</div>';
+    h += '<div class="idf-grid">';
+    (sec.fields || []).forEach(function(f) {
+      var fid = 'idf-' + f.id + '-' + idx;
+      var val = raw[f.id] || '';
+      var lbl = f.label + (f.unit ? ' (' + f.unit + ')' : '');
+      if (f.type === 'readonly') {
+        h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + (val || f.exampleValue || '') + '" readonly style="background:#f1f5f9;color:#64748b"></div>';
+      } else if (f.type === 'textarea') {
+        h += '<div class="idf-field" style="grid-column:1/-1"><label>' + lbl + '</label><textarea id="' + fid + '" rows="2" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" oninput="calcItemResult(' + idx + ')">' + val + '</textarea></div>';
+      } else {
+        var typeAttr = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+        var stepAttr = f.type === 'number' ? ' step="any"' : '';
+        h += '<div class="idf-field"><label>' + lbl + (f.required ? ' <span style="color:#ef4444">*</span>' : '') + '</label>';
+        h += '<input type="' + typeAttr + '" id="' + fid + '" value="' + val + '" placeholder="' + (f.placeholder || f.exampleValue || '') + '"' + stepAttr + ' oninput="calcItemResult(' + idx + ')"></div>';
+      }
+    });
+    h += '</div>';
+  });
+
+  // 계산식 표시
+  if (calculations.length > 0) {
+    h += '<div class="idf-formula" id="idf-formula-' + idx + '">';
+    calculations.forEach(function(c) {
+      h += (c.label || c.id) + ': ' + (c.formulaText || c.formula || '') + '<br>';
+    });
+    h += '</div>';
+  }
+
+  // 결과 영역
+  h += '<div class="idf-result">';
+  calculations.forEach(function(c, ci) {
+    h += '<span class="idf-result-label">' + (c.label || '결과') + ' (' + (c.unit || '') + '):</span>';
+    h += '<span class="idf-result-value" id="idf-calc-' + ci + '-' + idx + '">-</span>';
+  });
+  h += '<span class="idf-result-label" style="margin-left:auto">판정:</span>';
+  h += '<span class="idf-result-judge" id="idf-judge-' + idx + '" style="color:#999">-</span>';
+  h += '</div>';
+
+  h += '</div>';
+  return h;
+}
+
+/* ============================================================
+   동적 계산 엔진 (formTemplates 기반)
+   ============================================================ */
+function calcItemResult(idx) {
+  var item = currentTestItems[idx];
+  if (!item) return;
+  var tmpl = findFormTemplate(item.testItemName);
+  if (!tmpl) return;
+  markModified();
+
+  var sections = tmpl.sections || [];
+  var calculations = tmpl.calculations || [];
+  var judgment = tmpl.judgmentRule || {};
+
+  // 1) 모든 필드 값 수집
+  var key = currentSampleIdx + '_' + idx;
+  var vals = {};
+  _rawInputs[key] = {};
+  sections.forEach(function(sec) {
+    (sec.fields || []).forEach(function(f) {
+      var el = document.getElementById('idf-' + f.id + '-' + idx);
+      var v = el ? el.value : '';
+      vals[f.id] = (f.type === 'number') ? (parseFloat(v) || 0) : v;
+      _rawInputs[key][f.id] = v;
+    });
+  });
+
+  // 2) 계산식 실행
+  var calcResults = {};
+  calculations.forEach(function(c, ci) {
+    try {
+      // formula 안의 변수명을 vals에서 치환하여 eval
+      var expr = c.formula;
+      Object.keys(vals).forEach(function(k) {
+        expr = expr.replace(new RegExp('\\b' + k + '\\b', 'g'), '(' + (typeof vals[k] === 'number' ? vals[k] : 0) + ')');
+      });
+      // 이전 계산 결과도 참조 가능
+      Object.keys(calcResults).forEach(function(k) {
+        expr = expr.replace(new RegExp('\\b' + k + '\\b', 'g'), '(' + calcResults[k] + ')');
+      });
+      var result = Function('"use strict"; return (' + expr + ')')();
+      result = Math.max(0, result);
+      var dp = c.decimalPlaces != null ? c.decimalPlaces : 2;
+      var resultStr = result.toFixed(dp);
+      calcResults[c.id] = result;
+
+      var el = document.getElementById('idf-calc-' + ci + '-' + idx);
+      if (el) el.textContent = resultStr;
+    } catch(e) {
+      var el2 = document.getElementById('idf-calc-' + ci + '-' + idx);
+      if (el2) el2.textContent = '계산오류';
+      console.warn('계산식 오류:', c.formula, e);
+    }
+  });
+
+  // 3) 수식 미리보기 업데이트
+  var formulaEl = document.getElementById('idf-formula-' + idx);
+  if (formulaEl && calculations.length > 0) {
+    var preview = calculations.map(function(c) {
+      var expr = c.formulaText || c.formula || '';
+      // 변수에 실제 값 표시
+      Object.keys(vals).forEach(function(k) {
+        if (typeof vals[k] === 'number' && vals[k] !== 0) {
+          expr = expr.replace(new RegExp(k, 'g'), vals[k]);
+        }
+      });
+      var rval = calcResults[c.id] != null ? calcResults[c.id].toFixed(c.decimalPlaces || 2) : '-';
+      return (c.label || c.id) + ': ' + expr + ' = ' + rval + ' ' + (c.unit || '');
+    }).join('\n');
+    formulaEl.textContent = preview;
+  }
+
+  // 4) 판정
+  var judgeEl = document.getElementById('idf-judge-' + idx);
+  var finalResult = null;
+  if (judgment.resultFieldId && calcResults[judgment.resultFieldId] != null) {
+    finalResult = calcResults[judgment.resultFieldId];
+  } else if (Object.keys(calcResults).length > 0) {
+    // 마지막 계산결과 사용
+    var lastKey = Object.keys(calcResults).pop();
+    finalResult = calcResults[lastKey];
+  }
+
+  if (finalResult != null && judgeEl) {
+    var pass = true;
+    if (judgment.maxValue != null) pass = finalResult <= judgment.maxValue;
+    judgeEl.textContent = pass ? '적합' : '부적합';
+    judgeEl.style.color = pass ? '#10b981' : '#ef4444';
+  }
+
+  // 5) 메인 테이블 측정값에 반영
+  if (finalResult != null) {
+    var dp2 = (calculations.length > 0) ? (calculations[calculations.length-1].decimalPlaces || 2) : 2;
+    var resultStr2 = finalResult.toFixed(dp2);
+    var mainInput = document.querySelector('.result-input[data-idx="' + idx + '"]');
+    if (mainInput) {
+      mainInput.value = resultStr2;
+      mainInput.removeAttribute('readonly');
+      mainInput.style.background = '';
+      mainInput.style.cursor = '';
+      onResultInput(idx, mainInput);
+    }
+  }
+}
+
+// 헬퍼
+function gv(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+function se(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
+
+/* ============================================================
+   시험일지 자동 생성 (식약처 전송용)
+   ============================================================ */
+function generateDiaryCn() {
+  var r = currentReceipt || {};
+  var samples = r.samples || [{}];
+  var sample = samples[currentSampleIdx] || {};
+  var items = currentResults[currentSampleIdx] || [];
+  if (!items.length) return '시험 결과 입력';
+
+  var html = '<div style="font-family:Malgun Gothic,sans-serif;font-size:12px;max-width:800px">';
+  html += '<h2 style="text-align:center;font-size:16px;margin-bottom:16px">시 험 검 사 기 록 서</h2>';
+  html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px">';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">접수번호</td><td style="padding:4px 8px">' + (r.receiptNo || '') + '</td>';
+  html += '<td style="padding:4px 8px;background:#f0f0f0">시료명</td><td style="padding:4px 8px">' + (sample.productName || '') + '</td></tr>';
+  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">검사목적</td><td style="padding:4px 8px">' + (r.testPurpose || '') + '</td>';
+  html += '<td style="padding:4px 8px;background:#f0f0f0">접수일</td><td style="padding:4px 8px">' + (r.receiptDate || '') + '</td></tr>';
+  html += '</table>';
+
+  items.forEach(function(it, i) {
+    html += '<h3 style="font-size:13px;margin:8px 0 4px">' + (i+1) + '. ' + it.testItemName + '</h3>';
+    // 원시 입력값 표시
+    var key = currentSampleIdx + '_' + i;
+    var raw = _rawInputs[key];
+    if (raw && Object.keys(raw).length > 0) {
+      var tmpl = findFormTemplate(it.testItemName);
+      html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px">';
+      if (tmpl && tmpl.sections) {
+        tmpl.sections.forEach(function(sec) {
+          (sec.fields || []).forEach(function(f) {
+            if (raw[f.id]) {
+              html += '<tr><td style="padding:3px 6px;background:#f0f0f0;width:35%">' + f.label + (f.unit ? '('+f.unit+')' : '') + '</td>';
+              html += '<td style="padding:3px 6px">' + raw[f.id] + '</td></tr>';
+            }
+          });
+        });
+      } else {
+        Object.keys(raw).forEach(function(k) {
+          if (raw[k]) html += '<tr><td style="padding:3px 6px;background:#f0f0f0">' + k + '</td><td style="padding:3px 6px">' + raw[k] + '</td></tr>';
+        });
+      }
+      html += '</table>';
+    }
+    html += '<p style="font-size:11px;margin:4px 0">기준: ' + (it.standard || '-') + ' | 결과: <strong>' + (it.measuredValue || '-') + '</strong> ' + (it.unit || '') + ' | 판정: <strong>' + (it.judgmentResult || '-') + '</strong></p>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================
    결과 수집
    ============================================================ */
 function collectCurrentResults() {
@@ -1243,7 +1549,9 @@ function collectCurrentResults() {
       jdgmntFomCode: processed.jdgmntFomCode || '',
       jdgmntWordCode: processed.jdgmntWordCode || '',
       mxmmValueSeCode: processed.mxmmValueSeCode || '',
-      mummValueSeCode: processed.mummValueSeCode || ''
+      mummValueSeCode: processed.mummValueSeCode || '',
+      // 양식 기반 원시 입력 데이터
+      rawInputs: _rawInputs[currentSampleIdx + '_' + idx] || {}
     });
   });
 
@@ -1358,7 +1666,7 @@ async function confirmMfdsSubmit() {
     var exprDiarySn = _exprDiarySn;
 
     if (!exprDiarySn) {
-      var diaryCn = '시험 결과 입력';
+      var diaryCn = generateDiaryCn();
       var todayStr = today().replace(/-/g, '');
 
       // 시험항목 목록 구성
