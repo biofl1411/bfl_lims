@@ -96,8 +96,11 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
   border-radius:9px;padding:11px 14px;margin-top:9px;font-size:12px;color:#1e40af;display:none}
 .share-box strong{display:block;font-size:13px;margin-bottom:3px;color:#1d4ed8}
 .share-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-.share-tag{padding:2px 8px;border-radius:7px;font-size:11px;font-weight:600;
-  background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
+.share-tag{padding:3px 10px;border-radius:7px;font-size:11px;font-weight:600;
+  background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;cursor:pointer;transition:all .15s;user-select:none}
+.share-tag:hover{opacity:.8}
+.share-tag.off{background:#f3f4f6;color:#9ca3af;border-color:#d1d5db;text-decoration:line-through}
+.share-tag.rep{background:#2563eb;color:#fff;border-color:#1d4ed8;cursor:default}
 
 /* ─── STEP4: 업로드 ─── */
 .up-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:16px}
@@ -251,7 +254,7 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
       <h3>사용 방법</h3>
       <p>
         ① <b>검사분야 → 검사목적 → 검사항목</b> 순서로 선택하세요.<br>
-        ② 같은 계산식을 사용하는 항목은 <b>대표 항목 하나만</b> 선택하면 나머지에도 공통 적용됩니다.<br>
+        ② 같은 계산식을 사용하는 후보 항목이 표시됩니다. <b>PDF로 검증된 항목만</b> 클릭해서 공통 적용하세요.<br>
         ③ 빈 양식 PDF + 작성 완료 PDF 2개 업로드 후 <b>"분석 후 저장"</b>을 누르세요.
       </p>
     </div>
@@ -318,7 +321,8 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
         <!-- 공통 사용 안내 -->
         <div class="share-box" id="share-box">
           <strong>✅ 선택된 대표 항목: <span id="share-rep" style="color:var(--pri)"></span></strong>
-          <span id="share-desc"></span>
+          <p id="share-desc" style="margin:4px 0"></p>
+          <p style="font-size:11px;color:#6b7280;margin-bottom:6px">※ 동일 양식을 공유할 항목을 클릭해서 선택/해제하세요. 검증되지 않은 항목은 해제하세요.</p>
           <div class="share-tags" id="share-tags"></div>
         </div>
       </div>
@@ -792,16 +796,22 @@ function pickItem(el, idx) {
 
   selItem = F_ITEMS[idx];
 
-  // ── 공통 적용 항목 계산 ──
-  var shared = getSharedGroup(selItem, ALL_ITEMS);
+  // ── 공통 적용 항목 (사용자 선택 방식) ──
+  var suggested = getSuggestedGroup(selItem, ALL_ITEMS);
+  _sharedSelection = {};
+  _sharedSelection[selItem.name] = true; // 대표 항목은 항상 선택
   document.getElementById('share-rep').textContent = selItem.name;
   document.getElementById('share-desc').textContent =
-    (selPurpose ? '['+selPurpose.n+']' : '') +
-    ' 에서 동일 계산식 항목 ' + shared.length + '개에 공통 적용됩니다.';
-  document.getElementById('share-tags').innerHTML = shared.map(function(it) {
-    return '<span class="share-tag">'+it.name+'</span>';
+    '아래는 동일 계산식을 사용할 수 있는 후보 항목입니다. PDF로 검증된 항목만 선택하세요.';
+  document.getElementById('share-tags').innerHTML = suggested.map(function(it) {
+    var isRep = (it.name === selItem.name);
+    if (isRep) _sharedSelection[it.name] = true;
+    return '<span class="share-tag ' + (isRep ? 'rep' : 'off') + '" data-name="' + it.name + '" data-code="' + (it.code||'') + '"'
+      + (isRep ? '' : ' onclick="toggleShareTag(this)"')
+      + '>' + it.name + (isRep ? ' (대표)' : '') + '</span>';
   }).join('');
   document.getElementById('share-box').style.display = 'block';
+  updateShareCount();
 
   // 다음 단계 표시
   document.getElementById('sec-upload').style.display = 'block';
@@ -809,8 +819,10 @@ function pickItem(el, idx) {
   goStep(4);
 }
 
-/* 동일 계산식 그룹 추론 */
-function getSharedGroup(item, allItems) {
+/* 동일 계산식 후보 그룹 추천 (참고용 - 사용자가 직접 선택해야 적용됨) */
+var _sharedSelection = {};  // { itemName: true/false }
+
+function getSuggestedGroup(item, allItems) {
   var groups = [
     ['납','카드뮴','비소','수은','Pb','Cd','As','Hg','중금속'],
     ['대장균','살모넬라','황색포도','세균','리스테리아','장염비브리오','클로스트리디움','리스','세균수'],
@@ -832,6 +844,37 @@ function getSharedGroup(item, allItems) {
     }
   }
   return [item];
+}
+
+function toggleShareTag(el) {
+  var name = el.getAttribute('data-name');
+  if (_sharedSelection[name]) {
+    delete _sharedSelection[name];
+    el.classList.add('off');
+    el.classList.remove('share-tag-on');
+  } else {
+    _sharedSelection[name] = true;
+    el.classList.remove('off');
+  }
+  updateShareCount();
+}
+
+function updateShareCount() {
+  var cnt = Object.keys(_sharedSelection).length;
+  document.getElementById('share-desc').textContent =
+    '공통 적용 항목: ' + cnt + '개 선택됨 (PDF로 검증된 항목만 선택하세요)';
+}
+
+function getSelectedSharedItems() {
+  var result = [];
+  document.querySelectorAll('#share-tags .share-tag').forEach(function(el) {
+    var name = el.getAttribute('data-name');
+    var code = el.getAttribute('data-code') || '';
+    if (_sharedSelection[name]) {
+      result.push({ name: name, code: code });
+    }
+  });
+  return result;
 }
 
 /* =============================================================
@@ -938,7 +981,7 @@ async function doAnalyze() {
   pi(3,'run','저장 중...');
   try {
     if (!dbOk) throw new Error('Firebase 미연결');
-    var shared = getSharedGroup(selItem, ALL_ITEMS);
+    var shared = getSelectedSharedItems();
     var docId = (selField?selField.id:'X')+'_'
       +(selPurpose?selPurpose.prefix:'P')+'_'
       +(selItem.code||selItem.name).replace(/[^a-zA-Z0-9가-힣]/g,'_')
