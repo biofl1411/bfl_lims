@@ -2379,7 +2379,8 @@ function updateInspectionMode(testPurpose) {
             foodTypeInput.disabled = false;
             foodTypeInput.value = '';
             foodTypeInput.oninput = function() { searchRefTestItems(this.value); };
-            foodTypeInput.onfocus = function() { searchRefTestItems(''); };
+            foodTypeInput.onfocus = function() { searchRefTestItems(this.value || ''); };
+            foodTypeInput.onclick = function() { searchRefTestItems(this.value || ''); };
         }
 
         if (inspectionItemsEl) {
@@ -2502,6 +2503,7 @@ var _REF_SUBCAT_NAMES = {
     'P5':'식품첨가물','P6':'곰팡이독소','P9':'기타'
 };
 var _refActiveCat = ''; // 현재 활성 카테고리 ('': 선택 없음)
+var _refDropdownKeep = false; // 드롭다운 리프레시 시 전역 click 핸들러 무시 플래그
 var _refLabelMode = ''; // 'major' or 'sub' (대분류/소분류 모드)
 
 /** 카테고리 라벨 칩 빌드 */
@@ -2722,6 +2724,7 @@ async function addAllRefCatItems(cat) {
         showToast(catLabel + ' ' + addCount + '건 일괄 추가 완료', 'success');
 
         // 드롭다운 갱신 (추가됨 표시 반영)
+        _refDropdownKeep = true;
         onRefCatLabelClick(cat, true);
     } else {
         showToast('추가할 항목이 없습니다 (이미 모두 추가됨)', 'info');
@@ -2745,6 +2748,7 @@ function removeRefCatItems(cat) {
         updateFeeSummary();
         var catLabel = (_refLabelMode === 'sub' ? _REF_SUBCAT_NAMES[cat] : _REF_CAT_NAMES[cat]) || cat;
         showToast(catLabel + ' ' + removed + '건 일괄 취소', 'info');
+        _refDropdownKeep = true;
         onRefCatLabelClick(cat, true);
     }
 }
@@ -2761,6 +2765,7 @@ function removeRefTestItem(code) {
     saveSampleToArray();
     updateFeeSummary();
     showToast(name + ' 취소', 'info');
+    _refDropdownKeep = true;
     if (_refActiveCat) {
         onRefCatLabelClick(_refActiveCat, true);
     } else {
@@ -3037,6 +3042,7 @@ function selectRefTestItem(testItemCode) {
     showToast('시험항목 추가: ' + name + ' (' + code + ')', 'success');
 
     // 드롭다운 유지 + 목록 갱신 (추가됨 배지 업데이트)
+    _refDropdownKeep = true;
     if (_refActiveCat) {
         onRefCatLabelClick(_refActiveCat, true);
     } else {
@@ -5535,7 +5541,8 @@ document.addEventListener('click', function(e) {
     if (!e.target.closest('.company-search')) {
         document.getElementById('company-suggestions').classList.remove('active');
     }
-    if (!e.target.closest('.autocomplete-input') && !e.target.closest('.ref-cat-chip') && !e.target.closest('.ref-cat-addall') && !e.target.closest('#food-type-list')) {
+    if (_refDropdownKeep) { _refDropdownKeep = false; }
+    else if (!e.target.closest('.autocomplete-input') && !e.target.closest('.ref-cat-chip') && !e.target.closest('.ref-cat-addall') && !e.target.closest('#food-type-list')) {
         document.getElementById('food-type-list').classList.remove('active');
     }
     // 제품이력 패널 외부 클릭 닫기
