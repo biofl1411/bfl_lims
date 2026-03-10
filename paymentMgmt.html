@@ -97,6 +97,7 @@ tr:hover{background:#f8f9fb}
 .bank-stat.partial{background:#fffbeb;color:#f59e0b}
 .bank-tbl td{font-size:12px;padding:8px 10px}
 .bank-tbl th{font-size:12px;padding:8px 10px}
+.bank-tbl .dep-name{max-width:280px;word-break:break-all}
 .match-auto{background:#ecfdf5;color:#059669;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
 .match-reverse{background:#eff6ff;color:#2563eb;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
 .match-manual{background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
@@ -302,6 +303,7 @@ var currentReceiptId = null;
 var bankDeposits = [];  // parsed bank deposits
 var _companiesCache = {}; // companyId -> {name, contacts}
 var _trackBankIdx = -1;
+var _matchHistory = {};  // depositor -> {companyName, companyId, receiptNo, count, lastDate, memo}
 
 document.addEventListener('DOMContentLoaded', function() {
     // 기본 날짜 설정 (최근 3개월)
@@ -348,6 +350,7 @@ async function loadData() {
 
         applyFilter();
         loadCompanies();
+        loadMatchHistory();
     } catch(e) {
         console.error('로드 실패:', e);
         document.getElementById('table-body').innerHTML = '<tr><td colspan="9" class="empty-msg" style="color:#ef4444">로드 실패: ' + e.message + '</td></tr>';
@@ -363,6 +366,32 @@ async function loadCompanies() {
             if (d.companyName) _companiesCache[d.companyName] = d;
         });
     } catch(e) { console.warn('업체 로드 실패:', e); }
+}
+
+async function loadMatchHistory() {
+    try {
+        var doc = await db.collection('settings').doc('bankMatchMap').get();
+        if (doc.exists) _matchHistory = doc.data().mappings || {};
+    } catch(e) { console.warn('매칭이력 로드 실패:', e); }
+}
+
+async function saveMatchMapping(depositor, companyName, companyId, receiptNo, memo) {
+    var key = depositor.trim();
+    if (!key) return;
+    var existing = _matchHistory[key] || {};
+    _matchHistory[key] = {
+        companyName: companyName || existing.companyName || '',
+        companyId: companyId || existing.companyId || '',
+        receiptNo: receiptNo || existing.receiptNo || '',
+        count: (existing.count || 0) + 1,
+        lastDate: formatDate(new Date()),
+        memo: memo || existing.memo || ''
+    };
+    try {
+        await db.collection('settings').doc('bankMatchMap').set(
+            { mappings: _matchHistory }, { merge: true }
+        );
+    } catch(e) { console.warn('매칭이력 저장 실패:', e); }
 }
 
 function applyFilter() {
@@ -728,14 +757,15 @@ function renderBankTable() {
                 ' <button class="track-btn" onclick="unmatchDeposit('+idx+')">해제</button>';
         } else {
             statusHtml = '<span class="match-none">미매칭</span>';
-            matchInfo = '-';
+            var h = _matchHistory[d.depositor.trim()];
+            matchInfo = h ? '<span style="color:#d97706;font-size:11px">이력: ' + h.companyName + (h.memo?' ['+h.memo+']':'') + '</span>' : '-';
             actionHtml = '<button class="track-btn" onclick="reverseTrack('+idx+')">역추적</button>';
         }
 
         html += '<tr class="' + (d.applied?'applied-row':'') + '">' +
             '<td>' + d.bank + '</td>' +
             '<td>' + d.date + '</td>' +
-            '<td title="' + d.depositor + '">' + (d.depositor.length>20?d.depositor.substring(0,20)+'...':d.depositor) + '</td>' +
+            '<td class="dep-name">' + d.depositor + '</td>' +
             '<td class="text-right" style="font-weight:700">' + formatMoney(d.amount) + '</td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' + matchInfo + '</td>' +
@@ -779,34 +809,44 @@ function autoMatchAll() {
 }
 
 function findAutoMatch(dep) {
-    // 입금자명으로 업체명 직접 매칭 + 금액 일치
     var depositorClean = cleanDepositorName(dep.depositor);
     var candidates = [];
 
+    // 1순위: 이전 매칭 이력에서 동일 입금자명 검색
+    var hist = _matchHistory[dep.depositor.trim()];
+    if (hist && hist.companyName) {
+        var histCompany = hist.companyName.toLowerCase();
+        allReceipts.forEach(function(r) {
+            var d = r.data;
+            var remain = getTotalFee(d) - getPaidAmount(d);
+            if (remain <= 0) return;
+            var company = (d.companyName || d.company || '').toLowerCase();
+            if (company === histCompany && remain === dep.amount) {
+                candidates.push(r);
+            }
+        });
+        if (candidates.length === 1) return candidates[0];
+    }
+
+    // 2순위: 입금자명으로 업체명 직접 매칭 + 금액 일치
+    candidates = [];
     allReceipts.forEach(function(r) {
         var d = r.data;
-        var total = getTotalFee(d);
-        var paid = getPaidAmount(d);
-        var remain = total - paid;
+        var remain = getTotalFee(d) - getPaidAmount(d);
         if (remain <= 0) return;
-
         var company = (d.companyName || d.company || '').toLowerCase();
         if (!company) return;
-
-        // 업체명 매칭
         var nameMatch = false;
         depositorClean.forEach(function(part) {
             if (part.length >= 2 && (company.indexOf(part.toLowerCase()) !== -1 || part.toLowerCase().indexOf(company) !== -1)) {
                 nameMatch = true;
             }
         });
-
         if (nameMatch && remain === dep.amount) {
             candidates.push(r);
         }
     });
 
-    // 유일한 후보만 자동매칭
     if (candidates.length === 1) return candidates[0];
     return null;
 }
@@ -850,7 +890,7 @@ function reverseTrack(bankIdx) {
 }
 
 function runReverseTrack(dep) {
-    var s1=[], s2=[], s3=[], s4=[];
+    var s0=[], s1=[], s2=[], s3=[], s4=[];
     var scoreMap = {}; // receiptId -> {receipt, score, reasons[]}
 
     function addScore(r, pts, reason) {
@@ -863,6 +903,21 @@ function runReverseTrack(dep) {
     var unpaid = allReceipts.filter(function(r) {
         return getTotalFee(r.data) - getPaidAmount(r.data) > 0;
     });
+
+    // Stage 0: 이전 매칭 이력
+    var hist = _matchHistory[dep.depositor.trim()];
+    if (hist && hist.companyName) {
+        var hc = hist.companyName.toLowerCase();
+        unpaid.forEach(function(r) {
+            var company = (r.data.companyName || r.data.company || '').toLowerCase();
+            if (company === hc) {
+                s0.push(r);
+                var label = '이력매칭(' + hist.companyName + ', ' + hist.count + '회)';
+                if (hist.memo) label += ' [' + hist.memo + ']';
+                addScore(r, 50, label);
+            }
+        });
+    }
 
     // Stage 1: 금액 일치
     unpaid.forEach(function(r) {
@@ -923,7 +978,7 @@ function runReverseTrack(dep) {
     // 점수순 정렬
     var combined = Object.values(scoreMap).sort(function(a,b){ return b.score - a.score; });
 
-    return { s1:s1, s2:s2, s3:s3, s4:s4, combined:combined };
+    return { s0:s0, s1:s1, s2:s2, s3:s3, s4:s4, combined:combined };
 }
 
 function renderTrackModal(dep, stages) {
@@ -936,6 +991,7 @@ function renderTrackModal(dep, stages) {
 
     // 단계별 결과
     var stageInfo = [
+        {name:'이력 추천', items:stages.s0, desc:'이전 매칭 학습 기록', highlight:true},
         {name:'1단계: 금액 역추적', items:stages.s1, desc:'잔액 = 입금액 일치'},
         {name:'2단계: 날짜 역추적', items:stages.s2, desc:'입금일 ±30일 이내'},
         {name:'3단계: 입금자명 분해매칭', items:stages.s3, desc:'적요 → 업체명 부분매칭'},
@@ -943,7 +999,9 @@ function renderTrackModal(dep, stages) {
     ];
 
     stageInfo.forEach(function(si) {
-        html += '<div class="track-stage"><div class="track-stage-hd">' + si.name +
+        var hdStyle = si.highlight && si.items.length > 0 ? 'background:#fef3c7' : '';
+        html += '<div class="track-stage"><div class="track-stage-hd" style="' + hdStyle + '">' +
+            (si.highlight ? '&#11088; ' : '') + si.name +
             ' <span class="cnt">' + si.items.length + '건</span>' +
             '<span style="font-weight:400;color:#9ca3af;font-size:11px;margin-left:4px">' + si.desc + '</span></div></div>';
     });
@@ -971,6 +1029,12 @@ function renderTrackModal(dep, stages) {
         html += '<div style="text-align:center;padding:20px;color:#9ca3af">매칭 후보를 찾지 못했습니다</div>';
     }
 
+    // 매칭 메모
+    html += '<div style="font-size:13px;font-weight:700;margin:14px 0 8px">매칭 메모 (학습용)</div>';
+    html += '<div class="manual-input-row">' +
+        '<input type="text" id="track-match-memo" placeholder="예: 카드사 결제코드, 대표자 개인명의 등 (다음 자동매칭 시 참고)" style="flex:2">' +
+        '</div>';
+
     // 수동 매칭 옵션
     html += '<div style="font-size:13px;font-weight:700;margin:14px 0 8px">수동 매칭</div>';
     html += '<div class="manual-input-row">' +
@@ -985,10 +1049,20 @@ function renderTrackModal(dep, stages) {
 function selectTrackMatch(receiptId, receiptNo) {
     if (_trackBankIdx < 0) return;
     var dep = bankDeposits[_trackBankIdx];
+    var memo = (document.getElementById('track-match-memo') || {}).value || '';
     dep.matched = true;
     dep.matchedReceiptId = receiptId;
     dep.matchedReceiptNo = receiptNo;
     dep.matchType = 'reverse';
+    dep._memo = memo;
+
+    // 매칭 이력 저장 (학습)
+    var r = allReceipts.find(function(x){ return x.id === receiptId; });
+    if (r) {
+        var d = r.data;
+        saveMatchMapping(dep.depositor, d.companyName || d.company, d.companyId || d.companyCode, receiptNo, memo);
+    }
+
     closeTrackModal();
     renderBankTable();
     showToast('역추적 매칭 완료: ' + receiptNo);
@@ -1074,6 +1148,10 @@ async function applySingleMatch(idx) {
         r.data.payments.push(payment);
         dep.applied = true;
 
+        // 매칭 이력 저장 (학습)
+        saveMatchMapping(dep.depositor, r.data.companyName || r.data.company,
+            r.data.companyId || r.data.companyCode, dep.matchedReceiptNo, dep._memo || '');
+
         renderBankTable();
         renderTable();
         updateSummary();
@@ -1130,6 +1208,9 @@ async function applySingleMatchSilent(idx) {
     if (!r.data.payments) r.data.payments = [];
     r.data.payments.push(payment);
     dep.applied = true;
+
+    saveMatchMapping(dep.depositor, r.data.companyName || r.data.company,
+        r.data.companyId || r.data.companyCode, dep.matchedReceiptNo, dep._memo || '');
 }
 </script>
 </body>
