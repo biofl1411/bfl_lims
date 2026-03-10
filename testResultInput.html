@@ -144,6 +144,40 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .quick-btn:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
 .override-select{padding:4px 6px;border:1px solid var(--warning);border-radius:6px;font-size:11px;background:var(--warning-light)}
 
+/* 첨부 (시험일지 자동첨부) */
+.attach-btn{display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--gray-200);background:white;color:var(--gray-600);transition:all 0.15s}
+.attach-btn:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
+.attach-btn.attached{background:#ecfdf5;border-color:#86efac;color:#059669}
+.attach-btn .att-icon{font-size:14px}
+
+/* 시험일지 미리보기 모달 */
+.diary-preview-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:2500;align-items:center;justify-content:center}
+.diary-preview-overlay.active{display:flex}
+.diary-preview-modal{background:white;border-radius:14px;width:90%;max-width:800px;max-height:85vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.35)}
+.diary-preview-header{padding:16px 24px;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center}
+.diary-preview-header h3{font-size:15px;font-weight:700;color:var(--gray-900)}
+.diary-preview-body{padding:24px;overflow-y:auto;max-height:calc(85vh - 60px)}
+.diary-preview-body .diary-content{background:#fafbfc;border:1px solid var(--gray-200);border-radius:8px;padding:20px;font-size:13px;line-height:1.7}
+.diary-preview-body .diary-content h3{font-size:14px;color:var(--primary);margin:12px 0 6px;font-weight:600}
+.diary-preview-body .diary-content table{width:100%;border-collapse:collapse;margin:8px 0}
+.diary-preview-body .diary-content table td,.diary-preview-body .diary-content table th{border:1px solid var(--gray-200);padding:6px 10px;font-size:12px}
+.diary-preview-body .diary-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:12px;color:var(--gray-600)}
+.diary-preview-body .diary-meta span{padding:6px 10px;background:var(--gray-50);border-radius:6px}
+
+/* 항목별 뷰 */
+.view-toggle{display:flex;gap:4px;margin-left:auto}
+.view-toggle button{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--gray-200);background:white;color:var(--gray-600);transition:all 0.15s}
+.view-toggle button.active{background:var(--primary);color:white;border-color:var(--primary)}
+.item-view-wrap{margin-top:12px}
+.item-view-card{background:white;border:1px solid var(--gray-200);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.item-view-card-header{padding:10px 16px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
+.item-view-card-header .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--primary-light);color:var(--primary);font-weight:500}
+.item-view-table{width:100%;border-collapse:collapse;font-size:13px}
+.item-view-table th{padding:8px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--gray-700);background:var(--gray-50);border-bottom:1px solid var(--gray-200)}
+.item-view-table td{padding:8px 12px;border-bottom:1px solid var(--gray-100)}
+.item-view-table .iv-input{width:120px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;text-align:center}
+.item-view-table .iv-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px rgba(37,99,235,0.15)}
+
 /* ====== 항목별 인라인 계산폼 ====== */
 .item-detail-row td{padding:0!important;border-bottom:2px solid var(--primary-light)!important}
 .item-detail-form{background:linear-gradient(135deg,#f0f4ff 0%,#f8faff 100%);padding:14px 16px;border-left:3px solid var(--primary);margin:0}
@@ -352,6 +386,17 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 <!-- Toast -->
 <div class="toast" id="toast"><span id="toast-msg"></span></div>
 
+<!-- 시험일지 미리보기 모달 -->
+<div class="diary-preview-overlay" id="diary-preview-overlay" onclick="if(event.target===this)closeDiaryPreview()">
+  <div class="diary-preview-modal">
+    <div class="diary-preview-header">
+      <h3>시험일지 미리보기</h3>
+      <button class="modal-close" onclick="closeDiaryPreview()">&times;</button>
+    </div>
+    <div class="diary-preview-body" id="diary-preview-body"></div>
+  </div>
+</div>
+
 <!-- MFDS Confirm Modal -->
 <div class="modal-overlay" id="mfds-modal">
   <div class="modal">
@@ -395,6 +440,9 @@ var masterItemsByPurpose = {};     // { purposeName: [item1, item2, ...] }
 // MFDS Templates 캐시
 var _mfdsTemplatesCache = null;
 var _mfdsTemplatesLoaded = false;
+var _diaryTemplatesCache = {};  // { itemCode: { itemName, diaryCn, field, purpose, ... } }
+var _diaryTemplatesLoaded = false;
+var _currentViewMode = 'sample';  // 'sample' | 'item'
 
 
 /* ============================================================
@@ -408,6 +456,7 @@ async function init() {
   checkMfdsStatus();
   loadMfdsEnabled();
   await loadFormTemplates();
+  await loadDiaryTemplatesCache();
   await loadMfdsTemplatesData();
   await loadReceipts();
   handleUrlParams();
@@ -824,11 +873,23 @@ function renderRightPanel() {
   html += ' | <strong>품목코드:</strong> ' + (sample.mfdsProductCode || '-');
   html += '</div>';
 
-  // 결과 테이블
+  // 뷰 전환 (시료별 / 항목별)
+  html += '<div style="display:flex;align-items:center;gap:8px;margin:8px 0">';
+  html += '<div class="view-toggle" id="view-toggle">';
+  html += '<button class="' + (_currentViewMode === 'sample' ? 'active' : '') + '" onclick="switchViewMode(\'sample\')">시료별</button>';
+  html += '<button class="' + (_currentViewMode === 'item' ? 'active' : '') + '" onclick="switchViewMode(\'item\')">항목별</button>';
+  html += '</div></div>';
+
+  // 시료별 뷰: 결과 테이블
+  html += '<div id="sample-view-wrap" style="' + (_currentViewMode !== 'sample' ? 'display:none' : '') + '">';
   html += '<div class="result-table-wrap"><table class="result-table"><thead><tr>';
   html += '<th style="width:40px">No</th><th>시험항목</th><th>항목코드</th><th>기준규격</th><th>단위</th>';
-  html += '<th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th><th style="width:60px">수동</th><th>비고</th>';
+  html += '<th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th><th style="width:60px">수동</th><th>비고</th><th style="width:60px">첨부</th>';
   html += '</tr></thead><tbody id="result-tbody"></tbody></table></div>';
+  html += '</div>';
+
+  // 항목별 뷰
+  html += '<div id="item-view-wrap" class="item-view-wrap" style="' + (_currentViewMode !== 'item' ? 'display:none' : '') + '"></div>';
 
   // 종합 판정
   html += '<div class="overall-row"><span class="overall-label">종합 판정:</span><span class="overall-badge pass" id="overall-badge">-</span></div>';
@@ -876,7 +937,7 @@ function loadAndRenderItems() {
   if (!tbody) return;
 
   if (!currentTestItems.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:#999">시험항목을 찾을 수 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:#999">시험항목을 찾을 수 없습니다</td></tr>';
     return;
   }
 
@@ -927,17 +988,152 @@ function loadAndRenderItems() {
       '<td id="judge-' + idx + '">' + judgeBadge + '</td>' +
       '<td>' + overrideHtml + '</td>' +
       '<td><input type="text" class="remark-input" data-idx="' + idx + '" value="' + rm + '" placeholder="비고" oninput="markModified()"></td>' +
+      '<td style="text-align:center"><button type="button" class="attach-btn' + (mv && findDiaryTemplate(item.testItemCode) ? ' attached' : '') + '" id="attach-btn-' + idx + '" onclick="openDiaryPreview(' + idx + ')" title="시험일지 미리보기">' +
+        (mv && findDiaryTemplate(item.testItemCode) ? '<span class="att-icon">📋</span>일지' : '<span class="att-icon">—</span>') +
+      '</button></td>' +
       '</tr>';
 
     // 인라인 계산폼 (템플릿 있으면 자동 표시)
     if (tmpl) {
-      row += '<tr class="item-detail-row" id="item-detail-' + idx + '" style="display:table-row"><td colspan="10">' + renderCalcForm(idx, item, tmpl, saved) + '</td></tr>';
+      row += '<tr class="item-detail-row" id="item-detail-' + idx + '" style="display:table-row"><td colspan="11">' + renderCalcForm(idx, item, tmpl, saved) + '</td></tr>';
     }
 
     return row;
   }).join('');
 
   calculateOverallResult();
+
+  // 항목별 뷰도 갱신
+  if (_currentViewMode === 'item') renderItemView();
+}
+
+/* ============================================================
+   뷰 모드 전환 (시료별 / 항목별)
+   ============================================================ */
+function switchViewMode(mode) {
+  _currentViewMode = mode;
+  var sampleWrap = document.getElementById('sample-view-wrap');
+  var itemWrap = document.getElementById('item-view-wrap');
+  if (sampleWrap) sampleWrap.style.display = mode === 'sample' ? '' : 'none';
+  if (itemWrap) itemWrap.style.display = mode === 'item' ? '' : 'none';
+
+  document.querySelectorAll('#view-toggle button').forEach(function(btn) {
+    btn.classList.toggle('active', btn.textContent === (mode === 'sample' ? '시료별' : '항목별'));
+  });
+
+  if (mode === 'item') renderItemView();
+}
+
+// 항목별 뷰: 항목 → 접수번호(시료)별 일괄 입력
+function renderItemView() {
+  var wrap = document.getElementById('item-view-wrap');
+  if (!wrap || !currentReceipt) return;
+
+  var r = currentReceipt;
+  var samples = r.samples || [];
+
+  // 모든 시료의 항목을 수집하여 항목코드별로 그룹핑
+  var itemMap = {};  // { itemCode: { item, entries: [{ sampleIdx, savedResult }] } }
+  samples.forEach(function(sample, si) {
+    var testItems = findTestItems(r, sample);
+    var savedItems = currentResults[si] || [];
+    testItems.forEach(function(item, ii) {
+      var code = item.testItemCode || item.testItemName || ('idx_' + ii);
+      if (!itemMap[code]) {
+        itemMap[code] = { item: item, entries: [] };
+      }
+      itemMap[code].entries.push({ sampleIdx: si, itemIdx: ii, saved: savedItems[ii] || {} });
+    });
+  });
+
+  var html = '';
+  var codes = Object.keys(itemMap);
+  if (!codes.length) {
+    html = '<div style="text-align:center;padding:30px;color:#999">시험항목이 없습니다</div>';
+    wrap.innerHTML = html;
+    return;
+  }
+
+  codes.forEach(function(code) {
+    var grp = itemMap[code];
+    var item = grp.item;
+    var diaryTmpl = findDiaryTemplate(item.testItemCode);
+
+    html += '<div class="item-view-card">';
+    html += '<div class="item-view-card-header">';
+    html += '<span>' + (item.testItemName || '-') + '</span>';
+    html += '<span class="badge">' + (item.testItemCode || '-') + '</span>';
+    html += '<span style="font-size:11px;color:#888;margin-left:auto">기준: ' + (item.standard || '-') + ' | 단위: ' + (item.unit || '-') + '</span>';
+    if (diaryTmpl) html += '<span style="font-size:11px;color:#059669;margin-left:8px">📋 일지양식</span>';
+    html += '</div>';
+    html += '<table class="item-view-table"><thead><tr>';
+    html += '<th style="width:50px">시료</th><th>접수번호</th><th>제품명</th><th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th>';
+    html += '</tr></thead><tbody>';
+
+    grp.entries.forEach(function(ent) {
+      var s = samples[ent.sampleIdx] || {};
+      var sv = ent.saved;
+      var mv = sv.measuredValue || '';
+      var mkv = sv.markValue || '';
+      var jr = sv.judgmentResult || '';
+      var jb = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
+      html += '<tr>';
+      html += '<td style="text-align:center;font-weight:600">' + (ent.sampleIdx + 1) + '</td>';
+      html += '<td style="font-size:12px;color:#2563eb">' + (r.receiptNo || '-') + '</td>';
+      html += '<td style="font-size:12px">' + (s.productName || '-') + '</td>';
+      html += '<td><input type="text" class="iv-input" value="' + mv + '" placeholder="입력" oninput="onItemViewInput(this,' + ent.sampleIdx + ',' + ent.itemIdx + ')"></td>';
+      html += '<td style="font-size:12px;color:#2563eb" id="iv-mark-' + ent.sampleIdx + '-' + ent.itemIdx + '">' + mkv + '</td>';
+      html += '<td id="iv-judge-' + ent.sampleIdx + '-' + ent.itemIdx + '">' + jb + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+  });
+
+  wrap.innerHTML = html;
+}
+
+// 항목별 뷰에서 값 입력 시
+function onItemViewInput(inputEl, sampleIdx, itemIdx) {
+  markModified();
+  var value = inputEl.value.trim();
+
+  // currentResults에 반영
+  if (!currentResults[sampleIdx]) currentResults[sampleIdx] = [];
+  if (!currentResults[sampleIdx][itemIdx]) currentResults[sampleIdx][itemIdx] = {};
+  currentResults[sampleIdx][itemIdx].measuredValue = value;
+
+  // 시료별 테이블에서 해당 항목 찾기
+  var samples = (currentReceipt.samples || []);
+  var sample = samples[sampleIdx] || {};
+  var testItems = findTestItems(currentReceipt, sample);
+  var item = testItems[itemIdx];
+  if (!item) return;
+
+  // 표기값
+  var mkv = (typeof MFDS_RULES !== 'undefined') ? MFDS_RULES.generateMarkValue(value, item) : value;
+  currentResults[sampleIdx][itemIdx].markValue = mkv;
+  var markCell = document.getElementById('iv-mark-' + sampleIdx + '-' + itemIdx);
+  if (markCell) markCell.textContent = mkv;
+
+  // 자동 판정
+  var jr = autoJudge(value, item);
+  currentResults[sampleIdx][itemIdx].judgmentResult = jr;
+  var judgeCell = document.getElementById('iv-judge-' + sampleIdx + '-' + itemIdx);
+  if (judgeCell) judgeCell.innerHTML = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
+
+  // 시료별 뷰의 해당 행도 동기화
+  if (sampleIdx === currentSampleIdx) {
+    var inp = document.querySelector('#item-row-' + itemIdx + ' .result-input');
+    if (inp && inp.value !== value) {
+      inp.value = value;
+      var markCellSv = document.getElementById('mark-' + itemIdx);
+      if (markCellSv) markCellSv.textContent = mkv;
+      var judgeCellSv = document.getElementById('judge-' + itemIdx);
+      if (judgeCellSv) judgeCellSv.innerHTML = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
+      updateAttachBtn(itemIdx);
+    }
+  }
 }
 
 function findTestItems(receipt, sample) {
@@ -1070,6 +1266,9 @@ function onResultInput(idx, inputEl) {
   var result = autoJudge(value, item);
   setJudgment(idx, result, inputEl);
   calculateOverallResult();
+
+  // 첨부 버튼 자동 갱신
+  updateAttachBtn(idx);
 }
 
 function autoJudge(value, item) {
@@ -1230,6 +1429,108 @@ function calculateOverallResult() {
     badge.textContent = '적합';
     badge.className = 'overall-badge pass';
   }
+}
+
+/* ============================================================
+   diaryTemplates 캐시 로드 (시험일지 자동첨부용)
+   ============================================================ */
+async function loadDiaryTemplatesCache() {
+  try {
+    var snap = await db.collection('diaryTemplates').get();
+    snap.docs.forEach(function(d) {
+      _diaryTemplatesCache[d.id] = d.data();
+    });
+    _diaryTemplatesLoaded = true;
+  } catch(e) {
+    console.warn('diaryTemplates 로드 실패:', e);
+    _diaryTemplatesLoaded = true;
+  }
+}
+
+// 항목코드로 일지 양식 찾기
+function findDiaryTemplate(itemCode) {
+  if (!itemCode || !_diaryTemplatesLoaded) return null;
+  return _diaryTemplatesCache[itemCode.trim()] || null;
+}
+
+// 시험일지 내용에 결과값 반영
+function buildDiaryContent(item, diaryTmpl, measuredValue, markValue, judgmentResult) {
+  var html = '';
+  html += '<h3>' + (diaryTmpl.itemName || item.testItemName || '') + '</h3>';
+  if (diaryTmpl.diaryCn) {
+    html += diaryTmpl.diaryCn;
+  }
+  html += '<table><tr><th>기준규격</th><th>단위</th><th>측정값</th><th>표기값</th><th>판정</th></tr>';
+  html += '<tr><td>' + (item.standard || '-') + '</td>';
+  html += '<td>' + (item.unit || '-') + '</td>';
+  html += '<td>' + (measuredValue || '-') + '</td>';
+  html += '<td>' + (markValue || '-') + '</td>';
+  html += '<td>' + (judgmentResult || '-') + '</td></tr></table>';
+  return html;
+}
+
+// 첨부 버튼 상태 업데이트 (결과 입력 시 자동 호출)
+function updateAttachBtn(idx) {
+  var btn = document.getElementById('attach-btn-' + idx);
+  if (!btn) return;
+  var item = currentTestItems[idx];
+  if (!item) return;
+  var saved = (currentResults[currentSampleIdx] || [])[idx] || {};
+  var mv = saved.measuredValue || '';
+  var diaryTmpl = findDiaryTemplate(item.testItemCode);
+
+  if (mv && diaryTmpl) {
+    btn.className = 'attach-btn attached';
+    btn.innerHTML = '<span class="att-icon">📋</span>일지';
+    btn.title = '시험일지 미리보기 (클릭)';
+  } else if (mv && !diaryTmpl) {
+    btn.className = 'attach-btn';
+    btn.innerHTML = '<span class="att-icon">📝</span>일지';
+    btn.title = '일지 양식 없음';
+  } else {
+    btn.className = 'attach-btn';
+    btn.innerHTML = '<span class="att-icon">—</span>';
+    btn.title = '측정값 입력 후 자동첨부';
+  }
+}
+
+// 시험일지 미리보기 모달 열기
+function openDiaryPreview(idx) {
+  var item = currentTestItems[idx];
+  if (!item) return;
+  var saved = (currentResults[currentSampleIdx] || [])[idx] || {};
+  var mv = saved.measuredValue || '';
+  var mkv = saved.markValue || '';
+  var jr = saved.judgmentResult || '';
+  var diaryTmpl = findDiaryTemplate(item.testItemCode);
+
+  var overlay = document.getElementById('diary-preview-overlay');
+  var body = document.getElementById('diary-preview-body');
+  if (!overlay || !body) return;
+
+  var meta = '<div class="diary-meta">';
+  meta += '<span><b>시험항목:</b> ' + (item.testItemName || '-') + '</span>';
+  meta += '<span><b>항목코드:</b> ' + (item.testItemCode || '-') + '</span>';
+  if (diaryTmpl) {
+    meta += '<span><b>분야:</b> ' + (diaryTmpl.field || '-') + '</span>';
+    meta += '<span><b>카테고리:</b> ' + (diaryTmpl.category || '-') + '</span>';
+  }
+  meta += '</div>';
+
+  var content = '';
+  if (diaryTmpl) {
+    content = buildDiaryContent(item, diaryTmpl, mv, mkv, jr);
+  } else {
+    content = '<p style="color:#999;text-align:center;padding:20px">등록된 일지 양식이 없습니다.<br>검사 관리 > 시험일지 탭에서 양식을 먼저 등록하세요.</p>';
+  }
+
+  body.innerHTML = meta + '<div class="diary-content">' + content + '</div>';
+  overlay.classList.add('active');
+}
+
+function closeDiaryPreview() {
+  var overlay = document.getElementById('diary-preview-overlay');
+  if (overlay) overlay.classList.remove('active');
 }
 
 /* ============================================================
