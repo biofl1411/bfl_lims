@@ -168,7 +168,7 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .view-toggle{display:flex;gap:4px;margin-left:auto}
 .view-toggle button{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--gray-200);background:white;color:var(--gray-600);transition:all 0.15s}
 .view-toggle button.active{background:var(--primary);color:white;border-color:var(--primary)}
-.item-view-wrap{margin-top:12px}
+.item-view-wrap{margin-top:0}
 .item-view-card{background:white;border:1px solid var(--gray-200);border-radius:10px;margin-bottom:12px;overflow:hidden}
 .item-view-card-header{padding:10px 16px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
 .item-view-card-header .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--primary-light);color:var(--primary);font-weight:500}
@@ -177,6 +177,13 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .item-view-table td{padding:8px 12px;border-bottom:1px solid var(--gray-100)}
 .item-view-table .iv-input{width:120px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;text-align:center}
 .item-view-table .iv-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px rgba(37,99,235,0.15)}
+.iv-item-row{padding:10px 14px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background 0.15s;display:flex;flex-direction:column;gap:2px}
+.iv-item-row:hover{background:var(--gray-50)}
+.iv-item-row.active{background:var(--primary-light);border-left:3px solid var(--primary)}
+.iv-item-row .iv-name{font-size:13px;font-weight:600;color:var(--gray-900)}
+.iv-item-row .iv-code{font-size:11px;color:#888}
+.iv-item-row .iv-meta{font-size:11px;color:#64748b;display:flex;gap:8px}
+.iv-item-row .iv-count{font-size:11px;color:var(--primary);font-weight:600}
 
 /* ====== 항목별 인라인 계산폼 ====== */
 .item-detail-row td{padding:0!important;border-bottom:2px solid var(--primary-light)!important}
@@ -386,8 +393,25 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         </div>
       </div>
 
-      <!-- 항목별 뷰: 전체 폭 -->
-      <div id="item-view-global" class="item-view-wrap" style="display:none"></div>
+      <!-- 항목별 뷰: 좌측 항목목록 + 우측 접수건 -->
+      <div class="split-panel" id="item-view-global" style="display:none">
+        <div class="left-panel">
+          <div class="panel-header">
+            <span>시험항목 목록</span>
+            <span class="count" id="iv-item-count" style="font-size:11px;color:#888;margin-left:auto">0건</span>
+          </div>
+          <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb">
+            <input type="text" id="iv-item-search" placeholder="항목명/코드 검색..." oninput="filterItemViewList()" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px">
+          </div>
+          <div class="panel-body" id="iv-item-list" style="padding:0"></div>
+        </div>
+        <div class="right-panel" id="iv-right-panel">
+          <div class="no-selection">
+            <div class="icon">🔬</div>
+            <div>좌측 목록에서 시험항목을 선택하세요</div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -1010,13 +1034,16 @@ function loadAndRenderItems() {
    뷰 모드 전환 (시료별 / 항목별)
    ============================================================ */
 var _itemViewResultsCache = {};  // { receiptId: { sampleIdx: [{measuredValue, markValue, judgmentResult}] } }
+var _ivItemMap = {};              // 항목코드별 그룹: { code: { item, entries: [] } }
+var _ivCodes = [];                // 필터된 항목코드 배열
+var _ivSelectedCode = null;       // 현재 선택된 항목코드
 
 function switchViewMode(mode) {
   _currentViewMode = mode;
   var splitPanel = document.getElementById('sample-view-split');
   var itemGlobal = document.getElementById('item-view-global');
   if (splitPanel) splitPanel.style.display = mode === 'sample' ? '' : 'none';
-  if (itemGlobal) itemGlobal.style.display = mode === 'item' ? '' : 'none';
+  if (itemGlobal) itemGlobal.style.display = mode === 'item' ? 'grid' : 'none';
 
   document.querySelectorAll('#view-toggle button').forEach(function(btn) {
     btn.classList.toggle('active', btn.textContent === (mode === 'sample' ? '시료별' : '항목별'));
@@ -1025,35 +1052,30 @@ function switchViewMode(mode) {
   if (mode === 'item') renderItemView();
 }
 
-// 항목별 뷰: 전체 접수건에서 동일 항목코드를 가진 모든 시료를 모아서 표시
+// 항목별 뷰: 좌측 항목 목록 로드
 async function renderItemView() {
-  var wrap = document.getElementById('item-view-global');
-  if (!wrap) return;
+  var listEl = document.getElementById('iv-item-list');
+  var rightEl = document.getElementById('iv-right-panel');
+  if (!listEl) return;
 
-  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">항목별 데이터 로딩중...</div>';
+  listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">로딩중...</div>';
 
-  // filteredReceipts 기준으로 모든 접수건의 시험항목 수집
   var receipts = filteredReceipts.length ? filteredReceipts : allReceipts;
   if (!receipts.length) {
-    wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">접수건이 없습니다</div>';
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">접수건이 없습니다</div>';
     return;
   }
 
-  // 각 접수건의 testResults를 Firestore에서 로드 (캐시 활용)
+  // 결과 데이터 비동기 로드
   var loadPromises = [];
   receipts.forEach(function(r) {
     if (!_itemViewResultsCache[r.id]) {
-      var samples = r.samples || [];
-      samples.forEach(function(s, si) {
+      (r.samples || []).forEach(function(s, si) {
         var docId = r.receiptNo + '_S' + si;
         loadPromises.push(
           db.collection('testResults').doc(docId).get().then(function(doc) {
             if (!_itemViewResultsCache[r.id]) _itemViewResultsCache[r.id] = {};
-            if (doc.exists) {
-              _itemViewResultsCache[r.id][si] = doc.data().items || [];
-            } else {
-              _itemViewResultsCache[r.id][si] = [];
-            }
+            _itemViewResultsCache[r.id][si] = doc.exists ? (doc.data().items || []) : [];
           }).catch(function() {
             if (!_itemViewResultsCache[r.id]) _itemViewResultsCache[r.id] = {};
             _itemViewResultsCache[r.id][si] = [];
@@ -1062,91 +1084,130 @@ async function renderItemView() {
       });
     }
   });
-
   if (loadPromises.length) {
-    try { await Promise.all(loadPromises); } catch(e) { console.warn('항목별 뷰 결과 로드 실패:', e); }
+    try { await Promise.all(loadPromises); } catch(e) { console.warn('항목별 뷰 로드 실패:', e); }
   }
 
-  // 항목코드별 그룹핑: { code: { item, entries: [{ receipt, sampleIdx, itemIdx, saved }] } }
-  var itemMap = {};
+  // 항목코드별 그룹핑
+  _ivItemMap = {};
   receipts.forEach(function(r) {
-    var samples = r.samples || [];
-    samples.forEach(function(sample, si) {
+    (r.samples || []).forEach(function(sample, si) {
       var testItems = findTestItems(r, sample);
       var cached = (_itemViewResultsCache[r.id] || {})[si] || [];
       testItems.forEach(function(item, ii) {
         var code = item.testItemCode || item.testItemName || ('idx_' + ii);
-        if (!itemMap[code]) {
-          itemMap[code] = { item: item, entries: [] };
-        }
-        itemMap[code].entries.push({
-          receipt: r,
-          sampleIdx: si,
-          itemIdx: ii,
-          saved: cached[ii] || {}
-        });
+        if (!_ivItemMap[code]) _ivItemMap[code] = { item: item, entries: [] };
+        _ivItemMap[code].entries.push({ receipt: r, sampleIdx: si, itemIdx: ii, saved: cached[ii] || {} });
       });
     });
   });
 
-  // 검사항목 필터 적용: 특정 항목 선택 시 해당 항목만 표시
-  var filterItem = filters.testItem || '';
-  var codes = Object.keys(itemMap);
-  if (filterItem) {
-    codes = codes.filter(function(code) {
-      var name = (itemMap[code].item.testItemName || '').toLowerCase();
-      return name.indexOf(filterItem.toLowerCase()) !== -1 || filterItem.toLowerCase().indexOf(name) !== -1;
+  _ivCodes = Object.keys(_ivItemMap);
+  filterItemViewList();
+
+  // 검사항목 필터에 값이 있으면 자동 선택
+  if (filters.testItem) {
+    var match = _ivCodes.find(function(c) {
+      var name = (_ivItemMap[c].item.testItemName || '').toLowerCase();
+      return name === filters.testItem.toLowerCase() || name.indexOf(filters.testItem.toLowerCase()) !== -1;
+    });
+    if (match) selectItemViewCode(match);
+  }
+}
+
+// 좌측 항목 목록 필터링 + 렌더링
+function filterItemViewList() {
+  var searchEl = document.getElementById('iv-item-search');
+  var keyword = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  var listEl = document.getElementById('iv-item-list');
+  if (!listEl) return;
+
+  var filtered = _ivCodes.filter(function(code) {
+    if (!keyword) return true;
+    var grp = _ivItemMap[code];
+    var name = (grp.item.testItemName || '').toLowerCase();
+    return name.indexOf(keyword) !== -1 || code.toLowerCase().indexOf(keyword) !== -1;
+  });
+
+  // 검사항목 필터도 적용
+  if (filters.testItem) {
+    filtered = filtered.filter(function(code) {
+      var name = (_ivItemMap[code].item.testItemName || '').toLowerCase();
+      return name.indexOf(filters.testItem.toLowerCase()) !== -1 || filters.testItem.toLowerCase().indexOf(name) !== -1;
     });
   }
 
-  var html = '';
-  if (!codes.length) {
-    wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">시험항목이 없습니다</div>';
+  document.getElementById('iv-item-count').textContent = filtered.length + '건';
+
+  if (!filtered.length) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">항목이 없습니다</div>';
     return;
   }
 
-  html += '<div style="font-size:12px;color:#888;margin-bottom:8px">' + codes.length + '개 항목 / ' + receipts.length + '건 접수</div>';
-
-  codes.forEach(function(code) {
-    var grp = itemMap[code];
+  listEl.innerHTML = filtered.map(function(code) {
+    var grp = _ivItemMap[code];
     var item = grp.item;
-    var diaryTmpl = findDiaryTemplate(item.testItemCode);
+    var activeClass = _ivSelectedCode === code ? ' active' : '';
+    var diaryIcon = findDiaryTemplate(item.testItemCode) ? ' 📋' : '';
+    return '<div class="iv-item-row' + activeClass + '" onclick="selectItemViewCode(\'' + code + '\')">' +
+      '<div class="iv-name">' + (item.testItemName || '-') + diaryIcon + '</div>' +
+      '<div style="display:flex;justify-content:space-between">' +
+        '<span class="iv-code">' + code + '</span>' +
+        '<span class="iv-count">' + grp.entries.length + '건</span>' +
+      '</div>' +
+      '<div class="iv-meta"><span>' + (item.standard || '-') + '</span><span>' + (item.unit || '-') + '</span></div>' +
+    '</div>';
+  }).join('');
+}
 
-    html += '<div class="item-view-card">';
-    html += '<div class="item-view-card-header">';
-    html += '<span>' + (item.testItemName || '-') + '</span>';
-    html += '<span class="badge">' + (item.testItemCode || '-') + '</span>';
-    html += '<span style="font-size:11px;color:#888;margin-left:auto">기준: ' + (item.standard || '-') + ' | 단위: ' + (item.unit || '-') + '</span>';
-    html += '<span style="font-size:11px;color:#64748b;margin-left:8px">' + grp.entries.length + '건</span>';
-    if (diaryTmpl) html += '<span style="font-size:11px;color:#059669;margin-left:8px">📋 일지양식</span>';
-    html += '</div>';
-    html += '<table class="item-view-table"><thead><tr>';
-    html += '<th>접수번호</th><th>제품명</th><th>거래처</th><th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th>';
-    html += '</tr></thead><tbody>';
+// 좌측 항목 선택 → 우측에 접수건 표시
+function selectItemViewCode(code) {
+  _ivSelectedCode = code;
+  var grp = _ivItemMap[code];
+  if (!grp) return;
 
-    grp.entries.forEach(function(ent, ei) {
-      var r = ent.receipt;
-      var s = (r.samples || [])[ent.sampleIdx] || {};
-      var sv = ent.saved;
-      var mv = sv.measuredValue || '';
-      var mkv = sv.markValue || '';
-      var jr = sv.judgmentResult || '';
-      var jb = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
-      var uid = code + '_' + r.id + '_' + ent.sampleIdx;
-      html += '<tr>';
-      html += '<td style="font-size:12px;color:#2563eb;cursor:pointer" onclick="selectReceipt(\'' + r.id + '\')">' + (r.receiptNo || '-') + '</td>';
-      html += '<td style="font-size:12px">' + (s.productName || '-') + '</td>';
-      html += '<td style="font-size:12px;color:#888">' + (r.clientName || '-') + '</td>';
-      html += '<td><input type="text" class="iv-input" value="' + mv + '" placeholder="입력" data-rid="' + r.id + '" data-si="' + ent.sampleIdx + '" data-ii="' + ent.itemIdx + '" oninput="onItemViewInput(this)"></td>';
-      html += '<td style="font-size:12px;color:#2563eb" id="iv-mark-' + uid + '">' + mkv + '</td>';
-      html += '<td id="iv-judge-' + uid + '">' + jb + '</td>';
-      html += '</tr>';
-    });
+  // 좌측 활성 표시
+  document.querySelectorAll('.iv-item-row').forEach(function(el) { el.classList.remove('active'); });
+  var rows = document.querySelectorAll('.iv-item-row');
+  rows.forEach(function(el) { if (el.querySelector('.iv-code').textContent === code) el.classList.add('active'); });
 
-    html += '</tbody></table></div>';
+  var item = grp.item;
+  var rightEl = document.getElementById('iv-right-panel');
+  if (!rightEl) return;
+
+  var html = '<div style="padding:16px">';
+  html += '<div class="item-view-card-header" style="margin-bottom:12px">';
+  html += '<span style="font-size:16px;font-weight:700">' + (item.testItemName || '-') + '</span>';
+  html += '<span class="badge" style="font-size:12px">' + (item.testItemCode || '-') + '</span>';
+  html += '<span style="font-size:12px;color:#888;margin-left:auto">기준: ' + (item.standard || '-') + ' | 단위: ' + (item.unit || '-') + '</span>';
+  html += '<span style="font-size:12px;color:#64748b;margin-left:8px">' + grp.entries.length + '건</span>';
+  html += '</div>';
+
+  html += '<table class="item-view-table"><thead><tr>';
+  html += '<th>접수번호</th><th>제품명</th><th>거래처</th><th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th>';
+  html += '</tr></thead><tbody>';
+
+  grp.entries.forEach(function(ent) {
+    var r = ent.receipt;
+    var s = (r.samples || [])[ent.sampleIdx] || {};
+    var sv = ent.saved;
+    var mv = sv.measuredValue || '';
+    var mkv = sv.markValue || '';
+    var jr = sv.judgmentResult || '';
+    var jb = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
+    var uid = code + '_' + r.id + '_' + ent.sampleIdx;
+    html += '<tr>';
+    html += '<td style="font-size:12px;color:#2563eb;cursor:pointer" onclick="switchViewMode(\'sample\');selectReceipt(\'' + r.id + '\')">' + (r.receiptNo || '-') + '</td>';
+    html += '<td style="font-size:12px">' + (s.productName || '-') + '</td>';
+    html += '<td style="font-size:12px;color:#888">' + (r.clientName || '-') + '</td>';
+    html += '<td><input type="text" class="iv-input" value="' + mv + '" placeholder="입력" data-rid="' + r.id + '" data-si="' + ent.sampleIdx + '" data-ii="' + ent.itemIdx + '" oninput="onItemViewInput(this)"></td>';
+    html += '<td style="font-size:12px;color:#2563eb" id="iv-mark-' + uid + '">' + mkv + '</td>';
+    html += '<td id="iv-judge-' + uid + '">' + jb + '</td>';
+    html += '</tr>';
   });
 
-  wrap.innerHTML = html;
+  html += '</tbody></table></div>';
+  rightEl.innerHTML = html;
 }
 
 // 항목별 뷰에서 값 입력 시
