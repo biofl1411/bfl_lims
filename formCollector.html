@@ -274,6 +274,13 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
   background:var(--g100);padding:1px 6px;border-radius:4px}
 .review-calc .cresult{font-weight:700;color:var(--ok);margin-left:auto}
 
+.rv-details{border:1px solid var(--g200);border-radius:9px;margin-bottom:12px;overflow:hidden}
+.rv-details-sum{padding:10px 14px;background:var(--g50);font-size:13px;font-weight:700;color:#1e293b;
+  cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+.rv-details-sum::-webkit-details-marker{display:none}
+.rv-details-sum::before{content:'▶';font-size:10px;transition:transform .2s}
+.rv-details[open] .rv-details-sum::before{transform:rotate(90deg)}
+.rv-details-sum span{background:var(--pri-l);color:var(--pri);padding:1px 8px;border-radius:10px;font-size:11px}
 .review-missing{border:1px solid #fde68a;border-radius:9px;background:#fffbeb;padding:14px;margin-bottom:12px}
 .review-missing-hd{font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .review-missing textarea{width:100%;min-height:80px;padding:8px 10px;border:1px solid #fde68a;
@@ -488,24 +495,25 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
         <!-- 요약 통계 -->
         <div class="review-summary" id="rv-summary"></div>
 
-        <!-- 추출 결과 필드별 검증 -->
-        <div id="rv-sections"></div>
-
-        <!-- 계산식 검증 -->
-        <div id="rv-calcs"></div>
-
-        <!-- 누락 사항 메모 -->
+        <!-- ★ 누락 사항 메모 (PDF 바로 아래 — 항상 보이도록) -->
         <div class="review-missing">
-          <div class="review-missing-hd">⚠️ 누락·수정 사항 메모</div>
+          <div class="review-missing-hd">📝 누락·수정 사항 메모</div>
           <textarea id="rv-missing-memo" placeholder="PDF를 비교해서 누락된 필드, 잘못된 값, 추가 메모를 작성하세요.&#10;&#10;예시:&#10;- 시험방법란 누락&#10;- 희석배수 필드가 빠져있음&#10;- 판정기준 값이 0.3이 아니라 0.5임"></textarea>
           <div class="hint">이 메모는 저장 시 함께 기록되어 개발팀 반영 시 참고됩니다.</div>
         </div>
 
         <!-- 확인 후 저장 버튼 -->
-        <div style="display:flex;justify-content:flex-end;gap:8px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px">
           <button class="btn btn-out" onclick="cancelReview()">← 재분석</button>
           <button class="btn btn-ok" id="btn-confirm-save" onclick="doConfirmSave()">✅ 검증 완료 — 저장</button>
         </div>
+
+        <!-- 추출 필드 상세 (접이식) -->
+        <details class="rv-details">
+          <summary class="rv-details-sum">📋 추출 필드 상세 검증 <span id="rv-field-cnt"></span></summary>
+          <div id="rv-sections"></div>
+          <div id="rv-calcs"></div>
+        </details>
       </div>
 
     </div><!-- /cb -->
@@ -1222,6 +1230,10 @@ function showReviewPanel(data) {
     '<div class="review-stat total">전체 필드: '+totalFields+'개</div>'+
     '<div class="review-stat ok">계산식: '+calcs.length+'개</div>'+
     (data.judgmentRule?'<div class="review-stat memo">판정기준: '+(data.judgmentRule.standardText||'')+'</div>':'');
+
+  // 필드 카운트 표시
+  var fcEl = document.getElementById('rv-field-cnt');
+  if (fcEl) fcEl.textContent = totalFields + '개 필드';
 
   // 누락 메모 초기화
   document.getElementById('rv-missing-memo').value = '';
