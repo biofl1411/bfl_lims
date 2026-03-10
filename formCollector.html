@@ -9,6 +9,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
 :root{
   --pri:#2563eb;--pri-l:#dbeafe;--pri-d:#1d4ed8;
@@ -239,7 +241,13 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
 .review-pdf-hd .tag{padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700}
 .review-pdf-hd .tag.blank{background:var(--pri-l);color:var(--pri)}
 .review-pdf-hd .tag.filled{background:var(--ok-l);color:#065f46}
-.review-pdf-embed{width:100%;height:400px;border:none}
+.review-pdf-viewer{width:100%;min-height:420px;max-height:600px;overflow-y:auto;background:#525659;position:relative}
+.review-pdf-viewer canvas{display:block;margin:0 auto}
+.pdf-nav{display:flex;align-items:center;justify-content:center;gap:10px;padding:6px 0;background:var(--g100);border-top:1px solid var(--g200);font-size:12px;color:var(--g600)}
+.pdf-nav button{width:28px;height:28px;border:1px solid var(--g300);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.pdf-nav button:hover{background:var(--pri-l)}
+.pdf-nav button:disabled{opacity:.35;cursor:default}
+.pdf-nav .pg-info{font-weight:600}
 
 .review-section{border:1px solid var(--g200);border-radius:9px;margin-bottom:12px;overflow:hidden}
 .review-sec-hd{padding:9px 14px;background:var(--g50);border-bottom:1px solid var(--g200);
@@ -459,11 +467,21 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
         <div class="review-pdf-row">
           <div class="review-pdf-box">
             <div class="review-pdf-hd"><span class="tag blank">빈 양식</span><span id="rv-blank-name"></span></div>
-            <embed id="rv-pdf-blank" class="review-pdf-embed" type="application/pdf">
+            <div class="review-pdf-viewer" id="rv-pdf-blank"><canvas></canvas></div>
+            <div class="pdf-nav" id="rv-nav-blank">
+              <button onclick="pdfNav('blank',-1)">◀</button>
+              <span class="pg-info"><span class="pg-cur">1</span> / <span class="pg-tot">1</span></span>
+              <button onclick="pdfNav('blank',1)">▶</button>
+            </div>
           </div>
           <div class="review-pdf-box">
             <div class="review-pdf-hd"><span class="tag filled">작성 완료</span><span id="rv-filled-name"></span></div>
-            <embed id="rv-pdf-filled" class="review-pdf-embed" type="application/pdf">
+            <div class="review-pdf-viewer" id="rv-pdf-filled"><canvas></canvas></div>
+            <div class="pdf-nav" id="rv-nav-filled">
+              <button onclick="pdfNav('filled',-1)">◀</button>
+              <span class="pg-info"><span class="pg-cur">1</span> / <span class="pg-tot">1</span></span>
+              <button onclick="pdfNav('filled',1)">▶</button>
+            </div>
           </div>
         </div>
 
@@ -1093,16 +1111,71 @@ async function doAnalyze() {
 }
 
 /* =============================================================
+   PDF.js 뷰어
+============================================================= */
+var _pdfDocs = { blank: null, filled: null };
+var _pdfPages = { blank: 1, filled: 1 };
+
+function renderPdfViewer(key, b64) {
+  var raw = atob(b64);
+  var arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+
+  pdfjsLib.getDocument({ data: arr }).promise.then(function(pdf) {
+    _pdfDocs[key] = pdf;
+    _pdfPages[key] = 1;
+    var nav = document.getElementById('rv-nav-' + key);
+    nav.querySelector('.pg-tot').textContent = pdf.numPages;
+    renderPdfPage(key, 1);
+  }).catch(function(e) {
+    console.error('PDF 로드 실패(' + key + '):', e);
+    var viewer = document.getElementById('rv-pdf-' + key);
+    viewer.innerHTML = '<div style="padding:20px;color:#fff;text-align:center">PDF 로드 실패</div>';
+  });
+}
+
+function renderPdfPage(key, pageNum) {
+  var pdf = _pdfDocs[key];
+  if (!pdf) return;
+  pageNum = Math.max(1, Math.min(pageNum, pdf.numPages));
+  _pdfPages[key] = pageNum;
+
+  var nav = document.getElementById('rv-nav-' + key);
+  nav.querySelector('.pg-cur').textContent = pageNum;
+  var btns = nav.querySelectorAll('button');
+  btns[0].disabled = (pageNum <= 1);
+  btns[1].disabled = (pageNum >= pdf.numPages);
+
+  pdf.getPage(pageNum).then(function(page) {
+    var viewer = document.getElementById('rv-pdf-' + key);
+    var canvas = viewer.querySelector('canvas');
+    if (!canvas) { canvas = document.createElement('canvas'); viewer.appendChild(canvas); }
+    var ctx = canvas.getContext('2d');
+    var containerW = viewer.clientWidth - 4;
+    var vp = page.getViewport({ scale: 1 });
+    var scale = containerW / vp.width;
+    var scaled = page.getViewport({ scale: scale });
+    canvas.width = scaled.width;
+    canvas.height = scaled.height;
+    page.render({ canvasContext: ctx, viewport: scaled });
+  });
+}
+
+function pdfNav(key, delta) {
+  renderPdfPage(key, _pdfPages[key] + delta);
+}
+
+/* =============================================================
    리뷰 패널 표시
 ============================================================= */
 function showReviewPanel(data) {
   document.getElementById('review-panel').style.display='block';
 
-  // PDF 임베드
+  // PDF.js 렌더링
   document.getElementById('rv-blank-name').textContent = nameBlank;
   document.getElementById('rv-filled-name').textContent = nameFilled;
-  document.getElementById('rv-pdf-blank').src = 'data:application/pdf;base64,'+b64Blank;
-  document.getElementById('rv-pdf-filled').src = 'data:application/pdf;base64,'+b64Filled;
+  renderPdfViewer('blank', b64Blank);
+  renderPdfViewer('filled', b64Filled);
 
   // 섹션별 필드 렌더
   var totalFields = 0, html = '';
