@@ -1341,13 +1341,32 @@ var PROXY_URL = '/fss/claude';
 
 async function callClaude() {
   var testType = guessType(selItem ? selItem.name : '');
-  var prompt = '당신은 식품 시험 검사 기록서 분석 전문가입니다.\n'
-    + '첨부 PDF 2개:\n- document1: 빈 양식\n- document2: 작성 완료 기록서\n\n'
+  var prompt = '당신은 식품 시험 검사 기록서 PDF 분석 전문가입니다.\n\n'
+    + '## 입력\n'
+    + '- document1: 빈 양식 PDF\n'
+    + '- document2: 작성 완료된 기록서 PDF\n\n'
     + '검사분야: ' + (selField ? selField.name : '')
     + '\n검사목적: ' + (selPurpose ? selPurpose.n : '')
     + '\n대표 검사항목: ' + (selItem ? selItem.name : '')
     + '\n시험유형: ' + testType + '\n\n'
-    + '아래 JSON만 응답하세요 (마크다운·주석 금지):\n\n'
+    + '## 핵심 규칙 — 절대 누락 금지\n'
+    + '1. 빈 양식 PDF의 **모든 페이지**를 1페이지부터 끝까지 순서대로 스캔하세요.\n'
+    + '2. 빈 칸, 테이블 셀, 밑줄(_____), 괄호 안 빈칸 등 **입력이 필요한 모든 위치**를 빠짐없이 추출하세요.\n'
+    + '3. 작성 완료 PDF에서 해당 위치에 채워진 **실제 값**을 exampleValue로 기록하세요.\n'
+    + '4. 아래 항목들이 PDF에 있으면 반드시 포함하세요:\n\n'
+    + '   **반드시 확인할 섹션/필드 목록:**\n'
+    + '   - 시료정보: 검사항목, 검사자, 시료명, 검사목적, 검체번호, 접수일, 검사일자, 시험방법근거, 제조일자, 유통기간, 검사완료일, 시료유형 등\n'
+    + '   - 표준물질정보: 표준물명, 농도(mg/L), 제조사, 표준물질 제조일\n'
+    + '   - 표준용액농도: STD Blank, STD 1~5 (각각의 농도값), 단위(μg/L 등)\n'
+    + '   - 측정값: 시료 측정농도, Blank 측정농도, 최종볼륨(mL), 희석배수, 검체 채취량(g) 등\n'
+    + '   - 시험시작일, 시험번호(변경)일\n'
+    + '   - 계산식 (수식 전체)\n'
+    + '   - 판정 테이블: 분석항목, 기준규격(mg/kg), 결과(mg/kg), 판정\n'
+    + '   - 장비/시약 정보 (있는 경우)\n\n'
+    + '5. 테이블 형태의 데이터(표준용액농도, 판정 테이블 등)도 개별 셀 단위로 각각 필드를 만드세요.\n'
+    + '6. 빈 양식에 있는 필드인데 작성 완료본에 값이 없으면 exampleValue를 빈 문자열("")로 두되, 필드 자체는 반드시 포함하세요.\n\n'
+    + '## 응답 형식\n'
+    + 'JSON만 응답하세요 (마크다운·주석·설명 금지):\n\n'
     + '{\n'
     + '  "formTitle": "기록서제목",\n'
     + '  "testItem": "대표검사항목명",\n'
@@ -1355,11 +1374,11 @@ async function callClaude() {
     + '  "sop": "SOP코드 또는 null",\n'
     + '  "sections": [\n'
     + '    {\n'
-    + '      "title": "섹션명",\n'
+    + '      "title": "섹션명 (PDF 순서대로)",\n'
     + '      "fields": [\n'
     + '        {\n'
     + '          "id": "camelCase영문ID",\n'
-    + '          "label": "한국어라벨",\n'
+    + '          "label": "한국어라벨 (PDF 원문 그대로)",\n'
     + '          "type": "text|number|date|textarea|readonly",\n'
     + '          "unit": "단위 또는 null",\n'
     + '          "exampleValue": "완성본실제값",\n'
@@ -1373,7 +1392,7 @@ async function callClaude() {
     + '    {\n'
     + '      "id": "결과ID",\n'
     + '      "label": "결과라벨",\n'
-    + '      "formula": "JS eval 가능한 수식 (변수명=field id 그대로)",\n'
+    + '      "formula": "JS eval 가능한 수식 (변수명=field id)",\n'
     + '      "formulaText": "한국어 수식 설명",\n'
     + '      "unit": "단위",\n'
     + '      "decimalPlaces": 2,\n'
@@ -1388,11 +1407,13 @@ async function callClaude() {
     + '  },\n'
     + '  "equipment": ["장비목록"],\n'
     + '  "reagents": ["시약목록"]\n'
-    + '}';
+    + '}\n\n'
+    + '## 최종 검증\n'
+    + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.';
 
   var body = {
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 3000,
+    max_tokens: 6000,
     messages: [{
       role: 'user',
       content: [
