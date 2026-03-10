@@ -1311,21 +1311,23 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
   </div>
 </div>
 
-  <!-- ═══ 패널 8: 시험일지 (항목코드별 일지 양식 관리) ═══ -->
+  <!-- ═══ 패널 8: 시험일지 (분야/검사목적/항목별 일지 양식 관리) ═══ -->
   <div class="panel" id="panel-diary">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-      <h3 style="font-size:16px;font-weight:800;margin:0;">항목코드별 시험일지 양식</h3>
+      <h3 style="font-size:16px;font-weight:800;margin:0;">시험일지 양식 관리</h3>
       <div style="display:flex;gap:6px;align-items:center;">
         <button class="btn btn-primary btn-sm" onclick="openDiaryTmplEditor(-1)">＋ 일지 양식 추가</button>
       </div>
     </div>
 
-    <!-- 필터 -->
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
-      <div class="search-box" style="flex:1;min-width:200px;">
-        <input type="text" id="diary-tmpl-search" placeholder="항목코드, 항목명 검색..." oninput="renderDiaryTemplates()">
-        <span class="search-icon">🔍</span>
-      </div>
+    <!-- 필터: 분야 → 검사목적 → 카테고리 → 검색 -->
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+      <select id="diary-tmpl-field-filter" onchange="onDiaryFieldFilterChange()" style="padding:6px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;">
+        <option value="">분야 전체</option>
+      </select>
+      <select id="diary-tmpl-purpose-filter" onchange="renderDiaryTemplates()" style="padding:6px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;">
+        <option value="">검사목적 전체</option>
+      </select>
       <select id="diary-tmpl-cat-filter" onchange="renderDiaryTemplates()" style="padding:6px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;">
         <option value="">카테고리 전체</option>
         <option value="이화학">이화학</option>
@@ -1333,6 +1335,12 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <option value="중금속">중금속</option>
         <option value="기타">기타</option>
       </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <div class="search-box" style="flex:1;min-width:200px;">
+        <input type="text" id="diary-tmpl-search" placeholder="항목코드, 항목명 검색..." oninput="renderDiaryTemplates()">
+        <span class="search-icon">🔍</span>
+      </div>
       <span id="diary-tmpl-count" style="font-size:12px;color:var(--sub);"></span>
     </div>
 
@@ -1361,7 +1369,21 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           </div>
         </div>
 
-        <!-- 카테고리 & 분야 -->
+        <!-- 분야 & 검사목적 -->
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">분야 *</label>
+            <select id="dtmpl-field" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">검사목적 *</label>
+            <select id="dtmpl-purpose" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+            </select>
+          </div>
+        </div>
+
+        <!-- 카테고리 & 일지유형 -->
         <div style="display:flex;gap:12px;">
           <div style="flex:1;">
             <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">카테고리 *</label>
@@ -36689,9 +36711,63 @@ async function loadDiaryTemplates() {
       _diaryTemplates.push(d);
     });
     _diaryTmplLoaded = true;
+    // 필터 드롭다운 초기화
+    initDiaryFilterDropdowns();
   } catch(e) {
     console.error('일지 양식 로드 실패:', e);
   }
+}
+
+function initDiaryFilterDropdowns() {
+  // 분야 필터
+  var fieldSel = document.getElementById('diary-tmpl-field-filter');
+  fieldSel.innerHTML = '<option value="">분야 전체</option>';
+  FIELDS.forEach(function(f) {
+    fieldSel.innerHTML += '<option value="' + f.name + '">' + f.name + '</option>';
+  });
+
+  // 검사목적 필터
+  var purposeSel = document.getElementById('diary-tmpl-purpose-filter');
+  var activePurposes = P.filter(function(p) { return p.o === 1; });
+  purposeSel.innerHTML = '<option value="">검사목적 전체</option>';
+  activePurposes.forEach(function(p) {
+    purposeSel.innerHTML += '<option value="' + p.n + '">' + p.n + '</option>';
+  });
+
+  // 모달 셀렉트 초기화
+  var dtmplField = document.getElementById('dtmpl-field');
+  dtmplField.innerHTML = '';
+  FIELDS.forEach(function(f) {
+    dtmplField.innerHTML += '<option value="' + f.name + '">' + f.name + '</option>';
+  });
+
+  var dtmplPurpose = document.getElementById('dtmpl-purpose');
+  dtmplPurpose.innerHTML = '';
+  activePurposes.forEach(function(p) {
+    dtmplPurpose.innerHTML += '<option value="' + p.n + '">' + p.n + '</option>';
+  });
+}
+
+function onDiaryFieldFilterChange() {
+  // 분야 변경 시 검사목적 필터 연동
+  var fieldVal = document.getElementById('diary-tmpl-field-filter').value;
+  var purposeSel = document.getElementById('diary-tmpl-purpose-filter');
+  var activePurposes = P.filter(function(p) { return p.o === 1; });
+
+  if (fieldVal) {
+    var fieldCode = '';
+    FIELDS.forEach(function(f) { if (f.name === fieldVal) fieldCode = f.id; });
+    activePurposes = activePurposes.filter(function(p) {
+      return p.fields && p.fields.indexOf(fieldCode) >= 0;
+    });
+  }
+
+  purposeSel.innerHTML = '<option value="">검사목적 전체</option>';
+  activePurposes.forEach(function(p) {
+    purposeSel.innerHTML += '<option value="' + p.n + '">' + p.n + '</option>';
+  });
+
+  renderDiaryTemplates();
 }
 
 async function renderDiaryTemplates() {
@@ -36701,10 +36777,15 @@ async function renderDiaryTemplates() {
   var searchVal = (document.getElementById('diary-tmpl-search').value || '').trim().toLowerCase();
   var catFilter = document.getElementById('diary-tmpl-cat-filter').value;
 
+  var fieldFilter = document.getElementById('diary-tmpl-field-filter').value;
+  var purposeFilter = document.getElementById('diary-tmpl-purpose-filter').value;
+
   var filtered = _diaryTemplates.filter(function(t) {
+    if (fieldFilter && t.field !== fieldFilter) return false;
+    if (purposeFilter && t.purpose !== purposeFilter) return false;
     if (catFilter && t.category !== catFilter) return false;
     if (searchVal) {
-      var s = ((t.itemCode || '') + ' ' + (t.itemName || '')).toLowerCase();
+      var s = ((t.itemCode || '') + ' ' + (t.itemName || '') + ' ' + (t.field || '') + ' ' + (t.purpose || '')).toLowerCase();
       return s.indexOf(searchVal) >= 0;
     }
     return true;
@@ -36723,12 +36804,14 @@ async function renderDiaryTemplates() {
     var idx = _diaryTemplates.indexOf(t);
     var catColor = catColors[t.category] || '#95a5a6';
     var formulaTag = t.calcFormula ? '<span style="font-size:11px;color:#8e44ad;background:#f3e8ff;padding:1px 6px;border-radius:3px;margin-left:6px;">fx: ' + escTmplAttr(t.calcFormula) + '</span>' : '';
+    var fieldTag = t.field ? '<span style="font-size:10px;color:#fff;background:#4361ee;padding:1px 5px;border-radius:3px;">' + escTmplAttr(t.field) + '</span>' : '';
+    var purposeTag = t.purpose ? '<span style="font-size:10px;color:#555;background:#e8e8e8;padding:1px 5px;border-radius:3px;">' + escTmplAttr(t.purpose) + '</span>' : '';
     var preview = (t.diaryCn || '').replace(/<[^>]*>/g, '').substring(0, 80);
 
     html += '<div style="background:#fff;border:1px solid var(--bdr);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=\'var(--primary)\'" onmouseout="this.style.borderColor=\'var(--bdr)\'" onclick="openDiaryTmplEditor(' + idx + ')">';
     html += '<span style="background:' + catColor + ';color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap;">' + (t.category || '기타') + '</span>';
     html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="font-weight:600;font-size:14px;">' + escTmplAttr(t.itemName || '-') + ' <span style="font-family:monospace;font-size:12px;color:var(--sub);">' + escTmplAttr(t.itemCode || '') + '</span>' + formulaTag + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + fieldTag + purposeTag + '<span style="font-weight:600;font-size:14px;">' + escTmplAttr(t.itemName || '-') + '</span> <span style="font-family:monospace;font-size:12px;color:var(--sub);">' + escTmplAttr(t.itemCode || '') + '</span>' + formulaTag + '</div>';
     if (preview) html += '<div style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">' + escTmplAttr(preview) + '</div>';
     html += '</div>';
     html += '<button onclick="event.stopPropagation();deleteDiaryTemplate(' + idx + ')" style="background:none;border:none;font-size:16px;color:#e74c3c;cursor:pointer;padding:4px;" title="삭제">&times;</button>';
@@ -36810,6 +36893,8 @@ function openDiaryTmplEditor(idx) {
     title.textContent = '시험일지 양식 수정';
     document.getElementById('dtmpl-item-name').value = t.itemName || '';
     document.getElementById('dtmpl-item-code').value = t.itemCode || '';
+    document.getElementById('dtmpl-field').value = t.field || (FIELDS[0] && FIELDS[0].name) || '';
+    document.getElementById('dtmpl-purpose').value = t.purpose || '';
     document.getElementById('dtmpl-category').value = t.category || '이화학';
     document.getElementById('dtmpl-diary-type').value = t.diaryType || 'general';
     document.getElementById('dtmpl-content').innerHTML = t.diaryCn || '';
@@ -36825,6 +36910,8 @@ function openDiaryTmplEditor(idx) {
     title.textContent = '시험일지 양식 추가';
     document.getElementById('dtmpl-item-name').value = '';
     document.getElementById('dtmpl-item-code').value = '';
+    document.getElementById('dtmpl-field').value = (FIELDS[0] && FIELDS[0].name) || '';
+    document.getElementById('dtmpl-purpose').value = '';
     document.getElementById('dtmpl-category').value = '이화학';
     document.getElementById('dtmpl-diary-type').value = 'general';
     document.getElementById('dtmpl-content').innerText = '';
@@ -36860,6 +36947,8 @@ async function saveDiaryTemplate() {
   var data = {
     itemCode: itemCode,
     itemName: itemName,
+    field: document.getElementById('dtmpl-field').value,
+    purpose: document.getElementById('dtmpl-purpose').value,
     category: document.getElementById('dtmpl-category').value,
     diaryType: document.getElementById('dtmpl-diary-type').value,
     diaryCn: document.getElementById('dtmpl-content').innerHTML,
