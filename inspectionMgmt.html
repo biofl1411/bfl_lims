@@ -483,6 +483,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <div class="tab" data-c="v" onclick="showTab(5)">📋 기준규격</div>
       <div class="tab" data-c="c" onclick="showTab(6)">📦 참고용</div>
       <div class="tab" data-c="f" onclick="showTab(7)">💰 수수료</div>
+      <div class="tab" data-c="d" onclick="showTab(8)">📝 시험일지</div>
     </div>
 
     <!-- ═══ 패널 0: 검사 분야 ═══ -->
@@ -1309,6 +1310,126 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     </div>
   </div>
 </div>
+
+  <!-- ═══ 패널 8: 시험일지 (항목코드별 일지 양식 관리) ═══ -->
+  <div class="panel" id="panel-diary">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <h3 style="font-size:16px;font-weight:800;margin:0;">항목코드별 시험일지 양식</h3>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn btn-primary btn-sm" onclick="openDiaryTmplEditor(-1)">＋ 일지 양식 추가</button>
+      </div>
+    </div>
+
+    <!-- 필터 -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <div class="search-box" style="flex:1;min-width:200px;">
+        <input type="text" id="diary-tmpl-search" placeholder="항목코드, 항목명 검색..." oninput="renderDiaryTemplates()">
+        <span class="search-icon">🔍</span>
+      </div>
+      <select id="diary-tmpl-cat-filter" onchange="renderDiaryTemplates()" style="padding:6px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;">
+        <option value="">카테고리 전체</option>
+        <option value="이화학">이화학</option>
+        <option value="미생물">미생물</option>
+        <option value="중금속">중금속</option>
+        <option value="기타">기타</option>
+      </select>
+      <span id="diary-tmpl-count" style="font-size:12px;color:var(--sub);"></span>
+    </div>
+
+    <!-- 목록 -->
+    <div id="diary-tmpl-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+
+  <!-- 시험일지 양식 편집 모달 -->
+  <div id="diary-tmpl-editor-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:2000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;width:720px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center;">
+        <h3 id="diary-tmpl-editor-title" style="margin:0;font-size:17px;">시험일지 양식 추가</h3>
+        <button onclick="closeDiaryTmplEditor()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--sub);">&times;</button>
+      </div>
+      <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
+        <!-- 항목코드 검색 -->
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;position:relative;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">시험항목명 * <span style="color:#aaa;font-size:11px;">(입력 시 자동검색)</span></label>
+            <input type="text" id="dtmpl-item-name" oninput="searchDiaryTmplItem()" placeholder="항목명 입력..." style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+            <div id="dtmpl-item-results" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border:1px solid var(--bdr);border-radius:0 0 8px 8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;"></div>
+          </div>
+          <div style="width:160px;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">시험항목코드 *</label>
+            <input type="text" id="dtmpl-item-code" readonly style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;background:#f5f5f5;font-family:monospace;">
+          </div>
+        </div>
+
+        <!-- 카테고리 & 분야 -->
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">카테고리 *</label>
+            <select id="dtmpl-category" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+              <option value="이화학">이화학</option>
+              <option value="미생물">미생물</option>
+              <option value="중금속">중금속</option>
+              <option value="기타">기타</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">일지 유형</label>
+            <select id="dtmpl-diary-type" onchange="onDiaryTypeChange()" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+              <option value="general">일반 시험일지</option>
+              <option value="chem">이화학 시험일지</option>
+              <option value="micro">미생물 시험일지</option>
+              <option value="metal">중금속 시험일지</option>
+              <option value="free">자유입력</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 일지 내용 템플릿 -->
+        <div>
+          <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">일지 내용 (템플릿)</label>
+          <div id="dtmpl-content" contenteditable="true" style="min-height:150px;max-height:300px;overflow-y:auto;padding:12px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;line-height:1.6;white-space:pre-wrap;"></div>
+        </div>
+
+        <!-- 계산식 -->
+        <div style="background:#f8f9fa;border-radius:8px;padding:14px;">
+          <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:8px;">계산식 (선택)</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <input type="text" id="dtmpl-formula" placeholder="예: (X1-X2)*X3/X4" style="flex:1;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;font-family:monospace;">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:12px;color:var(--sub);">소수점</span>
+              <input type="number" id="dtmpl-valid" value="3" min="0" max="10" style="width:50px;padding:6px;border:1px solid var(--bdr);border-radius:6px;font-size:13px;text-align:center;">
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--sub);line-height:28px;">변수:</span>
+            <input type="text" id="dtmpl-x1-label" placeholder="X1명" style="width:70px;padding:4px 6px;border:1px solid var(--bdr);border-radius:4px;font-size:11px;">
+            <input type="text" id="dtmpl-x2-label" placeholder="X2명" style="width:70px;padding:4px 6px;border:1px solid var(--bdr);border-radius:4px;font-size:11px;">
+            <input type="text" id="dtmpl-x3-label" placeholder="X3명" style="width:70px;padding:4px 6px;border:1px solid var(--bdr);border-radius:4px;font-size:11px;">
+            <input type="text" id="dtmpl-x4-label" placeholder="X4명" style="width:70px;padding:4px 6px;border:1px solid var(--bdr);border-radius:4px;font-size:11px;">
+            <input type="text" id="dtmpl-x5-label" placeholder="X5명" style="width:70px;padding:4px 6px;border:1px solid var(--bdr);border-radius:4px;font-size:11px;">
+          </div>
+        </div>
+
+        <!-- 기준규격 참고 -->
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">기준규격 (참고)</label>
+            <input type="text" id="dtmpl-standard" placeholder="예: 음성, ≤10 CFU/g" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+          </div>
+          <div style="width:120px;">
+            <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px;">단위</label>
+            <input type="text" id="dtmpl-unit" placeholder="mg/kg" style="width:100%;padding:8px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:14px;">
+          </div>
+        </div>
+      </div>
+
+      <!-- 하단 버튼 -->
+      <div style="padding:16px 24px;border-top:1px solid var(--bdr);display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="closeDiaryTmplEditor()" style="padding:8px 16px;border:1px solid var(--bdr);border-radius:6px;background:#fff;cursor:pointer;">취소</button>
+        <button onclick="saveDiaryTemplate()" style="padding:8px 20px;border:none;border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-weight:600;">저장</button>
+      </div>
+    </div>
+  </div>
 
 <!-- 오버레이 -->
 <div class="overlay" id="overlay" onclick="closeDetailItem()"></div>
@@ -30526,6 +30647,7 @@ function showTab(i) {
   if (i === 5) renderStandards();
   if (i === 6) renderData();
   if (i === 7) renderData();
+  if (i === 8) renderDiaryTemplates();
 }
 
 // ══════════════════════════════════════════════════════
@@ -36538,6 +36660,255 @@ if (window._firebaseInitDone) {
 }
 
 // (API 수집/서브탭/식품군 함수 제거됨 — 식약처 코드매핑 데이터로 교체)
+
+// ══════════════════════════════════════════════════════
+// 탭 8: 시험일지 (항목코드별 일지 양식 관리)
+// ══════════════════════════════════════════════════════
+var _diaryTemplates = [];
+var _diaryTmplLoaded = false;
+var _diaryTmplEditorIdx = -1;
+var _diaryTmplSearchTimer = null;
+
+// 일지 유형별 기본 템플릿
+var DIARY_TYPE_TEMPLATES = {
+  general: '1. 시험 목적\n\n2. 시험 방법\n\n3. 시험 과정\n\n4. 시험 결과\n\n5. 고찰',
+  chem: '1. 시험 목적\n\n2. 시약 및 기구\n  - 시약:\n  - 기구:\n\n3. 시험 방법\n  - 전처리:\n  - 분석:\n\n4. 시험 결과\n  - 측정값:\n  - 계산:\n\n5. 판정',
+  micro: '1. 시험 목적\n\n2. 배지 및 기구\n  - 배지:\n  - 기구:\n\n3. 시험 방법\n  - 검체 조제:\n  - 접종:\n  - 배양 조건:\n\n4. 시험 결과\n  - 집락수:\n  - 계산:\n\n5. 판정',
+  metal: '1. 시험 목적\n\n2. 시약 및 기구\n  - 표준용액:\n  - 기기: ICP / AAS\n\n3. 전처리\n  - 습식분해 / 건식회화 / 마이크로웨이브\n\n4. 분석 조건\n  - 파장:\n  - 검량선:\n\n5. 시험 결과\n  - 측정값:\n  - 환산값:\n\n6. 판정',
+  free: ''
+};
+
+async function loadDiaryTemplates() {
+  if (_diaryTmplLoaded) return;
+  try {
+    var snap = await db.collection('diaryTemplates').orderBy('itemName').get();
+    _diaryTemplates = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      d._id = doc.id;
+      _diaryTemplates.push(d);
+    });
+    _diaryTmplLoaded = true;
+  } catch(e) {
+    console.error('일지 양식 로드 실패:', e);
+  }
+}
+
+async function renderDiaryTemplates() {
+  await loadDiaryTemplates();
+  var container = document.getElementById('diary-tmpl-list');
+  var countEl = document.getElementById('diary-tmpl-count');
+  var searchVal = (document.getElementById('diary-tmpl-search').value || '').trim().toLowerCase();
+  var catFilter = document.getElementById('diary-tmpl-cat-filter').value;
+
+  var filtered = _diaryTemplates.filter(function(t) {
+    if (catFilter && t.category !== catFilter) return false;
+    if (searchVal) {
+      var s = ((t.itemCode || '') + ' ' + (t.itemName || '')).toLowerCase();
+      return s.indexOf(searchVal) >= 0;
+    }
+    return true;
+  });
+
+  countEl.textContent = filtered.length + '건' + (_diaryTemplates.length !== filtered.length ? ' / 전체 ' + _diaryTemplates.length + '건' : '');
+
+  if (!filtered.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);">등록된 일지 양식이 없습니다.<br><br><button class="btn btn-primary btn-sm" onclick="openDiaryTmplEditor(-1)">＋ 첫 일지 양식 추가</button></div>';
+    return;
+  }
+
+  var catColors = { '이화학': '#3498db', '미생물': '#27ae60', '중금속': '#e67e22', '기타': '#95a5a6' };
+  var html = '';
+  filtered.forEach(function(t, fi) {
+    var idx = _diaryTemplates.indexOf(t);
+    var catColor = catColors[t.category] || '#95a5a6';
+    var formulaTag = t.calcFormula ? '<span style="font-size:11px;color:#8e44ad;background:#f3e8ff;padding:1px 6px;border-radius:3px;margin-left:6px;">fx: ' + escTmplAttr(t.calcFormula) + '</span>' : '';
+    var preview = (t.diaryCn || '').replace(/<[^>]*>/g, '').substring(0, 80);
+
+    html += '<div style="background:#fff;border:1px solid var(--bdr);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=\'var(--primary)\'" onmouseout="this.style.borderColor=\'var(--bdr)\'" onclick="openDiaryTmplEditor(' + idx + ')">';
+    html += '<span style="background:' + catColor + ';color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap;">' + (t.category || '기타') + '</span>';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="font-weight:600;font-size:14px;">' + escTmplAttr(t.itemName || '-') + ' <span style="font-family:monospace;font-size:12px;color:var(--sub);">' + escTmplAttr(t.itemCode || '') + '</span>' + formulaTag + '</div>';
+    if (preview) html += '<div style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">' + escTmplAttr(preview) + '</div>';
+    html += '</div>';
+    html += '<button onclick="event.stopPropagation();deleteDiaryTemplate(' + idx + ')" style="background:none;border:none;font-size:16px;color:#e74c3c;cursor:pointer;padding:4px;" title="삭제">&times;</button>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function escTmplAttr(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function onDiaryTypeChange() {
+  var type = document.getElementById('dtmpl-diary-type').value;
+  var contentEl = document.getElementById('dtmpl-content');
+  if (DIARY_TYPE_TEMPLATES[type] !== undefined && !contentEl.innerText.trim()) {
+    contentEl.innerText = DIARY_TYPE_TEMPLATES[type];
+  }
+}
+
+// 시험항목 검색 (식약처 시험항목에서)
+function searchDiaryTmplItem() {
+  clearTimeout(_diaryTmplSearchTimer);
+  _diaryTmplSearchTimer = setTimeout(function() {
+    var q = (document.getElementById('dtmpl-item-name').value || '').trim();
+    var panel = document.getElementById('dtmpl-item-results');
+    if (q.length < 1) { panel.style.display = 'none'; return; }
+
+    var items = typeof _mfdsTestItems !== 'undefined' ? _mfdsTestItems : [];
+    var ql = q.toLowerCase();
+    var matches = items.filter(function(it) {
+      return ((it['시험항목명'] || '').toLowerCase().indexOf(ql) >= 0) || ((it['시험항목코드'] || '').indexOf(q) >= 0);
+    }).slice(0, 20);
+
+    if (!matches.length) {
+      panel.innerHTML = '<div style="padding:10px;color:var(--sub);font-size:13px;">결과 없음</div>';
+      panel.style.display = 'block';
+      return;
+    }
+
+    var html = '';
+    matches.forEach(function(m) {
+      var code = m['시험항목코드'] || '';
+      var name = m['시험항목명'] || '';
+      html += '<div onmousedown="event.preventDefault();selectDiaryTmplItem(\'' + escTmplAttr(code) + '\',\'' + escTmplAttr(name) + '\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px;display:flex;justify-content:space-between;" onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">';
+      html += '<span style="pointer-events:none;">' + escTmplAttr(name) + '</span>';
+      html += '<span style="pointer-events:none;font-family:monospace;color:var(--sub);font-size:12px;">' + escTmplAttr(code) + '</span>';
+      html += '</div>';
+    });
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+  }, 200);
+}
+
+function selectDiaryTmplItem(code, name) {
+  document.getElementById('dtmpl-item-name').value = name;
+  document.getElementById('dtmpl-item-code').value = code;
+  document.getElementById('dtmpl-item-results').style.display = 'none';
+
+  // 카테고리 자동 추론
+  var nl = name.toLowerCase();
+  if (/납|카드뮴|비소|수은|중금속|니켈|주석|안티몬/.test(nl)) {
+    document.getElementById('dtmpl-category').value = '중금속';
+    document.getElementById('dtmpl-diary-type').value = 'metal';
+  } else if (/세균|대장균|살모넬라|리스테리아|황색포도|클로스트리디움|바실루스|진균|유산균|비브리오|캠필로|크로노|여시니아|장출혈|장염|곰팡이|비피더스|프로바이오/.test(nl)) {
+    document.getElementById('dtmpl-category').value = '미생물';
+    document.getElementById('dtmpl-diary-type').value = 'micro';
+  } else {
+    document.getElementById('dtmpl-category').value = '이화학';
+    document.getElementById('dtmpl-diary-type').value = 'chem';
+  }
+}
+
+function openDiaryTmplEditor(idx) {
+  _diaryTmplEditorIdx = idx;
+  var overlay = document.getElementById('diary-tmpl-editor-overlay');
+  var title = document.getElementById('diary-tmpl-editor-title');
+
+  if (idx >= 0 && _diaryTemplates[idx]) {
+    var t = _diaryTemplates[idx];
+    title.textContent = '시험일지 양식 수정';
+    document.getElementById('dtmpl-item-name').value = t.itemName || '';
+    document.getElementById('dtmpl-item-code').value = t.itemCode || '';
+    document.getElementById('dtmpl-category').value = t.category || '이화학';
+    document.getElementById('dtmpl-diary-type').value = t.diaryType || 'general';
+    document.getElementById('dtmpl-content').innerHTML = t.diaryCn || '';
+    document.getElementById('dtmpl-formula').value = t.calcFormula || '';
+    document.getElementById('dtmpl-valid').value = t.calcValid || 3;
+    document.getElementById('dtmpl-standard').value = t.standard || '';
+    document.getElementById('dtmpl-unit').value = t.unit || '';
+    for (var i = 1; i <= 5; i++) {
+      var lbl = document.getElementById('dtmpl-x' + i + '-label');
+      if (lbl) lbl.value = (t.varLabels && t.varLabels['x' + i]) || '';
+    }
+  } else {
+    title.textContent = '시험일지 양식 추가';
+    document.getElementById('dtmpl-item-name').value = '';
+    document.getElementById('dtmpl-item-code').value = '';
+    document.getElementById('dtmpl-category').value = '이화학';
+    document.getElementById('dtmpl-diary-type').value = 'general';
+    document.getElementById('dtmpl-content').innerText = '';
+    document.getElementById('dtmpl-formula').value = '';
+    document.getElementById('dtmpl-valid').value = 3;
+    document.getElementById('dtmpl-standard').value = '';
+    document.getElementById('dtmpl-unit').value = '';
+    for (var i = 1; i <= 5; i++) {
+      var lbl = document.getElementById('dtmpl-x' + i + '-label');
+      if (lbl) lbl.value = '';
+    }
+  }
+
+  document.getElementById('dtmpl-item-results').style.display = 'none';
+  overlay.style.display = 'flex';
+}
+
+function closeDiaryTmplEditor() {
+  document.getElementById('diary-tmpl-editor-overlay').style.display = 'none';
+}
+
+async function saveDiaryTemplate() {
+  var itemName = document.getElementById('dtmpl-item-name').value.trim();
+  var itemCode = document.getElementById('dtmpl-item-code').value.trim();
+  if (!itemName || !itemCode) { showToast('시험항목명과 코드를 입력하세요', 'error'); return; }
+
+  var varLabels = {};
+  for (var i = 1; i <= 5; i++) {
+    var v = (document.getElementById('dtmpl-x' + i + '-label') || {}).value || '';
+    if (v) varLabels['x' + i] = v;
+  }
+
+  var data = {
+    itemCode: itemCode,
+    itemName: itemName,
+    category: document.getElementById('dtmpl-category').value,
+    diaryType: document.getElementById('dtmpl-diary-type').value,
+    diaryCn: document.getElementById('dtmpl-content').innerHTML,
+    calcFormula: document.getElementById('dtmpl-formula').value.trim(),
+    calcValid: parseInt(document.getElementById('dtmpl-valid').value) || 3,
+    varLabels: varLabels,
+    standard: document.getElementById('dtmpl-standard').value.trim(),
+    unit: document.getElementById('dtmpl-unit').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    var docId = itemCode;
+    if (_diaryTmplEditorIdx >= 0 && _diaryTemplates[_diaryTmplEditorIdx]) {
+      docId = _diaryTemplates[_diaryTmplEditorIdx]._id || itemCode;
+    }
+    await db.collection('diaryTemplates').doc(docId).set(data, { merge: true });
+
+    // 로컬 배열 업데이트
+    if (_diaryTmplEditorIdx >= 0) {
+      data._id = docId;
+      _diaryTemplates[_diaryTmplEditorIdx] = data;
+    } else {
+      data._id = docId;
+      _diaryTemplates.push(data);
+    }
+
+    closeDiaryTmplEditor();
+    renderDiaryTemplates();
+    showToast('일지 양식 저장 완료', 'success');
+  } catch(e) {
+    console.error('일지 양식 저장 실패:', e);
+    showToast('저장 실패: ' + e.message, 'error');
+  }
+}
+
+async function deleteDiaryTemplate(idx) {
+  if (!confirm('이 일지 양식을 삭제하시겠습니까?')) return;
+  var t = _diaryTemplates[idx];
+  if (!t) return;
+  try {
+    await db.collection('diaryTemplates').doc(t._id || t.itemCode).delete();
+    _diaryTemplates.splice(idx, 1);
+    renderDiaryTemplates();
+    showToast('일지 양식 삭제 완료', 'success');
+  } catch(e) {
+    showToast('삭제 실패: ' + e.message, 'error');
+  }
+}
 
 </script>
 </body>

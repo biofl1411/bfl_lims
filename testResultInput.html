@@ -1654,9 +1654,62 @@ async function confirmMfdsSubmit() {
       } catch(e) { console.warn('testDiaries 조회 실패:', e); }
     }
 
+    // exprDiarySn이 없으면 diaryTemplates에서 항목코드로 일지 양식 조회 → 자동 등록
     if (!exprDiarySn) {
-      showToast('시험일지를 먼저 등록하세요 (시험 결재 > 시험일지)', 'error');
-      return;
+      var resultItems = currentResults[currentSampleIdx] || [];
+      if (!resultItems.length) { showToast('결과 항목이 없습니다', 'error'); return; }
+
+      try {
+        showToast('일지 양식 조회 중...', 'info');
+        // 항목코드별로 diaryTemplates 조회
+        var itemCodes = resultItems.map(function(it) { return it.testItemCode; }).filter(Boolean);
+        var diaryContent = '';
+        for (var ci = 0; ci < itemCodes.length; ci++) {
+          try {
+            var tmplDoc = await db.collection('diaryTemplates').doc(itemCodes[ci]).get();
+            if (tmplDoc.exists) {
+              var tmpl = tmplDoc.data();
+              diaryContent += '<h3>' + (ci+1) + '. ' + (tmpl.itemName || resultItems[ci].testItemName) + '</h3>';
+              diaryContent += (tmpl.diaryCn || '') + '<br>';
+            } else {
+              diaryContent += '<h3>' + (ci+1) + '. ' + (resultItems[ci].testItemName || '') + '</h3>';
+              diaryContent += '<p>기준: ' + (resultItems[ci].standard || '-') + ' | 결과: ' + (resultItems[ci].measuredValue || '-') + ' ' + (resultItems[ci].unit || '') + '</p>';
+            }
+          } catch(e2) { /* skip */ }
+        }
+        if (!diaryContent) diaryContent = '시험 결과 기록';
+
+        // insertExprDiary 호출하여 exprDiarySn 획득
+        var todayStr = today().replace(/-/g, '');
+        var exprIemLst = resultItems.map(function(r, i) { return { exprIemSn: String(i + 1) }; });
+
+        var diaryParams = {
+          jobSeCode: 'IM18000001',
+          webApi: 'Y',
+          sploreReqestNo: currentReceipt.sploreReqestNo || currentReceipt.receiptNo,
+          sploreSn: String(currentSampleIdx + 1),
+          exprBeginDe: todayStr,
+          exprEndDe: todayStr,
+          exprDiaryCn: diaryContent,
+          sploreChargerId: (typeof MFDS !== 'undefined' && MFDS.DEFAULT_USER) ? MFDS.DEFAULT_USER.mfdsLimsId : 'apitest34',
+          exprIemLst: exprIemLst
+        };
+
+        var diaryRes = await MFDS.insertExprDiary(diaryParams);
+        if (diaryRes && (diaryRes.resultFlag === '1' || diaryRes.exprDiarySn)) {
+          exprDiarySn = diaryRes.exprDiarySn || (diaryRes.resultData && diaryRes.resultData[0] && diaryRes.resultData[0].exprDiarySn);
+          _exprDiarySn = exprDiarySn;
+          var docId2 = currentReceipt.receiptNo + '_S' + currentSampleIdx;
+          await db.collection('testResults').doc(docId2).update({ exprDiarySn: exprDiarySn, mfdsSubmitted: true });
+          showToast('일지 양식으로 시험일지 자동 등록 (SN: ' + exprDiarySn + ')', 'success');
+        } else {
+          throw new Error(diaryRes.errorMessage || '시험일지 등록 실패');
+        }
+      } catch(e3) {
+        console.error('일지 자동등록 실패:', e3);
+        showToast('시험일지 등록 실패: ' + (e3.message || e3) + '\n기록서 양식 수집 > 시험일지에서 양식을 먼저 등록하세요', 'error');
+        return;
+      }
     }
 
     // 검사결과 전송
