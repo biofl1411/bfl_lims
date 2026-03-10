@@ -642,6 +642,9 @@ function applyFilters() {
 
   renderReceiptList();
   document.getElementById('list-count').textContent = filteredReceipts.length + '건';
+
+  // 항목별 뷰 활성 중이면 갱신
+  if (_currentViewMode === 'item') renderItemView();
 }
 
 function getSampleNames(r) {
@@ -1010,6 +1013,8 @@ function loadAndRenderItems() {
 /* ============================================================
    뷰 모드 전환 (시료별 / 항목별)
    ============================================================ */
+var _itemViewResultsCache = {};  // { receiptId: { sampleIdx: [{measuredValue, markValue, judgmentResult}] } }
+
 function switchViewMode(mode) {
   _currentViewMode = mode;
   var sampleWrap = document.getElementById('sample-view-wrap');
@@ -1024,35 +1029,87 @@ function switchViewMode(mode) {
   if (mode === 'item') renderItemView();
 }
 
-// 항목별 뷰: 항목 → 접수번호(시료)별 일괄 입력
-function renderItemView() {
+// 항목별 뷰: 전체 접수건에서 동일 항목코드를 가진 모든 시료를 모아서 표시
+async function renderItemView() {
   var wrap = document.getElementById('item-view-wrap');
-  if (!wrap || !currentReceipt) return;
+  if (!wrap) return;
 
-  var r = currentReceipt;
-  var samples = r.samples || [];
+  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">항목별 데이터 로딩중...</div>';
 
-  // 모든 시료의 항목을 수집하여 항목코드별로 그룹핑
-  var itemMap = {};  // { itemCode: { item, entries: [{ sampleIdx, savedResult }] } }
-  samples.forEach(function(sample, si) {
-    var testItems = findTestItems(r, sample);
-    var savedItems = currentResults[si] || [];
-    testItems.forEach(function(item, ii) {
-      var code = item.testItemCode || item.testItemName || ('idx_' + ii);
-      if (!itemMap[code]) {
-        itemMap[code] = { item: item, entries: [] };
-      }
-      itemMap[code].entries.push({ sampleIdx: si, itemIdx: ii, saved: savedItems[ii] || {} });
+  // filteredReceipts 기준으로 모든 접수건의 시험항목 수집
+  var receipts = filteredReceipts.length ? filteredReceipts : allReceipts;
+  if (!receipts.length) {
+    wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">접수건이 없습니다</div>';
+    return;
+  }
+
+  // 각 접수건의 testResults를 Firestore에서 로드 (캐시 활용)
+  var loadPromises = [];
+  receipts.forEach(function(r) {
+    if (!_itemViewResultsCache[r.id]) {
+      var samples = r.samples || [];
+      samples.forEach(function(s, si) {
+        var docId = r.receiptNo + '_S' + si;
+        loadPromises.push(
+          db.collection('testResults').doc(docId).get().then(function(doc) {
+            if (!_itemViewResultsCache[r.id]) _itemViewResultsCache[r.id] = {};
+            if (doc.exists) {
+              _itemViewResultsCache[r.id][si] = doc.data().items || [];
+            } else {
+              _itemViewResultsCache[r.id][si] = [];
+            }
+          }).catch(function() {
+            if (!_itemViewResultsCache[r.id]) _itemViewResultsCache[r.id] = {};
+            _itemViewResultsCache[r.id][si] = [];
+          })
+        );
+      });
+    }
+  });
+
+  if (loadPromises.length) {
+    try { await Promise.all(loadPromises); } catch(e) { console.warn('항목별 뷰 결과 로드 실패:', e); }
+  }
+
+  // 항목코드별 그룹핑: { code: { item, entries: [{ receipt, sampleIdx, itemIdx, saved }] } }
+  var itemMap = {};
+  receipts.forEach(function(r) {
+    var samples = r.samples || [];
+    samples.forEach(function(sample, si) {
+      var testItems = findTestItems(r, sample);
+      var cached = (_itemViewResultsCache[r.id] || {})[si] || [];
+      testItems.forEach(function(item, ii) {
+        var code = item.testItemCode || item.testItemName || ('idx_' + ii);
+        if (!itemMap[code]) {
+          itemMap[code] = { item: item, entries: [] };
+        }
+        itemMap[code].entries.push({
+          receipt: r,
+          sampleIdx: si,
+          itemIdx: ii,
+          saved: cached[ii] || {}
+        });
+      });
     });
   });
 
-  var html = '';
+  // 검사항목 필터 적용: 특정 항목 선택 시 해당 항목만 표시
+  var filterItem = filters.testItem || '';
   var codes = Object.keys(itemMap);
+  if (filterItem) {
+    codes = codes.filter(function(code) {
+      var name = (itemMap[code].item.testItemName || '').toLowerCase();
+      return name.indexOf(filterItem.toLowerCase()) !== -1 || filterItem.toLowerCase().indexOf(name) !== -1;
+    });
+  }
+
+  var html = '';
   if (!codes.length) {
-    html = '<div style="text-align:center;padding:30px;color:#999">시험항목이 없습니다</div>';
-    wrap.innerHTML = html;
+    wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">시험항목이 없습니다</div>';
     return;
   }
+
+  html += '<div style="font-size:12px;color:#888;margin-bottom:8px">' + codes.length + '개 항목 / ' + receipts.length + '건 접수</div>';
 
   codes.forEach(function(code) {
     var grp = itemMap[code];
@@ -1064,26 +1121,29 @@ function renderItemView() {
     html += '<span>' + (item.testItemName || '-') + '</span>';
     html += '<span class="badge">' + (item.testItemCode || '-') + '</span>';
     html += '<span style="font-size:11px;color:#888;margin-left:auto">기준: ' + (item.standard || '-') + ' | 단위: ' + (item.unit || '-') + '</span>';
+    html += '<span style="font-size:11px;color:#64748b;margin-left:8px">' + grp.entries.length + '건</span>';
     if (diaryTmpl) html += '<span style="font-size:11px;color:#059669;margin-left:8px">📋 일지양식</span>';
     html += '</div>';
     html += '<table class="item-view-table"><thead><tr>';
-    html += '<th style="width:50px">시료</th><th>접수번호</th><th>제품명</th><th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th>';
+    html += '<th>접수번호</th><th>제품명</th><th>거래처</th><th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th>';
     html += '</tr></thead><tbody>';
 
-    grp.entries.forEach(function(ent) {
-      var s = samples[ent.sampleIdx] || {};
+    grp.entries.forEach(function(ent, ei) {
+      var r = ent.receipt;
+      var s = (r.samples || [])[ent.sampleIdx] || {};
       var sv = ent.saved;
       var mv = sv.measuredValue || '';
       var mkv = sv.markValue || '';
       var jr = sv.judgmentResult || '';
       var jb = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
+      var uid = code + '_' + r.id + '_' + ent.sampleIdx;
       html += '<tr>';
-      html += '<td style="text-align:center;font-weight:600">' + (ent.sampleIdx + 1) + '</td>';
-      html += '<td style="font-size:12px;color:#2563eb">' + (r.receiptNo || '-') + '</td>';
+      html += '<td style="font-size:12px;color:#2563eb;cursor:pointer" onclick="selectReceipt(\'' + r.id + '\')">' + (r.receiptNo || '-') + '</td>';
       html += '<td style="font-size:12px">' + (s.productName || '-') + '</td>';
-      html += '<td><input type="text" class="iv-input" value="' + mv + '" placeholder="입력" oninput="onItemViewInput(this,' + ent.sampleIdx + ',' + ent.itemIdx + ')"></td>';
-      html += '<td style="font-size:12px;color:#2563eb" id="iv-mark-' + ent.sampleIdx + '-' + ent.itemIdx + '">' + mkv + '</td>';
-      html += '<td id="iv-judge-' + ent.sampleIdx + '-' + ent.itemIdx + '">' + jb + '</td>';
+      html += '<td style="font-size:12px;color:#888">' + (r.clientName || '-') + '</td>';
+      html += '<td><input type="text" class="iv-input" value="' + mv + '" placeholder="입력" data-rid="' + r.id + '" data-si="' + ent.sampleIdx + '" data-ii="' + ent.itemIdx + '" oninput="onItemViewInput(this)"></td>';
+      html += '<td style="font-size:12px;color:#2563eb" id="iv-mark-' + uid + '">' + mkv + '</td>';
+      html += '<td id="iv-judge-' + uid + '">' + jb + '</td>';
       html += '</tr>';
     });
 
@@ -1094,45 +1154,85 @@ function renderItemView() {
 }
 
 // 항목별 뷰에서 값 입력 시
-function onItemViewInput(inputEl, sampleIdx, itemIdx) {
-  markModified();
+function onItemViewInput(inputEl) {
+  var rid = inputEl.getAttribute('data-rid');
+  var si = parseInt(inputEl.getAttribute('data-si'));
+  var ii = parseInt(inputEl.getAttribute('data-ii'));
   var value = inputEl.value.trim();
 
-  // currentResults에 반영
-  if (!currentResults[sampleIdx]) currentResults[sampleIdx] = [];
-  if (!currentResults[sampleIdx][itemIdx]) currentResults[sampleIdx][itemIdx] = {};
-  currentResults[sampleIdx][itemIdx].measuredValue = value;
-
-  // 시료별 테이블에서 해당 항목 찾기
-  var samples = (currentReceipt.samples || []);
-  var sample = samples[sampleIdx] || {};
-  var testItems = findTestItems(currentReceipt, sample);
-  var item = testItems[itemIdx];
+  // 해당 접수건 찾기
+  var receipt = allReceipts.find(function(r) { return r.id === rid; });
+  if (!receipt) return;
+  var samples = receipt.samples || [];
+  var sample = samples[si] || {};
+  var testItems = findTestItems(receipt, sample);
+  var item = testItems[ii];
   if (!item) return;
+
+  var code = item.testItemCode || item.testItemName;
+  var uid = code + '_' + rid + '_' + si;
 
   // 표기값
   var mkv = (typeof MFDS_RULES !== 'undefined') ? MFDS_RULES.generateMarkValue(value, item) : value;
-  currentResults[sampleIdx][itemIdx].markValue = mkv;
-  var markCell = document.getElementById('iv-mark-' + sampleIdx + '-' + itemIdx);
+  var markCell = document.getElementById('iv-mark-' + uid);
   if (markCell) markCell.textContent = mkv;
 
   // 자동 판정
   var jr = autoJudge(value, item);
-  currentResults[sampleIdx][itemIdx].judgmentResult = jr;
-  var judgeCell = document.getElementById('iv-judge-' + sampleIdx + '-' + itemIdx);
+  var judgeCell = document.getElementById('iv-judge-' + uid);
   if (judgeCell) judgeCell.innerHTML = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
 
-  // 시료별 뷰의 해당 행도 동기화
-  if (sampleIdx === currentSampleIdx) {
-    var inp = document.querySelector('#item-row-' + itemIdx + ' .result-input');
+  // 캐시 업데이트
+  if (!_itemViewResultsCache[rid]) _itemViewResultsCache[rid] = {};
+  if (!_itemViewResultsCache[rid][si]) _itemViewResultsCache[rid][si] = [];
+  if (!_itemViewResultsCache[rid][si][ii]) _itemViewResultsCache[rid][si][ii] = {};
+  _itemViewResultsCache[rid][si][ii].measuredValue = value;
+  _itemViewResultsCache[rid][si][ii].markValue = mkv;
+  _itemViewResultsCache[rid][si][ii].judgmentResult = jr;
+
+  // 현재 선택된 접수건이면 시료별 뷰도 동기화
+  if (currentReceipt && currentReceipt.id === rid && si === currentSampleIdx) {
+    if (!currentResults[si]) currentResults[si] = [];
+    if (!currentResults[si][ii]) currentResults[si][ii] = {};
+    currentResults[si][ii].measuredValue = value;
+    currentResults[si][ii].markValue = mkv;
+    currentResults[si][ii].judgmentResult = jr;
+
+    var inp = document.querySelector('#item-row-' + ii + ' .result-input');
     if (inp && inp.value !== value) {
       inp.value = value;
-      var markCellSv = document.getElementById('mark-' + itemIdx);
-      if (markCellSv) markCellSv.textContent = mkv;
-      var judgeCellSv = document.getElementById('judge-' + itemIdx);
-      if (judgeCellSv) judgeCellSv.innerHTML = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
-      updateAttachBtn(itemIdx);
+      var mc = document.getElementById('mark-' + ii);
+      if (mc) mc.textContent = mkv;
+      var jc = document.getElementById('judge-' + ii);
+      if (jc) jc.innerHTML = jr ? getJudgeBadge(jr) : '<span class="badge badge-gray">-</span>';
+      updateAttachBtn(ii);
     }
+    markModified();
+  }
+
+  // Firestore에 자동저장 (디바운스)
+  clearTimeout(inputEl._saveTimer);
+  inputEl._saveTimer = setTimeout(function() {
+    saveItemViewResult(rid, si, ii, value, mkv, jr);
+  }, 1000);
+}
+
+// 항목별 뷰 개별 결과 Firestore 저장
+async function saveItemViewResult(rid, si, ii, measuredValue, markValue, judgmentResult) {
+  var receipt = allReceipts.find(function(r) { return r.id === rid; });
+  if (!receipt) return;
+  var docId = receipt.receiptNo + '_S' + si;
+  try {
+    var docRef = db.collection('testResults').doc(docId);
+    var doc = await docRef.get();
+    var items = doc.exists ? (doc.data().items || []) : [];
+    if (!items[ii]) items[ii] = {};
+    items[ii].measuredValue = measuredValue;
+    items[ii].markValue = markValue;
+    items[ii].judgmentResult = judgmentResult;
+    await docRef.set({ items: items, receiptNo: receipt.receiptNo, sampleIdx: si, updatedAt: new Date() }, { merge: true });
+  } catch(e) {
+    console.warn('항목별 뷰 저장 실패:', e);
   }
 }
 
