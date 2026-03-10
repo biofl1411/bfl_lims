@@ -275,6 +275,18 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
 .review-calc .cresult{font-weight:700;color:var(--ok);margin-left:auto}
 
 .rv-sections-scroll{max-height:420px;overflow-y:auto;border:1px solid var(--g200);border-radius:9px;margin-bottom:12px}
+.text-compare{border:1px solid var(--g200);border-radius:9px;margin-bottom:12px;overflow:hidden}
+.text-compare-hd{padding:9px 14px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:13px;font-weight:700;
+  color:#1e293b;display:flex;align-items:center;justify-content:space-between}
+.text-compare-info{font-size:11px;font-weight:500;color:var(--pri)}
+.text-compare-body{max-height:350px;overflow-y:auto;font-size:11px}
+.tc-page-hd{padding:6px 14px;background:#e0e7ff;font-weight:700;font-size:11px;color:#3730a3;position:sticky;top:0;z-index:1}
+.tc-row{display:grid;grid-template-columns:60px 1fr 1fr;border-bottom:1px solid var(--g100);font-size:11px}
+.tc-row.has-input{background:#fef3c7}
+.tc-row .tc-y{padding:4px 8px;color:var(--g400);text-align:center;border-right:1px solid var(--g100)}
+.tc-row .tc-blank{padding:4px 8px;border-right:1px solid var(--g100);color:var(--g600)}
+.tc-row .tc-filled{padding:4px 8px;color:#1e293b}
+.tc-row .tc-filled .new-val{background:#fde68a;padding:0 3px;border-radius:3px;font-weight:600}
 .review-missing{border:1px solid #fde68a;border-radius:9px;background:#fffbeb;padding:14px;margin-bottom:12px}
 .review-missing-hd{font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .review-missing textarea{width:100%;min-height:80px;padding:8px 10px;border:1px solid #fde68a;
@@ -492,6 +504,15 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
         <!-- 추출 필드 목록 (스크롤 영역) -->
         <div id="rv-sections" class="rv-sections-scroll"></div>
         <div id="rv-calcs"></div>
+
+        <!-- PDF 텍스트 비교 그리드 -->
+        <div class="text-compare" id="rv-text-compare" style="display:none">
+          <div class="text-compare-hd">
+            <span>🔍 PDF 텍스트 줄별 비교</span>
+            <span class="text-compare-info" id="rv-tc-info"></span>
+          </div>
+          <div class="text-compare-body" id="rv-tc-body"></div>
+        </div>
 
         <!-- 누락 사항 메모 (필드 목록 아래) -->
         <div class="review-missing">
@@ -1087,12 +1108,27 @@ async function doAnalyze() {
   document.getElementById('review-panel').style.display='none';
   goStep(5);
 
-  pi(1,'run'); await sleep(200);
-  pi(1,'done','완료');
+  pi(1,'run','PDF 텍스트 추출 중...'); await sleep(100);
+  try {
+    _pdfTextBlank = await extractPdfText(b64Blank);
+    _pdfTextFilled = await extractPdfText(b64Filled);
+    var blankCount = _pdfTextBlank.reduce(function(s,p){return s+p.items.length;},0);
+    var filledCount = _pdfTextFilled.reduce(function(s,p){return s+p.items.length;},0);
+    pi(1,'done', blankCount+'/'+filledCount+'개 텍스트');
+  } catch(e) {
+    console.warn('텍스트 추출 실패(계속 진행):', e);
+    _pdfTextBlank = null; _pdfTextFilled = null;
+    pi(1,'done','완료');
+  }
 
   pi(2,'run','AI 분석 중...');
   try {
-    _lastAnalyzed = await callClaude();
+    var textContext = '';
+    if (_pdfTextBlank && _pdfTextFilled) {
+      var comparison = comparePdfTexts(_pdfTextBlank, _pdfTextFilled);
+      textContext = buildTextComparisonSummary(comparison);
+    }
+    _lastAnalyzed = await callClaude(textContext);
     var fc = (_lastAnalyzed.sections||[]).reduce(function(s,sec){return s+(sec.fields||[]).length;},0);
     pi(2,'done', fc+'개 필드 추출');
     pi(3,'idle','검증 대기');
@@ -1107,6 +1143,104 @@ async function doAnalyze() {
   goStep(6);
   btn.disabled=false; btn.textContent='🚀 재분석';
   toast('분석 완료 — PDF를 비교하고 누락사항을 확인하세요','info');
+}
+
+/* =============================================================
+   PDF.js 텍스트 추출 & 비교
+============================================================= */
+var _pdfTextBlank = null, _pdfTextFilled = null;
+
+async function extractPdfText(b64) {
+  var raw = atob(b64);
+  var arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  var pdf = await pdfjsLib.getDocument({ data: arr }).promise;
+  var pages = [];
+
+  for (var p = 1; p <= pdf.numPages; p++) {
+    var page = await pdf.getPage(p);
+    var tc = await page.getTextContent();
+    var vp = page.getViewport({ scale: 1 });
+    var items = [];
+    tc.items.forEach(function(it) {
+      var s = (it.str || '').trim();
+      if (!s) return;
+      var tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+      items.push({ text: s, x: Math.round(tx[4]), y: Math.round(vp.height - tx[5]), w: Math.round(it.width) });
+    });
+    pages.push({ page: p, items: items });
+  }
+  return pages;
+}
+
+function groupIntoRows(pages) {
+  var rows = [];
+  pages.forEach(function(pg) {
+    var sorted = pg.items.slice().sort(function(a,b){ return Math.abs(a.y-b.y)<6 ? a.x-b.x : a.y-b.y; });
+    var curRow = null;
+    sorted.forEach(function(it) {
+      if (!curRow || Math.abs(it.y - curRow.y) > 6) {
+        curRow = { page: pg.page, y: it.y, cells: [] };
+        rows.push(curRow);
+      }
+      curRow.cells.push(it);
+    });
+  });
+  return rows;
+}
+
+function comparePdfTexts(blankPages, filledPages) {
+  var blankRows = groupIntoRows(blankPages);
+  var filledRows = groupIntoRows(filledPages);
+  var result = [];
+
+  filledRows.forEach(function(fRow) {
+    // 같은 페이지, 비슷한 y좌표의 blank 행 찾기
+    var bRow = null;
+    blankRows.forEach(function(br) {
+      if (br.page === fRow.page && Math.abs(br.y - fRow.y) < 8) bRow = br;
+    });
+
+    var blankText = bRow ? bRow.cells.map(function(c){return c.text;}).join(' ') : '';
+    var filledText = fRow.cells.map(function(c){return c.text;}).join(' ');
+
+    // 빈 양식에 없는 텍스트 = 사용자가 입력한 값
+    var newTexts = [];
+    if (bRow) {
+      var blankSet = new Set(bRow.cells.map(function(c){return c.text;}));
+      fRow.cells.forEach(function(c) {
+        if (!blankSet.has(c.text)) newTexts.push(c.text);
+      });
+    } else {
+      newTexts = fRow.cells.map(function(c){return c.text;});
+    }
+
+    result.push({
+      page: fRow.page,
+      y: fRow.y,
+      blankText: blankText,
+      filledText: filledText,
+      newValues: newTexts,
+      hasInput: newTexts.length > 0
+    });
+  });
+
+  return result;
+}
+
+function buildTextComparisonSummary(comparison) {
+  var lines = ['[PDF 텍스트 추출 비교 결과]'];
+  var curPage = 0;
+  comparison.forEach(function(row) {
+    if (row.page !== curPage) {
+      curPage = row.page;
+      lines.push('\n--- ' + curPage + '페이지 ---');
+    }
+    if (row.hasInput) {
+      lines.push('행(y=' + row.y + '): 양식=[' + row.blankText + '] → 입력값=[' + row.newValues.join(', ') + ']');
+    }
+  });
+  return lines.join('\n');
 }
 
 /* =============================================================
@@ -1222,11 +1356,49 @@ function showReviewPanel(data) {
     '<div class="review-stat ok">계산식: '+calcs.length+'개</div>'+
     (data.judgmentRule?'<div class="review-stat memo">판정기준: '+(data.judgmentRule.standardText||'')+'</div>':'');
 
+  // 텍스트 비교 그리드 렌더
+  renderTextCompare();
+
   // 누락 메모 초기화
   document.getElementById('rv-missing-memo').value = '';
 
   // 리뷰 패널로 스크롤
   document.getElementById('review-panel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderTextCompare() {
+  var panel = document.getElementById('rv-text-compare');
+  if (!_pdfTextBlank || !_pdfTextFilled) { panel.style.display = 'none'; return; }
+
+  var comparison = comparePdfTexts(_pdfTextBlank, _pdfTextFilled);
+  var inputRows = comparison.filter(function(r){return r.hasInput;});
+
+  panel.style.display = 'block';
+  document.getElementById('rv-tc-info').textContent = '입력값 감지: ' + inputRows.length + '행 / 전체 ' + comparison.length + '행';
+
+  var html = '<div class="tc-row" style="font-weight:700;background:var(--g50);position:sticky;top:0;z-index:2">'
+    + '<div class="tc-y">위치</div><div class="tc-blank">빈 양식</div><div class="tc-filled">작성 완료</div></div>';
+
+  var curPage = 0;
+  comparison.forEach(function(row) {
+    if (row.page !== curPage) {
+      curPage = row.page;
+      html += '<div class="tc-page-hd">' + curPage + '페이지</div>';
+    }
+    var newHighlighted = row.filledText;
+    if (row.newValues.length) {
+      row.newValues.forEach(function(nv) {
+        newHighlighted = newHighlighted.replace(nv, '<span class="new-val">' + nv + '</span>');
+      });
+    }
+    html += '<div class="tc-row' + (row.hasInput ? ' has-input' : '') + '">'
+      + '<div class="tc-y">y' + row.y + '</div>'
+      + '<div class="tc-blank">' + (row.blankText || '<i style="color:#ccc">—</i>') + '</div>'
+      + '<div class="tc-filled">' + newHighlighted + '</div>'
+      + '</div>';
+  });
+
+  document.getElementById('rv-tc-body').innerHTML = html;
 }
 
 function toggleFieldMemo(fid) {
@@ -1339,7 +1511,7 @@ function collectReviewData() {
 // 프록시 서버 주소 (api_server.py 포트 5003)
 var PROXY_URL = '/fss/claude';
 
-async function callClaude() {
+async function callClaude(textContext) {
   var testType = guessType(selItem ? selItem.name : '');
   var prompt = '당신은 식품 시험 검사 기록서 PDF 분석 전문가입니다.\n\n'
     + '## 입력\n'
@@ -1409,7 +1581,8 @@ async function callClaude() {
     + '  "reagents": ["시약목록"]\n'
     + '}\n\n'
     + '## 최종 검증\n'
-    + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.';
+    + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.'
+    + (textContext ? '\n\n## 참고: PDF 텍스트 추출 비교 데이터\n아래는 PDF.js로 추출한 텍스트 좌표 비교입니다. 빈 양식에 없고 작성본에만 있는 텍스트가 입력값입니다. 이 데이터와 PDF 이미지를 교차 확인하여 누락 없이 추출하세요.\n\n' + textContext : '');
 
   var body = {
     model: 'claude-sonnet-4-20250514',
