@@ -125,6 +125,47 @@ tr:hover{background:#f8f9fb}
 .file-label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .file-label input[type="file"]{display:none}
 .applied-row{background:#f0fdf4 !important}
+/* 개선 입금현황 */
+.pay-tbl{width:100%;font-size:12px}
+.pay-tbl th{font-size:11px;color:#6b7280;padding:8px 6px;white-space:nowrap}
+.pay-tbl td{padding:8px 6px;vertical-align:middle}
+.company-cell{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.product-cell{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#374151}
+.purpose-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#eff6ff;color:#2563eb}
+.method-tags{display:flex;gap:3px;flex-wrap:wrap;justify-content:center}
+.method-tag{display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:600}
+.method-tag.card{background:#fef3c7;color:#d97706}
+.method-tag.cash{background:#ecfdf5;color:#059669}
+.method-tag.transfer{background:#eff6ff;color:#2563eb}
+.method-tag.bank{background:#f3e8ff;color:#7c3aed}
+.progress-bar-wrap{width:60px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:4px}
+.progress-bar-fill{height:100%;border-radius:3px;transition:width .3s}
+.last-pay-date{font-size:11px;color:#6b7280}
+/* 개선 모달 */
+.modal-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.modal-info-card{padding:12px;background:#f8f9fb;border-radius:8px}
+.modal-info-card .lbl{font-size:11px;color:#6b7280;margin-bottom:4px}
+.modal-info-card .val{font-size:14px;font-weight:700}
+.modal-info-card .val.blue{color:#2563eb}
+.modal-info-card .val.red{color:#ef4444}
+.modal-info-card .val.green{color:#10b981}
+.modal-progress{margin-bottom:16px}
+.modal-progress .bar-wrap{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-top:6px}
+.modal-progress .bar-fill{height:100%;border-radius:4px;transition:width .3s}
+.modal-progress .pct{font-size:12px;font-weight:700;margin-left:6px}
+.modal-detail-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #f3f4f6}
+.modal-detail-row:last-child{border:none}
+.modal-detail-row .lbl{color:#6b7280}
+.modal-detail-row .val{font-weight:600}
+.pay-hist-item2{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f3f4f6;font-size:12px}
+.pay-hist-item2:last-child{border:none}
+.pay-hist-item2 .date{color:#6b7280;min-width:80px}
+.pay-hist-item2 .method{min-width:50px}
+.pay-hist-item2 .amt{font-weight:700;color:#2563eb;margin-left:auto;min-width:80px;text-align:right}
+.pay-hist-item2 .memo{color:#9ca3af;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pay-hist-item2 .del{background:none;border:none;color:#d1d5db;cursor:pointer;font-size:14px;padding:2px 4px}
+.pay-hist-item2 .del:hover{color:#ef4444}
+.pay-hist-item2 .bank-tag{background:#f3e8ff;color:#7c3aed;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:600}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -191,22 +232,25 @@ tr:hover{background:#f8f9fb}
                     <button class="btn btn-primary" onclick="applyFilter()">검색</button>
                 </div>
                 <div class="tbl-wrap">
-                    <table>
+                    <table class="pay-tbl">
                         <thead>
                             <tr>
                                 <th>접수번호</th>
                                 <th>접수일</th>
                                 <th>업체명</th>
-                                <th>제품명</th>
+                                <th>검사목적</th>
+                                <th>제품·시료</th>
                                 <th class="text-right">청구금액</th>
                                 <th class="text-right">입금액</th>
-                                <th class="text-right">잔액</th>
+                                <th class="text-center">진행률</th>
+                                <th class="text-center">입금방법</th>
+                                <th>최종입금</th>
                                 <th class="text-center">상태</th>
-                                <th class="text-center">입금처리</th>
+                                <th class="text-center">처리</th>
                             </tr>
                         </thead>
                         <tbody id="table-body">
-                            <tr><td colspan="9" class="empty-msg">로딩 중...</td></tr>
+                            <tr><td colspan="12" class="empty-msg">로딩 중...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -217,57 +261,71 @@ tr:hover{background:#f8f9fb}
 
 <!-- 입금 처리 모달 -->
 <div class="modal-overlay" id="modal-overlay">
-    <div class="modal">
+    <div class="modal" style="width:560px">
         <div class="modal-hd">
             <h3 id="modal-title">입금 처리</h3>
-            <button class="close" onclick="closeModal()">✕</button>
+            <button class="close" onclick="closeModal()">&#10005;</button>
         </div>
         <div class="modal-bd">
-            <div style="margin-bottom:16px;padding:12px;background:#f8f9fb;border-radius:8px;font-size:13px">
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                    <span style="color:#6b7280">접수번호</span>
-                    <span style="font-weight:700" id="modal-receipt-no"></span>
+            <!-- 접수 정보 요약 (그리드) -->
+            <div class="modal-info-grid">
+                <div class="modal-info-card">
+                    <div class="lbl">접수번호</div>
+                    <div class="val" id="modal-receipt-no"></div>
                 </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                    <span style="color:#6b7280">업체명</span>
-                    <span style="font-weight:600" id="modal-company"></span>
+                <div class="modal-info-card">
+                    <div class="lbl">업체명</div>
+                    <div class="val" id="modal-company" style="font-size:13px"></div>
                 </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                    <span style="color:#6b7280">청구금액</span>
-                    <span style="font-weight:700;color:#2563eb" id="modal-total"></span>
+                <div class="modal-info-card">
+                    <div class="lbl">청구금액</div>
+                    <div class="val blue" id="modal-total"></div>
                 </div>
-                <div style="display:flex;justify-content:space-between">
-                    <span style="color:#6b7280">잔액</span>
-                    <span style="font-weight:700;color:#ef4444" id="modal-remain"></span>
+                <div class="modal-info-card">
+                    <div class="lbl">미수잔액</div>
+                    <div class="val red" id="modal-remain"></div>
                 </div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label>입금방법</label>
-                    <select id="pay-method">
-                        <option value="카드">카드</option>
-                        <option value="현금">현금</option>
-                        <option value="계좌이체">계좌이체</option>
-                    </select>
+            <!-- 상세 정보 -->
+            <div id="modal-detail-area" style="margin-bottom:14px"></div>
+
+            <!-- 입금 진행률 -->
+            <div class="modal-progress" id="modal-progress-area"></div>
+
+            <!-- 입금 입력 폼 -->
+            <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:14px">
+                <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px">입금 입력</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>입금방법</label>
+                        <select id="pay-method">
+                            <option value="카드">카드</option>
+                            <option value="현금">현금</option>
+                            <option value="계좌이체">계좌이체</option>
+                            <option value="은행매칭">은행매칭</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>입금일자</label>
+                        <input type="date" id="pay-date">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>입금일자</label>
-                    <input type="date" id="pay-date">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>입금액</label>
+                        <input type="text" id="pay-amount" placeholder="금액 입력" inputmode="numeric">
+                    </div>
+                    <div class="form-group">
+                        <label>비고</label>
+                        <input type="text" id="pay-memo" placeholder="메모 (선택)">
+                    </div>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>입금액</label>
-                <input type="text" id="pay-amount" placeholder="금액 입력" inputmode="numeric">
-            </div>
-            <div class="form-group">
-                <label>비고</label>
-                <input type="text" id="pay-memo" placeholder="메모 (선택)">
             </div>
 
             <!-- 입금 이력 -->
-            <div style="font-size:12px;font-weight:600;color:#5f6b7a;margin-top:16px;margin-bottom:6px">입금 이력</div>
-            <div class="pay-history" id="pay-history">
+            <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">입금 이력 <span id="pay-history-count" style="color:#9ca3af;font-weight:400"></span></div>
+            <div class="pay-history" id="pay-history" style="max-height:180px;overflow-y:auto">
                 <div style="padding:12px;color:#9ca3af;text-align:center;font-size:12px">입금 이력이 없습니다</div>
             </div>
         </div>
@@ -353,7 +411,7 @@ async function loadData() {
         loadMatchHistory();
     } catch(e) {
         console.error('로드 실패:', e);
-        document.getElementById('table-body').innerHTML = '<tr><td colspan="9" class="empty-msg" style="color:#ef4444">로드 실패: ' + e.message + '</td></tr>';
+        document.getElementById('table-body').innerHTML = '<tr><td colspan="12" class="empty-msg" style="color:#ef4444">로드 실패: ' + e.message + '</td></tr>';
     }
 }
 
@@ -449,10 +507,34 @@ function getBadgeClass(status) {
     return 'badge-paid';
 }
 
+function getPaymentMethods(d) {
+    var payments = d.payments || [];
+    var methods = {};
+    payments.forEach(function(p) {
+        var m = p.method || '기타';
+        methods[m] = (methods[m] || 0) + 1;
+    });
+    return methods;
+}
+
+function getMethodTagClass(m) {
+    if (m === '카드') return 'card';
+    if (m === '현금') return 'cash';
+    if (m === '계좌이체') return 'transfer';
+    return 'bank';
+}
+
+function getLastPayDate(d) {
+    var payments = d.payments || [];
+    if (payments.length === 0) return '';
+    var dates = payments.map(function(p) { return p.date || ''; }).filter(Boolean).sort();
+    return dates.length > 0 ? dates[dates.length - 1] : '';
+}
+
 function renderTable() {
     var tbody = document.getElementById('table-body');
     if (filteredList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">데이터가 없습니다</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="empty-msg">데이터가 없습니다</td></tr>';
         return;
     }
 
@@ -463,15 +545,52 @@ function renderTable() {
         var remain = Math.max(0, total - paid);
         var status = getPaymentStatus(d);
         var badgeCls = getBadgeClass(status);
+        var pct = total > 0 ? Math.min(100, Math.round(paid / total * 100)) : 100;
+        var barColor = pct >= 100 ? '#10b981' : pct > 0 ? '#f59e0b' : '#e5e7eb';
+        var methods = getPaymentMethods(d);
+        var lastPay = getLastPayDate(d);
+
+        // 검사목적
+        var purpose = d.purpose || d.testPurpose || '';
+        var purposeHtml = purpose ? '<span class="purpose-badge">' + purpose + '</span>' : '<span style="color:#d1d5db">-</span>';
+
+        // 제품·시료 (시료수 포함)
+        var product = d.productName || '';
+        var sampleCount = '';
+        if (d.samples && Array.isArray(d.samples)) sampleCount = d.samples.length + '건';
+        else if (d.sampleCount) sampleCount = d.sampleCount + '건';
+        var productHtml = '<div class="product-cell" title="' + product + '">' + (product || '-') + '</div>' +
+            (sampleCount ? '<div style="font-size:10px;color:#9ca3af">' + sampleCount + '</div>' : '');
+
+        // 입금방법 태그
+        var methodHtml = '';
+        var mKeys = Object.keys(methods);
+        if (mKeys.length > 0) {
+            methodHtml = '<div class="method-tags">' + mKeys.map(function(m) {
+                return '<span class="method-tag ' + getMethodTagClass(m) + '">' + m + '</span>';
+            }).join('') + '</div>';
+        } else {
+            methodHtml = '<span style="color:#d1d5db">-</span>';
+        }
+
+        // 진행률 바
+        var progressHtml = '<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
+            '<span style="font-size:11px;font-weight:600;color:' + (pct >= 100 ? '#10b981' : pct > 0 ? '#d97706' : '#9ca3af') + '">' + pct + '%</span>';
+
+        // 최종입금
+        var lastPayHtml = lastPay ? '<span class="last-pay-date">' + lastPay.substring(5) + '</span>' : '<span style="color:#d1d5db">-</span>';
 
         return '<tr>' +
-            '<td>' + (d.receiptNo || r.id) + '</td>' +
-            '<td>' + (d.receiptDate || '-') + '</td>' +
-            '<td>' + (d.companyName || d.company || '-') + '</td>' +
-            '<td>' + (d.productName || '-') + '</td>' +
-            '<td class="text-right">' + formatMoney(total) + '</td>' +
-            '<td class="text-right">' + formatMoney(paid) + '</td>' +
-            '<td class="text-right" style="font-weight:700;color:' + (remain > 0 ? '#ef4444' : '#10b981') + '">' + formatMoney(remain) + '</td>' +
+            '<td style="font-weight:600;white-space:nowrap">' + (d.receiptNo || r.id) + '</td>' +
+            '<td style="white-space:nowrap;font-size:12px">' + (d.receiptDate || '-') + '</td>' +
+            '<td class="company-cell" title="' + (d.companyName || d.company || '') + '">' + (d.companyName || d.company || '-') + '</td>' +
+            '<td class="text-center">' + purposeHtml + '</td>' +
+            '<td>' + productHtml + '</td>' +
+            '<td class="text-right" style="font-weight:600">' + formatMoney(total) + '</td>' +
+            '<td class="text-right" style="color:' + (paid > 0 ? '#2563eb' : '#9ca3af') + '">' + formatMoney(paid) + '</td>' +
+            '<td class="text-center">' + progressHtml + '</td>' +
+            '<td class="text-center">' + methodHtml + '</td>' +
+            '<td class="text-center">' + lastPayHtml + '</td>' +
             '<td class="text-center"><span class="badge ' + badgeCls + '">' + status + '</span></td>' +
             '<td class="text-center"><button class="btn btn-sm btn-primary" onclick="openModal(\'' + r.id + '\')">입금</button></td>' +
             '</tr>';
@@ -498,14 +617,44 @@ function openModal(receiptId) {
     var total = getTotalFee(d);
     var paid = getPaidAmount(d);
     var remain = Math.max(0, total - paid);
+    var pct = total > 0 ? Math.min(100, Math.round(paid / total * 100)) : 100;
 
     document.getElementById('modal-receipt-no').textContent = d.receiptNo || receiptId;
     document.getElementById('modal-company').textContent = d.companyName || d.company || '-';
     document.getElementById('modal-total').textContent = formatMoney(total);
     document.getElementById('modal-remain').textContent = formatMoney(remain);
+    document.getElementById('modal-remain').className = 'val ' + (remain > 0 ? 'red' : 'green');
     document.getElementById('pay-amount').value = remain > 0 ? remain.toLocaleString() : '';
     document.getElementById('pay-memo').value = '';
     document.getElementById('modal-title').textContent = '입금 처리 - ' + (d.receiptNo || '');
+
+    // 상세 정보 영역
+    var detailHtml = '';
+    var purpose = d.purpose || d.testPurpose || '';
+    var product = d.productName || '';
+    var sampleCount = '';
+    if (d.samples && Array.isArray(d.samples)) sampleCount = d.samples.length + '건';
+    else if (d.sampleCount) sampleCount = d.sampleCount + '건';
+    var receiptDate = d.receiptDate || '';
+
+    if (purpose || product || sampleCount || receiptDate) {
+        detailHtml = '<div style="background:#f8f9fb;border-radius:8px;padding:10px 12px;font-size:12px">';
+        if (purpose) detailHtml += '<div class="modal-detail-row"><span class="lbl">검사목적</span><span class="val"><span class="purpose-badge">' + purpose + '</span></span></div>';
+        if (product) detailHtml += '<div class="modal-detail-row"><span class="lbl">제품명</span><span class="val">' + product + '</span></div>';
+        if (sampleCount) detailHtml += '<div class="modal-detail-row"><span class="lbl">시료수</span><span class="val">' + sampleCount + '</span></div>';
+        if (receiptDate) detailHtml += '<div class="modal-detail-row"><span class="lbl">접수일</span><span class="val">' + receiptDate + '</span></div>';
+        detailHtml += '</div>';
+    }
+    document.getElementById('modal-detail-area').innerHTML = detailHtml;
+
+    // 진행률 바
+    var barColor = pct >= 100 ? '#10b981' : pct > 0 ? '#f59e0b' : '#e5e7eb';
+    var progressHtml = '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">' +
+        '<span style="color:#6b7280">입금 진행률</span>' +
+        '<span><span style="font-weight:700;color:' + (pct >= 100 ? '#10b981' : '#d97706') + '">' + formatMoney(paid) + '</span>' +
+        ' / ' + formatMoney(total) + '</span></div>' +
+        '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
+    document.getElementById('modal-progress-area').innerHTML = progressHtml;
 
     // 입금 이력 렌더
     renderPayHistory(d.payments || []);
@@ -520,19 +669,25 @@ function closeModal() {
 
 function renderPayHistory(payments) {
     var el = document.getElementById('pay-history');
+    var countEl = document.getElementById('pay-history-count');
     if (!payments || payments.length === 0) {
         el.innerHTML = '<div style="padding:12px;color:#9ca3af;text-align:center;font-size:12px">입금 이력이 없습니다</div>';
+        if (countEl) countEl.textContent = '';
         return;
     }
 
+    if (countEl) countEl.textContent = '(' + payments.length + '건)';
+
     el.innerHTML = payments.map(function(p, idx) {
-        var methodCls = p.method === '카드' ? 'method-card' : p.method === '현금' ? 'method-cash' : 'method-transfer';
-        return '<div class="pay-history-item">' +
+        var tagCls = getMethodTagClass(p.method || '기타');
+        var isBank = p.bankMatch ? true : false;
+        var bankHtml = isBank ? ' <span class="bank-tag">' + (p.bankMatch.bank || '은행') + '</span>' : '';
+        return '<div class="pay-hist-item2">' +
             '<span class="date">' + (p.date || '-') + '</span>' +
-            '<span class="method ' + methodCls + '">' + (p.method || '-') + '</span>' +
-            (p.memo ? '<span style="color:#6b7280;font-size:11px">' + p.memo + '</span>' : '') +
-            '<span class="amount">' + formatMoney(p.amount) + '</span>' +
-            '<button class="del-btn" onclick="deletePayment(' + idx + ')" title="삭제">✕</button>' +
+            '<span class="method"><span class="method-tag ' + tagCls + '">' + (p.method || '-') + '</span>' + bankHtml + '</span>' +
+            '<span class="memo" title="' + (p.memo || '') + '">' + (p.memo || '') + '</span>' +
+            '<span class="amt">' + formatMoney(p.amount) + '</span>' +
+            '<button class="del" onclick="deletePayment(' + idx + ')" title="삭제">&#10005;</button>' +
             '</div>';
     }).join('');
 }
@@ -570,8 +725,18 @@ async function processPayment() {
         var total = getTotalFee(d);
         var paid = getPaidAmount(d);
         var remain = Math.max(0, total - paid);
+        var pct = total > 0 ? Math.min(100, Math.round(paid / total * 100)) : 100;
+        var barColor = pct >= 100 ? '#10b981' : pct > 0 ? '#f59e0b' : '#e5e7eb';
         document.getElementById('modal-remain').textContent = formatMoney(remain);
+        document.getElementById('modal-remain').className = 'val ' + (remain > 0 ? 'red' : 'green');
         document.getElementById('pay-amount').value = remain > 0 ? remain.toLocaleString() : '';
+        // 진행률 갱신
+        document.getElementById('modal-progress-area').innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">' +
+            '<span style="color:#6b7280">입금 진행률</span>' +
+            '<span><span style="font-weight:700;color:' + (pct >= 100 ? '#10b981' : '#d97706') + '">' + formatMoney(paid) + '</span>' +
+            ' / ' + formatMoney(total) + '</span></div>' +
+            '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
         renderPayHistory(d.payments);
         renderTable();
         updateSummary();
