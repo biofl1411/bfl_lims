@@ -354,12 +354,18 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
             <span style="color:#aaa;font-size:12px">~</span>
             <input type="date" id="filter-to" onchange="applyFilters()">
           </div>
-          <div style="margin-left:auto;font-size:12px;color:#999" id="list-count">0건</div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <div class="view-toggle" id="view-toggle">
+              <button class="active" onclick="switchViewMode('sample')">시료별</button>
+              <button onclick="switchViewMode('item')">항목별</button>
+            </div>
+            <span style="font-size:12px;color:#999" id="list-count">0건</span>
+          </div>
         </div>
       </div>
 
-      <!-- Split Panel -->
-      <div class="split-panel">
+      <!-- 시료별 뷰: Split Panel -->
+      <div class="split-panel" id="sample-view-split">
         <!-- Left: Receipt list -->
         <div class="left-panel">
           <div class="panel-header">
@@ -379,6 +385,9 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
           </div>
         </div>
       </div>
+
+      <!-- 항목별 뷰: 전체 폭 -->
+      <div id="item-view-global" class="item-view-wrap" style="display:none"></div>
     </main>
   </div>
 </div>
@@ -876,24 +885,11 @@ function renderRightPanel() {
   html += ' | <strong>품목코드:</strong> ' + (sample.mfdsProductCode || '-');
   html += '</div>';
 
-  // 뷰 전환 (시료별 / 항목별)
-  html += '<div style="display:flex;align-items:center;gap:8px;margin:8px 0">';
-  html += '<div class="view-toggle" id="view-toggle">';
-  html += '<button class="' + (_currentViewMode === 'sample' ? 'active' : '') + '" onclick="switchViewMode(\'sample\')">시료별</button>';
-  html += '<button class="' + (_currentViewMode === 'item' ? 'active' : '') + '" onclick="switchViewMode(\'item\')">항목별</button>';
-  html += '</div></div>';
-
-  // 시료별 뷰: 결과 테이블
-  html += '<div id="sample-view-wrap" style="' + (_currentViewMode !== 'sample' ? 'display:none' : '') + '">';
+  // 결과 테이블
   html += '<div class="result-table-wrap"><table class="result-table"><thead><tr>';
   html += '<th style="width:40px">No</th><th>시험항목</th><th>항목코드</th><th>기준규격</th><th>단위</th>';
   html += '<th style="width:140px">측정값</th><th style="width:100px">표기값</th><th style="width:90px">판정</th><th style="width:60px">수동</th><th>비고</th><th style="width:60px">첨부</th>';
   html += '</tr></thead><tbody id="result-tbody"></tbody></table></div>';
-  html += '</div>';
-
-  // 항목별 뷰
-  html += '<div id="item-view-wrap" class="item-view-wrap" style="' + (_currentViewMode !== 'item' ? 'display:none' : '') + '"></div>';
-
   // 종합 판정
   html += '<div class="overall-row"><span class="overall-label">종합 판정:</span><span class="overall-badge pass" id="overall-badge">-</span></div>';
 
@@ -1017,10 +1013,10 @@ var _itemViewResultsCache = {};  // { receiptId: { sampleIdx: [{measuredValue, m
 
 function switchViewMode(mode) {
   _currentViewMode = mode;
-  var sampleWrap = document.getElementById('sample-view-wrap');
-  var itemWrap = document.getElementById('item-view-wrap');
-  if (sampleWrap) sampleWrap.style.display = mode === 'sample' ? '' : 'none';
-  if (itemWrap) itemWrap.style.display = mode === 'item' ? '' : 'none';
+  var splitPanel = document.getElementById('sample-view-split');
+  var itemGlobal = document.getElementById('item-view-global');
+  if (splitPanel) splitPanel.style.display = mode === 'sample' ? '' : 'none';
+  if (itemGlobal) itemGlobal.style.display = mode === 'item' ? '' : 'none';
 
   document.querySelectorAll('#view-toggle button').forEach(function(btn) {
     btn.classList.toggle('active', btn.textContent === (mode === 'sample' ? '시료별' : '항목별'));
@@ -1031,7 +1027,7 @@ function switchViewMode(mode) {
 
 // 항목별 뷰: 전체 접수건에서 동일 항목코드를 가진 모든 시료를 모아서 표시
 async function renderItemView() {
-  var wrap = document.getElementById('item-view-wrap');
+  var wrap = document.getElementById('item-view-global');
   if (!wrap) return;
 
   wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#999">항목별 데이터 로딩중...</div>';
