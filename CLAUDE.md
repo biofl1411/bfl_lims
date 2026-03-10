@@ -127,6 +127,24 @@
 
 ---
 
+## 페이지 명칭 규칙
+
+페이지 언급 시 반드시 **"파일명.html(메뉴명칭)"** 형식으로 표기:
+
+| 파일명 | 메뉴명칭 |
+|---|---|
+| sampleReceipt.html | 접수 관리 > 접수등록 |
+| inspectionMgmt.html | 접수 관리 > 검사 관리 |
+| testResultInput.html | 시험 결재 > 결과 입력 |
+| testDiary.html | 시험 결재 > 시험일지 |
+| testApproval.html | 시험 결재 > 결재 |
+| reportIssue.html | 성적서 > 성적서 발급 |
+| businessMetrics.html | 경영실적 |
+| expiryDate.html | 유통기한 |
+| fssCollector.html | 식약처 수집기 |
+
+---
+
 ## 프로젝트 문서 참조
 
 - **README.md**: 전체 프로젝트 문서 (기술 스택, 식약처 데이터 원칙, 결과값 처리 규칙, Firestore 구조, 커밋 이력 등)
