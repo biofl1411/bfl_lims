@@ -1091,9 +1091,8 @@ let apiOnline = false;
 // ============================================================================
 // OCR 프록시 설정 (의뢰서 OCR)
 // ============================================================================
-var OCR_PROXY_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
-    ? 'https://127.0.0.1:5002'
-    : '/ocr';
+var _isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:');
+var OCR_PROXY_BASE = _isLocal ? 'https://127.0.0.1:5002' : '';
 var _receiptOcrFile = null;
 
 // PDF→JPEG 변환 (PDF.js 사용)
@@ -1141,7 +1140,7 @@ function convertPdfToJpegBase64(file) {
 function handleOcrFetchError(err, statusEl, btnEl) {
     if (btnEl) { btnEl.textContent = '🤖 의뢰서 OCR'; btnEl.disabled = false; }
     if (err.message === 'Failed to fetch') {
-        var healthUrl = OCR_PROXY_BASE + '/api/ocr/health';
+        var healthUrl = _isLocal ? OCR_PROXY_BASE + '/api/ocr/health' : '/ocr/health';
         if (statusEl) {
             statusEl.innerHTML = '❌ OCR 서버 연결 실패. <a href="' + healthUrl + '" target="_blank" style="color:#1565c0;text-decoration:underline;">여기를 클릭</a>하여 인증서를 수락한 후 다시 시도하세요.';
             statusEl.style.color = '#c62828';
@@ -1182,7 +1181,8 @@ async function runReceiptOCR() {
             images: [{ format: imgData.format, name: _receiptOcrFile.name, data: imgData.base64 }]
         };
 
-        var resp = await fetch(OCR_PROXY_BASE + '/api/ocr/inspection-form', {
+        var ocrFormUrl = _isLocal ? OCR_PROXY_BASE + '/api/ocr/inspection-form' : '/ocr/inspection-form';
+        var resp = await fetch(ocrFormUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
