@@ -1273,6 +1273,8 @@ async function saveDiary() {
       }
 
       renderExprItems(); // 목록 갱신
+      // Firestore에도 exprDiarySn 포함하여 자동 저장
+      try { await saveDiaryLocal(); } catch(e2) { console.warn('로컬 저장 실패:', e2); }
       showToast('시험일지 등록 완료' + (sn ? ' (SN: '+sn+')' : ''), 'success');
     } else {
       showToast('등록 실패: ' + (res.errorMessage || ''), 'error');
@@ -1299,10 +1301,13 @@ async function saveDiaryLocal() {
   var docId = (currentSample.sploreRceptNo || currentSample._firestoreId || 'unknown') + '_diary_' + currentExprItemIdx;
 
   try {
-    await db.collection('testDiaries').doc(docId).set({
+    var diaryData = {
       sampleId: currentSample.sploreRceptNo || currentSample._firestoreId,
       sampleName: currentSample.sploreNm || currentSample.prductNm,
+      sploreReqestNo: currentSample.sploreReqestNo || currentSample.sploreRceptNo || '',
+      sploreSn: currentSample.sploreSn || '1',
       exprIemIdx: currentExprItemIdx,
+      exprIemSn: currentExprItem.exprIemSn || String(currentExprItemIdx + 1),
       exprIemNm: currentExprItem.exprIemNm || '',
       exprIemCode: itemCode,
       stndrdValue: standard,
@@ -1310,8 +1315,11 @@ async function saveDiaryLocal() {
       diaryCn: diaryCn,
       calcFormula: (document.getElementById('calc-formula') || {}).value || '',
       calcResult: (document.getElementById('calc-result') || {}).value || '',
+      exprDiarySn: currentExprItem.exprDiarySn || '',
+      jnlRegistAt: currentExprItem.jnlRegistAt || '',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+    await db.collection('testDiaries').doc(docId).set(diaryData, { merge: true });
 
     showToast('Firestore 저장 완료', 'success');
   } catch(e) {

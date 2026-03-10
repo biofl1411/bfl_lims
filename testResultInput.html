@@ -795,6 +795,8 @@ function renderRightPanel() {
 
   if (_exprDiarySn) {
     html += '<div class="mfds-info submitted">식약처 시험일지 등록 완료 (SN: ' + _exprDiarySn + ')</div>';
+  } else {
+    html += '<div class="mfds-info" style="background:#fff3cd;color:#856404;border-left:4px solid #ffc107;padding:8px 12px;margin:8px 0;font-size:13px;border-radius:4px">⚠️ 시험일지 미등록 — 식약처 전송 전 <strong>시험 결재 &gt; 시험일지</strong>에서 일지를 먼저 등록하세요</div>';
   }
 
   // Section 3: 결과 입력
@@ -1457,55 +1459,7 @@ function calcItemResult(idx) {
 function gv(id) { var el = document.getElementById(id); return el ? el.value : ''; }
 function se(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
 
-/* ============================================================
-   시험일지 자동 생성 (식약처 전송용)
-   ============================================================ */
-function generateDiaryCn() {
-  var r = currentReceipt || {};
-  var samples = r.samples || [{}];
-  var sample = samples[currentSampleIdx] || {};
-  var items = currentResults[currentSampleIdx] || [];
-  if (!items.length) return '시험 결과 입력';
-
-  var html = '<div style="font-family:Malgun Gothic,sans-serif;font-size:12px;max-width:800px">';
-  html += '<h2 style="text-align:center;font-size:16px;margin-bottom:16px">시 험 검 사 기 록 서</h2>';
-  html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px">';
-  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">접수번호</td><td style="padding:4px 8px">' + (r.receiptNo || '') + '</td>';
-  html += '<td style="padding:4px 8px;background:#f0f0f0">시료명</td><td style="padding:4px 8px">' + (sample.productName || '') + '</td></tr>';
-  html += '<tr><td style="padding:4px 8px;background:#f0f0f0">검사목적</td><td style="padding:4px 8px">' + (r.testPurpose || '') + '</td>';
-  html += '<td style="padding:4px 8px;background:#f0f0f0">접수일</td><td style="padding:4px 8px">' + (r.receiptDate || '') + '</td></tr>';
-  html += '</table>';
-
-  items.forEach(function(it, i) {
-    html += '<h3 style="font-size:13px;margin:8px 0 4px">' + (i+1) + '. ' + it.testItemName + '</h3>';
-    // 원시 입력값 표시
-    var key = currentSampleIdx + '_' + i;
-    var raw = _rawInputs[key];
-    if (raw && Object.keys(raw).length > 0) {
-      var tmpl = findFormTemplate(it.testItemName);
-      html += '<table border="1" style="width:100%;border-collapse:collapse;font-size:11px">';
-      if (tmpl && tmpl.sections) {
-        tmpl.sections.forEach(function(sec) {
-          (sec.fields || []).forEach(function(f) {
-            if (raw[f.id]) {
-              html += '<tr><td style="padding:3px 6px;background:#f0f0f0;width:35%">' + f.label + (f.unit ? '('+f.unit+')' : '') + '</td>';
-              html += '<td style="padding:3px 6px">' + raw[f.id] + '</td></tr>';
-            }
-          });
-        });
-      } else {
-        Object.keys(raw).forEach(function(k) {
-          if (raw[k]) html += '<tr><td style="padding:3px 6px;background:#f0f0f0">' + k + '</td><td style="padding:3px 6px">' + raw[k] + '</td></tr>';
-        });
-      }
-      html += '</table>';
-    }
-    html += '<p style="font-size:11px;margin:4px 0">기준: ' + (it.standard || '-') + ' | 결과: <strong>' + (it.measuredValue || '-') + '</strong> ' + (it.unit || '') + ' | 판정: <strong>' + (it.judgmentResult || '-') + '</strong></p>';
-  });
-
-  html += '</div>';
-  return html;
-}
+/* generateDiaryCn() 제거됨 — 시험일지는 '시험 결재 > 시험일지'에서 관리 */
 
 /* ============================================================
    결과 수집
@@ -1668,45 +1622,44 @@ async function confirmMfdsSubmit() {
   try {
     showToast('식약처 전송 중...', 'info');
 
-    // Step 1: 시험일지 자동 등록
+    // 시험일지 SN 확인 (시험일지 페이지에서 등록된 것을 사용)
     var exprDiarySn = _exprDiarySn;
 
+    // testResults에 exprDiarySn이 없으면 testDiaries에서 조회
     if (!exprDiarySn) {
-      var diaryCn = generateDiaryCn();
-      var todayStr = today().replace(/-/g, '');
-
-      // 시험항목 목록 구성
-      var resultItems = currentResults[currentSampleIdx] || [];
-      var exprIemLst = resultItems.map(function(r, i) {
-        return { exprIemSn: String(i + 1) };
-      });
-
-      var diaryParams = {
-        jobSeCode: 'IM18000001',
-        webApi: 'Y',
-        sploreReqestNo: currentReceipt.sploreReqestNo || currentReceipt.receiptNo,
-        sploreSn: String(currentSampleIdx + 1),
-        exprBeginDe: todayStr,
-        exprEndDe: todayStr,
-        exprDiaryCn: diaryCn,
-        sploreChargerId: (typeof MFDS !== 'undefined' && MFDS.DEFAULT_USER) ? MFDS.DEFAULT_USER.mfdsLimsId : 'apitest34',
-        exprIemLst: exprIemLst
-      };
-
-      var diaryRes = await MFDS.insertExprDiary(diaryParams);
-      if (diaryRes && (diaryRes.resultFlag === '1' || diaryRes.exprDiarySn)) {
-        exprDiarySn = diaryRes.exprDiarySn || (diaryRes.resultData && diaryRes.resultData[0] && diaryRes.resultData[0].exprDiarySn);
-        _exprDiarySn = exprDiarySn;
-        // Firestore 업데이트
-        var docId = currentReceipt.receiptNo + '_S' + currentSampleIdx;
-        await db.collection('testResults').doc(docId).update({ exprDiarySn: exprDiarySn, mfdsSubmitted: true });
-        showToast('시험일지 등록 완료 (SN: ' + exprDiarySn + ')', 'success');
-      } else {
-        throw new Error(diaryRes.errorMessage || '시험일지 등록 실패');
-      }
+      var receiptNo = currentReceipt.receiptNo || '';
+      var sploreReqestNo = currentReceipt.sploreReqestNo || '';
+      try {
+        // testDiaries에서 해당 시료의 일지 조회 (receiptNo 또는 sploreReqestNo로 검색)
+        var diarySnap = null;
+        if (sploreReqestNo) {
+          diarySnap = await db.collection('testDiaries')
+            .where('sploreReqestNo', '==', sploreReqestNo)
+            .where('exprDiarySn', '!=', '')
+            .limit(1).get();
+        }
+        if ((!diarySnap || diarySnap.empty) && receiptNo) {
+          diarySnap = await db.collection('testDiaries')
+            .where('sampleId', '==', receiptNo)
+            .where('exprDiarySn', '!=', '')
+            .limit(1).get();
+        }
+        if (diarySnap && !diarySnap.empty) {
+          exprDiarySn = diarySnap.docs[0].data().exprDiarySn;
+          _exprDiarySn = exprDiarySn;
+          // testResults에도 반영
+          var docId = receiptNo + '_S' + currentSampleIdx;
+          await db.collection('testResults').doc(docId).update({ exprDiarySn: exprDiarySn });
+        }
+      } catch(e) { console.warn('testDiaries 조회 실패:', e); }
     }
 
-    // Step 2: 검사결과 전송
+    if (!exprDiarySn) {
+      showToast('시험일지를 먼저 등록하세요 (시험 결재 > 시험일지)', 'error');
+      return;
+    }
+
+    // 검사결과 전송
     var items = currentResults[currentSampleIdx] || [];
     var resultParams = {
       jobSeCode: 'IM18000001',
