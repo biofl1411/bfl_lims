@@ -288,6 +288,12 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
 .tc-row .tc-filled{padding:4px 8px;color:#1e293b}
 .tc-row .tc-filled .new-val{background:#fde68a;padding:0 3px;border-radius:3px;font-weight:600}
 .review-missing{border:1px solid #fde68a;border-radius:9px;background:#fffbeb;padding:14px;margin-bottom:12px}
+.btn-memo-reanalyze{margin-top:8px;padding:7px 16px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;
+  border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-memo-reanalyze:hover{background:linear-gradient(135deg,#6d28d9,#5b21b6);transform:translateY(-1px)}
+.btn-memo-reanalyze:disabled{opacity:.5;cursor:default;transform:none}
+.rv-added{animation:rvFlash .8s ease}
+@keyframes rvFlash{0%{background:#d8b4fe}100%{background:transparent}}
 .review-missing-hd{font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .review-missing textarea{width:100%;min-height:80px;padding:8px 10px;border:1px solid #fde68a;
   border-radius:7px;font-size:12px;font-family:inherit;resize:vertical;background:#fff}
@@ -517,13 +523,14 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
         <!-- 누락 사항 메모 (필드 목록 아래) -->
         <div class="review-missing">
           <div class="review-missing-hd">📝 누락·수정 사항 메모</div>
-          <textarea id="rv-missing-memo" placeholder="위 필드 목록과 PDF를 비교해서 누락된 필드, 잘못된 값, 추가 메모를 작성하세요.&#10;&#10;예시:&#10;- 시험방법란 누락&#10;- 희석배수 필드가 빠져있음&#10;- 판정기준 값이 0.3이 아니라 0.5임"></textarea>
-          <div class="hint">이 메모는 저장 시 함께 기록되어 개발팀 반영 시 참고됩니다.</div>
+          <textarea id="rv-missing-memo" placeholder="위 필드 목록과 PDF를 비교해서 누락된 필드, 잘못된 값, 추가 메모를 작성하세요.&#10;&#10;예시:&#10;- 표준물질 제조일 누락&#10;- 시험시작일 빠짐&#10;- 판정기준 값이 0.3이 아니라 0.5임"></textarea>
+          <div class="hint">메모 작성 후 <b>메모 기반 재분석</b>을 누르면 AI가 기존 결과에 누락 필드를 추가합니다.</div>
+          <button class="btn btn-memo-reanalyze" id="btn-memo-reanalyze" onclick="doMemoReanalyze()">📎 메모 기반 재분석</button>
         </div>
 
         <!-- 확인 후 저장 버튼 -->
         <div style="display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn btn-out" onclick="cancelReview()">← 재분석</button>
+          <button class="btn btn-out" onclick="cancelReview()">← 처음부터 재분석</button>
           <button class="btn btn-ok" id="btn-confirm-save" onclick="doConfirmSave()">✅ 검증 완료 — 저장</button>
         </div>
       </div>
@@ -1319,10 +1326,12 @@ function showReviewPanel(data) {
     html += '<div class="review-sec-hd"><span>'+sec.title+'</span><span class="cnt">'+fields.length+'개</span></div>';
     fields.forEach(function(f, fi) {
       var fid = 'rv-f-'+si+'-'+fi;
-      html += '<div class="review-field">';
+      var addedCls = f._added ? ' rv-added' : '';
+      var corrCls = f._corrected ? ' rv-added' : '';
+      html += '<div class="review-field' + addedCls + corrCls + '">';
       html += '<input type="checkbox" class="chk rv-chk" id="'+fid+'" checked data-sec="'+si+'" data-fi="'+fi+'">';
       html += '<div class="finfo">';
-      html += '<div class="flbl">'+f.label+(f.required?' <span style="color:var(--err)">*</span>':'')+'</div>';
+      html += '<div class="flbl">'+(f._added?'<span style="background:#d8b4fe;padding:1px 5px;border-radius:4px;font-size:10px;margin-right:4px">NEW</span>':'')+(f._corrected?'<span style="background:#fde68a;padding:1px 5px;border-radius:4px;font-size:10px;margin-right:4px">수정</span>':'')+f.label+(f.required?' <span style="color:var(--err)">*</span>':'')+'</div>';
       html += '<div class="fmeta">'+f.id+' | '+f.type+(f.unit?' | '+f.unit:'')+'</div>';
       if (f.exampleValue) html += '<div class="fval">예시값: '+f.exampleValue+'</div>';
       html += '<textarea class="fmemo rv-memo" id="'+fid+'-memo" placeholder="이 필드 관련 메모 (누락·수정·특이사항)"></textarea>';
@@ -1502,6 +1511,160 @@ function collectReviewData() {
     totalChecked: document.querySelectorAll('.rv-chk:checked').length,
     totalUnchecked: uncheckedFields.length
   };
+}
+
+/* =============================================================
+   메모 기반 재분석 — 기존 결과 + 메모로 누락 필드 보완
+============================================================= */
+async function doMemoReanalyze() {
+  var memo = (document.getElementById('rv-missing-memo').value || '').trim();
+  if (!memo) { toast('메모를 먼저 작성하세요', 'err'); return; }
+  if (!_lastAnalyzed) { toast('분석 결과가 없습니다', 'err'); return; }
+
+  var btn = document.getElementById('btn-memo-reanalyze');
+  btn.disabled = true; btn.textContent = '⏳ 재분석 중...';
+
+  try {
+    var refined = await callClaudeRefine(memo);
+    // 기존 결과에 새 필드 병합
+    var added = mergeAnalysis(_lastAnalyzed, refined);
+    // 리뷰 패널 갱신
+    showReviewPanel(_lastAnalyzed);
+    toast('재분석 완료 — ' + added + '개 필드 추가됨', 'info');
+  } catch(e) {
+    toast('재분석 실패: ' + e.message, 'err');
+  }
+  btn.disabled = false; btn.textContent = '📎 메모 기반 재분석';
+}
+
+async function callClaudeRefine(memo) {
+  var existingFields = [];
+  (_lastAnalyzed.sections || []).forEach(function(sec) {
+    (sec.fields || []).forEach(function(f) {
+      existingFields.push(sec.title + ' > ' + f.label + ' (' + f.id + ')');
+    });
+  });
+
+  var prompt = '당신은 식품 시험 검사 기록서 PDF 분석 전문가입니다.\n\n'
+    + '## 상황\n'
+    + '이전 분석에서 아래 필드들이 추출되었으나, 사용자가 누락/오류를 발견했습니다.\n\n'
+    + '### 기존 추출 필드 (' + existingFields.length + '개)\n'
+    + existingFields.join('\n') + '\n\n'
+    + '### 사용자 메모 (누락/수정 사항)\n'
+    + memo + '\n\n'
+    + '## 작업\n'
+    + '1. 첨부된 PDF 2개(빈 양식 + 작성본)를 다시 확인하세요.\n'
+    + '2. 사용자 메모에서 언급한 누락 필드를 찾아 추출하세요.\n'
+    + '3. 기존에 이미 있는 필드는 포함하지 마세요.\n'
+    + '4. **새로 추가할 필드만** 아래 JSON 형식으로 응답하세요.\n\n'
+    + '```json\n'
+    + '{\n'
+    + '  "addedSections": [\n'
+    + '    {\n'
+    + '      "title": "기존 섹션명 또는 새 섹션명",\n'
+    + '      "fields": [\n'
+    + '        {\n'
+    + '          "id": "camelCase영문ID",\n'
+    + '          "label": "한국어라벨",\n'
+    + '          "type": "text|number|date|textarea|readonly",\n'
+    + '          "unit": "단위 또는 null",\n'
+    + '          "exampleValue": "완성본실제값",\n'
+    + '          "placeholder": "입력힌트",\n'
+    + '          "required": true\n'
+    + '        }\n'
+    + '      ]\n'
+    + '    }\n'
+    + '  ],\n'
+    + '  "addedCalculations": [],\n'
+    + '  "corrections": [\n'
+    + '    { "fieldId": "수정할필드id", "field": "수정할속성", "oldValue": "기존값", "newValue": "수정값" }\n'
+    + '  ]\n'
+    + '}\n```\n\n'
+    + '추가/수정할 내용이 없으면 addedSections:[], corrections:[] 빈 배열로 응답하세요.\n'
+    + 'JSON만 응답 (마크다운·주석 금지).';
+
+  var textContext = '';
+  if (_pdfTextBlank && _pdfTextFilled) {
+    var comparison = comparePdfTexts(_pdfTextBlank, _pdfTextFilled);
+    textContext = buildTextComparisonSummary(comparison);
+    prompt += '\n\n## 참고: PDF 텍스트 추출 비교\n' + textContext;
+  }
+
+  var body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Blank } },
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Filled } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  var resp = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) throw new Error('프록시 오류 ' + resp.status);
+
+  var d = await resp.json();
+  if (d.error) throw new Error(d.error.message || d.error);
+
+  var raw = (d.content || []).find(function(b) { return b.type === 'text'; });
+  if (!raw) throw new Error('응답에 텍스트 없음');
+
+  var jsonStr = raw.text.replace(/```json|```/g, '').trim();
+  return JSON.parse(jsonStr);
+}
+
+function mergeAnalysis(existing, refined) {
+  var addedCount = 0;
+
+  // 1) 새 필드 추가
+  (refined.addedSections || []).forEach(function(addSec) {
+    // 기존 섹션에 같은 이름이 있으면 거기에 추가
+    var target = existing.sections.find(function(s) { return s.title === addSec.title; });
+    if (!target) {
+      target = { title: addSec.title, fields: [] };
+      existing.sections.push(target);
+    }
+    (addSec.fields || []).forEach(function(f) {
+      // 중복 체크
+      var dup = target.fields.find(function(ef) { return ef.id === f.id; });
+      if (!dup) {
+        f._added = true; // 새로 추가된 마커
+        target.fields.push(f);
+        addedCount++;
+      }
+    });
+  });
+
+  // 2) 계산식 추가
+  (refined.addedCalculations || []).forEach(function(calc) {
+    var dup = (existing.calculations || []).find(function(c) { return c.id === calc.id; });
+    if (!dup) {
+      if (!existing.calculations) existing.calculations = [];
+      existing.calculations.push(calc);
+      addedCount++;
+    }
+  });
+
+  // 3) 수정 사항 반영
+  (refined.corrections || []).forEach(function(cor) {
+    existing.sections.forEach(function(sec) {
+      sec.fields.forEach(function(f) {
+        if (f.id === cor.fieldId && cor.field && cor.newValue !== undefined) {
+          f[cor.field] = cor.newValue;
+          f._corrected = true;
+        }
+      });
+    });
+  });
+
+  return addedCount;
 }
 
 /* =============================================================
