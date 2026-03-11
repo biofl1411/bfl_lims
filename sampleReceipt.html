@@ -591,7 +591,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:90px">시험항목코드</th>
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054">기준규격</th>
                                     <th style="padding:10px 12px;text-align:left;font-weight:600;color:#344054;width:70px">단위</th>
-                                    <th style="padding:10px 12px;text-align:right;font-weight:600;color:#344054;width:100px">수수료</th>
+                                    <th style="padding:10px 12px;text-align:right;font-weight:600;color:#344054;width:90px">수수료</th>
+                                    <th class="disc-col" style="padding:10px 8px;text-align:right;font-weight:600;color:#c2410c;width:75px;display:none">할인</th>
+                                    <th class="disc-col" style="padding:10px 8px;text-align:right;font-weight:600;color:#1565c0;width:90px;display:none">적용가</th>
                                 </tr>
                             </thead>
                             <tbody id="inspection-items-tbody"></tbody>
@@ -599,14 +601,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                                 <tr style="background:#f0f4ff;border-top:2px solid #d0d5dd">
                                     <td colspan="6" style="padding:10px 12px;font-weight:700;color:#344054;text-align:right">합계</td>
                                     <td id="inspection-items-total" style="padding:10px 12px;font-weight:700;color:#6941C6;text-align:right"></td>
+                                    <td class="disc-col" id="disc-total-discount" style="padding:10px 8px;font-weight:700;color:#c2410c;text-align:right;display:none"></td>
+                                    <td class="disc-col" id="disc-total-final" style="padding:10px 8px;font-weight:700;color:#1565c0;text-align:right;display:none"></td>
                                 </tr>
                                 <tr style="background:#f0f4ff">
                                     <td colspan="6" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right">공급가액</td>
                                     <td id="inspection-items-supply" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right"></td>
+                                    <td class="disc-col" style="display:none" colspan="2"></td>
                                 </tr>
                                 <tr style="background:#f0f4ff">
                                     <td colspan="6" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right">세액 (VAT 10%)</td>
                                     <td id="inspection-items-vat" style="padding:6px 12px;font-size:12px;color:#667085;text-align:right"></td>
+                                    <td class="disc-col" style="display:none" colspan="2"></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -4262,7 +4268,7 @@ function onDiscountAmountChange() {
 }
 
 /**
- * 할인 적용 → 최종가 계산 + 표시 + window._feeTotal 갱신
+ * 할인 적용 → 최종가 계산 + 항목별 균등 배분 + 표시 + window._feeTotal 갱신
  */
 function applyDiscount() {
     var original = window._feeGrandTotal || 0;
@@ -4283,15 +4289,103 @@ function applyDiscount() {
     var section = document.getElementById('discount-section');
     if (section) {
         if (discountAmt > 0) {
-            section.style.background = '#fff2e0';
+            section.style.background = 'linear-gradient(135deg,#fff2e0,#ffe0b2)';
             section.style.borderColor = '#f59e0b';
         } else {
-            section.style.background = '#fff8f0';
+            section.style.background = 'linear-gradient(135deg,#fff8f0,#fff3e0)';
             section.style.borderColor = '#fed7aa';
         }
     }
 
+    // ── 항목별 할인 균등 배분 ──
+    distributeDiscountToItems(discountAmt);
+
     updatePaymentSummary();
+}
+
+/**
+ * 항목별 할인 균등 배분 — 수수료 비율에 따라 배분, 마지막 항목에서 나머지 보정
+ */
+function distributeDiscountToItems(totalDiscount) {
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr[data-fee]');
+    var discCols = document.querySelectorAll('.disc-col');
+
+    // 할인 없으면 할인 컬럼 숨기기
+    if (!totalDiscount || totalDiscount <= 0) {
+        discCols.forEach(function(el) { el.style.display = 'none'; });
+        // 기존 할인 셀 제거
+        rows.forEach(function(tr) {
+            var dc1 = tr.querySelector('.td-disc');
+            var dc2 = tr.querySelector('.td-final');
+            if (dc1) dc1.remove();
+            if (dc2) dc2.remove();
+        });
+        window._itemDiscounts = null;
+        return;
+    }
+
+    // 할인 컬럼 표시
+    discCols.forEach(function(el) { el.style.display = ''; });
+
+    // 항목별 수수료 수집
+    var items = [];
+    var grandTotal = 0;
+    rows.forEach(function(tr, i) {
+        var fee = parseInt(tr.getAttribute('data-fee') || '0', 10);
+        items.push({ tr: tr, fee: fee, idx: i });
+        grandTotal += fee;
+    });
+
+    if (grandTotal <= 0 || items.length === 0) return;
+
+    // 비율 기반 배분 (원 단위 반올림, 마지막에 보정)
+    var allocated = 0;
+    var discounts = [];
+    items.forEach(function(it, i) {
+        if (i === items.length - 1) {
+            // 마지막 항목: 나머지 전부
+            it.disc = totalDiscount - allocated;
+        } else {
+            it.disc = Math.round(totalDiscount * it.fee / grandTotal);
+            allocated += it.disc;
+        }
+        it.final = it.fee - it.disc;
+        discounts.push({ fee: it.fee, discount: it.disc, final: it.final });
+    });
+
+    // 저장용 데이터
+    window._itemDiscounts = discounts;
+
+    // 테이블에 할인/적용가 셀 업데이트
+    items.forEach(function(it) {
+        // 기존 셀 제거
+        var old1 = it.tr.querySelector('.td-disc');
+        var old2 = it.tr.querySelector('.td-final');
+        if (old1) old1.remove();
+        if (old2) old2.remove();
+
+        // 새 셀 추가
+        var tdDisc = document.createElement('td');
+        tdDisc.className = 'td-disc';
+        tdDisc.style.cssText = 'padding:8px 8px;text-align:right;color:#c2410c;font-size:12px;font-weight:600';
+        tdDisc.textContent = it.disc > 0 ? ('-' + it.disc.toLocaleString()) : '-';
+
+        var tdFinal = document.createElement('td');
+        tdFinal.className = 'td-final';
+        tdFinal.style.cssText = 'padding:8px 8px;text-align:right;color:#1565c0;font-weight:700;font-size:13px';
+        tdFinal.textContent = it.final.toLocaleString() + '원';
+
+        it.tr.appendChild(tdDisc);
+        it.tr.appendChild(tdFinal);
+    });
+
+    // tfoot 합계 업데이트
+    var dtd = document.getElementById('disc-total-discount');
+    var dtf = document.getElementById('disc-total-final');
+    if (dtd) dtd.textContent = '-' + totalDiscount.toLocaleString() + '원';
+    if (dtf) dtf.textContent = (grandTotal - totalDiscount).toLocaleString() + '원';
 }
 
 // ============================================================================
@@ -5033,6 +5127,7 @@ function collectReceiptData() {
         discountRate: parseFloat(document.getElementById('discount-rate')?.value) || 0,
         discountAmount: parseInt(document.getElementById('discount-amount')?.value) || 0,
         feeTotal: window._feeTotal || 0,
+        itemDiscounts: window._itemDiscounts || null,
         payMethod: document.querySelector('input[name="pay-method"]:checked')?.value || '',
         payCardDate: document.getElementById('pay-card-date')?.value || '',
         payDepositor: document.getElementById('pay-depositor')?.value || '',
