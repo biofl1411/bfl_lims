@@ -36121,16 +36121,29 @@ function renderMfdsTestItems() {
   Promise.all([
     MFDS_CODES.loadTestItems(),
     MFDS_CODES.loadItemMappings(),
-    MFDS_CODES.loadUnits()
+    MFDS_CODES.loadUnits(),
+    firebase.firestore().collection('settings').doc('pRefSubCategories').get()
   ]).then(function(results) {
     _mfdsTestItems = results[0];
     _mfdsItemMappings = results[1];
     _mfdsUnits = results[2];
+    // P참고용 커스텀 소분류 + usedKeys 복원
+    var pDoc = results[3];
+    if (pDoc.exists) {
+      var pData = pDoc.data();
+      _pRefUsedKeys = pData._usedKeys || [];
+      delete pData._usedKeys;
+      Object.keys(pData).forEach(function(k) {
+        if (!REF_SUB_CATEGORIES['P']) REF_SUB_CATEGORIES['P'] = {};
+        REF_SUB_CATEGORIES['P'][k] = pData[k];
+      });
+    }
     _mfdsTestFiltered = _mfdsTestItems;
     _mfdsTestPage = 0;
     _mfdsTestLoaded = true;
     buildMfdsTestCatIndex();
     renderMfdsTestCategoryChips();
+    renderMfdsTestSubChips();
     applyMfdsTestFilters();
     renderMfdsTestTable();
   }).catch(function(err) {
@@ -36265,23 +36278,24 @@ function setMfdsTestSubCategory(sub) {
 }
 
 // ══ P참고용: 신규 소분류 칩 생성 ══
+var _pRefUsedKeys = []; // 사용된(삭제 포함) 키 목록 — 키 재사용 방지
+
 function createPRefSubChip() {
   var name = prompt('새 P참고용 소분류 이름을 입력하세요:\n(예: 유통기한, 알레르겐 등)');
   if (!name || !name.trim()) return;
   name = name.trim();
 
-  // 기존 P 소분류에서 사용중인 번호 확인
+  // 현재 사용중 + 과거 삭제된 키 모두 제외
   var usedKeys = Object.keys(REF_SUB_CATEGORIES['P'] || {});
-  // 사용 가능한 키 찾기 (A~Z 문자 또는 미사용 숫자)
+  var allUsed = usedKeys.concat(_pRefUsedKeys);
   var newKey = null;
   var candidates = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   for (var i = 0; i < candidates.length; i++) {
-    if (!usedKeys.includes(candidates[i])) { newKey = candidates[i]; break; }
+    if (allUsed.indexOf(candidates[i]) < 0) { newKey = candidates[i]; break; }
   }
   if (!newKey) {
-    // 숫자로 시도
     for (var n = 0; n <= 9; n++) {
-      if (!usedKeys.includes(String(n))) { newKey = String(n); break; }
+      if (allUsed.indexOf(String(n)) < 0) { newKey = String(n); break; }
     }
   }
   if (!newKey) { showToast('더 이상 소분류를 추가할 수 없습니다', 'warning'); return; }
@@ -36293,11 +36307,11 @@ function createPRefSubChip() {
   // 메모리 추가
   if (!REF_SUB_CATEGORIES['P']) REF_SUB_CATEGORIES['P'] = {};
   REF_SUB_CATEGORIES['P'][newKey] = name;
+  if (_pRefUsedKeys.indexOf(newKey) < 0) _pRefUsedKeys.push(newKey);
 
-  // Firestore에 저장 (커스텀 소분류 기록)
-  firebase.firestore().collection('settings').doc('pRefSubCategories').set(
-    REF_SUB_CATEGORIES['P'], { merge: true }
-  );
+  // Firestore에 저장
+  var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
+  firebase.firestore().collection('settings').doc('pRefSubCategories').set(saveData);
 
   // 소분류 칩 갱신
   renderMfdsTestSubChips();
@@ -36479,42 +36493,48 @@ function deletePRefSubChip() {
   var subName = (REF_SUB_CATEGORIES['P'] || {})[sub] || sub;
 
   // 해당 소분류에 속한 항목 수 확인
-  var cnt = 0;
+  var codesToDelete = [];
   _mfdsTestItems.forEach(function(t) {
     var c = (t['시험항목코드'] || '').toUpperCase();
-    if (c.charAt(0) === 'P' && c.charAt(1) === sub) cnt++;
+    if (c.charAt(0) === 'P' && c.charAt(1) === sub) codesToDelete.push(c);
   });
 
   var msg = 'P' + sub + ' "' + subName + '" 소분류 칩을 삭제하시겠습니까?';
-  if (cnt > 0) msg += '\n\n⚠ 이 소분류에 ' + cnt + '개 항목이 있습니다.\n항목도 함께 삭제됩니다.';
+  if (codesToDelete.length > 0) msg += '\n\n⚠ 이 소분류에 ' + codesToDelete.length + '개 항목이 있습니다.\n항목도 함께 삭제됩니다.';
   if (!confirm(msg)) return;
 
-  // 소속 항목들도 삭제
-  if (cnt > 0) {
-    var codesToDelete = [];
-    _mfdsTestItems = _mfdsTestItems.filter(function(t) {
-      var c = (t['시험항목코드'] || '').toUpperCase();
-      if (c.charAt(0) === 'P' && c.charAt(1) === sub) {
-        codesToDelete.push(c);
-        return false;
-      }
-      return true;
-    });
-    // Firestore에서 항목 삭제
-    var batch = firebase.firestore().batch();
-    codesToDelete.forEach(function(c) {
-      batch.delete(firebase.firestore().collection('mfds_test_items').doc(c));
-    });
-    batch.commit().catch(function(e) { console.error('항목 일괄삭제 실패:', e); });
-  }
+  // 삭제된 키 기록 (재사용 방지)
+  if (_pRefUsedKeys.indexOf(sub) < 0) _pRefUsedKeys.push(sub);
 
   // 소분류 카테고리에서 제거
   delete REF_SUB_CATEGORIES['P'][sub];
 
-  // Firestore에서 칩 정보 갱신 (전체 덮어쓰기)
-  firebase.firestore().collection('settings').doc('pRefSubCategories').set(
-    REF_SUB_CATEGORIES['P']
-  );
+  // Firestore: 칩 정보 갱신 + usedKeys 기록
+  var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
+  firebase.firestore().collection('settings').doc('pRefSubCategories').set(saveData);
+
+  // Firestore: 소속 항목 삭제 (완료 대기 후 UI 갱신)
+  if (codesToDelete.length > 0) {
+    // 메모리에서 즉시 제거
+    _mfdsTestItems = _mfdsTestItems.filter(function(t) {
+      var c = (t['시험항목코드'] || '').toUpperCase();
+      return !(c.charAt(0) === 'P' && c.charAt(1) === sub);
+    });
+
+    // Firestore 삭제 (500개 단위 배치)
+    var promises = [];
+    for (var i = 0; i < codesToDelete.length; i += 500) {
+      var chunk = codesToDelete.slice(i, i + 500);
+      var batch = firebase.firestore().batch();
+      chunk.forEach(function(c) {
+        batch.delete(firebase.firestore().collection('mfds_test_items').doc(c));
+      });
+      promises.push(batch.commit());
+    }
+    Promise.all(promises)
+      .then(function() { console.log('P' + sub + ' 항목 ' + codesToDelete.length + '건 Firestore 삭제 완료'); })
+      .catch(function(e) { console.error('항목 일괄삭제 실패:', e); showToast('일부 항목 Firestore 삭제 실패', 'error'); });
+  }
 
   // UI 갱신
   _mfdsTestSubFilter = null;
