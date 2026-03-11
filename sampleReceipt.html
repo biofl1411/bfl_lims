@@ -5528,15 +5528,25 @@ function renderReportVerifyPanel(data) {
             + '</tr>';
     }
 
-    // 소비기한 일수 비교 (숫자만 추출)
-    var fssPogNum = fssPog.replace(/[^0-9]/g, '');
+    // 소비기한 파싱 (다양한 형태 지원)
     var inputExpNum = inputExpDays.replace(/[^0-9]/g, '');
+    var pogInfo = parsePogDaycnt(fssPog);
 
-    // 소비기한 날짜 계산 (식약처 일수 + 입력 제조일자 기준)
+    // 소비기한 날짜 계산 (제조일 기준)
     var calcExpDate = '';
-    if (fssPogNum && inputMfgDate) {
+    var calcLabel = '';
+    if (pogInfo.days && inputMfgDate) {
         var d = new Date(inputMfgDate);
-        d.setDate(d.getDate() + parseInt(fssPogNum));
+        if (pogInfo.unit === 'month') {
+            d.setMonth(d.getMonth() + pogInfo.num);
+            calcLabel = '제조일+' + pogInfo.num + '개월';
+        } else if (pogInfo.unit === 'year') {
+            d.setFullYear(d.getFullYear() + pogInfo.num);
+            calcLabel = '제조일+' + pogInfo.num + '년';
+        } else {
+            d.setDate(d.getDate() + pogInfo.days);
+            calcLabel = '제조일+' + pogInfo.days + '일';
+        }
         calcExpDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
     }
 
@@ -5551,38 +5561,44 @@ function renderReportVerifyPanel(data) {
     html += cmpRow('제품명', fssName, inputName);
     html += cmpRow('식품유형', fssType, inputFoodType);
 
-    // 소비기한 — 숫자/텍스트("해당없음" 등) 모두 처리
-    var fssPogIsNum = /^\d+$/.test(fssPogNum);
+    // 소비기한 표시
     if (fssPog) {
-        if (fssPogIsNum) {
-            // 숫자인 경우: 일수 비교
-            html += cmpRow('소비기한(일)', fssPogNum + '일', inputExpNum ? inputExpNum + '일' : '');
+        // 원본값 항상 표시
+        html += '<tr style="background:#e8eaf6">'
+            + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(원본)</td>'
+            + '<td colspan="2" style="padding:6px 10px;color:#1a237e;font-weight:600;font-size:13px">' + fssPog + '</td>'
+            + '<td style="padding:6px 10px;text-align:center">'
+            + (pogInfo.type === 'none' ? '<span style="color:#7b1fa2;font-size:11px">해당없음</span>' : '')
+            + '</td></tr>';
 
-            // 날짜 비교 (제조일 + 식약처일수)
+        if (pogInfo.days) {
+            // 일수 변환 가능한 경우: 비교 표시
+            var daysLabel = pogInfo.days + '일' + (pogInfo.unit !== 'day' ? ' (' + pogInfo.display + ')' : '');
+            html += cmpRow('소비기한(일수)', daysLabel, inputExpNum ? inputExpNum + '일' : '');
+
+            // 날짜 비교
             if (calcExpDate && inputExpDate) {
                 var dateMatch = calcExpDate === inputExpDate;
                 html += '<tr style="background:' + (dateMatch ? '#e8f5e9' : '#ffebee') + '">'
                     + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
-                    + '<td style="padding:6px 10px;color:#1a237e">' + calcExpDate + ' <span style="font-size:11px;color:#999">(제조일+' + fssPogNum + '일)</span></td>'
+                    + '<td style="padding:6px 10px;color:#1a237e">' + calcExpDate + ' <span style="font-size:11px;color:#999">(' + calcLabel + ')</span></td>'
                     + '<td style="padding:6px 10px">' + inputExpDate + '</td>'
                     + '<td style="padding:6px 10px;text-align:center">' + (dateMatch
                         ? '<span style="color:#43a047;font-weight:700">✓ 일치</span>'
                         : '<span style="color:#c62828;font-weight:700">✗ 불일치</span>') + '</td></tr>';
+            } else if (inputMfgDate && !inputExpDate) {
+                html += '<tr style="background:#fff8e1">'
+                    + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
+                    + '<td style="padding:6px 10px;color:#1a237e">' + calcExpDate + ' <span style="font-size:11px;color:#999">(' + calcLabel + ')</span></td>'
+                    + '<td style="padding:6px 10px;color:#aaa">미입력</td>'
+                    + '<td style="padding:6px 10px;text-align:center"><span style="color:#f9a825">⚠ 미입력</span></td></tr>';
             } else if (!inputMfgDate) {
                 html += '<tr style="background:#fff8e1">'
                     + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
-                    + '<td style="padding:6px 10px;color:#1a237e">제조일 입력 시 자동 계산</td>'
+                    + '<td style="padding:6px 10px;color:#999">제조일 입력 시 자동 계산</td>'
                     + '<td style="padding:6px 10px;color:#aaa">' + (inputExpDate || '미입력') + '</td>'
                     + '<td style="padding:6px 10px;text-align:center"><span style="color:#f9a825">⚠</span></td></tr>';
             }
-        } else {
-            // "해당없음" 등 비숫자인 경우
-            var expInput = inputExpDays || inputExpDate || '';
-            html += '<tr style="background:#f3e5f5">'
-                + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한</td>'
-                + '<td style="padding:6px 10px;color:#7b1fa2;font-weight:600">' + fssPog + '</td>'
-                + '<td style="padding:6px 10px">' + (expInput || '<span style="color:#aaa">미입력</span>') + '</td>'
-                + '<td style="padding:6px 10px;text-align:center"><span style="color:#7b1fa2;font-size:11px">참고</span></td></tr>';
         }
     }
 
@@ -5610,16 +5626,61 @@ function renderReportVerifyPanel(data) {
 
     html += '</tbody></table>';
 
-    // 소비기한 일수 자동 채움 버튼 (숫자일 때만)
-    if (fssPogIsNum && fssPogNum && fssPogNum !== inputExpNum) {
-        html += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">'
-            + '<button onclick="applyFssExpiry(\'' + fssPogNum + '\')" style="padding:6px 14px;background:#3949ab;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">'
-            + '📥 소비기한 ' + fssPogNum + '일 적용</button>'
-            + '<span style="font-size:11px;color:#999">식약처 데이터를 소비기한(일수)에 자동 입력합니다</span></div>';
+    // 소비기한 자동 채움 버튼 (일수 변환 가능할 때만)
+    if (pogInfo.days && String(pogInfo.days) !== inputExpNum) {
+        var btnLabel = pogInfo.display || (pogInfo.days + '일');
+        html += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+            + '<button onclick="applyFssExpiry(\'' + pogInfo.days + '\')" style="padding:6px 14px;background:#3949ab;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">'
+            + '📥 소비기한 ' + pogInfo.days + '일 적용</button>';
+        if (calcExpDate) {
+            html += '<button onclick="applyFssExpiryDate(\'' + pogInfo.days + '\',\'' + calcExpDate + '\')" style="padding:6px 14px;background:#43a047;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">'
+                + '📅 ' + calcExpDate + ' 적용</button>';
+        }
+        html += '<span style="font-size:11px;color:#999">' + btnLabel + ' → ' + pogInfo.days + '일 변환</span></div>';
     }
 
     body.innerHTML = html;
     panel.style.display = 'block';
+}
+
+// 소비기한 문자열 파싱 (다양한 형태 지원)
+// "365" → {days:365, num:365, unit:'day', display:'365일', type:'number'}
+// "제조일로부터 18개월" → {days:540, num:18, unit:'month', display:'18개월', type:'period'}
+// "제조일로부터 2년" → {days:730, num:2, unit:'year', display:'2년', type:'period'}
+// "없음", "해당없음", "없음(제조일자표시)" → {days:0, type:'none', display:원본}
+function parsePogDaycnt(raw) {
+    if (!raw) return { days: 0, num: 0, unit: '', display: '', type: 'empty' };
+    var s = raw.toString().trim();
+
+    // "없음", "해당없음", "없음(제조일자표시)" 등
+    if (/없음|해당없음|해당\s*없/i.test(s)) {
+        return { days: 0, num: 0, unit: '', display: s, type: 'none' };
+    }
+
+    // "제조일로부터 N개월" / "N개월" / "제조일부터 N개월"
+    var mMonth = s.match(/(\d+)\s*개월/);
+    if (mMonth) {
+        var n = parseInt(mMonth[1]);
+        return { days: n * 30, num: n, unit: 'month', display: n + '개월', type: 'period' };
+    }
+
+    // "N년" / "제조일로부터 N년"
+    var mYear = s.match(/(\d+)\s*년/);
+    if (mYear) {
+        var n = parseInt(mYear[1]);
+        return { days: n * 365, num: n, unit: 'year', display: n + '년', type: 'period' };
+    }
+
+    // "N일" / 순수 숫자
+    var mDay = s.match(/(\d+)\s*일?$/);
+    if (!mDay) mDay = s.match(/^(\d+)$/);
+    if (mDay) {
+        var n = parseInt(mDay[1]);
+        return { days: n, num: n, unit: 'day', display: n + '일', type: 'number' };
+    }
+
+    // 파싱 불가
+    return { days: 0, num: 0, unit: '', display: s, type: 'unknown' };
 }
 
 // 식약처 소비기한 일수 적용
@@ -5641,6 +5702,13 @@ function applyFssExpiry(days) {
             document.getElementById('expiry-date').value = yyyy + '-' + mm + '-' + dd;
         }
     }
+}
+
+// 식약처 소비기한 날짜+일수 동시 적용
+function applyFssExpiryDate(days, dateStr) {
+    document.getElementById('expiry-days').value = days;
+    document.getElementById('expiry-date').value = dateStr;
+    showToast('소비기한 ' + days + '일 / ' + dateStr + ' 적용 완료', 'success');
 }
 
 // ============================================================================
