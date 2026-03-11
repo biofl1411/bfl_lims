@@ -516,6 +516,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
                         <button type="button" class="btn-receipt secondary" onclick="fetchReportNo(true)" style="padding:9px 16px;font-size:13px" title="인허가번호+제품명으로 보고번호 자동 조회">🔍 보고번호조회</button>
                     </div>
                 </div>
+                <!-- 보고번호 조회 결과 검증 패널 -->
+                <div id="report-verify-panel" style="display:none;margin:10px 0;padding:14px 18px;background:#f8f9ff;border:1px solid #c5cae9;border-radius:10px;animation:fadeIn .25s">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                        <span style="font-weight:700;font-size:13px;color:#3949ab">📋 식약처 품목정보 검증</span>
+                        <button onclick="document.getElementById('report-verify-panel').style.display='none'" style="background:none;border:none;font-size:16px;cursor:pointer;color:#999">✕</button>
+                    </div>
+                    <div id="report-verify-body" style="font-size:13px"></div>
+                </div>
                 <!-- 식약처 품목코드 선택 (자가품질위탁검사용 선택 시 표시) -->
                 <div id="mfds-product-picker-container" style="display:none;margin:12px 0"></div>
                 <!-- 식약처 기준규격 시험항목 (품목코드 선택 시 표시) -->
@@ -5457,13 +5465,165 @@ async function fetchReportNo(manual) {
                     loadInspectionItems(foodTypeName);
                 }
             }
+            // 검증 패널 표시
+            renderReportVerifyPanel(matched);
             if (manual) showToast('보고번호 조회 완료: ' + matched.prdlst_report_no + (foodTypeName ? ' (유형: ' + foodTypeName + ')' : ''), 'info');
         } else {
+            document.getElementById('report-verify-panel').style.display = 'none';
             if (manual) showToast('일치하는 품목이 없습니다. (조회: ' + snap.size + '건, 입력: "' + productName + '")', 'warning');
         }
     } catch(e) {
         console.warn('[보고번호 조회 실패]', e.message);
         if (manual) showToast('보고번호 조회 실패: ' + e.message, 'error');
+    }
+}
+
+// ============================================================================
+// 보고번호 조회 결과 검증 패널
+// ============================================================================
+function renderReportVerifyPanel(data) {
+    var panel = document.getElementById('report-verify-panel');
+    var body = document.getElementById('report-verify-body');
+    if (!panel || !body) return;
+
+    // 식약처 데이터
+    var fssName = (data.prdlst_nm || '').trim();
+    var fssType = (data.prdlst_dcnm || '').trim();
+    var fssPog = (data.pog_daycnt || '').toString().trim();
+    var fssCompany = (data.bssh_nm || '').trim();
+    var fssReportNo = (data.prdlst_report_no || '').trim();
+    var fssPermDate = (data.prms_dt || '').trim();
+    var fssCstdy = (data.cstdy_mthd || '').trim();
+    var fssProduction = (data.production || '').trim();
+
+    // 현재 입력값
+    var inputName = (document.getElementById('product-name').value || '').trim();
+    var inputExpDays = (document.getElementById('expiry-days').value || '').trim();
+    var inputExpDate = (document.getElementById('expiry-date').value || '').trim();
+    var inputMfgDate = (document.getElementById('manufacture-date').value || '').trim();
+    var inputFoodType = (document.getElementById('food-type-input').value || '').trim();
+
+    // 비교 함수
+    function cmpRow(label, fssVal, inputVal, unit) {
+        if (!fssVal && !inputVal) return '';
+        var fssDisp = fssVal || '-';
+        var inputDisp = inputVal || '<span style="color:#aaa">미입력</span>';
+        var match = '', icon = '';
+        if (fssVal && inputVal) {
+            var a = fssVal.toString().replace(/\s/g,'').toLowerCase();
+            var b = inputVal.toString().replace(/\s/g,'').toLowerCase();
+            if (a === b) {
+                match = 'background:#e8f5e9'; icon = '<span style="color:#43a047;font-weight:700">✓ 일치</span>';
+            } else {
+                match = 'background:#fff3e0'; icon = '<span style="color:#e65100;font-weight:700">✗ 불일치</span>';
+            }
+        } else if (fssVal && !inputVal) {
+            match = 'background:#fff8e1'; icon = '<span style="color:#f9a825">⚠ 미입력</span>';
+        }
+        return '<tr style="' + match + '">'
+            + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0;white-space:nowrap;width:110px">' + label + '</td>'
+            + '<td style="padding:6px 10px;color:#1a237e">' + fssDisp + (unit && fssVal ? ' ' + unit : '') + '</td>'
+            + '<td style="padding:6px 10px">' + inputDisp + (unit && inputVal ? ' ' + unit : '') + '</td>'
+            + '<td style="padding:6px 10px;text-align:center;width:80px">' + icon + '</td>'
+            + '</tr>';
+    }
+
+    // 소비기한 일수 비교 (숫자만 추출)
+    var fssPogNum = fssPog.replace(/[^0-9]/g, '');
+    var inputExpNum = inputExpDays.replace(/[^0-9]/g, '');
+
+    // 소비기한 날짜 계산 (식약처 일수 + 입력 제조일자 기준)
+    var calcExpDate = '';
+    if (fssPogNum && inputMfgDate) {
+        var d = new Date(inputMfgDate);
+        d.setDate(d.getDate() + parseInt(fssPogNum));
+        calcExpDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead><tr style="border-bottom:2px solid #c5cae9">'
+        + '<th style="padding:6px 10px;text-align:left;color:#3949ab">항목</th>'
+        + '<th style="padding:6px 10px;text-align:left;color:#3949ab">식약처 데이터</th>'
+        + '<th style="padding:6px 10px;text-align:left;color:#3949ab">입력값</th>'
+        + '<th style="padding:6px 10px;text-align:center;color:#3949ab;width:80px">결과</th>'
+        + '</tr></thead><tbody>';
+
+    html += cmpRow('제품명', fssName, inputName);
+    html += cmpRow('식품유형', fssType, inputFoodType);
+    html += cmpRow('소비기한(일)', fssPogNum ? fssPogNum + '일' : '', inputExpNum ? inputExpNum + '일' : '');
+
+    // 소비기한 날짜 비교
+    if (calcExpDate && inputExpDate) {
+        var dateMatch = calcExpDate === inputExpDate;
+        html += '<tr style="background:' + (dateMatch ? '#e8f5e9' : '#ffebee') + '">'
+            + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
+            + '<td style="padding:6px 10px;color:#1a237e">' + calcExpDate + ' <span style="font-size:11px;color:#999">(제조일+' + fssPogNum + '일)</span></td>'
+            + '<td style="padding:6px 10px">' + inputExpDate + '</td>'
+            + '<td style="padding:6px 10px;text-align:center">' + (dateMatch
+                ? '<span style="color:#43a047;font-weight:700">✓ 일치</span>'
+                : '<span style="color:#c62828;font-weight:700">✗ 불일치</span>') + '</td></tr>';
+    } else if (fssPogNum && !inputMfgDate) {
+        html += '<tr style="background:#fff8e1">'
+            + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
+            + '<td style="padding:6px 10px;color:#1a237e">제조일 입력 시 자동 계산</td>'
+            + '<td style="padding:6px 10px;color:#aaa">' + (inputExpDate || '미입력') + '</td>'
+            + '<td style="padding:6px 10px;text-align:center"><span style="color:#f9a825">⚠</span></td></tr>';
+    }
+
+    // 부가 정보 (비교 없이 참고용 표시)
+    if (fssCompany) {
+        html += '<tr><td style="padding:6px 10px;font-weight:600;color:#5c6bc0">제조업체</td>'
+            + '<td colspan="3" style="padding:6px 10px;color:#555">' + fssCompany + '</td></tr>';
+    }
+    if (fssReportNo) {
+        html += '<tr><td style="padding:6px 10px;font-weight:600;color:#5c6bc0">보고번호</td>'
+            + '<td colspan="3" style="padding:6px 10px;color:#555;font-family:monospace">' + fssReportNo + '</td></tr>';
+    }
+    if (fssPermDate) {
+        html += '<tr><td style="padding:6px 10px;font-weight:600;color:#5c6bc0">허가일자</td>'
+            + '<td colspan="3" style="padding:6px 10px;color:#555">' + fssPermDate + '</td></tr>';
+    }
+    if (fssProduction) {
+        html += '<tr><td style="padding:6px 10px;font-weight:600;color:#5c6bc0">생산유형</td>'
+            + '<td colspan="3" style="padding:6px 10px;color:#555">' + fssProduction + '</td></tr>';
+    }
+    if (fssCstdy) {
+        html += '<tr><td style="padding:6px 10px;font-weight:600;color:#5c6bc0">보관방법</td>'
+            + '<td colspan="3" style="padding:6px 10px;color:#555;max-width:400px;word-break:break-all">' + fssCstdy + '</td></tr>';
+    }
+
+    html += '</tbody></table>';
+
+    // 소비기한 일수 자동 채움 버튼
+    if (fssPogNum && fssPogNum !== inputExpNum) {
+        html += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">'
+            + '<button onclick="applyFssExpiry(\'' + fssPogNum + '\')" style="padding:6px 14px;background:#3949ab;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">'
+            + '📥 소비기한 ' + fssPogNum + '일 적용</button>'
+            + '<span style="font-size:11px;color:#999">식약처 데이터를 소비기한(일수)에 자동 입력합니다</span></div>';
+    }
+
+    body.innerHTML = html;
+    panel.style.display = 'block';
+}
+
+// 식약처 소비기한 일수 적용
+function applyFssExpiry(days) {
+    var el = document.getElementById('expiry-days');
+    if (el) {
+        el.value = days;
+        calcExpiryDate();
+        // 패널 갱신 (입력값 변경 반영)
+        showToast('소비기한 ' + days + '일이 적용되었습니다', 'success');
+        // 제조일자가 있으면 날짜도 자동 계산됨
+        var mfgDate = document.getElementById('manufacture-date').value;
+        if (mfgDate) {
+            var d = new Date(mfgDate);
+            d.setDate(d.getDate() + parseInt(days));
+            var yyyy = d.getFullYear();
+            var mm = String(d.getMonth() + 1).padStart(2, '0');
+            var dd = String(d.getDate()).padStart(2, '0');
+            document.getElementById('expiry-date').value = yyyy + '-' + mm + '-' + dd;
+        }
     }
 }
 
