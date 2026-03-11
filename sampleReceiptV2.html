@@ -575,9 +575,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
     </div>
   </div>
 
-  <!-- 업체 변경이력 -->
-  <div id="company-changelog" style="display:none">
-    <div id="company-changelog-body" style="max-height:100px;overflow-y:auto;font-size:10px"></div>
+  <!-- 업체 변경이력 (hover 오버레이) -->
+  <div id="company-changelog" style="display:none;position:fixed;z-index:9500;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:10px 12px;min-width:500px;max-width:700px;max-height:320px;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;color:#344054">업체 변경이력</span>
+      <span id="changelog-count" style="font-size:10px;color:#8892a4"></span>
+    </div>
+    <div id="company-changelog-body" style="font-size:10px"></div>
   </div>
 
   <!-- 휴대폰 (숨김) -->
@@ -746,7 +750,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
     </div>
 
     <!-- 접수 공지 -->
-    <div id="notice-template-area" style="display:none"></div>
+    <div id="notice-template-area" style="display:none;padding:8px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="font-weight:600;font-size:12px;color:#f57f17">접수 공지</label>
+        <span id="notice-purpose-label" style="font-size:11px;color:#8d6e63"></span>
+      </div>
+      <div id="notice-items-list" style="display:flex;flex-direction:column;gap:5px">
+        <!-- 공지 항목들이 여기 렌더됨 -->
+      </div>
+      <!-- 선택된 공지의 비고 입력 -->
+      <div id="notice-remark-area" style="display:none;margin-top:8px;padding:8px;background:#fffde7;border-radius:6px;border:1px solid #fff9c4">
+        <label style="font-size:11px;font-weight:600;color:#8d6e63;margin-bottom:4px;display:block">
+          선택 공지 비고 <span style="font-weight:400;color:#bbb">(성적서 "비고 또는 기타"에 기재)</span>
+        </label>
+        <textarea id="notice-remark-input" rows="2" placeholder="추가 기재할 내용을 입력하세요..." oninput="markAsModified()" style="width:100%;padding:6px 10px;border:1px solid #ffe082;border-radius:6px;font-size:12px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+    </div>
 
     <!-- 접수 공지 메모 -->
     <div class="f-grp" id="notice-memo-area">
@@ -895,8 +914,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 
   <!-- 계산서 정보 토글 -->
   <div style="position:relative">
-    <button type="button" class="memo-btn" onclick="toggleBillPanel()">🧾 계산서 ▾</button>
-    <div id="bill-panel" style="display:none;position:absolute;bottom:calc(100%+4px);right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 -8px 24px rgba(0,0,0,.12);z-index:400;padding:14px;min-width:520px;max-height:480px;overflow-y:auto">
+    <button type="button" class="memo-btn" id="bill-toggle-btn" onclick="toggleBillPanel()">🧾 계산서 ▾</button>
+    <div id="bill-panel" style="display:none;position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 -8px 24px rgba(0,0,0,.12);z-index:9000;padding:14px;min-width:520px;max-height:480px;overflow-y:auto">
       <div style="font-size:12px;font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between">
         <span>🧾 계산서 정보</span>
         <button type="button" onclick="toggleBillPanel()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:14px">✕</button>
@@ -974,8 +993,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 
   <!-- 결제방법 + 입금내역 토글 -->
   <div style="position:relative">
-    <button type="button" class="memo-btn" onclick="togglePayPanel()">💳 결제/입금 ▾</button>
-    <div id="pay-panel" style="display:none;position:absolute;bottom:calc(100%+4px);right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 -8px 24px rgba(0,0,0,.12);z-index:400;padding:14px;min-width:460px">
+    <button type="button" class="memo-btn" id="pay-toggle-btn" onclick="togglePayPanel()">💳 결제/입금 ▾</button>
+    <div id="pay-panel" style="display:none;position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 -8px 24px rgba(0,0,0,.12);z-index:9000;padding:14px;min-width:460px">
       <div style="font-size:12px;font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between">
         <span>💳 결제방법 & 입금내역</span>
         <button type="button" onclick="togglePayPanel()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:14px">✕</button>
@@ -1127,7 +1146,9 @@ document.addEventListener('click', function(e){
 
 function togglePayPanel(){
   var p=document.getElementById('pay-panel');
-  p.style.display=p.style.display==='block'?'none':'block';
+  var show=p.style.display!=='block';
+  if(show){ positionFixedPopup(p,'pay-toggle-btn',460); }
+  p.style.display=show?'block':'none';
 }
 function toggleMemoPanel(){
   var p=document.getElementById('memo-panel');
@@ -1181,9 +1202,25 @@ function collapseMfdsStdBody(){
   if(body)body.style.display='none';
   if(icon)icon.textContent='▼';
 }
+/** fee-bar 팝업을 버튼 위쪽(position:fixed)으로 배치 */
+function positionFixedPopup(panel, btnId, minW) {
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+  var r = btn.getBoundingClientRect();
+  // 위쪽으로 배치 (버튼 top - 4px 에서 팝업 bottom)
+  panel.style.left = 'auto';
+  panel.style.right = 'auto';
+  panel.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+  // 오른쪽 정렬 (버튼 오른쪽 기준)
+  var rightOffset = window.innerWidth - r.right;
+  panel.style.right = Math.max(4, rightOffset) + 'px';
+  panel.style.maxHeight = Math.min(480, r.top - 20) + 'px';
+}
 function toggleBillPanel(){
   var p=document.getElementById('bill-panel');
-  p.style.display=p.style.display==='block'?'none':'block';
+  var show=p.style.display!=='block';
+  if(show){ positionFixedPopup(p,'bill-toggle-btn',520); }
+  p.style.display=show?'block':'none';
 }
 function submitReceiptForm(){
   var e=new Event('submit',{bubbles:true,cancelable:true});
@@ -1191,10 +1228,10 @@ function submitReceiptForm(){
 }
 // 클릭 외부 시 팝업 닫기
 document.addEventListener('click',function(e){
-  ['pay-panel','memo-panel'].forEach(function(id){
-    var el=document.getElementById(id);
+  [['bill-panel','bill-toggle-btn'],['pay-panel','pay-toggle-btn'],['memo-panel',null]].forEach(function(pair){
+    var el=document.getElementById(pair[0]);
     if(!el||el.style.display!=='block') return;
-    var btn=el.previousElementSibling;
+    var btn=pair[1]?document.getElementById(pair[1]):el.previousElementSibling;
     if(btn&&(btn.contains(e.target)||el.contains(e.target))) return;
     el.style.display='none';
   });
@@ -2033,18 +2070,44 @@ function toggleSection(header) {
     header.nextElementSibling.classList.toggle('active');
 }
 
-// 변경이력 접기/펼치기
-function toggleChangeLog() {
-    var body = document.getElementById('company-changelog-body');
-    var btn = document.getElementById('changelog-toggle-btn');
-    if (body.style.display === 'none') {
-        body.style.display = '';
-        btn.textContent = '접기 ▲';
-    } else {
-        body.style.display = 'none';
-        btn.textContent = '펼치기 ▼';
+// 업체 변경이력 hover 오버레이
+var _changelogHoverTimer = null;
+function showCompanyChangelog() {
+    var cl = document.getElementById('company-changelog');
+    if (!cl || !cl.querySelector('table')) return; // 이력 없으면 표시 안 함
+    clearTimeout(_changelogHoverTimer);
+    var inp = document.getElementById('company-search');
+    if (!inp) return;
+    var r = inp.getBoundingClientRect();
+    cl.style.left = r.left + 'px';
+    cl.style.top = (r.bottom + 4) + 'px';
+    // 화면 아래 넘어가면 위에 표시
+    cl.style.display = 'block';
+    var cr = cl.getBoundingClientRect();
+    if (cr.bottom > window.innerHeight - 10) {
+        cl.style.top = 'auto';
+        cl.style.bottom = (window.innerHeight - r.top + 4) + 'px';
     }
 }
+function hideCompanyChangelog() {
+    _changelogHoverTimer = setTimeout(function() {
+        var cl = document.getElementById('company-changelog');
+        if (cl) cl.style.display = 'none';
+    }, 200);
+}
+// 이벤트 등록
+document.addEventListener('DOMContentLoaded', function() {
+    var inp = document.getElementById('company-search');
+    var cl = document.getElementById('company-changelog');
+    if (inp) {
+        inp.addEventListener('mouseenter', showCompanyChangelog);
+        inp.addEventListener('mouseleave', hideCompanyChangelog);
+    }
+    if (cl) {
+        cl.addEventListener('mouseenter', function() { clearTimeout(_changelogHoverTimer); });
+        cl.addEventListener('mouseleave', hideCompanyChangelog);
+    }
+});
 
 // ============================================================================
 // 계산서 정보 토글/조건부 표시
@@ -2245,7 +2308,8 @@ function onTestFieldChange() {
     document.getElementById('company-address').value = '';
     document.getElementById('sales-rep').value = '';
     var clWrap = document.getElementById('company-changelog');
-    if (clWrap) clWrap.style.display = 'none';
+    if (clWrap) { clWrap.style.display = 'none'; var cb = document.getElementById('company-changelog-body'); if(cb) cb.innerHTML=''; }
+    var inp = document.getElementById('company-search'); if(inp) inp.title = '';
     document.getElementById('company-suggestions').classList.remove('active');
 
     // 계산서 정보 초기화
@@ -5010,29 +5074,37 @@ function selectCompany(elOrObj) {
     bp('bill-p-name', _tn); bp('bill-p-phone', _tp); bp('bill-p-fax', _tf);
     bp('bill-p-mobile', _tm); bp('bill-p-email', _te);
 
-    // 업체 변경이력 표시
+    // 업체 변경이력 데이터 채움 (hover 시 오버레이로 표시)
     var clWrap = document.getElementById('company-changelog');
     var clBody = document.getElementById('company-changelog-body');
+    var clCount = document.getElementById('changelog-count');
     var logs = c.changeLog || [];
+    if (clWrap) clWrap.style.display = 'none'; // 숨김 유지
     if (logs.length > 0 && clWrap && clBody) {
-        clWrap.style.display = '';
+        if (clCount) clCount.textContent = logs.length + '건';
         var html = '<table style="width:100%;border-collapse:collapse">' +
-            '<tr style="border-bottom:1px solid #e2e6ed;color:#8892a4">' +
-            '<th style="text-align:left;padding:4px 6px;width:130px">일시</th>' +
-            '<th style="text-align:left;padding:4px 6px;width:70px">변경자</th>' +
-            '<th style="text-align:left;padding:4px 6px">변경 내용</th>' +
-            '<th style="text-align:right;padding:4px 6px;width:80px">미수금</th></tr>';
+            '<tr style="border-bottom:1px solid #e2e6ed;color:#8892a4;font-size:10px">' +
+            '<th style="text-align:left;padding:3px 6px;width:120px">일시</th>' +
+            '<th style="text-align:left;padding:3px 6px;width:60px">변경자</th>' +
+            '<th style="text-align:left;padding:3px 6px">변경 내용</th>' +
+            '<th style="text-align:right;padding:3px 6px;width:70px">미수금</th></tr>';
         logs.slice().reverse().forEach(function(log) {
             html += '<tr style="border-bottom:1px solid #f5f5f5">' +
-                '<td style="padding:4px 6px;color:#5f6b7a;white-space:nowrap">' + (log.date || '') + '</td>' +
-                '<td style="padding:4px 6px">' + (log.who || '') + '</td>' +
-                '<td style="padding:4px 6px;font-size:10px">' + (log.detail || '') + '</td>' +
-                '<td style="padding:4px 6px;text-align:right;color:#d32f2f;font-weight:600">' + (log.receivable || '') + '</td></tr>';
+                '<td style="padding:3px 6px;color:#5f6b7a;white-space:nowrap;font-size:10px">' + (log.date || '') + '</td>' +
+                '<td style="padding:3px 6px;font-size:10px">' + (log.who || '') + '</td>' +
+                '<td style="padding:3px 6px;font-size:10px;max-width:300px;word-break:break-all">' + (log.detail || '') + '</td>' +
+                '<td style="padding:3px 6px;text-align:right;color:#d32f2f;font-weight:600;font-size:10px">' + (log.receivable || '') + '</td></tr>';
         });
         html += '</table>';
         clBody.innerHTML = html;
+        // 업체명 입력 옆에 이력 표시 인디케이터
+        var inp = document.getElementById('company-search');
+        if (inp) inp.title = '변경이력 ' + logs.length + '건 (마우스 올리면 표시)';
     } else if (clWrap) {
-        clWrap.style.display = 'none';
+        clBody.innerHTML = '';
+        if (clCount) clCount.textContent = '';
+        var inp2 = document.getElementById('company-search');
+        if (inp2) inp2.title = '';
     }
 
     // 성적서 발송용 데이터 보관
