@@ -640,7 +640,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
     <!-- 날짜 정보 -->
     <div class="f-row c2">
       <div class="f-grp"><label>제조일자</label><input type="date" id="manufacture-date" onchange="calcExpiryDate()"></div>
-      <div class="f-grp"><label>소비기한</label><input type="date" id="expiry-date"></div>
+      <div class="f-grp"><label>소비기한</label><input type="text" id="expiry-date" placeholder="날짜 또는 제조일로부터 00일"></div>
     </div>
     <div class="f-row c2">
       <div class="f-grp">
@@ -4476,18 +4476,12 @@ function updatePaymentSummary() {
 }
 
 // ============================================================================
-// 소비기한 일수 → 날짜 자동 계산
+// 소비기한 일수 → "제조일로부터 ○○일" 텍스트 설정
 // ============================================================================
 function calcExpiryDate() {
-    var mfDate = document.getElementById('manufacture-date').value;
     var days = parseInt(document.getElementById('expiry-days').value);
-    if (mfDate && days > 0) {
-        var d = new Date(mfDate);
-        d.setDate(d.getDate() + days);
-        var yyyy = d.getFullYear();
-        var mm = String(d.getMonth() + 1).padStart(2, '0');
-        var dd = String(d.getDate()).padStart(2, '0');
-        document.getElementById('expiry-date').value = yyyy + '-' + mm + '-' + dd;
+    if (days > 0) {
+        document.getElementById('expiry-date').value = '제조일로부터 ' + days + '일';
     }
 }
 
@@ -5637,11 +5631,18 @@ function renderReportVerifyPanel(data) {
         if (pogInfo.days) {
             var daysLabel = pogInfo.days + '일' + (pogInfo.unit !== 'day' ? ' (' + pogInfo.display + ')' : '');
             html += cmpRow('소비기한(일)', daysLabel, inputExpNum ? inputExpNum + '일' : '');
-            if (calcExpDate && inputExpDate) {
-                var dateMatch = calcExpDate === inputExpDate;
-                html += '<tr style="background:' + (dateMatch ? '#e8f5e9' : '#ffebee') + '"><td style="padding:4px 8px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td><td style="padding:4px 8px;color:#1a237e">' + calcExpDate + ' <span style="font-size:10px;color:#999">(' + calcLabel + ')</span></td><td style="padding:4px 8px">' + inputExpDate + '</td><td style="padding:4px 8px;text-align:center">' + (dateMatch ? '<span style="color:#43a047;font-weight:700">✓</span>' : '<span style="color:#c62828;font-weight:700">✗</span>') + '</td></tr>';
-            } else if (inputMfgDate && !inputExpDate) {
-                html += '<tr style="background:#fff8e1"><td style="padding:4px 8px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td><td style="padding:4px 8px;color:#1a237e">' + calcExpDate + '</td><td style="padding:4px 8px;color:#aaa">미입력</td><td style="padding:4px 8px;text-align:center"><span style="color:#f9a825">⚠</span></td></tr>';
+            // 소비기한 텍스트 비교 ("제조일로부터 ○○일")
+            if (inputExpDate) {
+                var expTextMatch = inputExpDate.indexOf('제조일로부터') >= 0 && inputExpDate.indexOf(pogInfo.days + '일') >= 0;
+                var isDateFormat = /^\d{4}-\d{2}-\d{2}$/.test(inputExpDate);
+                if (isDateFormat && calcExpDate) {
+                    var dateMatch = calcExpDate === inputExpDate;
+                    html += '<tr style="background:' + (dateMatch ? '#e8f5e9' : '#ffebee') + '"><td style="padding:4px 8px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td><td style="padding:4px 8px;color:#1a237e">' + calcExpDate + ' <span style="font-size:10px;color:#999">(' + calcLabel + ')</span></td><td style="padding:4px 8px">' + inputExpDate + '</td><td style="padding:4px 8px;text-align:center">' + (dateMatch ? '<span style="color:#43a047;font-weight:700">✓</span>' : '<span style="color:#c62828;font-weight:700">✗</span>') + '</td></tr>';
+                } else {
+                    html += '<tr style="background:' + (expTextMatch ? '#e8f5e9' : '#fff3e0') + '"><td style="padding:4px 8px;font-weight:600;color:#5c6bc0">소비기한</td><td style="padding:4px 8px;color:#1a237e">제조일로부터 ' + pogInfo.days + '일</td><td style="padding:4px 8px">' + inputExpDate + '</td><td style="padding:4px 8px;text-align:center">' + (expTextMatch ? '<span style="color:#43a047;font-weight:700">✓</span>' : '<span style="color:#e65100;font-weight:700">✗</span>') + '</td></tr>';
+                }
+            } else if (inputMfgDate) {
+                html += '<tr style="background:#fff8e1"><td style="padding:4px 8px;font-weight:600;color:#5c6bc0">소비기한</td><td style="padding:4px 8px;color:#1a237e">제조일로부터 ' + pogInfo.days + '일</td><td style="padding:4px 8px;color:#aaa">미입력</td><td style="padding:4px 8px;text-align:center"><span style="color:#f9a825">⚠</span></td></tr>';
             }
         }
     }
@@ -5679,21 +5680,16 @@ function parsePogDaycnt(raw) {
 function applyFssExpiry(days) {
     var el = document.getElementById('expiry-days');
     if (el) {
-        el.value = days; calcExpiryDate();
-        showToast('소비기한 ' + days + '일이 적용되었습니다', 'success');
-        var mfgDate = document.getElementById('manufacture-date').value;
-        if (mfgDate) {
-            var d = new Date(mfgDate); d.setDate(d.getDate() + parseInt(days));
-            document.getElementById('expiry-date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-        }
+        el.value = days;
+        calcExpiryDate();
+        showToast('소비기한 "제조일로부터 ' + days + '일" 적용', 'success');
     }
 }
 
 function applyFssExpiryDate(days, dateStr) {
     document.getElementById('expiry-days').value = days;
-    document.getElementById('expiry-date').value = dateStr;
     calcExpiryDate();
-    showToast('소비기한 ' + days + '일 + 날짜 ' + dateStr + ' 적용', 'success');
+    showToast('소비기한 "제조일로부터 ' + days + '일" 적용', 'success');
 }
 
 // ============================================================================
