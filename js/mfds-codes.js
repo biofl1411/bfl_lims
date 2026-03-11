@@ -175,7 +175,20 @@ MFDS_CODES.renderProductPicker = function(containerId, onSelect) {
     '  </div>' +
     '  <input type="hidden" id="mfds-product-code">' +
     '  <input type="hidden" id="mfds-product-name">' +
+    '  <div style="margin-top:10px;border-top:1px dashed #ffe0b2;padding-top:8px">' +
+    '    <div style="font-size:11px;font-weight:700;color:#e65100;margin-bottom:6px">📦 공통기준규격 항목 검색</div>' +
+    '    <div style="position:relative">' +
+    '      <input type="text" id="mfds-cmn-search" placeholder="공통규격 항목명 또는 코드 검색..." ' +
+    '             style="width:100%;padding:5px 8px;border:1px solid #ffe0b2;border-radius:4px;font-size:12px;background:#fffbf0">' +
+    '      <div id="mfds-cmn-results" style="display:none;position:absolute;top:100%;left:0;right:0;' +
+    '           max-height:200px;overflow-y:auto;background:#fff;border:1px solid #ffe0b2;border-top:none;' +
+    '           border-radius:0 0 4px 4px;z-index:100;box-shadow:0 4px 8px rgba(0,0,0,0.1)"></div>' +
+    '    </div>' +
+    '  </div>' +
     '</div>';
+
+  // 공통규격 검색 핸들러 초기화
+  MFDS_CODES._initCmnSearch();
 
   // 데이터 로드 후 대분류 채우기
   MFDS_CODES.loadProductCodes().then(function(allCodes) {
@@ -749,6 +762,99 @@ MFDS_CODES.clearCache = function() {
   _mc_testItemNameMap = null;
   _mc_unitNameMap = null;
   console.log('[MFDS_CODES] 캐시 초기화');
+};
+
+// ============================================================
+// 9. 공통기준규격 검색 (품목코드 피커 하단)
+// ============================================================
+
+MFDS_CODES._cmnSearchCache = null;
+
+/** 공통규격 검색 데이터 캐시 빌드 */
+MFDS_CODES._loadCmnSearchData = function() {
+  if (MFDS_CODES._cmnSearchCache) return Promise.resolve(MFDS_CODES._cmnSearchCache);
+  return Promise.all([
+    MFDS_CODES.loadCommonStandards(),
+    MFDS_CODES.getTestItemNameMap(),
+    MFDS_CODES.getUnitNameMap()
+  ]).then(function(results) {
+    var cmnData = results[0], testNameMap = results[1], unitMap = results[2];
+    var seen = {};
+    cmnData.forEach(function(s) {
+      if (s['사용여부'] !== 'Y') return;
+      var code = s['시험항목코드'] || '';
+      if (!code || seen[code]) return;
+      seen[code] = {
+        code: code,
+        name: (testNameMap && testNameMap[code]) || code,
+        stdVal: s['기준규격값'] || s['기준규격값설명'] || '',
+        unitCode: s['단위코드'] || '',
+        unit: (unitMap && unitMap[s['단위코드']]) || s['단위코드'] || ''
+      };
+    });
+    MFDS_CODES._cmnSearchCache = Object.values(seen);
+    MFDS_CODES._cmnSearchCache.sort(function(a, b) { return a.name.localeCompare(b.name); });
+    return MFDS_CODES._cmnSearchCache;
+  });
+};
+
+/** 공통규격 검색 UI 이벤트 바인딩 */
+MFDS_CODES._initCmnSearch = function() {
+  var searchEl = document.getElementById('mfds-cmn-search');
+  var resultsEl = document.getElementById('mfds-cmn-results');
+  if (!searchEl || !resultsEl) return;
+
+  var timer = null;
+  searchEl.addEventListener('input', function() {
+    clearTimeout(timer);
+    var q = searchEl.value.trim().toLowerCase();
+    if (q.length < 1) { resultsEl.style.display = 'none'; return; }
+    timer = setTimeout(function() {
+      MFDS_CODES._loadCmnSearchData().then(function(items) {
+        var matched = items.filter(function(item) {
+          return item.name.toLowerCase().indexOf(q) >= 0 || item.code.toLowerCase().indexOf(q) >= 0;
+        });
+        if (matched.length === 0) {
+          resultsEl.innerHTML = '<div style="padding:8px 10px;color:#999;font-size:11px">검색 결과 없음</div>';
+        } else {
+          var regex = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+          resultsEl.innerHTML = matched.slice(0, 30).map(function(item) {
+            var fee = (typeof getFeeByCode === 'function') ? getFeeByCode(item.code) : 0;
+            var feeText = fee > 0 ? fee.toLocaleString() + '원' : '';
+            return '<div class="mfds-cmn-item" data-code="' + item.code + '" ' +
+              'style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid #f5f5f5" ' +
+              'onmouseover="this.style.background=\'#fff3e0\'" onmouseout="this.style.background=\'#fff\'">' +
+              '<span>' + item.name.replace(regex, '<mark>$1</mark>') +
+              ' <span style="color:#e65100;font-size:9px;background:#fff3e0;padding:0 4px;border-radius:3px">공통</span></span>' +
+              '<span style="font-size:10px;color:#999;white-space:nowrap">' +
+              '<span style="font-family:monospace">' + item.code + '</span>' +
+              (item.stdVal ? ' · ' + item.stdVal.substring(0, 12) : '') +
+              (feeText ? ' · <b style="color:#1565c0">' + feeText + '</b>' : '') +
+              '</span></div>';
+          }).join('');
+        }
+        resultsEl.style.display = 'block';
+      });
+    }, 200);
+  });
+
+  // 클릭 시 addCmnStdItem 호출
+  resultsEl.addEventListener('click', function(e) {
+    var target = e.target.closest('.mfds-cmn-item');
+    if (!target) return;
+    var code = target.getAttribute('data-code');
+    if (typeof addCmnStdItem === 'function') {
+      addCmnStdItem(code);
+    } else {
+      console.warn('[공통규격] addCmnStdItem 함수를 찾을 수 없습니다');
+    }
+    // 검색 결과 유지 (계속 추가 가능)
+  });
+
+  // 포커스 아웃 시 닫기
+  searchEl.addEventListener('blur', function() {
+    setTimeout(function() { resultsEl.style.display = 'none'; }, 200);
+  });
 };
 
 // ============================================================

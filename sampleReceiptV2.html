@@ -3569,12 +3569,14 @@ function selectFoodType(type) {
 // 공통기준규격 시험항목 → 검사항목 테이블에 직접 추가
 // ============================================================================
 function addCmnStdItem(testCode) {
-    if (!_cmnStdTestItems) return;
-    var item = _cmnStdTestItems.find(function(i) { return i.code === testCode; });
-    if (!item) return;
+    // 두 캐시 소스에서 항목 탐색 (검체유형 검색 캐시 + 품목코드 피커 캐시)
+    var item = null;
+    if (_cmnStdTestItems) item = _cmnStdTestItems.find(function(i) { return i.code === testCode; });
+    if (!item && MFDS_CODES._cmnSearchCache) item = MFDS_CODES._cmnSearchCache.find(function(i) { return i.code === testCode; });
+    if (!item) { loadCmnStdTestItems().then(function(items) { var found = items.find(function(i){ return i.code === testCode; }); if(found) addCmnStdItem(testCode); }); return; }
 
     // 드롭다운 닫기
-    document.getElementById('food-type-list').classList.remove('active');
+    var ftl = document.getElementById('food-type-list'); if(ftl) ftl.classList.remove('active');
 
     // 검사항목 테이블 표시
     var section = document.getElementById('inspection-items-section');
