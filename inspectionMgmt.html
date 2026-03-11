@@ -752,7 +752,13 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <!-- 대분류 필터 칩 -->
     <div id="mfds-test-category-chips" style="display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 6px;"></div>
     <!-- 소분류 필터 칩 -->
-    <div id="mfds-test-sub-chips" style="display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 10px;min-height:0;"></div>
+    <div style="display:flex;align-items:center;gap:6px;padding:0 16px 10px;flex-wrap:wrap;">
+      <div id="mfds-test-sub-chips" style="display:flex;flex-wrap:wrap;gap:5px;flex:1"></div>
+      <div id="mfds-p-actions" style="display:none;flex-shrink:0;display:flex;gap:4px;">
+        <button onclick="createPRefSubChip()" style="padding:3px 8px;font-size:12px;border:2px dashed #7c4dff;color:#7c4dff;background:#f3e8ff;border-radius:8px;cursor:pointer;font-weight:700;line-height:1" title="P참고용 새 소분류 칩 생성">＋ 칩</button>
+        <button onclick="openMoveToP()" style="padding:3px 10px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#f3e8ff;border-radius:6px;cursor:pointer;white-space:nowrap" title="다른 분야 항목을 P참고용으로 이동">📦 항목→P</button>
+      </div>
+    </div>
     <!-- 시험항목 테이블 -->
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -36235,6 +36241,9 @@ function setMfdsTestCategory(cat) {
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
+  // P참고용 선택 시 액션 버튼 표시
+  var pActions = document.getElementById('mfds-p-actions');
+  if (pActions) pActions.style.display = (_mfdsTestCatFilter === 'P') ? 'flex' : 'none';
 }
 
 /** 소분류 필터 클릭 */
@@ -36244,6 +36253,192 @@ function setMfdsTestSubCategory(sub) {
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
+}
+
+// ══ P참고용: 신규 소분류 칩 생성 ══
+function createPRefSubChip() {
+  var name = prompt('새 P참고용 소분류 이름을 입력하세요:\n(예: 유통기한, 알레르겐 등)');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+
+  // 기존 P 소분류에서 사용중인 번호 확인
+  var usedKeys = Object.keys(REF_SUB_CATEGORIES['P'] || {});
+  // 사용 가능한 키 찾기 (A~Z 문자 또는 미사용 숫자)
+  var newKey = null;
+  var candidates = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  for (var i = 0; i < candidates.length; i++) {
+    if (!usedKeys.includes(candidates[i])) { newKey = candidates[i]; break; }
+  }
+  if (!newKey) {
+    // 숫자로 시도
+    for (var n = 0; n <= 9; n++) {
+      if (!usedKeys.includes(String(n))) { newKey = String(n); break; }
+    }
+  }
+  if (!newKey) { showToast('더 이상 소분류를 추가할 수 없습니다', 'warning'); return; }
+
+  // 중복 이름 체크
+  var existing = Object.values(REF_SUB_CATEGORIES['P'] || {});
+  if (existing.indexOf(name) >= 0) { showToast("'" + name + "' 소분류가 이미 존재합니다", 'warning'); return; }
+
+  // 메모리 추가
+  if (!REF_SUB_CATEGORIES['P']) REF_SUB_CATEGORIES['P'] = {};
+  REF_SUB_CATEGORIES['P'][newKey] = name;
+
+  // Firestore에 저장 (커스텀 소분류 기록)
+  firebase.firestore().collection('settings').doc('pRefSubCategories').set(
+    REF_SUB_CATEGORIES['P'], { merge: true }
+  );
+
+  // 소분류 칩 갱신
+  renderMfdsTestSubChips();
+  showToast("P" + newKey + " '" + name + "' 소분류가 생성되었습니다", 'success');
+}
+
+// ══ P참고용: 다른 분야 항목을 P참고용으로 이동 ══
+function openMoveToP() {
+  // 현재 선택된 P 소분류 확인
+  var targetSub = _mfdsTestSubFilter;
+  if (!targetSub) {
+    showToast('이동할 P 소분류 칩을 먼저 선택하세요', 'warning');
+    return;
+  }
+  var targetName = (REF_SUB_CATEGORIES['P'] || {})[targetSub] || targetSub;
+
+  // 모달 열기 — 기존 mMoveToP 모달 사용
+  var srcOptions = '';
+  Object.keys(REF_CODE_CATEGORIES).forEach(function(p) {
+    if (p === 'P') return;
+    var cat = REF_CODE_CATEGORIES[p];
+    var cnt = _mfdsTestCatIndex[p] || 0;
+    srcOptions += '<option value="' + p + '">' + p + ' ' + cat.name + ' (' + cnt + ')</option>';
+  });
+
+  var modalHtml = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mMoveToP" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:600px;max-width:90vw;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
+    + '<h3 style="margin:0;font-size:15px">📦 항목 → P' + targetSub + ' ' + targetName + '</h3>'
+    + '<button onclick="document.getElementById(\'mMoveToP\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<div style="display:flex;gap:10px;margin-bottom:10px">'
+    + '<select id="mvp-src" onchange="loadMoveToPItems()" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px">' + srcOptions + '</select>'
+    + '<input id="mvp-search" placeholder="항목명 검색..." oninput="filterMoveToPItems()" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px">'
+    + '<label style="font-size:11px;display:flex;align-items:center;gap:3px;white-space:nowrap"><input type="checkbox" id="mvp-all" onchange="toggleMoveToPAll(this.checked)" style="accent-color:#7c4dff"> 전체</label>'
+    + '<span id="mvp-cnt" style="font-size:11px;color:#7c4dff;font-weight:600;white-space:nowrap">0개</span></div>'
+    + '<div id="mvp-list" style="flex:1;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;max-height:350px"></div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'
+    + '<button onclick="document.getElementById(\'mMoveToP\').remove()" style="padding:7px 16px;border:1px solid #d1d5db;background:#fff;border-radius:7px;font-size:12px;cursor:pointer">취소</button>'
+    + '<button onclick="executeMoveToPRef()" style="padding:7px 16px;border:none;background:#7c4dff;color:#fff;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">📦 이동</button></div>'
+    + '</div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  _moveToPSub = targetSub;
+  _moveToPName = targetName;
+  _moveToPSelected = new Set();
+  _moveToPItems = [];
+  _moveToPFiltered = [];
+  loadMoveToPItems();
+}
+
+var _moveToPSub = '', _moveToPName = '', _moveToPSelected = new Set(), _moveToPItems = [], _moveToPFiltered = [];
+
+function loadMoveToPItems() {
+  var cat = document.getElementById('mvp-src').value;
+  _moveToPSelected = new Set();
+  _moveToPItems = [];
+  document.getElementById('mvp-all').checked = false;
+
+  (_mfdsTestItems || []).forEach(function(t, i) {
+    var code = (t['시험항목코드'] || '').toUpperCase();
+    if (code.charAt(0) === cat) {
+      _moveToPItems.push({ idx: i, code: code, name: t['시험항목명'] || t['한글명'] || '', sub: t['중분류명'] || '' });
+    }
+  });
+  filterMoveToPItems();
+}
+
+function filterMoveToPItems() {
+  var q = (document.getElementById('mvp-search').value || '').toLowerCase();
+  _moveToPFiltered = q ? _moveToPItems.filter(function(it) {
+    return it.name.toLowerCase().indexOf(q) >= 0 || it.code.toLowerCase().indexOf(q) >= 0;
+  }) : _moveToPItems.slice();
+
+  var html = '';
+  if (!_moveToPFiltered.length) {
+    html = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">항목 없음</div>';
+  } else {
+    _moveToPFiltered.forEach(function(it) {
+      var chk = _moveToPSelected.has(it.idx) ? 'checked' : '';
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px">'
+        + '<input type="checkbox" ' + chk + ' onchange="toggleMoveToPItem(' + it.idx + ',this.checked)" style="accent-color:#7c4dff">'
+        + '<span style="color:#7c4dff;font-weight:600;width:70px;font-size:11px">' + it.code + '</span>'
+        + '<span style="flex:1">' + it.name + '</span>'
+        + '<span style="color:#999;font-size:11px">' + it.sub + '</span></label>';
+    });
+  }
+  document.getElementById('mvp-list').innerHTML = html;
+  document.getElementById('mvp-cnt').textContent = _moveToPSelected.size + '개';
+}
+
+function toggleMoveToPItem(idx, checked) {
+  if (checked) _moveToPSelected.add(idx); else _moveToPSelected.delete(idx);
+  document.getElementById('mvp-cnt').textContent = _moveToPSelected.size + '개';
+}
+
+function toggleMoveToPAll(checked) {
+  _moveToPSelected = new Set();
+  if (checked) _moveToPFiltered.forEach(function(it) { _moveToPSelected.add(it.idx); });
+  filterMoveToPItems();
+}
+
+function executeMoveToPRef() {
+  if (!_moveToPSelected.size) { showToast('이동할 항목을 선택하세요', 'warning'); return; }
+  var newCode = 'P' + _moveToPSub;
+  var count = 0;
+
+  _moveToPSelected.forEach(function(idx) {
+    var t = _mfdsTestItems[idx];
+    if (!t) return;
+    var oldCode = t['시험항목코드'] || '';
+    // 새 코드 생성: P + 소분류 + 기존코드 뒷부분(4자리)
+    var suffix = oldCode.length > 2 ? oldCode.substring(2) : ('0' + (count + 1)).slice(-4);
+    var pCode = newCode + suffix;
+
+    // 중복 확인
+    var dup = _mfdsTestItems.find(function(x) { return (x['시험항목코드'] || '').toUpperCase() === pCode.toUpperCase(); });
+    if (dup) return; // 이미 있으면 건너뛰기
+
+    // P참고용 항목으로 복사
+    var newItem = {
+      '시험항목코드': pCode,
+      '시험항목명': t['시험항목명'] || t['한글명'] || '',
+      '한글명': t['한글명'] || t['시험항목명'] || '',
+      '영문명': t['영문명'] || '',
+      '별칭': t['별칭'] || '',
+      '대분류명': 'P 참고용',
+      '중분류명': _moveToPName,
+      '단위': t['단위'] || '',
+      '시험법': t['시험법'] || '',
+      '사용여부': 'Y',
+      '_sourceCode': oldCode
+    };
+    _mfdsTestItems.push(newItem);
+
+    // Firestore 저장
+    firebase.firestore().collection('mfds_test_items').doc(pCode.toUpperCase()).set(newItem);
+    count++;
+  });
+
+  // 모달 닫기
+  var modal = document.getElementById('mMoveToP');
+  if (modal) modal.remove();
+
+  // 인덱스 갱신
+  buildMfdsTestCatIndex();
+  renderMfdsTestCategoryChips();
+  renderMfdsTestSubChips();
+  applyMfdsTestFilters();
+  renderMfdsTestTable();
+  showToast(count + '개 항목이 P' + _moveToPSub + ' ' + _moveToPName + '(으)로 복사되었습니다', 'success');
 }
 
 // ── 시험항목 추가 모달 ──
