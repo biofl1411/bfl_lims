@@ -2919,3 +2919,79 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 
 ##### sidebar.js — 메뉴 추가
 - 시험결재 그룹에 "시험일지" 메뉴 추가 (`testDiary.html`, page: `testing-diary`)
+
+### 2026-03-11
+
+#### 양식 수집기(formCollector) 개선
+
+**수정 파일**: `formCollector.html`
+
+- PDF 미리보기: `<embed>` → PDF.js canvas 렌더링 전환
+- 누락 메모 영역을 PDF 바로 아래로 이동, 필드 상세 접이식 변경
+- AI 분석 프롬프트 대폭 강화 (필드 누락 방지)
+- PDF 텍스트 추출 비교 기능 추가 (줄/행/격자 단위 검토)
+- 메모 기반 AI 재분석 기능 추가
+
+#### 참고용 탭 P참고용 칩 기능
+
+**수정 파일**: `sampleReceipt.html`
+
+- 참고용 탭에서 신규 P참고용 칩 생성 + 항목 이동 기능
+- 삭제/정렬 기능, UI 개선 (× 아이콘 호버 시 표시)
+- 칩 삭제 후 재생성 시 항목 잔류 오류 수정
+
+#### 소비기한 검증 패널
+
+**수정 파일**: `sampleReceipt.html`
+
+- 보고번호 조회 시 소비기한 검증 패널 추가
+- 해당없음/개월/년/일 등 다양한 형태 파싱 지원
+
+#### 수수료 할인 개선
+
+**수정 파일**: `sampleReceipt.html`
+
+- 할인 영역 UI 확대, 항목별 균등 배분 기능 추가
+
+#### 접수등록 V2 코크핏 레이아웃 (`sampleReceiptV2.html`)
+
+**수정 파일**: `sampleReceiptV2.html` (신규), `js/sidebar.js`, `js/mfds-codes.js`
+
+##### V2 페이지 신규 생성
+- 코크핏 레이아웃: 상단바(접수정보) + 업체바 + 시료탭 + 좌우분할(시료정보|시험항목) + 수수료바 + 버튼바
+- 사이드바 링크를 V2로 변경
+
+##### 할인금액 콤마 포맷팅 + 할인가 기준 계산
+- `fmtComma()`, `parseComma()`, `formatDiscountAmountInput()` 헬퍼
+- 입력값 = 할인가(최종가) 기준으로 할인율 계산
+- discount-final에 할인액 마이너스 표시, 테이블 숫자 짤림 수정
+
+##### 소비기한 텍스트 기록
+- type="date" → type="text", 일수 입력 시 "제조일로부터 20일" 텍스트 기록
+
+##### 계산서 정보 fee-bar 팝업 이동
+- 좌측 패널 → fee-bar 🧾 계산서 팝업으로 이동
+- bill-p-*(표시용) + hidden(저장용) 이중 구조
+
+##### 접수 공지 양식 복원
+- `notice-template-area` 내부 V1 누락 요소 추가 (notice-items-list, notice-purpose-label, notice-remark-area)
+
+##### 계산서/결제 팝업 위로 표시
+- `position:absolute` → `position:fixed` + `positionFixedPopup()` 동적 위치 계산
+- `#receipt-form{overflow:hidden}` 우회
+
+##### 업체 변경이력 hover 오버레이
+- 기존 인라인 → 업체명 hover 시 고정 오버레이 (position:fixed, 스크롤 지원)
+
+##### 공통기준규격 검색 → 품목코드 피커 하단 이동
+- `mfds-codes.js` renderProductPicker에 공통규격 검색 UI 추가
+- `_initCmnSearch()`, `_loadCmnSearchData()` — 디바운스 200ms 검색
+- `addCmnStdItem()` 두 캐시 소스 지원
+
+##### 팀별 메모 재배치
+- fee-bar 팝업/하단 메모바 삭제 → 우측 하단 2×2 그리드 박스 (고객/품질/재무/마케팅)
+- 전체 편집 가능 (권한은 추후 부여), 비고 삭제
+
+##### 기타 수정
+- 검체유형 드롭다운 클릭 사라짐 버그 수정 (`.autocomplete-wrap` 체크 누락)
+- 사이드바 접힘 시 `body.sidebar-collapsed .main-container{margin-left:64px}` + transition
