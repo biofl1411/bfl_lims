@@ -321,7 +321,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 <form id="receipt-form" onsubmit="return false">
 
 <!-- 알림바 영역 -->
-<div id="notification-bar" style="min-height:6px;flex-shrink:0"></div>
+<div id="notification-bar" style="min-height:30px;flex-shrink:0"></div>
 
 <!-- ══════════════════════════════════════════
      바 1 : 접수기본정보
@@ -503,10 +503,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
   <div class="cp-field">
     <span class="cp-lbl">성적서 발송</span>
     <div class="send-chips" style="position:relative">
-      <label class="send-chip"><input type="checkbox" name="report-send" value="우편" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('mail-option-panel',this.closest('label'))"><span>📮 우편</span></label>
+      <label class="send-chip"><input type="checkbox" name="report-send" value="우편" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('mail-option-panel',this.closest('label'));else closeSendPanel('mail-option-panel')"><span>📮 우편</span></label>
       <label class="send-chip"><input type="checkbox" name="report-send" value="선발송" onchange="toggleReportSendOption()"><span>🚀 선발송</span></label>
-      <label class="send-chip"><input type="checkbox" name="report-send" value="팩스(선)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('fax-option-panel',this.closest('label'))"><span>📠 팩스</span></label>
-      <label class="send-chip"><input type="checkbox" name="report-send" value="메일(사본)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('email-option-panel',this.closest('label'))"><span>📧 메일</span></label>
+      <label class="send-chip"><input type="checkbox" name="report-send" value="팩스(선)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('fax-option-panel',this.closest('label'));else closeSendPanel('fax-option-panel')"><span>📠 팩스</span></label>
+      <label class="send-chip"><input type="checkbox" name="report-send" value="메일(사본)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('email-option-panel',this.closest('label'));else closeSendPanel('email-option-panel')"><span>📧 메일</span></label>
     </div>
   </div>
 
@@ -1004,11 +1004,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
 function positionSendPanel(panelId, triggerEl) {
   var panel = document.getElementById(panelId);
   if (!panel) return;
+  // 다른 발송 패널 모두 닫기
+  ['mail-option-panel','fax-option-panel','email-option-panel'].forEach(function(id){
+    if(id!==panelId){var p=document.getElementById(id);if(p)p.style.display='none';}
+  });
   var rect = triggerEl.getBoundingClientRect();
+  panel.style.display = 'block';
   panel.style.top  = (rect.bottom + 4) + 'px';
   panel.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
   panel.style.right = 'auto';
 }
+function closeSendPanel(panelId) {
+  var p = document.getElementById(panelId); if(p) p.style.display='none';
+}
+// 발송 옵션 패널 외부 클릭 시 닫기
+document.addEventListener('click', function(e){
+  ['mail-option-panel','fax-option-panel','email-option-panel'].forEach(function(id){
+    var panel = document.getElementById(id);
+    if(panel && panel.style.display!=='none'){
+      // 패널 내부 또는 해당 체크박스 클릭이 아닌 경우 닫기
+      if(!panel.contains(e.target) && !e.target.closest('.send-chips')){
+        panel.style.display='none';
+      }
+    }
+  });
+});
 
 function togglePayPanel(){
   var p=document.getElementById('pay-panel');
