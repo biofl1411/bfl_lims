@@ -133,7 +133,7 @@ const SIDEBAR_MENU = [
     sub: [
       { label: '업체등록·수정',     href: 'companyMgmt.html',  page: 'reception-company' },
       { label: '검사목적 관리',     href: 'inspectionMgmt.html',  page: 'reception-inspection' },
-      { label: '접수 등록',         href: 'sampleReceipt.html',   page: 'reception-register' },
+      { label: '접수 등록',         href: 'sampleReceiptV2.html',   page: 'reception-register' },
       { label: '접수 공지',         href: 'receiptNotice.html',  page: 'reception-notice' },
       { label: '모바일',            href: 'mobilePhoto.html',   page: 'mobile-photo' },
       { label: '접수 현황',         href: 'receiptStatus.html',  page: 'reception-status' },
