@@ -754,9 +754,13 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <!-- 소분류 필터 칩 -->
     <div style="display:flex;align-items:center;gap:6px;padding:0 16px 10px;flex-wrap:wrap;">
       <div id="mfds-test-sub-chips" style="display:flex;flex-wrap:wrap;gap:5px;flex:1"></div>
-      <div id="mfds-p-actions" style="display:none;flex-shrink:0;display:flex;gap:4px;">
+      <div id="mfds-p-actions" style="display:none;flex-shrink:0;display:flex;gap:4px;align-items:center;">
         <button onclick="createPRefSubChip()" style="padding:3px 8px;font-size:12px;border:2px dashed #7c4dff;color:#7c4dff;background:#f3e8ff;border-radius:8px;cursor:pointer;font-weight:700;line-height:1" title="P참고용 새 소분류 칩 생성">＋ 칩</button>
+        <button onclick="deletePRefSubChip()" style="padding:3px 8px;font-size:12px;border:1px solid #e53935;color:#e53935;background:#ffebee;border-radius:6px;cursor:pointer;white-space:nowrap" title="선택한 P소분류 칩 삭제">✕ 칩삭제</button>
         <button onclick="openMoveToP()" style="padding:3px 10px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#f3e8ff;border-radius:6px;cursor:pointer;white-space:nowrap" title="다른 분야 항목을 P참고용으로 이동">📦 항목→P</button>
+        <span style="width:1px;height:16px;background:#ddd;margin:0 2px"></span>
+        <button onclick="sortPRefItems('name')" style="padding:3px 8px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap" title="이름순 정렬">가나다↕</button>
+        <button onclick="sortPRefItems('code')" style="padding:3px 8px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap" title="코드순 정렬">코드↕</button>
       </div>
     </div>
     <!-- 시험항목 테이블 -->
@@ -36441,6 +36445,109 @@ function executeMoveToPRef() {
   showToast(count + '개 항목이 P' + _moveToPSub + ' ' + _moveToPName + '(으)로 복사되었습니다', 'success');
 }
 
+// ══ P참고용: 항목 삭제 ══
+function deletePRefItem(code) {
+  var item = _mfdsTestItems.find(function(t) { return t['시험항목코드'] === code; });
+  var itemName = item ? (item['한글명'] || item['시험항목명'] || code) : code;
+  if (!confirm('P참고용 항목을 삭제하시겠습니까?\n\n코드: ' + code + '\n이름: ' + itemName)) return;
+
+  // 메모리에서 제거
+  _mfdsTestItems = _mfdsTestItems.filter(function(t) { return t['시험항목코드'] !== code; });
+
+  // Firestore에서 삭제
+  firebase.firestore().collection('mfds_test_items').doc(code.toUpperCase()).delete()
+    .then(function() { showToast(code + ' 항목이 삭제되었습니다', 'success'); })
+    .catch(function(e) { console.error('삭제 실패:', e); showToast('삭제 실패: ' + e.message, 'error'); });
+
+  // 테이블 갱신
+  buildMfdsTestCatIndex();
+  renderMfdsTestCategoryChips();
+  renderMfdsTestSubChips();
+  applyMfdsTestFilters();
+  renderMfdsTestTable();
+}
+
+// ══ P참고용: 소분류 칩 삭제 ══
+function deletePRefSubChip() {
+  var sub = _mfdsTestSubFilter;
+  if (!sub) { showToast('삭제할 P 소분류 칩을 먼저 선택하세요', 'warning'); return; }
+  var subName = (REF_SUB_CATEGORIES['P'] || {})[sub] || sub;
+
+  // 해당 소분류에 속한 항목 수 확인
+  var cnt = 0;
+  _mfdsTestItems.forEach(function(t) {
+    var c = (t['시험항목코드'] || '').toUpperCase();
+    if (c.charAt(0) === 'P' && c.charAt(1) === sub) cnt++;
+  });
+
+  var msg = 'P' + sub + ' "' + subName + '" 소분류 칩을 삭제하시겠습니까?';
+  if (cnt > 0) msg += '\n\n⚠ 이 소분류에 ' + cnt + '개 항목이 있습니다.\n항목도 함께 삭제됩니다.';
+  if (!confirm(msg)) return;
+
+  // 소속 항목들도 삭제
+  if (cnt > 0) {
+    var codesToDelete = [];
+    _mfdsTestItems = _mfdsTestItems.filter(function(t) {
+      var c = (t['시험항목코드'] || '').toUpperCase();
+      if (c.charAt(0) === 'P' && c.charAt(1) === sub) {
+        codesToDelete.push(c);
+        return false;
+      }
+      return true;
+    });
+    // Firestore에서 항목 삭제
+    var batch = firebase.firestore().batch();
+    codesToDelete.forEach(function(c) {
+      batch.delete(firebase.firestore().collection('mfds_test_items').doc(c));
+    });
+    batch.commit().catch(function(e) { console.error('항목 일괄삭제 실패:', e); });
+  }
+
+  // 소분류 카테고리에서 제거
+  delete REF_SUB_CATEGORIES['P'][sub];
+
+  // Firestore에서 칩 정보 갱신 (전체 덮어쓰기)
+  firebase.firestore().collection('settings').doc('pRefSubCategories').set(
+    REF_SUB_CATEGORIES['P']
+  );
+
+  // UI 갱신
+  _mfdsTestSubFilter = null;
+  buildMfdsTestCatIndex();
+  renderMfdsTestCategoryChips();
+  renderMfdsTestSubChips();
+  applyMfdsTestFilters();
+  renderMfdsTestTable();
+  showToast('P' + sub + ' "' + subName + '" 소분류가 삭제되었습니다', 'success');
+}
+
+// ══ P참고용: 항목 정렬 ══
+var _pRefSortDir = { name: 'asc', code: 'asc' }; // 토글용
+function sortPRefItems(by) {
+  // P 카테고리 필터 중이어야 함
+  if (_mfdsTestCatFilter !== 'P') return;
+
+  var dir = _pRefSortDir[by];
+  _pRefSortDir[by] = dir === 'asc' ? 'desc' : 'asc'; // 다음 클릭 시 반전
+
+  _mfdsTestFiltered.sort(function(a, b) {
+    var va, vb;
+    if (by === 'name') {
+      va = (a['한글명'] || a['시험항목명'] || '').toLowerCase();
+      vb = (b['한글명'] || b['시험항목명'] || '').toLowerCase();
+    } else {
+      va = (a['시험항목코드'] || '').toUpperCase();
+      vb = (b['시험항목코드'] || '').toUpperCase();
+    }
+    var cmp = va < vb ? -1 : (va > vb ? 1 : 0);
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  _mfdsTestPage = 0;
+  renderMfdsTestTable();
+  showToast((by === 'name' ? '이름' : '코드') + '순 ' + (dir === 'asc' ? '오름차순 ↑' : '내림차순 ↓') + ' 정렬', 'info');
+}
+
 // ── 시험항목 추가 모달 ──
 function openMfdsTestAddModal() {
   document.getElementById('mfdsTestAddModal').style.display = 'flex';
@@ -36674,6 +36781,9 @@ function renderMfdsTestTable() {
       + '<button onclick="openMfdsMappingFromTest(\'' + code.replace(/'/g, "\\'") + '\')" '
       + 'style="border:1px solid #1565c0;background:#fff;color:#1565c0;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;" '
       + 'title="BFL 항목과 매핑">🔗 매핑</button>'
+      + (code.charAt(0) === 'P' ? ' <button onclick="deletePRefItem(\'' + code.replace(/'/g, "\\'") + '\')" '
+      + 'style="border:1px solid #e53935;background:#fff;color:#e53935;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:3px" '
+      + 'title="P참고용 항목 삭제">🗑</button>' : '')
       + '</td></tr>';
   });
   tbody.innerHTML = html;
