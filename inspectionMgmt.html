@@ -904,6 +904,8 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <div class="filter-chips" id="ig-filter-chips" style="flex:1;"></div>
+      <button onclick="createNewChip()" style="padding:5px 10px;font-size:14px;border:2px dashed #7c5cfc;color:#7c5cfc;background:#f5f3ff;border-radius:8px;cursor:pointer;font-weight:700;white-space:nowrap;line-height:1" title="새 카테고리(칩) 생성">＋</button>
+      <button onclick="openMoveItemsModal()" style="padding:5px 12px;font-size:12px;border:1px solid #7c5cfc;color:#7c5cfc;background:#f5f3ff;border-radius:6px;cursor:pointer;white-space:nowrap;" title="다른 칩에서 항목을 이 칩으로 이동">📦 항목 이동</button>
       <button onclick="autoMatchItemGroupCodes()" style="padding:5px 12px;font-size:12px;border:1px solid #1565c0;color:#1565c0;background:#e3f2fd;border-radius:6px;cursor:pointer;white-space:nowrap;" title="모든 항목에 시험항목코드 자동매칭">🔗 코드 자동매칭</button>
       <button onclick="migrateEngKorNames()" style="padding:5px 12px;font-size:12px;border:1px solid #e65100;color:#e65100;background:#fff3e0;border-radius:6px;cursor:pointer;white-space:nowrap;" title="영문 한글명을 한국어로 일괄 변환">🔄 한글명 변환</button>
     </div>
@@ -1661,6 +1663,37 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <button class="btn btn-ghost" onclick="closeModal('mDelPurpose')">취소</button>
       <button class="btn btn-danger-outline" id="btn-del-purpose-delete" onclick="confirmDeletePurpose('delete')">삭제</button>
       <button class="btn btn-primary" id="btn-del-purpose-move" onclick="confirmDeletePurpose('move')">이동 후 삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 항목 이동 모달 -->
+<div class="modal-overlay" id="mMoveItems">
+  <div class="modal" style="width:680px;max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-head"><h3>📦 항목 이동</h3><button class="modal-x" onclick="closeModal('mMoveItems')">✕</button></div>
+    <div class="modal-body" style="flex:1;overflow-y:auto;padding:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:4px;display:block">원본 카테고리(칩)</label>
+          <select id="mv-src" onchange="loadMoveSourceItems()" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;font-size:13px"></select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:4px;display:block">이동할 카테고리(칩)</label>
+          <select id="mv-dest" style="width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;font-size:13px"></select>
+        </div>
+      </div>
+      <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px">
+        <input type="text" id="mv-search" placeholder="항목명 검색..." oninput="filterMoveItems()" style="flex:1;padding:6px 10px;border:1px solid var(--bdr);border-radius:6px;font-size:12px">
+        <label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <input type="checkbox" id="mv-select-all" onchange="toggleMoveSelectAll(this.checked)" style="accent-color:#7c5cfc"> 전체선택
+        </label>
+        <span id="mv-count" style="font-size:11px;color:#7c5cfc;font-weight:600;white-space:nowrap">0개 선택</span>
+      </div>
+      <div id="mv-items" style="max-height:320px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px"></div>
+    </div>
+    <div class="modal-foot" style="gap:8px">
+      <button class="btn btn-ghost" onclick="closeModal('mMoveItems')">취소</button>
+      <button class="btn btn-primary" onclick="executeMoveItems()">📦 선택 항목 이동</button>
     </div>
   </div>
 </div>
@@ -32288,6 +32321,223 @@ function editItemGroupPurpose(oldName) {
   updateStats();
   renderData();
   saveItemGroupsToFirestore();
+}
+
+// ══ 참고용: 신규 칩(카테고리) 생성 ══
+function createNewChip() {
+  var name = prompt('새 카테고리(칩) 이름을 입력하세요:');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+
+  // 중복 체크
+  var existing = new Set(itemGroupData.map(function(d) { return d.검사목적; }));
+  if (existing.has(name)) {
+    showToast("'" + name + "' 카테고리가 이미 존재합니다.", 'warning');
+    return;
+  }
+
+  // 빈 플레이스홀더 항목 하나 생성 → 칩이 표시되도록
+  var placeholder = {
+    검사목적: name,
+    검체유형: '기타',
+    항목명: '(신규 카테고리)',
+    분야: '',
+    규격: '',
+    항목단위: '',
+    시험법근거: '',
+    담당자: '',
+    사용여부: 'Y',
+    _placeholder: true
+  };
+  itemGroupData.push(placeholder);
+
+  // Firestore 저장
+  firebase.firestore().collection('itemGroups').add(placeholder).then(function(docRef) {
+    placeholder._docId = docRef.id;
+  });
+
+  currentFilter.purpose = name;
+  buildItemGroupChips();
+  renderData();
+  showToast("'" + name + "' 카테고리가 생성되었습니다. 항목을 추가하세요.", 'success');
+}
+
+// ══ 참고용: 항목 이동 모달 ══
+var _moveItems = []; // 원본 카테고리 항목들
+var _moveFiltered = [];
+var _moveSelected = new Set();
+
+function openMoveItemsModal() {
+  var purposes = [];
+  var purposeSet = new Set();
+  itemGroupData.forEach(function(d) {
+    var p = d.검사목적 || '기타';
+    if (!purposeSet.has(p)) { purposeSet.add(p); purposes.push(p); }
+  });
+
+  // mfds_test_items 분야 추가 (전체 분야)
+  var mfdsCats = [];
+  if (_mfdsTestItems && _mfdsTestItems.length) {
+    var catSet = new Set();
+    _mfdsTestItems.forEach(function(t) {
+      var cat = t['대분류명'] || '기타';
+      if (!catSet.has(cat)) { catSet.add(cat); mfdsCats.push(cat); }
+    });
+  }
+
+  // 원본 select: 참고용 카테고리 + 식품공전 분야
+  var srcHtml = '<optgroup label="참고용 카테고리">';
+  purposes.forEach(function(p) { srcHtml += '<option value="ig:' + p + '">' + p + '</option>'; });
+  srcHtml += '</optgroup>';
+  if (mfdsCats.length) {
+    srcHtml += '<optgroup label="식품공전 분야 (시험항목)">';
+    mfdsCats.forEach(function(c) { srcHtml += '<option value="mfds:' + c + '">' + c + '</option>'; });
+    srcHtml += '</optgroup>';
+  }
+  document.getElementById('mv-src').innerHTML = srcHtml;
+
+  // 대상 select: 참고용 카테고리만
+  var destHtml = '';
+  purposes.forEach(function(p) { destHtml += '<option value="' + p + '">' + p + '</option>'; });
+  document.getElementById('mv-dest').innerHTML = destHtml;
+
+  // 현재 필터 카테고리를 대상으로 기본 선택
+  if (currentFilter.purpose) {
+    document.getElementById('mv-dest').value = currentFilter.purpose;
+  }
+
+  _moveSelected = new Set();
+  document.getElementById('mv-search').value = '';
+  document.getElementById('mv-select-all').checked = false;
+  loadMoveSourceItems();
+  openModal('mMoveItems');
+}
+
+function loadMoveSourceItems() {
+  var src = document.getElementById('mv-src').value;
+  _moveItems = [];
+  _moveSelected = new Set();
+  document.getElementById('mv-select-all').checked = false;
+
+  if (src.startsWith('ig:')) {
+    var purpose = src.substring(3);
+    itemGroupData.forEach(function(d, i) {
+      if (d.검사목적 === purpose && !d._placeholder) {
+        _moveItems.push({ idx: i, name: d.항목명 || '', type: d.검체유형 || '', source: 'ig', data: d });
+      }
+    });
+  } else if (src.startsWith('mfds:')) {
+    var cat = src.substring(5);
+    (_mfdsTestItems || []).forEach(function(t, i) {
+      if ((t['대분류명'] || '기타') === cat) {
+        _moveItems.push({ idx: i, name: t['시험항목명'] || '', type: t['중분류명'] || '', code: t['시험항목코드'] || '', source: 'mfds', data: t });
+      }
+    });
+  }
+  filterMoveItems();
+}
+
+function filterMoveItems() {
+  var q = (document.getElementById('mv-search').value || '').toLowerCase();
+  _moveFiltered = q ? _moveItems.filter(function(it) {
+    return it.name.toLowerCase().indexOf(q) >= 0 || it.type.toLowerCase().indexOf(q) >= 0;
+  }) : _moveItems.slice();
+
+  var html = '';
+  if (!_moveFiltered.length) {
+    html = '<div style="padding:20px;text-align:center;color:var(--sub);font-size:12px">항목이 없습니다</div>';
+  } else {
+    _moveFiltered.forEach(function(it, i) {
+      var checked = _moveSelected.has(it.source + ':' + it.idx) ? 'checked' : '';
+      var badge = it.source === 'mfds' ? '<span style="background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:4px;font-size:10px;margin-left:4px">공전</span>' : '';
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px">'
+        + '<input type="checkbox" ' + checked + ' onchange="toggleMoveItem(\'' + it.source + ':' + it.idx + '\',this.checked)" style="accent-color:#7c5cfc">'
+        + '<span style="flex:1">' + it.name + badge + '</span>'
+        + '<span style="color:var(--sub);font-size:11px">' + it.type + '</span>'
+        + '</label>';
+    });
+  }
+  document.getElementById('mv-items').innerHTML = html;
+  updateMoveCount();
+}
+
+function toggleMoveItem(key, checked) {
+  if (checked) _moveSelected.add(key); else _moveSelected.delete(key);
+  updateMoveCount();
+}
+
+function toggleMoveSelectAll(checked) {
+  _moveSelected = new Set();
+  if (checked) {
+    _moveFiltered.forEach(function(it) { _moveSelected.add(it.source + ':' + it.idx); });
+  }
+  filterMoveItems();
+}
+
+function updateMoveCount() {
+  document.getElementById('mv-count').textContent = _moveSelected.size + '개 선택';
+}
+
+function executeMoveItems() {
+  if (!_moveSelected.size) { showToast('이동할 항목을 선택하세요', 'warning'); return; }
+  var dest = document.getElementById('mv-dest').value;
+  if (!dest) { showToast('이동할 카테고리를 선택하세요', 'warning'); return; }
+
+  var count = 0;
+  _moveSelected.forEach(function(key) {
+    var parts = key.split(':');
+    var source = parts[0];
+    var idx = parseInt(parts[1]);
+
+    if (source === 'ig') {
+      // 참고용 내부 이동: 검사목적만 변경
+      if (itemGroupData[idx]) {
+        itemGroupData[idx].검사목적 = dest;
+        count++;
+      }
+    } else if (source === 'mfds') {
+      // 식품공전에서 참고용으로 복사
+      var t = _mfdsTestItems[idx];
+      if (t) {
+        var newItem = {
+          검사목적: dest,
+          검체유형: t['중분류명'] || '기타',
+          항목명: t['시험항목명'] || '',
+          분야: t['대분류명'] || '',
+          규격: '',
+          항목단위: t['단위'] || '',
+          시험법근거: t['시험법'] || '',
+          담당자: '',
+          사용여부: 'Y',
+          testItemCode: t['시험항목코드'] || ''
+        };
+        itemGroupData.push(newItem);
+        // Firestore 저장
+        firebase.firestore().collection('itemGroups').add(newItem).then(function(docRef) {
+          newItem._docId = docRef.id;
+        });
+        count++;
+      }
+    }
+  });
+
+  // 플레이스홀더 제거 (해당 카테고리에 실제 항목이 생겼으면)
+  var realCount = itemGroupData.filter(function(d) { return d.검사목적 === dest && !d._placeholder; }).length;
+  if (realCount > 0) {
+    var placeholders = itemGroupData.filter(function(d) { return d.검사목적 === dest && d._placeholder; });
+    placeholders.forEach(function(ph) {
+      var phIdx = itemGroupData.indexOf(ph);
+      if (phIdx >= 0) itemGroupData.splice(phIdx, 1);
+      if (ph._docId) firebase.firestore().collection('itemGroups').doc(ph._docId).delete();
+    });
+  }
+
+  closeModal('mMoveItems');
+  currentFilter.purpose = dest;
+  buildItemGroupChips();
+  renderData();
+  saveItemGroupsToFirestore();
+  showToast(count + '개 항목이 "' + dest + '"(으)로 이동되었습니다.', 'success');
 }
 
 // ══ 참고용: 카테고리 삭제 ══
