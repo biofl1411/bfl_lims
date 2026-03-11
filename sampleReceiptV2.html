@@ -772,17 +772,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
   <!-- ─── 오른쪽: 시험항목 ─── -->
   <div class="cp-right">
 
-    <!-- 보고번호 조회 결과 검증 패널 (우측 상단) -->
-    <div id="report-verify-panel" style="display:none;margin:0 0 6px;padding:10px 12px;background:#f8f9ff;border:1px solid #c5cae9;border-radius:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-weight:700;font-size:11px;color:#3949ab">📋 식약처 품목정보 검증</span>
-        <button onclick="document.getElementById('report-verify-panel').style.display='none'" style="background:none;border:none;font-size:14px;cursor:pointer;color:#999">✕</button>
+    <!-- 식약처 품목정보 검증 + 품목코드 가로 배치 -->
+    <div id="fss-top-row" style="display:none;gap:8px;margin-bottom:6px">
+      <!-- 좌: 품목정보 검증 -->
+      <div id="report-verify-panel" style="display:none;flex:1;min-width:0;padding:8px 10px;background:#f8f9ff;border:1px solid #c5cae9;border-radius:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-weight:700;font-size:11px;color:#3949ab">📋 품목정보 검증</span>
+          <button onclick="document.getElementById('report-verify-panel').style.display='none';checkFssTopRow()" style="background:none;border:none;font-size:13px;cursor:pointer;color:#999">✕</button>
+        </div>
+        <div id="report-verify-body" style="font-size:11px"></div>
       </div>
-      <div id="report-verify-body" style="font-size:11px"></div>
+      <!-- 우: 품목코드 -->
+      <div id="mfds-product-picker-container" style="display:none;flex:1;min-width:0"></div>
     </div>
-
-    <!-- 식약처 품목코드 (우측) -->
-    <div id="mfds-product-picker-container" style="display:none"></div>
 
     <!-- ref cat labels (참고용 라벨 칩) -->
     <div id="ref-cat-labels" class="ref-cat-labels"></div>
@@ -881,9 +883,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans
       <input type="number" id="discount-rate" min="0" max="100" step="1" placeholder="0" oninput="onDiscountRateChange()">
       <span style="color:#c2410c;font-size:11px">%</span>
       <span style="color:#ccc;font-size:10px">또는</span>
-      <input type="number" id="discount-amount" min="0" step="1000" placeholder="0" oninput="onDiscountAmountChange()" style="width:70px">
+      <input type="text" id="discount-amount" inputmode="numeric" placeholder="0" oninput="formatDiscountAmountInput(this);onDiscountAmountChange()" style="width:70px">
       <span style="color:#c2410c;font-size:11px">원</span>
     </div>
+    <span style="font-size:11px;color:#888;white-space:nowrap">→</span>
     <span style="font-size:11px;color:#c2410c;font-weight:700;white-space:nowrap" id="discount-final">0원</span>
   </div>
 
@@ -1015,9 +1018,15 @@ function positionSendPanel(panelId, triggerEl) {
     if(id!==panelId){var p=document.getElementById(id);if(p)p.style.display='none';}
   });
   var rect = triggerEl.getBoundingClientRect();
+  // 왼쪽 패널 내에서 표시 (cp-left 440px 기준)
+  var cpLeft = triggerEl.closest('.cp-left');
+  var maxLeft = cpLeft ? cpLeft.getBoundingClientRect().right - 10 : 440;
+  var panelW = panel.offsetWidth || 300;
   panel.style.display = 'block';
   panel.style.top  = (rect.bottom + 4) + 'px';
-  panel.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
+  // 패널이 왼쪽 패널 밖으로 넘치지 않도록 제한
+  var left = Math.min(rect.left, maxLeft - panelW);
+  panel.style.left = Math.max(8, left) + 'px';
   panel.style.right = 'auto';
 }
 function closeSendPanel(panelId) {
@@ -1067,6 +1076,15 @@ function syncMemoFromPopup(){
   var fi=document.getElementById('memo-finance-inline');
   var ft=document.getElementById('memo-finance');
   if(fi&&ft) fi.value=ft.value;
+}
+// fss-top-row 가시성 관리 (검증패널/품목코드 중 하나라도 보이면 표시)
+function checkFssTopRow(){
+  var row=document.getElementById('fss-top-row');
+  var vp=document.getElementById('report-verify-panel');
+  var pp=document.getElementById('mfds-product-picker-container');
+  if(!row)return;
+  var anyVisible=(vp&&vp.style.display!=='none')||(pp&&pp.style.display!=='none');
+  row.style.display=anyVisible?'flex':'none';
 }
 // 식약처 기준규격 섹션 접힘/펼침
 function toggleMfdsStdBody(){
@@ -2455,6 +2473,7 @@ function updateInspectionMode(testPurpose) {
         if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
         if (refCatLabelsEl) { refCatLabelsEl.style.display = 'none'; refCatLabelsEl.innerHTML = ''; }
         _refActiveCat = '';
+        checkFssTopRow();
         return;
     }
 
@@ -2462,6 +2481,7 @@ function updateInspectionMode(testPurpose) {
         // ★ 시험항목 직접 검색 모드
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
+        checkFssTopRow();
         if (foodTypeGroup) foodTypeGroup.style.display = '';
 
         if (foodTypeLabel) {
@@ -2527,6 +2547,7 @@ function updateInspectionMode(testPurpose) {
             if (oldToggle) oldToggle.remove();
             var content = document.getElementById('mfds-picker-content');
             if (content) content.style.display = '';
+            checkFssTopRow();
         }
         if (typeof MFDS_CODES !== 'undefined' && MFDS_CODES.lockCategories) {
             MFDS_CODES.lockCategories('가공식품', '가공식품(전부개정)');
@@ -2539,6 +2560,7 @@ function updateInspectionMode(testPurpose) {
         _refActiveCat = '';
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
+        checkFssTopRow();
         if (foodTypeGroup) foodTypeGroup.style.display = '';
         if (foodTypeInput) { foodTypeInput.disabled = false; foodTypeInput.placeholder = '검체유형 검색 (참고용 그룹)...'; }
         if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
@@ -4318,6 +4340,25 @@ async function updateFeeSummary() {
 // 할인 기능 (% ↔ 금액 양방향 연동)
 // ============================================================================
 
+/** 숫자 콤마 포맷 (1234567 → "1,234,567") */
+function fmtComma(n) {
+    return (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+/** 콤마 포맷 문자열 → 정수 파싱 ("1,234,567" → 1234567) */
+function parseComma(s) {
+    return parseInt((s || '').toString().replace(/,/g, ''), 10) || 0;
+}
+/** 할인금액 입력 시 콤마 자동 포맷 */
+function formatDiscountAmountInput(el) {
+    var cur = el.selectionStart || 0;
+    var oldLen = (el.value || '').length;
+    var raw = el.value.replace(/[^\d]/g, '');
+    el.value = raw ? fmtComma(parseInt(raw)) : '';
+    var newLen = (el.value || '').length;
+    var newCur = Math.max(0, cur + (newLen - oldLen));
+    el.setSelectionRange(newCur, newCur);
+}
+
 /**
  * 할인율(%) 입력 → 할인금액 자동 계산
  */
@@ -4327,20 +4368,20 @@ function onDiscountRateChange() {
     if (rate > 100) rate = 100;
     var original = window._feeGrandTotal || 0;
     var discountAmt = Math.round(original * rate / 100);
-    document.getElementById('discount-amount').value = discountAmt || '';
+    document.getElementById('discount-amount').value = discountAmt ? fmtComma(discountAmt) : '';
     applyDiscount();
 }
 
 /**
- * 할인금액 입력 → 할인율 자동 계산
+ * 할인금액 입력 → 할인율 자동 계산 (소수점 2자리)
  */
 function onDiscountAmountChange() {
-    var amt = parseInt(document.getElementById('discount-amount').value) || 0;
+    var amt = parseComma(document.getElementById('discount-amount').value);
     if (amt < 0) amt = 0;
     var original = window._feeGrandTotal || 0;
     var rate = original > 0 ? (amt / original * 100) : 0;
-    // 소수점 1자리 반올림 (예: 11.1%)
-    document.getElementById('discount-rate').value = rate > 0 ? Math.round(rate * 10) / 10 : '';
+    // 소수점 2자리 반올림 (예: 48.43%)
+    document.getElementById('discount-rate').value = rate > 0 ? Math.round(rate * 100) / 100 : '';
     applyDiscount();
 }
 
@@ -4349,7 +4390,7 @@ function onDiscountAmountChange() {
  */
 function applyDiscount() {
     var original = window._feeGrandTotal || 0;
-    var discountAmt = parseInt(document.getElementById('discount-amount')?.value) || 0;
+    var discountAmt = parseComma(document.getElementById('discount-amount')?.value);
     if (discountAmt < 0) discountAmt = 0;
     if (discountAmt > original) discountAmt = original;
 
@@ -5091,7 +5132,7 @@ function collectReceiptData() {
         // 수수료/결제 정보
         feeOriginal: window._feeGrandTotal || 0,
         discountRate: parseFloat(document.getElementById('discount-rate')?.value) || 0,
-        discountAmount: parseInt(document.getElementById('discount-amount')?.value) || 0,
+        discountAmount: parseComma(document.getElementById('discount-amount')?.value),
         itemDiscounts: window._itemDiscounts || null,
         feeTotal: window._feeTotal || 0,
         payMethod: document.querySelector('input[name="pay-method"]:checked')?.value || '',
@@ -5612,6 +5653,7 @@ function renderReportVerifyPanel(data) {
     }
     body.innerHTML = html;
     panel.style.display = 'block';
+    checkFssTopRow();
 }
 
 // 소비기한 문자열 파싱
