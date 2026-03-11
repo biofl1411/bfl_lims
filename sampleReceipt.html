@@ -5550,24 +5550,40 @@ function renderReportVerifyPanel(data) {
 
     html += cmpRow('제품명', fssName, inputName);
     html += cmpRow('식품유형', fssType, inputFoodType);
-    html += cmpRow('소비기한(일)', fssPogNum ? fssPogNum + '일' : '', inputExpNum ? inputExpNum + '일' : '');
 
-    // 소비기한 날짜 비교
-    if (calcExpDate && inputExpDate) {
-        var dateMatch = calcExpDate === inputExpDate;
-        html += '<tr style="background:' + (dateMatch ? '#e8f5e9' : '#ffebee') + '">'
-            + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
-            + '<td style="padding:6px 10px;color:#1a237e">' + calcExpDate + ' <span style="font-size:11px;color:#999">(제조일+' + fssPogNum + '일)</span></td>'
-            + '<td style="padding:6px 10px">' + inputExpDate + '</td>'
-            + '<td style="padding:6px 10px;text-align:center">' + (dateMatch
-                ? '<span style="color:#43a047;font-weight:700">✓ 일치</span>'
-                : '<span style="color:#c62828;font-weight:700">✗ 불일치</span>') + '</td></tr>';
-    } else if (fssPogNum && !inputMfgDate) {
-        html += '<tr style="background:#fff8e1">'
-            + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
-            + '<td style="padding:6px 10px;color:#1a237e">제조일 입력 시 자동 계산</td>'
-            + '<td style="padding:6px 10px;color:#aaa">' + (inputExpDate || '미입력') + '</td>'
-            + '<td style="padding:6px 10px;text-align:center"><span style="color:#f9a825">⚠</span></td></tr>';
+    // 소비기한 — 숫자/텍스트("해당없음" 등) 모두 처리
+    var fssPogIsNum = /^\d+$/.test(fssPogNum);
+    if (fssPog) {
+        if (fssPogIsNum) {
+            // 숫자인 경우: 일수 비교
+            html += cmpRow('소비기한(일)', fssPogNum + '일', inputExpNum ? inputExpNum + '일' : '');
+
+            // 날짜 비교 (제조일 + 식약처일수)
+            if (calcExpDate && inputExpDate) {
+                var dateMatch = calcExpDate === inputExpDate;
+                html += '<tr style="background:' + (dateMatch ? '#e8f5e9' : '#ffebee') + '">'
+                    + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
+                    + '<td style="padding:6px 10px;color:#1a237e">' + calcExpDate + ' <span style="font-size:11px;color:#999">(제조일+' + fssPogNum + '일)</span></td>'
+                    + '<td style="padding:6px 10px">' + inputExpDate + '</td>'
+                    + '<td style="padding:6px 10px;text-align:center">' + (dateMatch
+                        ? '<span style="color:#43a047;font-weight:700">✓ 일치</span>'
+                        : '<span style="color:#c62828;font-weight:700">✗ 불일치</span>') + '</td></tr>';
+            } else if (!inputMfgDate) {
+                html += '<tr style="background:#fff8e1">'
+                    + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한(날짜)</td>'
+                    + '<td style="padding:6px 10px;color:#1a237e">제조일 입력 시 자동 계산</td>'
+                    + '<td style="padding:6px 10px;color:#aaa">' + (inputExpDate || '미입력') + '</td>'
+                    + '<td style="padding:6px 10px;text-align:center"><span style="color:#f9a825">⚠</span></td></tr>';
+            }
+        } else {
+            // "해당없음" 등 비숫자인 경우
+            var expInput = inputExpDays || inputExpDate || '';
+            html += '<tr style="background:#f3e5f5">'
+                + '<td style="padding:6px 10px;font-weight:600;color:#5c6bc0">소비기한</td>'
+                + '<td style="padding:6px 10px;color:#7b1fa2;font-weight:600">' + fssPog + '</td>'
+                + '<td style="padding:6px 10px">' + (expInput || '<span style="color:#aaa">미입력</span>') + '</td>'
+                + '<td style="padding:6px 10px;text-align:center"><span style="color:#7b1fa2;font-size:11px">참고</span></td></tr>';
+        }
     }
 
     // 부가 정보 (비교 없이 참고용 표시)
@@ -5594,8 +5610,8 @@ function renderReportVerifyPanel(data) {
 
     html += '</tbody></table>';
 
-    // 소비기한 일수 자동 채움 버튼
-    if (fssPogNum && fssPogNum !== inputExpNum) {
+    // 소비기한 일수 자동 채움 버튼 (숫자일 때만)
+    if (fssPogIsNum && fssPogNum && fssPogNum !== inputExpNum) {
         html += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">'
             + '<button onclick="applyFssExpiry(\'' + fssPogNum + '\')" style="padding:6px 14px;background:#3949ab;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">'
             + '📥 소비기한 ' + fssPogNum + '일 적용</button>'
