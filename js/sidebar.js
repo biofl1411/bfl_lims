@@ -31,13 +31,14 @@
 .sidebar{width:250px;background:#1a2332;color:white;position:fixed;left:0;top:0;bottom:0;z-index:1000;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
 .logo{padding:20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0}
 .logo-icon{width:40px;height:40px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo-link{display:flex;align-items:center;text-decoration:none}
 .logo-img{height:36px;width:auto;object-fit:contain;flex-shrink:0}
 .logo-text{display:flex;flex-direction:column}
 .logo-title{font-size:18px;font-weight:700}
 .logo-subtitle{font-size:11px;color:#94a3b8}
 .sidebar-nav{flex:1;padding:8px 0;overflow-y:auto}
 .nav-group{margin-bottom:2px}
-.nav-parent{padding:10px 20px;display:flex;align-items:center;gap:10px;color:#8ea4c0;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;transition:all 0.15s;border:none;background:none;width:100%}
+.nav-parent{padding:10px 20px;display:flex;align-items:center;gap:10px;color:#b0c4de;font-size:15px;font-weight:500;cursor:pointer;text-decoration:none;transition:all 0.15s;border:none;background:none;width:100%}
 .nav-parent:hover{background:rgba(255,255,255,0.05);color:#c8d6e5}
 .nav-parent.active{color:#4fc3f7;background:rgba(79,195,247,0.1);font-weight:600}
 .nav-parent.disabled{color:#4a6785;cursor:default}
@@ -48,7 +49,7 @@
 .nav-group.expanded .nav-arrow{transform:rotate(180deg)}
 .nav-submenu{list-style:none;max-height:0;overflow:hidden;transition:max-height 0.25s ease;margin-left:32px;border-left:2px solid rgba(79,195,247,0.15);padding-left:10px}
 .nav-group.expanded .nav-submenu{max-height:600px}
-.nav-sub-item{display:block;padding:7px 12px;font-size:12px;color:#6b7d93;text-decoration:none;border-radius:6px;cursor:pointer;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-sub-item{display:block;padding:7px 12px;font-size:14px;color:#94a8be;text-decoration:none;border-radius:6px;cursor:pointer;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav-sub-item:hover{color:#8ea4c0;background:rgba(255,255,255,0.03)}
 .nav-sub-item.active{color:#4fc3f7;font-weight:600;background:rgba(79,195,247,0.08)}
 .nav-sub-item.disabled{color:#3d5068;cursor:default}
@@ -216,7 +217,7 @@ function renderSidebar() {
   // 로고 + 접기 버튼
   let html = `
   <div class="logo">
-    <img src="img/bfl_logo.svg?v=3" alt="BFL" class="logo-img">
+    <a href="index.html" class="logo-link" title="대시보드로 이동"><img src="img/bfl_logo.svg?v=3" alt="BFL" class="logo-img"></a>
     <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="사이드바 접기/펼치기">☰</div>
   </div>
   <nav class="sidebar-nav">`;
