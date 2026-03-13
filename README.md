@@ -3023,3 +3023,18 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 - 절대 규칙: 중간 질문 금지, 한 흐름 실행, 취소/복원 시 역질문 금지
 - 작업 흐름 규칙: 파일 삭제/교체, 커밋+push+배포, 서버 접속 순서(내부망→공인IP), Preview 검증, 구/신버전 교체
 - 페이지 명칭 규칙: `sampleReceipt.html` → `sampleReceiptV2.html` 업데이트
+
+#### 식약처 변경이력 수집기(collector.py) 수정
+
+- **문제**: I2859/I2860 API에서 변경이력이 거의 수집 안 됨 (3건/2건)
+- **원인**: 식약처 API가 `1~1` 범위 요청 시 `total_count`를 부정확하게 반환
+- **수정**: 변경이력 API 총 건수 조회 시 `1~1000` 범위로 요청하여 정확한 total_count 확보
+- `insert_change` 중복 방지: 자동 ID → `인허가번호_변경일자_변경사유` 고유 ID 방식
+- 첫 배치 데이터 재활용으로 API 호출 절약
+- **결과**: I2859 3건→2,778건, I2860 2건→1,000건, 변경이력 합계 20건→3,035건
+
+#### sampleReceiptV2.html(접수등록) UI/버그 수정
+
+- **materials-panel 세로 라인 제거**: `display:none` 상태에서 border 렌더링되는 문제 → JS에서 표시 시 동적 추가
+- **좌측 패널 너비 확대**: `.cp-left` width 440px → 500px
+- **할인 전액 처리 버그 수정**: 할인 입력란 비어있을 때 전액 할인으로 처리되던 문제 → 빈 입력 시 할인 없음으로 조기 리턴
