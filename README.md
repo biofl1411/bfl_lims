@@ -2995,3 +2995,31 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 ##### 기타 수정
 - 검체유형 드롭다운 클릭 사라짐 버그 수정 (`.autocomplete-wrap` 체크 누락)
 - 사이드바 접힘 시 `body.sidebar-collapsed .main-container{margin-left:64px}` + transition
+
+### 2026-03-13
+
+#### 구버전 sampleReceipt.html 삭제
+
+- `sampleReceipt.html` 삭제 — `sampleReceiptV2.html`로 완전 교체
+- `sidebar.js` 접수등록 링크는 이미 V2로 변경 완료 상태
+
+#### 사이드바 UI 개선
+
+**수정 파일**: `js/sidebar.js`
+
+##### 폰트 크기 확대 (로고 제외)
+- `.nav-parent` 13px → **15px** (상위 메뉴)
+- `.nav-sub-item` 12px → **14px** (하위 메뉴)
+
+##### 비선택 메뉴 색상 대비 강화
+- `.nav-parent` color: `#8ea4c0` → **`#b0c4de`** (어두운 배경 대비 가독성 향상)
+- `.nav-sub-item` color: `#6b7d93` → **`#94a8be`**
+
+##### 로고 클릭 시 대시보드 이동
+- `<img>` → `<a href="index.html"><img></a>` 래핑
+- `.logo-link` 스타일 추가
+
+#### CLAUDE.md 작업흐름 규칙 추가
+- 절대 규칙: 중간 질문 금지, 한 흐름 실행, 취소/복원 시 역질문 금지
+- 작업 흐름 규칙: 파일 삭제/교체, 커밋+push+배포, 서버 접속 순서(내부망→공인IP), Preview 검증, 구/신버전 교체
+- 페이지 명칭 규칙: `sampleReceipt.html` → `sampleReceiptV2.html` 업데이트
