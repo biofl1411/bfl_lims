@@ -116,12 +116,12 @@ const SIDEBAR_MENU = [
       { label: '고객사 관리',      href: 'salesMgmt.html',              page: 'customerList', internalPage: 'customerList' },
       { label: '업무일지',          href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily' },
       { label: '차량일지',          href: 'salesMgmt.html#vehicle',      page: 'vehicle',      internalPage: 'vehicle' },
-      { label: '미수금 활동 내역',   href: 'salesMgmt.html#collection',   page: 'collection',   internalPage: 'collection' },
-      { label: '거래명세표 관리',    href: 'salesMgmt.html#trade',        page: 'trade',        internalPage: 'trade' },
-      { label: '계산서 발행 승인',   href: 'salesMgmt.html#invoice',      page: 'invoice',      internalPage: 'invoice' },
+      { label: '미수금 활동 내역',   href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily', dailyTab: 'dailyCollection' },
+      { label: '거래명세표 관리',    href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily', dailyTab: 'dailyTrade' },
+      { label: '계산서 발행 승인',   href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily', dailyTab: 'dailyInvoice' },
       { label: '업체조회',          href: 'salesMgmt.html#bizSearch',    page: 'bizSearch',    internalPage: 'bizSearch' },
       { label: '긴급 협조',         href: 'salesMgmt.html#urgent',       page: 'urgent',       internalPage: 'urgent' },
-      { label: '세금계산서 미발행',   href: 'taxUnissued.html',            page: 'tax-unissued' },
+      { label: '세금계산서 미발행',   href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily', dailyTab: 'dailyTaxUnissued' },
       { label: '영업통계',          disabled: true },
       { label: '영업 설정',         disabled: true },
       { label: 'API 설정',         href: 'salesMgmt.html#apiSettings',  page: 'apiSettings',  internalPage: 'apiSettings' }
@@ -262,7 +262,11 @@ function renderSidebar() {
       let linkHref, linkOnclick;
       if (useInternal) {
         linkHref = 'javascript:void(0)';
-        linkOnclick = ` onclick="showPage('${item.internalPage}')"`;
+        if (item.dailyTab) {
+          linkOnclick = ` onclick="showPage('${item.internalPage}');setTimeout(function(){var b=document.querySelector('[data-tab=${item.dailyTab}]');if(b)switchDailyTab(b);},50)"`;
+        } else {
+          linkOnclick = ` onclick="showPage('${item.internalPage}')"`;
+        }
       } else {
         linkHref = item.href;
         linkOnclick = '';
