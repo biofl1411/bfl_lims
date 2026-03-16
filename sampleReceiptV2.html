@@ -2033,6 +2033,138 @@ window.addEventListener('firebase-ready', async function() {
 });
 
 // ============================================================================
+// 편집 모드 — URL 파라미터로 기존 접수 불러오기
+// ============================================================================
+async function loadReceiptForEdit(docId) {
+    try {
+        var doc = await db.collection('receipts').doc(docId).get();
+        if (!doc.exists) {
+            showToast('접수 문서를 찾을 수 없습니다: ' + docId, 'error');
+            return;
+        }
+        var data = doc.data();
+
+        // 접수번호 + 상태 설정
+        document.getElementById('receipt-no').value = data.receiptNo || '';
+        document.getElementById('receipt-no').classList.add('receipt-no-allocated');
+        document.getElementById('receipt-no-status').textContent = '✅ 편집 모드';
+        document.getElementById('receipt-no-status').style.color = '#1a73e8';
+        isReceiptNoAllocated = true;
+        document.getElementById('status').value = data.status || '접수중';
+
+        // 기본정보
+        document.getElementById('receipt-date').value = data.receiptDate || '';
+        // 시험분야
+        if (data.testField) {
+            var radios = document.querySelectorAll('input[name="test-field"]');
+            radios.forEach(function(r) { if (r.value === data.testField) r.checked = true; });
+            await updateTestPurposeOptions(data.testField);
+        }
+        // 검사목적
+        if (data.testPurpose) {
+            var sel = document.getElementById('test-purpose');
+            if (sel) { sel.value = data.testPurpose; sel.dispatchEvent(new Event('change')); }
+        }
+        // 긴급여부
+        if (data.urgent === '긴급' || data.urgent === 'Y') {
+            var urgRadio = document.querySelector('input[name="urgency"][value="긴급"]');
+            if (urgRadio) urgRadio.checked = true;
+        }
+        // 처리기한
+        var dlEl = document.getElementById('processing-deadline');
+        if (dlEl) dlEl.value = data.processingDeadline || '';
+
+        // 업체정보
+        document.getElementById('company-search').value = data.companyName || '';
+        document.getElementById('lic-no').value = data.licNo || '';
+        document.getElementById('lic-biz-form').value = data.licBizForm || '';
+        var compPhoneEl = document.getElementById('company-phone');
+        if (compPhoneEl) compPhoneEl.value = data.companyPhone || '';
+        var compFaxEl = document.getElementById('company-fax');
+        if (compFaxEl) compFaxEl.value = data.companyFax || '';
+        var compMobileEl = document.getElementById('company-mobile');
+        if (compMobileEl) compMobileEl.value = data.companyMobile || '';
+        var compAddrEl = document.getElementById('company-address');
+        if (compAddrEl) compAddrEl.value = data.companyAddress || '';
+        var salesRepEl = document.getElementById('sales-rep');
+        if (salesRepEl) salesRepEl.value = data.salesRep || '';
+
+        // 계산서 정보 (hidden 필드)
+        var billFields = {
+            'company-name': data.billCompany || '',
+            'business-no': data.bizNo || '',
+            'ceo': data.ceo || '',
+            'bill-name': data.billName || '',
+            'bill-phone': data.billPhone || '',
+            'bill-email': data.billEmail || ''
+        };
+        Object.keys(billFields).forEach(function(k) {
+            var el = document.getElementById(k);
+            if (el) el.value = billFields[k];
+        });
+
+        // 성적서 발송
+        if (data.reportSend) {
+            data.reportSend.forEach(function(v) {
+                var cb = document.querySelector('input[name="report-send"][value="' + v + '"]');
+                if (cb) cb.checked = true;
+            });
+        }
+        var faxEl = document.getElementById('report-fax-no');
+        if (faxEl) faxEl.value = data.reportFaxNo || '';
+        var emailEl = document.getElementById('report-email');
+        if (emailEl) emailEl.value = data.reportEmail || '';
+
+        // 시료 데이터
+        var samples = data.samples || [];
+        if (samples.length > 0) {
+            _sampleData = samples.map(function(s) {
+                return {
+                    'product-name': s.productName || '',
+                    'report-no': s.reportNo || '',
+                    'food-type-input': s.foodType || '',
+                    'food-type-value': s.foodTypeValue || '',
+                    'mfds-product-code': s.mfdsProductCode || '',
+                    'mfds-product-name': s.mfdsProductName || '',
+                    'sample-amount': s.sampleAmount || '',
+                    'sample-amount-unit': s.sampleAmountUnit || 'g',
+                    'sample-count': s.sampleCount || '',
+                    'package-unit': s.packageUnit || '',
+                    'sample-receive-method': s.sampleReceiveMethod || '',
+                    'receipt-form-type': s.receiptFormType || '',
+                    'transport-status': s.transportStatus || '',
+                    'notice-required': s.noticeRequired || '',
+                    'manufacture-date': s.manufactureDate || '',
+                    'expiry-date': s.expiryDate || '',
+                    'expiry-days': s.expiryDays || '',
+                    'lot-no': s.lotNo || '',
+                    'sample-location': s.sampleLocation || '',
+                    'sample-box-no': s.sampleBoxNo || '',
+                    'disposal-date': s.disposalDate || '',
+                    'remarks': s.remarks || '',
+                    '_refTestItems': s.refTestItems || null
+                };
+            });
+            document.getElementById('sample-total-count').value = _sampleData.length;
+            _currentSampleIdx = 0;
+            renderSampleNav();
+            loadSampleFromArray(0);
+        }
+
+        // 편집 모드 doc ID 저장
+        window._editDocId = docId;
+
+        // 타이틀 변경
+        document.title = '접수 편집 - ' + (data.receiptNo || docId);
+        showToast('📝 접수 편집 모드: ' + (data.receiptNo || ''));
+
+    } catch(err) {
+        console.error('편집 모드 로드 실패:', err);
+        showToast('편집 모드 로드 실패: ' + err.message, 'error');
+    }
+}
+
+// ============================================================================
 // 초기화
 // ============================================================================
 window.onload = async function() {
@@ -2040,6 +2172,16 @@ window.onload = async function() {
 
     // 서버 상태 확인
     await checkServerStatus();
+
+    // URL 파라미터로 편집 모드 진입 확인
+    var urlParams = new URLSearchParams(window.location.search);
+    var editDocId = urlParams.get('edit');
+    if (editDocId) {
+        await loadReceiptForEdit(editDocId);
+        setupTeamMemoPermissions();
+        renderSampleNav();
+        return; // 편집 모드에서는 초기화 로직 스킵
+    }
 
     // 초기 시험분야 선택 시 검사목적 로드 (잠금 복원은 restorePinnedFields에서 처리)
     const initialTestField = document.querySelector('input[name="test-field"]:checked')?.value;
@@ -5393,8 +5535,12 @@ async function saveReceipt() {
         // 파일 업로드 (미업로드 파일이 있으면 먼저 처리)
         await uploadAllFiles();
         var data = collectReceiptData();
-        data.status = '접수중';
+        data.status = document.getElementById('status').value || '접수중';
         data.files = collectFileData();
+        // 편집 모드: 기존 문서 ID 유지
+        if (window._editDocId) {
+            data.id = window._editDocId;
+        }
         await fsSaveReceipt(data);
         // 업체별 발송방법 저장
         saveCompanyReportSendPrefs();

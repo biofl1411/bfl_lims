@@ -109,6 +109,19 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .dp-section-title{font-size:12px;font-weight:700;color:#1a2332;margin:12px 0 8px;padding-top:8px;border-top:1px solid #eef0f4}
 .dp-sample-card{border:1px solid #e2e6ed;border-radius:8px;padding:10px;margin-bottom:8px}
 .dp-memo-area{width:100%;min-height:60px;border:1px solid #e2e6ed;border-radius:6px;padding:8px;font-size:12px;resize:vertical;background:#f8f9fb;font-family:inherit}
+
+/* 인라인 편집 */
+.dp-edit-input{width:100%;padding:4px 6px;border:1px solid #d0d5dd;border-radius:4px;font-size:12px;font-family:inherit;background:#fff;color:#1a2332}
+.dp-edit-input:focus{border-color:#1a73e8;outline:none;box-shadow:0 0 0 2px rgba(26,115,232,.15)}
+.dp-edit-select{width:100%;padding:4px 6px;border:1px solid #d0d5dd;border-radius:4px;font-size:12px;font-family:inherit;background:#fff;color:#1a2332}
+.dp-edit-btn-row{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid #eef0f4}
+.dp-edit-btn{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:none;font-family:inherit}
+.dp-edit-save{background:#1a73e8;color:#fff}.dp-edit-save:hover{background:#1557b0}
+.dp-edit-cancel{background:#f0f2f5;color:#5f6b7a;border:1px solid #e2e6ed}.dp-edit-cancel:hover{background:#e2e6ed}
+.dp-edit-toggle{background:none;border:none;font-size:14px;cursor:pointer;padding:2px 4px;color:#5f6b7a;position:absolute;right:0;top:0}
+.dp-edit-toggle:hover{color:#1a73e8}
+.dp-goto-edit{display:flex;align-items:center;gap:6px;padding:10px 14px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:8px;cursor:pointer;font-size:12px;color:#344054;margin-top:12px;text-decoration:none;font-family:inherit;width:100%;justify-content:center}
+.dp-goto-edit:hover{background:#e3f2fd;border-color:#1a73e8;color:#1a73e8}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -531,6 +544,9 @@ var _page = 1;
 var _pageSize = 30;
 var _selectedRows = new Set();    // 선택된 행 키 (id_sampleIdx)
 var _selectedRowId = null; // 현재 상세 패널에 표시 중인 행
+var _currentDetailId = null; // 현재 상세 패널 접수 doc ID
+var _currentDetailSampleIdx = 0; // 현재 상세 패널 시료 인덱스
+var _currentDetailRecord = null; // 현재 상세 패널 레코드
 var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
 
 // ============================================================================
@@ -1232,7 +1248,10 @@ function openDetailPanel(id, sampleIdx) {
     if (r.urgent === '긴급' || r.urgent === 'Y') statusHtml += ' <span style="color:#e53935;font-weight:700">⚡긴급</span>';
     document.getElementById('dp-status-row').innerHTML = statusHtml;
 
-    // 탭1 기본정보
+    // 탭1 기본정보 (인라인 편집 지원)
+    _currentDetailId = id;
+    _currentDetailSampleIdx = sampleIdx;
+    _currentDetailRecord = r;
     var deadlineDisplay = r.processingDeadline || '-';
     if (r.processingDeadline) {
         var dlDays = Math.ceil((new Date(r.processingDeadline) - new Date()) / 86400000);
@@ -1242,7 +1261,10 @@ function openDetailPanel(id, sampleIdx) {
     }
     var tlDisplay = r.trafficLight ? '<span class="tl tl-' + r.trafficLight + '"></span> ' + (tlLabels[r.trafficLight]||'') : '-';
     document.getElementById('dp-tab-basic').innerHTML =
-        '<div class="dp-grid">' +
+        '<div style="position:relative;padding-right:24px">' +
+        '<button class="dp-edit-toggle" onclick="toggleBasicEdit()" title="편집">✏️</button>' +
+        '</div>' +
+        '<div class="dp-grid" id="dp-basic-view">' +
         dpRow('접수일자', r.receiptDate) +
         dpRow('처리기한', deadlineDisplay) +
         dpRow('시험분야', r.testField) +
@@ -1252,7 +1274,8 @@ function openDetailPanel(id, sampleIdx) {
         dpRow('거래처', (r.companyName || '-') + (r.trafficLight ? ' ' + tlDisplay : '')) +
         dpRow('인허가번호', r.licNo) +
         dpRow('업종', r.licBizForm) +
-        '</div>';
+        '</div>' +
+        '<div id="dp-basic-edit" style="display:none"></div>';
 
     // 탭2 시료정보 (클릭한 시료만 — 이전 접수 비교 포함)
     var s = (r.samples && r.samples[sampleIdx]) || {};
@@ -1280,12 +1303,15 @@ function openDetailPanel(id, sampleIdx) {
 
     // 먼저 기본 렌더링 (비교 결과는 비동기로 업데이트)
     var sampleHtml = '<div class="dp-sample-card">' +
-        '<div style="font-weight:600;margin-bottom:6px">시료 #' + (sampleIdx+1) + '</div>' +
+        '<div style="font-weight:600;margin-bottom:6px;position:relative;padding-right:24px">시료 #' + (sampleIdx+1) +
+        '<button class="dp-edit-toggle" onclick="toggleSampleEdit()" title="편집">✏️</button></div>' +
         '<div class="dp-grid" id="dp-sample-grid">';
     compareFields.forEach(function(f) {
         sampleHtml += '<div class="dp-lbl">' + f.label + '</div><div class="dp-val" id="dp-sf-' + f.key + '">' + (f.val || '-') + '</div>';
     });
-    sampleHtml += '</div></div>';
+    sampleHtml += '</div>' +
+        '<div id="dp-sample-edit" style="display:none"></div>' +
+        '</div>';
     document.getElementById('dp-tab-sample').innerHTML = sampleHtml;
 
     // 자가품질위탁검사용인 경우 이전 접수와 비교
@@ -1318,6 +1344,7 @@ function openDetailPanel(id, sampleIdx) {
         dpRow('이메일', r.reportEmail) +
         dpRow('성적서 발송일시', r.reportSentAt || '<span style="color:#999">미발송</span>') +
         '</div>';
+    feeHtml += '<a class="dp-goto-edit" onclick="goToReceiptEdit()">📝 접수등록에서 수정하기</a>';
     document.getElementById('dp-tab-fee').innerHTML = feeHtml;
 
     // 탭4 메모
@@ -1328,6 +1355,7 @@ function openDetailPanel(id, sampleIdx) {
         memoHtml += '<div style="margin-bottom:12px"><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + team + ' 메모</label>' +
             '<textarea class="dp-memo-area" readonly>' + (teamMemo[team] || '') + '</textarea></div>';
     });
+    memoHtml += '<a class="dp-goto-edit" onclick="goToReceiptEdit()">📝 접수등록에서 수정하기</a>';
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
 
     // 기본 탭 활성화
@@ -1470,6 +1498,196 @@ function switchDpTab(tabName) {
     document.querySelectorAll('.dp-tab-pane').forEach(function(pane) {
         pane.classList.toggle('active', pane.id === 'dp-tab-' + tabName);
     });
+}
+
+// ============================================================================
+// 인라인 편집 — 기본정보
+// ============================================================================
+function toggleBasicEdit() {
+    var viewEl = document.getElementById('dp-basic-view');
+    var editEl = document.getElementById('dp-basic-edit');
+    if (!viewEl || !editEl) return;
+    if (editEl.style.display === 'none') {
+        var r = _currentDetailRecord;
+        if (!r) return;
+        var urgVal = (r.urgent === '긴급' || r.urgent === 'Y') ? '긴급' : '일반';
+        editEl.innerHTML =
+            '<div class="dp-grid">' +
+            dpEditRow('접수일자', 'be-receiptDate', 'date', r.receiptDate || '') +
+            dpEditRow('처리기한', 'be-deadline', 'date', r.processingDeadline || '') +
+            dpEditSelect('시험분야', 'be-testField', ['식품','축산'], r.testField || '') +
+            dpEditRow('검사목적', 'be-testPurpose', 'text', r.testPurpose || '') +
+            dpEditRow('담당자', 'be-salesRep', 'text', r.salesRep || '') +
+            dpEditSelect('긴급여부', 'be-urgent', ['일반','긴급'], urgVal) +
+            dpEditRow('거래처', 'be-companyName', 'text', r.companyName || '') +
+            dpEditRow('인허가번호', 'be-licNo', 'text', r.licNo || '') +
+            dpEditRow('업종', 'be-licBizForm', 'text', r.licBizForm || '') +
+            '</div>' +
+            '<div class="dp-edit-btn-row">' +
+            '<button class="dp-edit-btn dp-edit-cancel" onclick="cancelBasicEdit()">취소</button>' +
+            '<button class="dp-edit-btn dp-edit-save" onclick="saveBasicEdit()">💾 저장</button>' +
+            '</div>';
+        viewEl.style.display = 'none';
+        editEl.style.display = 'block';
+    } else {
+        cancelBasicEdit();
+    }
+}
+function cancelBasicEdit() {
+    document.getElementById('dp-basic-view').style.display = '';
+    document.getElementById('dp-basic-edit').style.display = 'none';
+}
+function saveBasicEdit() {
+    var r = _currentDetailRecord;
+    if (!r) return;
+    var docId = r._origId || r.id;
+    var updateData = {
+        receiptDate: document.getElementById('be-receiptDate').value || '',
+        processingDeadline: document.getElementById('be-deadline').value || '',
+        testField: document.getElementById('be-testField').value || '',
+        testPurpose: document.getElementById('be-testPurpose').value || '',
+        salesRep: document.getElementById('be-salesRep').value || '',
+        urgent: document.getElementById('be-urgent').value === '긴급' ? '긴급' : '',
+        companyName: document.getElementById('be-companyName').value || '',
+        licNo: document.getElementById('be-licNo').value || '',
+        licBizForm: document.getElementById('be-licBizForm').value || ''
+    };
+    db.collection('receipts').doc(docId).update(updateData).then(function() {
+        // 로컬 캐시 업데이트
+        Object.keys(updateData).forEach(function(k) { r[k] = updateData[k]; });
+        _allReceipts.forEach(function(x) {
+            if ((x._origId || x.id) === docId) {
+                Object.keys(updateData).forEach(function(k) { x[k] = updateData[k]; });
+            }
+        });
+        cancelBasicEdit();
+        openDetailPanel(r.id, _currentDetailSampleIdx);
+        renderTable();
+        showDpToast('기본정보 저장 완료');
+    }).catch(function(err) {
+        console.error('기본정보 저장 실패:', err);
+        showDpToast('저장 실패: ' + err.message, true);
+    });
+}
+
+// ============================================================================
+// 인라인 편집 — 시료정보
+// ============================================================================
+function toggleSampleEdit() {
+    var gridEl = document.getElementById('dp-sample-grid');
+    var editEl = document.getElementById('dp-sample-edit');
+    if (!gridEl || !editEl) return;
+    if (editEl.style.display === 'none') {
+        var r = _currentDetailRecord;
+        if (!r) return;
+        var s = (r.samples && r.samples[_currentDetailSampleIdx]) || {};
+        editEl.innerHTML =
+            '<div class="dp-grid">' +
+            dpEditRow('제품/시료명', 'se-productName', 'text', s.productName || r.productName || '') +
+            dpEditRow('보고번호', 'se-reportNo', 'text', s.reportNo || '') +
+            dpEditRow('검체유형', 'se-foodType', 'text', s.foodType || r.foodType || '') +
+            dpEditRow('제조일자', 'se-manufactureDate', 'date', s.manufactureDate || '') +
+            dpEditRow('소비기한', 'se-expiryDate', 'text', s.expiryDate || '') +
+            dpEditRow('소비기한(일수)', 'se-expiryDays', 'text', s.expiryDays || '') +
+            dpEditRow('로트번호', 'se-lotNo', 'text', s.lotNo || '') +
+            dpEditRow('포장단위', 'se-packageUnit', 'text', s.packageUnit || '') +
+            dpEditRow('검체수', 'se-sampleCount', 'text', s.sampleCount || '') +
+            dpEditRow('시료접수', 'se-sampleReceiveMethod', 'text', s.sampleReceiveMethod || '') +
+            dpEditRow('접수형태', 'se-receiptFormType', 'text', s.receiptFormType || '') +
+            dpEditRow('운반상태', 'se-transportStatus', 'text', s.transportStatus || '') +
+            dpEditRow('공지여부', 'se-noticeRequired', 'text', s.noticeRequired || '') +
+            '</div>' +
+            '<div class="dp-edit-btn-row">' +
+            '<button class="dp-edit-btn dp-edit-cancel" onclick="cancelSampleEdit()">취소</button>' +
+            '<button class="dp-edit-btn dp-edit-save" onclick="saveSampleEdit()">💾 저장</button>' +
+            '</div>';
+        gridEl.style.display = 'none';
+        editEl.style.display = 'block';
+    } else {
+        cancelSampleEdit();
+    }
+}
+function cancelSampleEdit() {
+    document.getElementById('dp-sample-grid').style.display = '';
+    document.getElementById('dp-sample-edit').style.display = 'none';
+}
+function saveSampleEdit() {
+    var r = _currentDetailRecord;
+    if (!r) return;
+    var docId = r._origId || r.id;
+    var idx = _currentDetailSampleIdx;
+
+    // Firestore에서 현재 문서 가져와서 samples 배열 업데이트
+    db.collection('receipts').doc(docId).get().then(function(doc) {
+        if (!doc.exists) { showDpToast('문서를 찾을 수 없습니다', true); return; }
+        var data = doc.data();
+        var samples = data.samples || [];
+        if (idx >= samples.length) {
+            // samples 배열에 해당 인덱스가 없으면 확장
+            while (samples.length <= idx) samples.push({});
+        }
+        var s = samples[idx];
+        s.productName = document.getElementById('se-productName').value || '';
+        s.reportNo = document.getElementById('se-reportNo').value || '';
+        s.foodType = document.getElementById('se-foodType').value || '';
+        s.manufactureDate = document.getElementById('se-manufactureDate').value || '';
+        s.expiryDate = document.getElementById('se-expiryDate').value || '';
+        s.expiryDays = document.getElementById('se-expiryDays').value || '';
+        s.lotNo = document.getElementById('se-lotNo').value || '';
+        s.packageUnit = document.getElementById('se-packageUnit').value || '';
+        s.sampleCount = document.getElementById('se-sampleCount').value || '';
+        s.sampleReceiveMethod = document.getElementById('se-sampleReceiveMethod').value || '';
+        s.receiptFormType = document.getElementById('se-receiptFormType').value || '';
+        s.transportStatus = document.getElementById('se-transportStatus').value || '';
+        s.noticeRequired = document.getElementById('se-noticeRequired').value || '';
+
+        return db.collection('receipts').doc(docId).update({ samples: samples });
+    }).then(function() {
+        // 로컬 캐시 업데이트
+        if (r.samples && r.samples[idx]) {
+            var fields = ['productName','reportNo','foodType','manufactureDate','expiryDate','expiryDays','lotNo','packageUnit','sampleCount','sampleReceiveMethod','receiptFormType','transportStatus','noticeRequired'];
+            fields.forEach(function(f) {
+                var el = document.getElementById('se-' + f);
+                if (el) r.samples[idx][f] = el.value || '';
+            });
+        }
+        cancelSampleEdit();
+        openDetailPanel(r.id, _currentDetailSampleIdx);
+        renderTable();
+        showDpToast('시료정보 저장 완료');
+    }).catch(function(err) {
+        console.error('시료정보 저장 실패:', err);
+        showDpToast('저장 실패: ' + err.message, true);
+    });
+}
+
+// 인라인 편집 헬퍼
+function dpEditRow(label, id, type, val) {
+    return '<div class="dp-lbl">' + label + '</div>' +
+        '<div class="dp-val"><input type="' + type + '" class="dp-edit-input" id="' + id + '" value="' + (val || '').replace(/"/g, '&quot;') + '"></div>';
+}
+function dpEditSelect(label, id, options, val) {
+    var html = '<div class="dp-lbl">' + label + '</div><div class="dp-val"><select class="dp-edit-select" id="' + id + '">';
+    options.forEach(function(opt) {
+        html += '<option value="' + opt + '"' + (opt === val ? ' selected' : '') + '>' + opt + '</option>';
+    });
+    html += '</select></div>';
+    return html;
+}
+function showDpToast(msg, isError) {
+    var toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;color:#fff;background:' + (isError ? '#e53935' : '#2e7d32') + ';box-shadow:0 4px 12px rgba(0,0,0,.15)';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 2500);
+}
+
+// 접수등록 페이지로 이동 (편집 모드)
+function goToReceiptEdit() {
+    var r = _currentDetailRecord;
+    if (!r) return;
+    var docId = r._origId || r.id;
+    window.open('sampleReceiptV2.html?edit=' + encodeURIComponent(docId), '_blank');
 }
 
 // ============================================================================
