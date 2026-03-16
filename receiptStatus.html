@@ -1605,41 +1605,89 @@ function loadComparePanel(side, id, sampleIdx) {
     totalEl.textContent = '-';
     countEl.textContent = '';
     var docId = (r._baseReceiptNo || r.receiptNo || '') + '_S' + sampleIdx;
-    db.collection('testResults').doc(docId).get().then(function(doc) {
-        var items = doc.exists ? (doc.data().items || []) : [];
+    // 1단계: 접수 데이터에서 시험항목 추출
+    function getBaseItems() {
+        var s = (r.samples && r.samples[sampleIdx]) || {};
+        var items = s.testItems || r.testItems || [];
         if (items.length === 0) {
-            bodyEl.innerHTML = '<div style="padding:24px;text-align:center;color:#bbb;font-size:12px">검사결과 없음<br><span style="font-size:11px">testResultInput에서 결과를 입력하세요</span></div>';
+            return db.collection('receipts').doc(r.id).get().then(function(doc) {
+                if (!doc.exists) return [];
+                var data = doc.data();
+                var s2 = (data.samples && data.samples[sampleIdx]) || {};
+                return s2.testItems || data.testItems || [];
+            });
+        }
+        return Promise.resolve(items);
+    }
+    // 2단계: testResults에서 결과값 조회 (없어도 괜찮음)
+    function getResultItems() {
+        return db.collection('testResults').doc(docId).get().then(function(doc) {
+            return doc.exists ? (doc.data().items || []) : [];
+        }).catch(function() { return []; });
+    }
+    // 3단계: 병합 후 렌더링
+    Promise.all([getBaseItems(), getResultItems()]).then(function(results) {
+        var baseItems   = results[0];
+        var resultItems = results[1];
+        if (!baseItems || baseItems.length === 0) {
+            baseItems = resultItems;
+        }
+        var merged = baseItems.map(function(base, idx) {
+            var res = resultItems.find(function(ri) {
+                return ri.testItemName === (base.testItemName || base.itemName || base.name)
+                    || ri.itemName === (base.testItemName || base.itemName || base.name);
+            }) || resultItems[idx] || {};
+            return {
+                testItemName:    base.testItemName || base.itemName || base.name || '-',
+                testTeam:        base.testTeam || base.team || res.testTeam || '-',
+                testerName:      base.testerName || base.assignee || res.testerName || '-',
+                standard:        base.standard || base.규격 || res.standard || '-',
+                markValue:       res.markValue || res.measuredValue || '',
+                judgmentResult:  res.judgmentResult || '',
+                unit:            base.unit || res.unit || '',
+                fee:             base.fee || res.fee || 0,
+            };
+        });
+        if (merged.length === 0) {
+            bodyEl.innerHTML = '<div style="padding:24px;text-align:center;color:#bbb;font-size:12px">시험항목 없음<br><span style="font-size:11px">접수등록에서 시험항목을 추가하세요</span></div>';
             totalEl.textContent = '0원';
             countEl.textContent = '(0건)';
             return;
         }
-        var totalFee    = items.reduce(function(s, it) { return s + (Number(it.fee) || 0); }, 0);
-        var judgedCount = items.filter(function(it) { return it.judgmentResult; }).length;
+        var totalFee    = merged.reduce(function(s, it) { return s + (Number(it.fee) || 0); }, 0);
+        var judgedCount = merged.filter(function(it) { return it.judgmentResult; }).length;
         totalEl.textContent = totalFee.toLocaleString() + '원';
-        countEl.textContent = '(' + judgedCount + '/' + items.length + '건 판정완료)';
+        countEl.textContent = '(' + judgedCount + '/' + merged.length + '건 판정완료)';
         var html = '<div style="min-width:600px"><table style="width:100%;border-collapse:collapse">';
         html += '<thead><tr style="background:#f8f9fb;position:sticky;top:0;z-index:1">';
-        ['항목명','시험팀','담당자','결과값','판정','검사비용'].forEach(function(h, i) {
-            var align = (i >= 3 && i !== 4) ? 'right' : (i === 4 ? 'center' : 'left');
-            html += '<th style="padding:7px 10px;font-size:11px;font-weight:700;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap;text-align:'+align+'">'+h+'</th>';
+        [
+            {label:'항목명',  align:'left'},
+            {label:'시험팀',  align:'left'},
+            {label:'담당자',  align:'left'},
+            {label:'규격',    align:'left'},
+            {label:'결과값',  align:'right'},
+            {label:'판정',    align:'center'},
+            {label:'검사비용',align:'right'}
+        ].forEach(function(h) {
+            html += '<th style="padding:7px 10px;font-size:11px;font-weight:700;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap;text-align:'+h.align+'">'+h.label+'</th>';
         });
         html += '</tr></thead><tbody>';
-        items.forEach(function(it) {
+        merged.forEach(function(it) {
             var jr   = it.judgmentResult || '';
             var jrBg = jr==='적합' ? '#e8f5e9' : jr==='부적합' ? '#fce4ec' : '';
             var jrCl = jr==='적합' ? '#2e7d32' : jr==='부적합' ? '#c62828' : '#bbb';
-            var mv   = it.markValue || it.measuredValue || '-';
-            var unit = it.unit ? ' ' + it.unit : '';
+            var mv   = it.markValue ? it.markValue + (it.unit ? ' '+it.unit : '') : '<span style="color:#ccc">미입력</span>';
             html += '<tr style="border-bottom:1px solid #eef0f4" onmouseover="this.style.background=\'#fafbfc\'" onmouseout="this.style.background=\'\'">';
-            html += '<td style="padding:7px 10px;font-size:12px;color:#1a2332;white-space:nowrap">' + (it.testItemName || it.itemName || '-') + '</td>';
-            html += '<td style="padding:7px 10px;font-size:11px;color:#5f6b7a;white-space:nowrap">' + (it.testTeam || '-') + '</td>';
-            html += '<td style="padding:7px 10px;font-size:11px;color:#5f6b7a;white-space:nowrap">' + (it.testerName || '-') + '</td>';
-            html += '<td style="padding:7px 10px;font-size:12px;color:#1a2332;text-align:right;white-space:nowrap">' + mv + unit + '</td>';
+            html += '<td style="padding:7px 10px;font-size:12px;color:#1a2332;white-space:nowrap">' + it.testItemName + '</td>';
+            html += '<td style="padding:7px 10px;font-size:11px;color:#5f6b7a;white-space:nowrap">' + it.testTeam + '</td>';
+            html += '<td style="padding:7px 10px;font-size:11px;color:#5f6b7a;white-space:nowrap">' + it.testerName + '</td>';
+            html += '<td style="padding:7px 10px;font-size:11px;color:#5f6b7a;white-space:nowrap">' + it.standard + '</td>';
+            html += '<td style="padding:7px 10px;font-size:12px;color:#1a2332;text-align:right;white-space:nowrap">' + mv + '</td>';
             html += '<td style="padding:7px 10px;text-align:center">';
-            if (jr && jr !== '미입력') {
+            if (jr) {
                 html += '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+jrBg+';color:'+jrCl+'">'+jr+'</span>';
             } else {
-                html += '<span style="color:#bbb;font-size:11px">미입력</span>';
+                html += '<span style="color:#bbb;font-size:11px">-</span>';
             }
             html += '</td>';
             html += '<td style="padding:7px 10px;font-size:12px;color:#5f6b7a;text-align:right;white-space:nowrap">' + (it.fee ? Number(it.fee).toLocaleString()+'원' : '-') + '</td>';
