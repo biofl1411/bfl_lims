@@ -156,7 +156,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
     <!-- 필터 존 -->
     <div id="filter-zone">
         <div class="filter-bar">
-            <input type="text" id="filter-search" placeholder="접수번호, 거래처, 제품명 검색..." oninput="applyFilter()" style="width:260px">
+            <div style="position:relative;display:inline-flex;align-items:center">
+                <input type="text" id="filter-search" placeholder="접수번호, 거래처, 제품명, 사업자번호, 주소..." oninput="applyFilter()" style="width:300px;padding-right:32px">
+                <button id="voice-btn" onclick="toggleVoiceSearch()" style="position:absolute;right:6px;background:none;border:none;cursor:pointer;font-size:16px;color:#5f6b7a;padding:2px" title="음성 검색">🎤</button>
+            </div>
             <select id="filter-status" onchange="applyFilter()">
                 <option value="">전체 상태</option>
                 <option value="대기중">대기중</option>
@@ -670,7 +673,7 @@ function applyFilter() {
         if (trafficFilter && r.trafficLight !== trafficFilter) return false;
         if (repFilter && r.salesRep !== repFilter) return false;
         if (search) {
-            var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '') + (r.testPurpose || '') + (r.billCompany || '') + (r.salesRep || '')).toLowerCase();
+            var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '') + (r.testPurpose || '') + (r.billCompany || '') + (r.salesRep || '') + (r.bizNo || '') + (r.companyAddress || '')).toLowerCase();
             if (hay.indexOf(search) < 0) return false;
         }
         return true;
@@ -704,6 +707,61 @@ function updateKpi() {
     var vals = Object.values ? Object.values(_companyReceivables) : Object.keys(_companyReceivables).map(function(k){return _companyReceivables[k];});
     vals.forEach(function(v) { totalReceivable += v.totalAmount; });
     document.getElementById('kpi-receivable-val').textContent = totalReceivable.toLocaleString() + '원';
+}
+
+// ============================================================================
+// 음성 검색 (Web Speech API)
+// ============================================================================
+var _voiceRecognition = null;
+var _voiceActive = false;
+
+function toggleVoiceSearch() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert('이 브라우저는 음성 인식을 지원하지 않습니다.\nChrome 브라우저를 사용해주세요.');
+        return;
+    }
+    if (_voiceActive) {
+        stopVoiceSearch();
+        return;
+    }
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    _voiceRecognition = new SR();
+    _voiceRecognition.lang = 'ko-KR';
+    _voiceRecognition.continuous = false;
+    _voiceRecognition.interimResults = true;
+
+    var btn = document.getElementById('voice-btn');
+    btn.style.color = '#e53935';
+    btn.textContent = '🔴';
+    _voiceActive = true;
+
+    _voiceRecognition.onresult = function(e) {
+        var transcript = '';
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+            transcript += e.results[i][0].transcript;
+        }
+        document.getElementById('filter-search').value = transcript;
+        applyFilter();
+    };
+    _voiceRecognition.onend = function() {
+        stopVoiceSearch();
+    };
+    _voiceRecognition.onerror = function(e) {
+        console.warn('음성 인식 오류:', e.error);
+        stopVoiceSearch();
+    };
+    _voiceRecognition.start();
+}
+
+function stopVoiceSearch() {
+    if (_voiceRecognition) {
+        try { _voiceRecognition.stop(); } catch(e) {}
+        _voiceRecognition = null;
+    }
+    _voiceActive = false;
+    var btn = document.getElementById('voice-btn');
+    btn.style.color = '#5f6b7a';
+    btn.textContent = '🎤';
 }
 
 // ============================================================================
