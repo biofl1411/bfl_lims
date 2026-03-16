@@ -585,6 +585,17 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     <div id="company-changelog-body" style="font-size:10px"></div>
   </div>
 
+  <!-- 인허가 변경 알림 (I2859) -->
+  <div id="lic-change-alert" style="display:none;margin-top:8px;border:2px solid #ff9800;border-radius:8px;background:#fff8e1;padding:10px 12px;position:relative">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <span style="font-size:16px">⚠️</span>
+      <span style="font-size:12px;font-weight:700;color:#e65100">인허가 변경사항 감지</span>
+      <span id="lic-change-count" style="font-size:10px;color:#bf360c;background:#ffccbc;padding:1px 6px;border-radius:10px;font-weight:600"></span>
+      <button onclick="document.getElementById('lic-change-alert').style.display='none'" style="margin-left:auto;background:none;border:none;font-size:14px;cursor:pointer;color:#999">✕</button>
+    </div>
+    <div id="lic-change-body" style="max-height:200px;overflow-y:auto;font-size:11px"></div>
+  </div>
+
   <!-- 휴대폰 (숨김) -->
   <input type="tel" id="company-mobile" style="display:none">
 
@@ -5352,6 +5363,129 @@ function selectCompany(elOrObj) {
 
     // 보고번호 자동 조회 (인허가번호 설정 후)
     fetchReportNo();
+
+    // 인허가 변경사항 확인 (I2859 fss_changes)
+    checkLicenseChanges(lic.licNo || lic.licenseNo || '', c.createdAt || c.regDate || '');
+}
+
+// ============================================================================
+// 인허가 변경사항 확인 (I2859 - 식품업소 인허가 변경 정보)
+// ============================================================================
+async function checkLicenseChanges(licNo, regDate) {
+    var alertEl = document.getElementById('lic-change-alert');
+    if (!alertEl) return;
+    alertEl.style.display = 'none';
+
+    if (!licNo) return;
+
+    // 업체등록일 기준일 산출
+    var sinceDate = '';
+    if (regDate) {
+        if (regDate.toDate) {
+            // Firestore Timestamp
+            sinceDate = regDate.toDate().toISOString().slice(0, 10).replace(/-/g, '');
+        } else if (typeof regDate === 'string') {
+            sinceDate = regDate.replace(/-/g, '').slice(0, 8);
+        }
+    }
+    // 기준일 없으면 최근 1년
+    if (!sinceDate) {
+        var oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        sinceDate = oneYearAgo.toISOString().slice(0, 10).replace(/-/g, '');
+    }
+
+    try {
+        // fss_changes 컬렉션에서 해당 인허가번호 변경 이력 조회
+        var snap = await db.collection('fss_changes')
+            .where('lcns_no', '==', licNo)
+            .orderBy('chng_dt', 'desc')
+            .get();
+
+        if (snap.empty) return;
+
+        // 기준일 이후 변경사항만 필터
+        var changes = [];
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            var chngDt = (d.chng_dt || '').replace(/-/g, '').slice(0, 8);
+            if (chngDt >= sinceDate) {
+                changes.push(d);
+            }
+        });
+
+        if (changes.length === 0) return;
+
+        // 알림 표시
+        document.getElementById('lic-change-count').textContent = changes.length + '건';
+        var html = '<table style="width:100%;border-collapse:collapse">' +
+            '<tr style="border-bottom:1px solid #ffcc80;color:#bf360c;font-size:10px;font-weight:600">' +
+            '<th style="text-align:left;padding:4px 6px;width:80px">변경일자</th>' +
+            '<th style="text-align:left;padding:4px 6px">변경전</th>' +
+            '<th style="text-align:center;padding:4px 2px;width:20px">→</th>' +
+            '<th style="text-align:left;padding:4px 6px">변경후</th>' +
+            '<th style="text-align:left;padding:4px 6px;width:100px">변경사유</th></tr>';
+        changes.forEach(function(c) {
+            var dt = c.chng_dt || '';
+            // YYYYMMDD → YYYY-MM-DD
+            if (dt.length === 8) dt = dt.slice(0, 4) + '-' + dt.slice(4, 6) + '-' + dt.slice(6, 8);
+            html += '<tr style="border-bottom:1px solid #fff3e0">' +
+                '<td style="padding:4px 6px;color:#e65100;font-weight:600;white-space:nowrap">' + dt + '</td>' +
+                '<td style="padding:4px 6px;color:#d32f2f;text-decoration:line-through;word-break:break-all">' + (c.chng_bf_cn || '-') + '</td>' +
+                '<td style="padding:4px 2px;text-align:center;color:#ff9800">→</td>' +
+                '<td style="padding:4px 6px;color:#2e7d32;font-weight:600;word-break:break-all">' + (c.chng_af_cn || '-') + '</td>' +
+                '<td style="padding:4px 6px;color:#5f6b7a;word-break:break-all">' + (c.chng_prvns || '-') + '</td></tr>';
+        });
+        html += '</table>';
+        document.getElementById('lic-change-body').innerHTML = html;
+        alertEl.style.display = 'block';
+
+        console.log('[I2859] 인허가 변경사항 ' + changes.length + '건 감지 (인허가: ' + licNo + ', 기준일: ' + sinceDate + ')');
+    } catch(err) {
+        // 인덱스 미생성 등 에러 시 조용히 처리
+        console.warn('[I2859] 인허가 변경 조회 실패:', err.message);
+        // orderBy 없이 재시도
+        try {
+            var snap2 = await db.collection('fss_changes')
+                .where('lcns_no', '==', licNo)
+                .get();
+            if (snap2.empty) return;
+            var changes2 = [];
+            snap2.forEach(function(doc) {
+                var d = doc.data();
+                var chngDt = (d.chng_dt || '').replace(/-/g, '').slice(0, 8);
+                if (chngDt >= sinceDate) changes2.push(d);
+            });
+            // 날짜 정렬
+            changes2.sort(function(a, b) { return (b.chng_dt || '').localeCompare(a.chng_dt || ''); });
+            if (changes2.length === 0) return;
+
+            document.getElementById('lic-change-count').textContent = changes2.length + '건';
+            var html2 = '<table style="width:100%;border-collapse:collapse">' +
+                '<tr style="border-bottom:1px solid #ffcc80;color:#bf360c;font-size:10px;font-weight:600">' +
+                '<th style="text-align:left;padding:4px 6px;width:80px">변경일자</th>' +
+                '<th style="text-align:left;padding:4px 6px">변경전</th>' +
+                '<th style="text-align:center;padding:4px 2px;width:20px">→</th>' +
+                '<th style="text-align:left;padding:4px 6px">변경후</th>' +
+                '<th style="text-align:left;padding:4px 6px;width:100px">변경사유</th></tr>';
+            changes2.forEach(function(c) {
+                var dt = c.chng_dt || '';
+                if (dt.length === 8) dt = dt.slice(0, 4) + '-' + dt.slice(4, 6) + '-' + dt.slice(6, 8);
+                html2 += '<tr style="border-bottom:1px solid #fff3e0">' +
+                    '<td style="padding:4px 6px;color:#e65100;font-weight:600;white-space:nowrap">' + dt + '</td>' +
+                    '<td style="padding:4px 6px;color:#d32f2f;text-decoration:line-through;word-break:break-all">' + (c.chng_bf_cn || '-') + '</td>' +
+                    '<td style="padding:4px 2px;text-align:center;color:#ff9800">→</td>' +
+                    '<td style="padding:4px 6px;color:#2e7d32;font-weight:600;word-break:break-all">' + (c.chng_af_cn || '-') + '</td>' +
+                    '<td style="padding:4px 6px;color:#5f6b7a;word-break:break-all">' + (c.chng_prvns || '-') + '</td></tr>';
+            });
+            html2 += '</table>';
+            document.getElementById('lic-change-body').innerHTML = html2;
+            alertEl.style.display = 'block';
+            console.log('[I2859] 인허가 변경사항 ' + changes2.length + '건 감지 (폴백 쿼리)');
+        } catch(err2) {
+            console.warn('[I2859] 인허가 변경 조회 완전 실패:', err2.message);
+        }
+    }
 }
 
 // ============================================================================
