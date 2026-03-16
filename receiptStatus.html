@@ -1605,19 +1605,19 @@ function loadComparePanel(side, id, sampleIdx) {
     totalEl.textContent = '-';
     countEl.textContent = '';
     var docId = (r._baseReceiptNo || r.receiptNo || '') + '_S' + sampleIdx;
-    // 1단계: 접수 데이터에서 시험항목 추출
+    // 1단계: 접수 데이터에서 시험항목 추출 (가능한 모든 필드명 시도)
     function getBaseItems() {
         var s = (r.samples && r.samples[sampleIdx]) || {};
-        var items = s.testItems || r.testItems || [];
-        if (items.length === 0) {
-            return db.collection('receipts').doc(r.id).get().then(function(doc) {
-                if (!doc.exists) return [];
-                var data = doc.data();
-                var s2 = (data.samples && data.samples[sampleIdx]) || {};
-                return s2.testItems || data.testItems || [];
-            });
-        }
-        return Promise.resolve(items);
+        var items = s.testItems || s.items || s.selectedItems || s.inspectionItems || s.refTestItems
+                 || r.testItems || r.items || r.selectedItems || [];
+        if (items && items.length > 0) return Promise.resolve(items);
+        return db.collection('receipts').doc(r.id).get().then(function(doc) {
+            if (!doc.exists) return [];
+            var data = doc.data();
+            var s2 = (data.samples && data.samples[sampleIdx]) || {};
+            return s2.testItems || s2.items || s2.selectedItems || s2.inspectionItems || s2.refTestItems
+                || data.testItems || data.items || data.selectedItems || [];
+        });
     }
     // 2단계: testResults에서 결과값 조회 (없어도 괜찮음)
     function getResultItems() {
@@ -1638,14 +1638,14 @@ function loadComparePanel(side, id, sampleIdx) {
                     || ri.itemName === (base.testItemName || base.itemName || base.name);
             }) || resultItems[idx] || {};
             return {
-                testItemName:    base.testItemName || base.itemName || base.name || '-',
-                testTeam:        base.testTeam || base.team || res.testTeam || '-',
-                testerName:      base.testerName || base.assignee || res.testerName || '-',
-                standard:        base.standard || base.규격 || res.standard || '-',
+                testItemName:    base.testItemName || base.itemName || base.name || base['항목명'] || base['시험항목명'] || base.testName || '-',
+                testTeam:        base.testTeam || base.team || base['시험팀'] || base.department || res.testTeam || '-',
+                testerName:      base.testerName || base.assignee || base['담당자'] || base.charger || res.testerName || '-',
+                standard:        base.standard || base['규격'] || base.spec || base.stdValue || res.standard || '-',
                 markValue:       res.markValue || res.measuredValue || '',
                 judgmentResult:  res.judgmentResult || '',
-                unit:            base.unit || res.unit || '',
-                fee:             base.fee || res.fee || 0,
+                unit:            base.unit || base['단위'] || res.unit || '',
+                fee:             base.fee || base['수수료'] || res.fee || 0,
             };
         });
         if (merged.length === 0) {
