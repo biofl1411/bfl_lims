@@ -3074,12 +3074,19 @@ async function loadFirestoreFeeMap() {
     }
 }
 
-function getFeeByCode(testCode) {
-    if (_firestoreFeeMap && _firestoreFeeMap[testCode]) {
-        return _firestoreFeeMap[testCode].fee || 0;
+function getFeeByCode(testCode, itemName) {
+    if (testCode) {
+        if (_firestoreFeeMap && _firestoreFeeMap[testCode]) {
+            return _firestoreFeeMap[testCode].fee || 0;
+        }
+        if (typeof MFDS_FEE_MAP !== 'undefined' && MFDS_FEE_MAP[testCode]) {
+            return MFDS_FEE_MAP[testCode].fee || 0;
+        }
     }
-    if (typeof MFDS_FEE_MAP !== 'undefined' && MFDS_FEE_MAP[testCode]) {
-        return MFDS_FEE_MAP[testCode].fee || 0;
+    // 항목명 기반 폴백
+    if (itemName && typeof MFDS_FEE_MAPPING !== 'undefined') {
+        var found = MFDS_FEE_MAPPING.find(function(m) { return m.itemName === itemName; });
+        if (found) return found.fee || 0;
     }
     return 0;
 }
@@ -3659,7 +3666,7 @@ async function loadInspectionItems(foodType) {
         var total = 0;
         var html = '';
         items.forEach(function(item, idx) {
-            var fee = item.항목수수료 || getFeeByCode(item.testItemCode || item['시험항목코드'] || '') || 0;
+            var fee = item.항목수수료 || getFeeByCode(item.testItemCode || item['시험항목코드'] || '', item.항목명 || '') || 0;
             total += fee;
             var itemKey = (item.항목명 || '') + '||' + (item.규격 || '');
             var code = item.testItemCode || '';
@@ -3705,7 +3712,7 @@ async function loadInspectionItems(foodType) {
         var total = 0;
         var html = '';
         tmpl.testItems.forEach(function(ti, idx) {
-            var fee = ti.fee || getFeeByCode(ti.testItemCode) || 0;
+            var fee = ti.fee || getFeeByCode(ti.testItemCode, ti.testItemName) || 0;
             total += fee;
             var itemName = ti.testItemName + (ti.proviso ? ' (' + ti.proviso + ')' : '');
             var itemKey = (ti.testItemName || '') + '||' + (ti.proviso || '');
