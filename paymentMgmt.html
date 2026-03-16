@@ -1507,34 +1507,56 @@ async function loadLedger() {
         if (company.startsWith('(주)')) searchVariants.push(company.replace(/^\(주\)/, ''));
         if (company.startsWith('주식회사 ')) searchVariants.push(company.replace(/^주식회사 /, ''));
 
-        // 변형별 정확 매칭 시도
+        // 단계1: 변형별 정확 매칭 시도
         for (var vi = 0; vi < searchVariants.length; vi++) {
             var snap = await db.collection('receipts')
                 .where('companyName', '==', searchVariants[vi].trim())
                 .get();
             if (snap.size > 0) {
                 allSnap = snap;
-                company = searchVariants[vi].trim(); // 매칭된 업체명으로 갱신
+                company = searchVariants[vi].trim();
                 break;
             }
         }
 
-        // 정확 매칭 실패 → 전체 검색 후 includes 필터
+        // 단계2: 정확 매칭 실패 → 접두어 범위 검색 (Firestore >= / <= 활용)
         if (!allSnap || allSnap.size === 0) {
-            var fullSnap = await db.collection('receipts').get();
-            var matchedDocs = [];
-            var lowerCompany = company.toLowerCase();
-            fullSnap.forEach(function(doc) {
-                var cn = (doc.data().companyName || '').toLowerCase();
-                if (cn.indexOf(lowerCompany) !== -1) matchedDocs.push(doc);
-            });
-            if (matchedDocs.length > 0) {
-                company = matchedDocs[0].data().companyName; // 첫 매칭 업체명으로 갱신
-                allSnap = { size: matchedDocs.length, forEach: function(cb) { matchedDocs.forEach(cb); } };
-            } else {
-                allSnap = { size: 0, forEach: function() {} };
+            for (var pi = 0; pi < searchVariants.length; pi++) {
+                var prefix = searchVariants[pi].trim();
+                var prefixSnap = await db.collection('receipts')
+                    .where('companyName', '>=', prefix)
+                    .where('companyName', '<=', prefix + '\uf8ff')
+                    .get();
+                if (prefixSnap.size > 0) {
+                    allSnap = prefixSnap;
+                    company = prefixSnap.docs[0].data().companyName;
+                    break;
+                }
             }
         }
+
+        // 단계3: 접두어도 실패 → companies 컬렉션에서 업체명 찾아서 재시도
+        if (!allSnap || allSnap.size === 0) {
+            var compSnap = await db.collection('companies')
+                .where('name', '>=', company)
+                .where('name', '<=', company + '\uf8ff')
+                .get();
+            if (compSnap.size === 0 && !company.startsWith('(주)')) {
+                compSnap = await db.collection('companies')
+                    .where('name', '>=', '(주)' + company)
+                    .where('name', '<=', '(주)' + company + '\uf8ff')
+                    .get();
+            }
+            if (compSnap.size > 0) {
+                var foundName = compSnap.docs[0].data().name;
+                allSnap = await db.collection('receipts')
+                    .where('companyName', '==', foundName)
+                    .get();
+                if (allSnap.size > 0) company = foundName;
+            }
+        }
+
+        if (!allSnap) allSnap = { size: 0, forEach: function() {}, docs: [] };
 
         var periodReceipts = [];
         var carrySales = 0, carryPayments = 0;
