@@ -644,6 +644,9 @@ async function loadTxnStatement() {
     resultEl.innerHTML = '<div class="txn-empty">조회 중...</div>';
 
     try {
+        // mfdsTemplates 먼저 로드 (검사항목 매칭용)
+        await _loadMfdsTemplates();
+
         var resolved = await _resolveCompanyAndFetch(company);
         company = resolved.company;
         var allSnap = resolved.snap;
@@ -771,53 +774,75 @@ async function loadTxnStatement() {
     }
 }
 
-// 검사항목 추출
+// ---- mfdsTemplates 캐시 ----
+var _mfdsTemplatesCache = null;
+
+async function _loadMfdsTemplates() {
+    if (_mfdsTemplatesCache) return _mfdsTemplatesCache;
+    try {
+        await waitForFirebase();
+        var snap = await db.collection('mfdsTemplates').get();
+        _mfdsTemplatesCache = snap.docs.map(function(d) { return d.data(); });
+    } catch(e) {
+        console.warn('mfdsTemplates 로드 실패:', e);
+        _mfdsTemplatesCache = [];
+    }
+    return _mfdsTemplatesCache;
+}
+
+// 검사항목 추출 (samples → refTestItems / mfdsTemplates 매칭)
 function _getTestItems(d) {
     var items = [];
 
-    // items[] 배열
-    if (d.items && Array.isArray(d.items)) {
-        d.items.forEach(function(it) {
-            var name = it.itemName || it.name || it.testItemName || '';
-            if (name && items.indexOf(name) < 0) items.push(name);
+    if (d.samples && Array.isArray(d.samples)) {
+        d.samples.forEach(function(s) {
+            // 1순위: refTestItems (참고용/기준규격외 - 접수 시 직접 저장)
+            if (s.refTestItems && Array.isArray(s.refTestItems) && s.refTestItems.length > 0) {
+                s.refTestItems.forEach(function(ri) {
+                    var name = ri.itemName || ri.testItemName || '';
+                    if (name && name.indexOf('||') >= 0) name = name.split('||')[0];
+                    if (name && items.indexOf(name) < 0) items.push(name);
+                });
+                return; // 이 시료는 refTestItems에서 가져왔으므로 다음 시료로
+            }
+
+            // 2순위: mfdsTemplates에서 mfdsProductCode로 매칭
+            if (_mfdsTemplatesCache && s.mfdsProductCode) {
+                var tpl = _mfdsTemplatesCache.find(function(t) { return t.foodTypeCode === s.mfdsProductCode; });
+                if (tpl && tpl.testItems && tpl.testItems.length > 0) {
+                    tpl.testItems.forEach(function(ti) {
+                        var name = ti.testItemName || '';
+                        if (name && items.indexOf(name) < 0) items.push(name);
+                    });
+                    return;
+                }
+            }
+
+            // 3순위: mfdsTemplates에서 foodType(식품유형명)으로 매칭
+            if (_mfdsTemplatesCache && s.foodType) {
+                var tpl2 = _mfdsTemplatesCache.find(function(t) {
+                    return t.templateName === s.foodType || t.foodTypeName === s.foodType;
+                });
+                if (tpl2 && tpl2.testItems && tpl2.testItems.length > 0) {
+                    tpl2.testItems.forEach(function(ti) {
+                        var name = ti.testItemName || '';
+                        if (name && items.indexOf(name) < 0) items.push(name);
+                    });
+                    return;
+                }
+            }
         });
     }
-    // testItems[] 배열
-    if (d.testItems && Array.isArray(d.testItems)) {
+
+    // 레거시 폴백: 문서 수준 필드
+    if (!items.length && d.testItems && Array.isArray(d.testItems)) {
         d.testItems.forEach(function(it) {
             var name = typeof it === 'string' ? it : (it.itemName || it.name || it.testItemName || '');
             if (name && items.indexOf(name) < 0) items.push(name);
         });
     }
-    // itemNames 문자열
     if (!items.length && d.itemNames) {
         items = d.itemNames.split(/[,;]/).map(function(s) { return s.trim(); }).filter(Boolean);
-    }
-    // samples[] 하위 검사항목
-    if (!items.length && d.samples && Array.isArray(d.samples)) {
-        d.samples.forEach(function(s) {
-            // refTestItems (참고용/기준규격외 - 실제 저장 필드)
-            if (s.refTestItems && Array.isArray(s.refTestItems)) {
-                s.refTestItems.forEach(function(ri) {
-                    var name = ri.itemName || ri.testItemName || '';
-                    // itemName이 "항목명||제목" 형태일 수 있음
-                    if (name && name.indexOf('||') >= 0) name = name.split('||')[0];
-                    if (name && items.indexOf(name) < 0) items.push(name);
-                });
-            }
-            if (s.items && Array.isArray(s.items)) {
-                s.items.forEach(function(it) {
-                    var name = it.itemName || it.name || it.testItemName || '';
-                    if (name && items.indexOf(name) < 0) items.push(name);
-                });
-            }
-            if (s.testItems && Array.isArray(s.testItems)) {
-                s.testItems.forEach(function(it) {
-                    var name = typeof it === 'string' ? it : (it.itemName || it.name || '');
-                    if (name && items.indexOf(name) < 0) items.push(name);
-                });
-            }
-        });
     }
 
     if (items.length === 0) return '';
