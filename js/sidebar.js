@@ -132,10 +132,9 @@ const SIDEBAR_MENU = [
       { label: '접수 등록',         href: 'sampleReceiptV2.html',   page: 'reception-register' },
       { label: '접수 공지',         href: 'receiptNotice.html',  page: 'reception-notice' },
       { label: '접수 현황',         href: 'receiptStatus.html',  page: 'reception-status' },
-      { label: '설정',              disabled: true },
-      { label: '모바일',            href: 'mobilePhoto.html',   page: 'mobile-photo' },
-      { label: '접수대장',          disabled: true },
-      { label: '접수 통계',         disabled: true }
+      { label: '⚙ 모바일',          href: 'mobilePhoto.html',   page: 'mobile-photo' },
+      { label: '⚙ 접수대장',        disabled: true },
+      { label: '⚙ 접수통계',        disabled: true }
     ]
   },
   {
