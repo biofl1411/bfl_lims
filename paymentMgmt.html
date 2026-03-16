@@ -97,7 +97,15 @@ tr:hover{background:#f8f9fb}
 
 /* 매출처 원장 */
 .ledger-filter{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;margin-bottom:16px;padding:10px 16px;background:#fff;border:1px solid #e2e6ed;border-radius:10px}
-.ledger-filter input[type="text"]{padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit;width:160px;flex-shrink:0}
+.ledger-filter input[type="text"]{padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit;width:220px;flex-shrink:0}
+.ledger-search-wrap{position:relative;flex-shrink:0}
+.ledger-suggest{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e6ed;border-top:none;border-radius:0 0 8px 8px;max-height:260px;overflow-y:auto;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.ledger-suggest.show{display:block}
+.ledger-suggest-item{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f0f2f5;font-size:12px}
+.ledger-suggest-item:last-child{border:none}
+.ledger-suggest-item:hover,.ledger-suggest-item.active{background:#eff6ff}
+.ledger-suggest-item .sg-name{font-weight:600;color:#1a2332}
+.ledger-suggest-item .sg-sub{font-size:11px;color:#6b7280;margin-top:2px}
 .ledger-filter input[type="date"]{padding:7px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;width:130px;flex-shrink:0}
 .ledger-filter input:focus{outline:none;border-color:#1a73e8}
 .ledger-filter label{font-size:12px;font-weight:500;color:#5f6b7a;display:flex;align-items:center;gap:4px;cursor:pointer}
@@ -334,8 +342,11 @@ tr:hover{background:#f8f9fb}
                 <p id="ledger-print-period"></p>
             </div>
             <div class="ledger-filter" id="ledger-filter">
-                <input type="text" id="ledger-company" placeholder="업체명 입력" autocomplete="off">
-                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ledger-company').value=''" title="초기화" style="padding:8px 10px">&times;</button>
+                <div class="ledger-search-wrap">
+                    <input type="text" id="ledger-company" placeholder="업체명/사업자번호/대표자/주소" autocomplete="off">
+                    <div class="ledger-suggest" id="ledger-suggest"></div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ledger-company').value='';document.getElementById('ledger-suggest').classList.remove('show')" title="초기화" style="padding:8px 10px">&times;</button>
                 <input type="date" id="ledger-from">
                 <span style="color:#9ca3af">~</span>
                 <input type="date" id="ledger-to">
@@ -1536,7 +1547,108 @@ function _ledgerFmt(n) {
     return n.toLocaleString('ko-KR');
 }
 
+// ---- 업체 자동완성 ----
+var _ledgerCompaniesCache = null;
+var _ledgerSuggestTimer = null;
+
+async function _loadCompaniesCache() {
+    if (_ledgerCompaniesCache) return _ledgerCompaniesCache;
+    await waitForFirebase();
+    var snap = await db.collection('companies').get();
+    _ledgerCompaniesCache = [];
+    snap.forEach(function(doc) {
+        var c = doc.data();
+        _ledgerCompaniesCache.push({
+            name: c.name || c.company || '',
+            businessNo: c.businessNo || c.bizNo || '',
+            ceo: c.ceo || c.repName || '',
+            addr: ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim(),
+            phone: c.phone || c.contactPhone || c.tel || ''
+        });
+    });
+    return _ledgerCompaniesCache;
+}
+
+function _searchCompanies(keyword, list) {
+    var kw = keyword.toLowerCase().replace(/[\s\-]/g, '');
+    return list.filter(function(c) {
+        var targets = [
+            c.name.toLowerCase().replace(/[\s\-]/g, ''),
+            c.businessNo.replace(/[\s\-]/g, ''),
+            c.ceo.toLowerCase(),
+            c.addr.toLowerCase()
+        ];
+        return targets.some(function(t) { return t.indexOf(kw) >= 0; });
+    }).slice(0, 10);
+}
+
+(function initLedgerAutocomplete() {
+    var input = document.getElementById('ledger-company');
+    var suggestEl = document.getElementById('ledger-suggest');
+    var activeIdx = -1;
+
+    input.addEventListener('input', function() {
+        clearTimeout(_ledgerSuggestTimer);
+        var val = input.value.trim();
+        if (val.length < 1) { suggestEl.classList.remove('show'); return; }
+        _ledgerSuggestTimer = setTimeout(async function() {
+            var list = await _loadCompaniesCache();
+            var results = _searchCompanies(val, list);
+            if (results.length === 0) { suggestEl.classList.remove('show'); return; }
+            activeIdx = -1;
+            suggestEl.innerHTML = results.map(function(c, i) {
+                var sub = [];
+                if (c.businessNo) sub.push(c.businessNo);
+                if (c.ceo) sub.push(c.ceo);
+                if (c.addr) sub.push(c.addr);
+                return '<div class="ledger-suggest-item" data-idx="' + i + '" data-name="' + c.name.replace(/"/g, '&quot;') + '">' +
+                    '<div class="sg-name">' + c.name + '</div>' +
+                    (sub.length ? '<div class="sg-sub">' + sub.join(' · ') + '</div>' : '') +
+                    '</div>';
+            }).join('');
+            suggestEl.classList.add('show');
+        }, 200);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (!suggestEl.classList.contains('show')) {
+            if (e.key === 'Enter') { e.preventDefault(); loadLedger(); }
+            return;
+        }
+        var items = suggestEl.querySelectorAll('.ledger-suggest-item');
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); }
+        else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeIdx >= 0 && items[activeIdx]) {
+                input.value = items[activeIdx].dataset.name;
+                suggestEl.classList.remove('show');
+                loadLedger();
+            } else {
+                suggestEl.classList.remove('show');
+                loadLedger();
+            }
+            return;
+        } else if (e.key === 'Escape') { suggestEl.classList.remove('show'); return; }
+        items.forEach(function(it, i) { it.classList.toggle('active', i === activeIdx); });
+        if (activeIdx >= 0 && items[activeIdx]) items[activeIdx].scrollIntoView({ block: 'nearest' });
+    });
+
+    suggestEl.addEventListener('click', function(e) {
+        var item = e.target.closest('.ledger-suggest-item');
+        if (!item) return;
+        input.value = item.dataset.name;
+        suggestEl.classList.remove('show');
+        loadLedger();
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.ledger-search-wrap')) suggestEl.classList.remove('show');
+    });
+})();
+
 async function loadLedger() {
+    document.getElementById('ledger-suggest').classList.remove('show');
     var company = document.getElementById('ledger-company').value.trim();
     if (!company) { showToast('업체명을 입력하세요'); return; }
 
@@ -1548,6 +1660,18 @@ async function loadLedger() {
 
     try {
         await waitForFirebase();
+
+        // 0) 사업자번호/대표자/주소 입력 시 → 업체명으로 변환
+        var cachedList = await _loadCompaniesCache();
+        var found = cachedList.find(function(c) { return c.name === company; });
+        if (!found) {
+            // 입력값이 업체명이 아닌 경우 다른 필드에서 매칭 시도
+            var matched = _searchCompanies(company, cachedList);
+            if (matched.length > 0) {
+                company = matched[0].name;
+                document.getElementById('ledger-company').value = company;
+            }
+        }
 
         // 1) 해당 업체 전체 데이터 조회 (부분 검색 지원)
         var allSnap = null;
