@@ -891,8 +891,22 @@ def main():
         completed = []
         skipped = []
 
+        # 카테고리 전환 시 쿨다운 (throttle 방지)
+        prev_category = None
+        CATEGORY_MAP = {}
+        for sid in BUSINESS_APIS: CATEGORY_MAP[sid] = 'business'
+        for sid in PRODUCT_APIS: CATEGORY_MAP[sid] = 'product'
+        for sid in MATERIAL_APIS: CATEGORY_MAP[sid] = 'material'
+        for sid in CHANGE_APIS: CATEGORY_MAP[sid] = 'change'
+
         for sid in order:
             if sid in targets:
+                curr_category = CATEGORY_MAP.get(sid, '')
+                if prev_category and curr_category != prev_category:
+                    logger.info(f'  ⏸️ 카테고리 전환 ({prev_category} → {curr_category}): 10초 쿨다운')
+                    time.sleep(10)
+                prev_category = curr_category
+
                 if collect_type == 'auto':
                     result = collect_api_auto(sid, targets[sid])
                 else:
@@ -902,6 +916,7 @@ def main():
                     skipped.append(sid)
                 else:
                     completed.append(sid)
+                    time.sleep(2)  # API 간 쿨다운 (throttle 방지)
 
         elapsed = time.time() - total_start
         logger.info(f'{"="*60}')
