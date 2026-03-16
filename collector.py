@@ -238,7 +238,55 @@ def check_write_quota():
     return True
 
 
-def upsert_business(batch, api_source, row):
+def detect_new_businesses(rows):
+    """페이지 단위로 신규 업소 감지 (get_all 벌크 조회)"""
+    lcns_nos = [r.get('LCNS_NO', '') for r in rows if r.get('LCNS_NO')]
+    if not lcns_nos:
+        return set()
+
+    try:
+        doc_refs = [fdb.collection('fss_businesses').document(ln) for ln in lcns_nos]
+        existing_docs = fdb.get_all(doc_refs, field_paths=[])
+        existing_ids = {doc.id for doc in existing_docs if doc.exists}
+        new_ids = set(lcns_nos) - existing_ids
+        return new_ids
+    except Exception as e:
+        logger.warning(f'  신규 업소 감지 실패: {e}')
+        return set()
+
+
+def record_new_business(batch, api_source, row):
+    """신규 업소를 fss_new_businesses 컬렉션에 기록"""
+    global _daily_write_count
+    lcns_no = row.get('LCNS_NO', '')
+    if not lcns_no:
+        return
+
+    addr = row.get('LOCP_ADDR', '')
+    sido, sigungu, dong = parse_address(addr)
+
+    doc_ref = fdb.collection('fss_new_businesses').document(lcns_no)
+    batch.set(doc_ref, {
+        'api_source': api_source,
+        'lcns_no': lcns_no,
+        'bssh_nm': row.get('BSSH_NM', ''),
+        'prsdnt_nm': row.get('PRSDNT_NM') or '',
+        'induty_nm': row.get('INDUTY_NM') or '',
+        'prms_dt': row.get('PRMS_DT') or '',
+        'telno': row.get('TELNO') or '',
+        'locp_addr': addr,
+        'instt_nm': row.get('INSTT_NM') or '',
+        'clsbiz_dvs_nm': row.get('CLSBIZ_DVS_NM') or '',
+        'addr_sido': sido or '',
+        'addr_sigungu': sigungu or '',
+        'addr_dong': dong or '',
+        'detected_at': firestore.SERVER_TIMESTAMP,
+    })
+    _daily_write_count += 1
+    logger.info(f'    🆕 신규 업소 감지: {row.get("BSSH_NM", "")} ({lcns_no})')
+
+
+def upsert_business(batch, api_source, row, new_ids=None):
     """업소 인허가 Firestore 저장"""
     global _daily_write_count
     if not check_write_quota():
@@ -269,6 +317,11 @@ def upsert_business(batch, api_source, row):
         'collected_at': firestore.SERVER_TIMESTAMP,
     }, merge=True)
     _daily_write_count += 1
+
+    # 신규 업소 감지 시 fss_new_businesses에도 기록
+    if new_ids and lcns_no in new_ids:
+        record_new_business(batch, api_source, row)
+
     return 1
 
 
@@ -533,6 +586,13 @@ def collect_api(service_id, api_info, collect_type='incremental',
                 time.sleep(REQUEST_DELAY)
                 continue
 
+            # 업소 인허가 수집 시: 페이지 단위 신규 업소 감지
+            new_ids = None
+            if collection_name == 'fss_businesses':
+                new_ids = detect_new_businesses(rows)
+                if new_ids:
+                    logger.info(f'    📋 이 페이지에서 신규 {len(new_ids)}건 감지')
+
             for row in rows:
                 # Firestore 쓰기 한도 체크
                 if not check_write_quota():
@@ -547,7 +607,7 @@ def collect_api(service_id, api_info, collect_type='incremental',
 
                 try:
                     if collection_name == 'fss_businesses':
-                        rc = upsert_business(batch, service_id, row)
+                        rc = upsert_business(batch, service_id, row, new_ids)
                     elif collection_name == 'fss_products':
                         rc = upsert_product(batch, service_id, row)
                     elif collection_name == 'fss_materials':

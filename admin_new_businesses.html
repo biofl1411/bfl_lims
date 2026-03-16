@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>신규 업체 알림 - BioFoodLab 관리자</title>
+<style>
+:root {
+  --bg: #f0f2f5;
+  --card: #ffffff;
+  --border: #e2e6ed;
+  --text: #1a2332;
+  --text2: #5f6b7a;
+  --text3: #8892a4;
+  --primary: #1a73e8;
+  --primary-light: #e8f0fe;
+  --success: #0d9f6e;
+  --success-light: #def7ec;
+  --warning: #f59e0b;
+  --warning-light: #fef3c7;
+  --danger: #e53e3e;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-lg: 0 4px 14px rgba(0,0,0,.1);
+  --radius: 10px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Pretendard', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.app-layout { display:flex; min-height:100vh; }
+.main-wrapper { flex:1; margin-left:250px; min-height:100vh; }
+@media(max-width:768px) { .main-wrapper { margin-left:0; } }
+
+.header {
+  background: linear-gradient(135deg, #1a2332 0%, #2d3a4a 100%);
+  color: #fff;
+  padding: 20px 32px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,.15);
+}
+.header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 17px; font-weight: 600; }
+.header h1 span { color: #90caf9; font-weight: 400; }
+
+.toolbar {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.toolbar label { font-size: 12px; font-weight: 600; color: var(--text2); }
+.toolbar select, .toolbar input[type=text] {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+}
+.toolbar input[type=text] { width: 220px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text2); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sm { padding: 5px 12px; font-size: 11px; }
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 32px 60px;
+}
+
+/* Summary */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.summary-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.summary-card .num { font-size: 24px; font-weight: 700; color: var(--primary); }
+.summary-card .label { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.summary-card.new .num { color: var(--success); }
+
+/* Table */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-header h2 { font-size: 14px; font-weight: 600; }
+
+.biz-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.biz-table th {
+  background: #f8f9fb;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.biz-table td {
+  padding: 9px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: middle;
+}
+.biz-table tr:hover td { background: #f8faff; }
+.biz-table .biz-name { font-weight: 600; color: var(--text); max-width: 200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.biz-table .biz-addr { max-width: 280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: var(--text2); }
+
+.industry-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #4f46e5;
+  white-space: nowrap;
+}
+.lcns-mono {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  background: #f0f2f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text2);
+}
+.date-cell { font-size: 12px; color: var(--text2); white-space: nowrap; }
+
+.empty-msg {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text3);
+  font-size: 14px;
+}
+
+.loading {
+  text-align: center;
+  padding: 60px;
+  color: var(--text3);
+}
+.loading::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e5e7eb;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  margin: 0 auto 10px;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast {
+  position: fixed; top: 70px; right: 24px;
+  background: #1a2332; color: #fff;
+  padding: 10px 18px; border-radius: 8px; font-size: 13px;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(120%); transition: transform .3s;
+  z-index: 999;
+}
+.toast.show { transform: translateX(0); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar" id="sidebar"></aside>
+<script src="js/sidebar.js?v=2"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<div class="main-wrapper">
+
+<div class="header">
+  <div class="header-inner">
+    <h1>🆕 신규 업체 알림 <span>관리자</span></h1>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="lastUpdate" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+      <button class="btn btn-outline btn-sm" onclick="loadData()" style="border-color:rgba(255,255,255,.3);color:#fff">↻ 새로고침</button>
+    </div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <label>기간</label>
+  <select id="filterDays" onchange="loadData()">
+    <option value="7">최근 7일</option>
+    <option value="14">최근 14일</option>
+    <option value="30" selected>최근 30일</option>
+    <option value="90">최근 90일</option>
+    <option value="0">전체</option>
+  </select>
+
+  <label>업종</label>
+  <select id="filterIndustry" onchange="applyFilter()">
+    <option value="">전체 업종</option>
+  </select>
+
+  <label>지역</label>
+  <select id="filterRegion" onchange="applyFilter()">
+    <option value="">전체 지역</option>
+  </select>
+
+  <label>검색</label>
+  <input type="text" id="filterKeyword" placeholder="업체명, 대표자, 주소..." oninput="applyFilter()">
+
+  <span id="resultCount" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+</div>
+
+<div class="container">
+  <!-- 요약 카드 -->
+  <div class="summary-row" id="summaryRow">
+    <div class="summary-card new">
+      <div class="num" id="sumTotal">-</div>
+      <div class="label">전체 신규</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="sumToday">-</div>
+      <div class="label">오늘</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="sumWeek">-</div>
+      <div class="label">이번 주</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="sumIndustry">-</div>
+      <div class="label">업종 수</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="sumRegion">-</div>
+      <div class="label">지역 수</div>
+    </div>
+  </div>
+
+  <!-- 테이블 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>신규 등록 업체 목록</h2>
+      <button class="btn btn-outline btn-sm" onclick="exportCSV()">📥 CSV 다운로드</button>
+    </div>
+    <div id="tableWrap" style="overflow:auto;max-height:calc(100vh - 320px)">
+      <div class="loading">데이터를 불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _allData = [];
+var _filtered = [];
+
+var API_NAMES = {
+  'I1220': '식품제조가공업',
+  'I2829': '즉석판매제조가공업',
+  'I-0020': '건강기능식품',
+  'I1300': '축산물 가공업',
+  'I1320': '식육포장처리업',
+  'I2835': '식육즉석판매',
+  'I2831': '식품소분업',
+  'C001': '수입식품영업',
+  'I1260': '수입판매업'
+};
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 3000);
+}
+
+function fmtDate8(s) {
+  if (!s || s.length < 8) return s || '-';
+  return s.substring(0,4) + '-' + s.substring(4,6) + '-' + s.substring(6,8);
+}
+
+function fmtTimestamp(ts) {
+  if (!ts) return '-';
+  try {
+    var d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit' })
+      + ' ' + d.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit', hour12:false });
+  } catch(e) { return '-'; }
+}
+
+async function loadData() {
+  var wrap = document.getElementById('tableWrap');
+  wrap.innerHTML = '<div class="loading">데이터를 불러오는 중...</div>';
+
+  try {
+    var days = parseInt(document.getElementById('filterDays').value);
+    var query = db.collection('fss_new_businesses').orderBy('detected_at', 'desc');
+
+    if (days > 0) {
+      var since = new Date();
+      since.setDate(since.getDate() - days);
+      query = query.where('detected_at', '>=', since);
+    }
+
+    query = query.limit(2000);
+    var snap = await query.get();
+
+    _allData = snap.docs.map(function(d) {
+      var data = d.data();
+      data._id = d.id;
+      return data;
+    });
+
+    // 업종 필터 옵션
+    var industries = {};
+    var regions = {};
+    _allData.forEach(function(b) {
+      if (b.induty_nm) industries[b.induty_nm] = (industries[b.induty_nm] || 0) + 1;
+      if (b.addr_sido) regions[b.addr_sido] = (regions[b.addr_sido] || 0) + 1;
+    });
+
+    var selInd = document.getElementById('filterIndustry');
+    var curInd = selInd.value;
+    selInd.innerHTML = '<option value="">전체 업종</option>';
+    Object.keys(industries).sort().forEach(function(k) {
+      selInd.innerHTML += '<option value="' + k + '">' + k + ' (' + industries[k] + ')</option>';
+    });
+    selInd.value = curInd;
+
+    var selReg = document.getElementById('filterRegion');
+    var curReg = selReg.value;
+    selReg.innerHTML = '<option value="">전체 지역</option>';
+    Object.keys(regions).sort().forEach(function(k) {
+      selReg.innerHTML += '<option value="' + k + '">' + k + ' (' + regions[k] + ')</option>';
+    });
+    selReg.value = curReg;
+
+    // 요약 카드
+    var now = new Date();
+    var todayStr = now.toISOString().substring(0,10);
+    var weekAgo = new Date(now.getTime() - 7*24*60*60*1000);
+    var todayCount = 0, weekCount = 0;
+    _allData.forEach(function(b) {
+      if (b.detected_at) {
+        var d = b.detected_at.toDate ? b.detected_at.toDate() : new Date(b.detected_at);
+        if (d.toISOString().substring(0,10) === todayStr) todayCount++;
+        if (d >= weekAgo) weekCount++;
+      }
+    });
+    document.getElementById('sumTotal').textContent = _allData.length.toLocaleString();
+    document.getElementById('sumToday').textContent = todayCount;
+    document.getElementById('sumWeek').textContent = weekCount;
+    document.getElementById('sumIndustry').textContent = Object.keys(industries).length;
+    document.getElementById('sumRegion').textContent = Object.keys(regions).length;
+
+    document.getElementById('lastUpdate').textContent = '갱신: ' + now.toLocaleTimeString('ko-KR');
+
+    applyFilter();
+  } catch(e) {
+    console.error('loadData 실패:', e);
+    wrap.innerHTML = '<div class="empty-msg">데이터 로드 실패: ' + e.message + '</div>';
+  }
+}
+
+function applyFilter() {
+  var industry = document.getElementById('filterIndustry').value;
+  var region = document.getElementById('filterRegion').value;
+  var keyword = (document.getElementById('filterKeyword').value || '').toLowerCase();
+
+  _filtered = _allData.filter(function(b) {
+    if (industry && b.induty_nm !== industry) return false;
+    if (region && b.addr_sido !== region) return false;
+    if (keyword) {
+      var text = ((b.bssh_nm||'') + ' ' + (b.prsdnt_nm||'') + ' ' + (b.locp_addr||'') + ' ' + (b.lcns_no||'')).toLowerCase();
+      if (text.indexOf(keyword) === -1) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('resultCount').textContent = _filtered.length + '건 / ' + _allData.length + '건';
+  renderTable(_filtered);
+}
+
+function renderTable(list) {
+  var wrap = document.getElementById('tableWrap');
+  if (!list.length) {
+    wrap.innerHTML = '<div class="empty-msg">조건에 맞는 신규 업체가 없습니다</div>';
+    return;
+  }
+
+  var html = '<table class="biz-table">';
+  html += '<thead><tr>'
+    + '<th>#</th>'
+    + '<th>업체명</th>'
+    + '<th>대표자</th>'
+    + '<th>업종</th>'
+    + '<th>인허가번호</th>'
+    + '<th>인허가일</th>'
+    + '<th>소재지</th>'
+    + '<th>관할관청</th>'
+    + '<th>감지일시</th>'
+    + '</tr></thead><tbody>';
+
+  list.forEach(function(b, i) {
+    var apiLabel = API_NAMES[b.api_source] || b.api_source || '';
+
+    html += '<tr>'
+      + '<td style="color:var(--text3);font-size:11px">' + (i + 1) + '</td>'
+      + '<td class="biz-name" title="' + (b.bssh_nm||'') + '">' + (b.bssh_nm || '-') + '</td>'
+      + '<td>' + (b.prsdnt_nm || '-') + '</td>'
+      + '<td><span class="industry-badge">' + (b.induty_nm || '-') + '</span></td>'
+      + '<td><span class="lcns-mono">' + (b.lcns_no || '-') + '</span></td>'
+      + '<td class="date-cell">' + fmtDate8(b.prms_dt) + '</td>'
+      + '<td class="biz-addr" title="' + (b.locp_addr||'') + '">' + (b.locp_addr || '-') + '</td>'
+      + '<td style="font-size:11px;color:var(--text2)">' + (b.instt_nm || '-') + '</td>'
+      + '<td class="date-cell">' + fmtTimestamp(b.detected_at) + '</td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function exportCSV() {
+  if (!_filtered.length) { showToast('내보낼 데이터가 없습니다'); return; }
+
+  var bom = '\uFEFF';
+  var header = '업체명,대표자,업종,인허가번호,인허가일,소재지,관할관청,감지일시\n';
+  var rows = _filtered.map(function(b) {
+    var det = '';
+    if (b.detected_at) {
+      try { det = (b.detected_at.toDate ? b.detected_at.toDate() : new Date(b.detected_at)).toISOString().substring(0,19); } catch(e){}
+    }
+    return [
+      '"' + (b.bssh_nm||'').replace(/"/g,'""') + '"',
+      '"' + (b.prsdnt_nm||'') + '"',
+      '"' + (b.induty_nm||'') + '"',
+      '"' + (b.lcns_no||'') + '"',
+      fmtDate8(b.prms_dt),
+      '"' + (b.locp_addr||'').replace(/"/g,'""') + '"',
+      '"' + (b.instt_nm||'') + '"',
+      det
+    ].join(',');
+  }).join('\n');
+
+  var blob = new Blob([bom + header + rows], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '신규업체_' + new Date().toISOString().substring(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV 다운로드 완료');
+}
+
+// 초기 로드
+waitForFirebase().then(function() {
+  loadData();
+});
+</script>
+</div>
+</div>
+</body>
+</html>

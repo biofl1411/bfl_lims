@@ -349,6 +349,29 @@ body {
     </div>
   </div>
 
+  <!-- 신규 등록 업체 -->
+  <div class="card" id="newBizCard">
+    <div class="card-header">
+      <h2>🆕 신규 등록 업체 <span id="newBizCount" style="font-size:13px;color:var(--primary);font-weight:700;margin-left:6px"></span></h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="newBizFilter" onchange="loadNewBusinesses()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
+          <option value="7">최근 7일</option>
+          <option value="30" selected>최근 30일</option>
+          <option value="90">최근 90일</option>
+          <option value="0">전체</option>
+        </select>
+        <select id="newBizIndustry" onchange="filterNewBizTable()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
+          <option value="">전체 업종</option>
+        </select>
+        <input type="text" id="newBizSearch" oninput="filterNewBizTable()" placeholder="업소명·주소 검색..."
+               style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:180px;font-family:inherit">
+      </div>
+    </div>
+    <div id="newBizWrap" style="overflow-x:auto;max-height:500px;overflow-y:auto">
+      <div class="loading">신규 업체 데이터를 불러오는 중...</div>
+    </div>
+  </div>
+
   <!-- API Table -->
   <div class="card">
     <div class="card-header">
@@ -695,9 +718,123 @@ function triggerCollect(mode) {
   });
 }
 
+// ─── 신규 등록 업체 ───
+var _allNewBiz = [];
+
+async function loadNewBusinesses() {
+  var wrap = document.getElementById('newBizWrap');
+  wrap.innerHTML = '<div class="loading">신규 업체 데이터를 불러오는 중...</div>';
+
+  try {
+    var days = parseInt(document.getElementById('newBizFilter').value);
+    var query = db.collection('fss_new_businesses').orderBy('detected_at', 'desc');
+
+    if (days > 0) {
+      var since = new Date();
+      since.setDate(since.getDate() - days);
+      query = query.where('detected_at', '>=', since);
+    }
+
+    query = query.limit(500);
+    var snap = await query.get();
+    _allNewBiz = snap.docs.map(function(d) { return d.data(); });
+
+    // 업종 필터 옵션 구성
+    var industries = {};
+    _allNewBiz.forEach(function(b) {
+      if (b.induty_nm) industries[b.induty_nm] = (industries[b.induty_nm] || 0) + 1;
+    });
+    var sel = document.getElementById('newBizIndustry');
+    var curVal = sel.value;
+    sel.innerHTML = '<option value="">전체 업종</option>';
+    Object.keys(industries).sort().forEach(function(k) {
+      sel.innerHTML += '<option value="' + k + '">' + k + ' (' + industries[k] + ')</option>';
+    });
+    sel.value = curVal;
+
+    document.getElementById('newBizCount').textContent = _allNewBiz.length + '건';
+    filterNewBizTable();
+  } catch(e) {
+    console.error('신규 업체 로드 실패:', e);
+    wrap.innerHTML = '<div style="padding:20px;color:var(--text3);text-align:center">데이터 로드 실패: ' + e.message + '</div>';
+  }
+}
+
+function filterNewBizTable() {
+  var industry = document.getElementById('newBizIndustry').value;
+  var keyword = (document.getElementById('newBizSearch').value || '').toLowerCase();
+
+  var filtered = _allNewBiz.filter(function(b) {
+    if (industry && b.induty_nm !== industry) return false;
+    if (keyword) {
+      var text = ((b.bssh_nm || '') + ' ' + (b.locp_addr || '') + ' ' + (b.prsdnt_nm || '')).toLowerCase();
+      if (text.indexOf(keyword) === -1) return false;
+    }
+    return true;
+  });
+
+  renderNewBizTable(filtered);
+}
+
+function renderNewBizTable(list) {
+  var wrap = document.getElementById('newBizWrap');
+  if (!list.length) {
+    wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">해당 기간 신규 등록 업체가 없습니다</div>';
+    return;
+  }
+
+  var html = '<table class="api-table">';
+  html += '<thead><tr>'
+    + '<th>업소명</th>'
+    + '<th>대표자</th>'
+    + '<th>업종</th>'
+    + '<th>인허가번호</th>'
+    + '<th>인허가일</th>'
+    + '<th>소재지</th>'
+    + '<th>관할기관</th>'
+    + '<th>감지일</th>'
+    + '<th>API</th>'
+    + '</tr></thead><tbody>';
+
+  list.forEach(function(b) {
+    var detectedAt = '-';
+    if (b.detected_at) {
+      try {
+        var d = b.detected_at.toDate ? b.detected_at.toDate() : new Date(b.detected_at);
+        detectedAt = d.toLocaleDateString('ko-KR', { month:'2-digit', day:'2-digit' })
+          + ' ' + d.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit', hour12:false });
+      } catch(e) { detectedAt = '-'; }
+    }
+
+    var prmsDt = b.prms_dt || '';
+    if (prmsDt.length === 8) prmsDt = prmsDt.substring(0,4) + '-' + prmsDt.substring(4,6) + '-' + prmsDt.substring(6,8);
+
+    var addrShort = (b.locp_addr || '').substring(0, 30);
+    if ((b.locp_addr || '').length > 30) addrShort += '...';
+
+    var apiName = ALL_APIS[b.api_source] ? ALL_APIS[b.api_source].name : b.api_source;
+
+    html += '<tr>'
+      + '<td style="font-weight:600;color:var(--text)">' + (b.bssh_nm || '-') + '</td>'
+      + '<td>' + (b.prsdnt_nm || '-') + '</td>'
+      + '<td><span class="cat-badge cat-biz">' + (b.induty_nm || '-') + '</span></td>'
+      + '<td><span class="api-id">' + (b.lcns_no || '-') + '</span></td>'
+      + '<td class="time-cell">' + prmsDt + '</td>'
+      + '<td title="' + (b.locp_addr || '') + '">' + addrShort + '</td>'
+      + '<td>' + (b.instt_nm || '-') + '</td>'
+      + '<td class="time-cell">' + detectedAt + '</td>'
+      + '<td style="font-size:11px;color:var(--text3)">' + apiName + '</td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
 // Firebase 준비 후 초기 로드
 waitForFirebase().then(function() {
   loadData();
+  loadNewBusinesses();
   refreshTimer = setInterval(loadData, 30000);
 });
 </script>
