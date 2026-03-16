@@ -121,6 +121,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .main{margin-left:0!important}
 .content{padding:0!important;overflow:visible!important}
 .ledger-info{display:block!important;border:1px solid #999;margin-bottom:12px}
+#txn-info{display:block!important}
 .ledger-info-top{border-bottom:1px solid #999}
 .ledger-info-col{border-right:1px solid #999}
 .ledger-info-col:last-child{border-right:none}
@@ -228,6 +229,39 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 <button class="btn btn-primary" onclick="loadTxnStatement()">조회</button>
                 <button class="btn btn-secondary" onclick="exportTxnExcel()">엑셀</button>
                 <button class="btn btn-secondary" onclick="printTxn()">인쇄</button>
+            </div>
+            <!-- 거래내역서 업체정보 헤더 -->
+            <div class="ledger-info" id="txn-info" style="display:none">
+                <div class="ledger-info-top">
+                    <div class="title" id="txn-info-title">거래내역서</div>
+                    <div class="period" id="txn-info-period"></div>
+                    <div class="bfl-logo">BioFoodLab LIMS</div>
+                </div>
+                <div class="ledger-info-body">
+                    <div class="ledger-info-col">
+                        <div class="col-title">거래처 정보</div>
+                        <div class="ledger-info-row"><span class="lbl">업체명</span><span class="val" id="ti-company">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">사업자번호</span><span class="val" id="ti-bizno">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">대표자</span><span class="val" id="ti-ceo">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">전화번호</span><span class="val" id="ti-phone">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">주소</span><span class="val" id="ti-addr">-</span></div>
+                    </div>
+                    <div class="ledger-info-col">
+                        <div class="col-title">영업허가 정보</div>
+                        <div class="ledger-info-row"><span class="lbl">영업소명칭</span><span class="val" id="ti-lic-name">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">인허가번호</span><span class="val" id="ti-lic-no">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">영업형태</span><span class="val" id="ti-lic-form">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">대표자</span><span class="val" id="ti-lic-rep">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">소재지</span><span class="val" id="ti-lic-addr">-</span></div>
+                    </div>
+                    <div class="ledger-info-col">
+                        <div class="col-title">담당자 정보</div>
+                        <div class="ledger-info-row"><span class="lbl">영업담당</span><span class="val" id="ti-salesrep">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">거래처담당</span><span class="val" id="ti-contact">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">담당연락처</span><span class="val" id="ti-contact-phone">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">담당이메일</span><span class="val" id="ti-contact-email">-</span></div>
+                    </div>
+                </div>
             </div>
             <div class="txn-kpi-bar" id="txn-kpi-bar" style="display:none">
                 <div class="txn-kpi"><div class="kpi-label">거래건수</div><div class="kpi-value" id="txn-kpi-count">0</div></div>
@@ -615,6 +649,9 @@ async function loadTxnStatement() {
         var allSnap = resolved.snap;
         document.getElementById('txn-company').value = company;
 
+        // 업체정보 헤더 로드
+        await _loadTxnCompanyInfo(company, allSnap);
+
         var rows = [];
 
         allSnap.forEach(function(doc) {
@@ -687,12 +724,10 @@ async function loadTxnStatement() {
         html += '<th style="width:82px">거래일</th>';
         html += '<th style="width:45px">구분</th>';
         html += '<th style="width:80px">접수번호</th>';
-        html += '<th>업체명</th>';
         html += '<th>제품명</th>';
         html += '<th>검사항목</th>';
         html += '<th style="width:55px">검사분야</th>';
         html += '<th style="width:65px">검사목적</th>';
-        html += '<th style="width:55px">영업담당</th>';
         html += '<th style="width:60px">입금수단</th>';
         html += '<th class="text-right" style="width:85px">매출</th>';
         html += '<th class="text-right" style="width:85px">입금</th>';
@@ -708,12 +743,10 @@ async function loadTxnStatement() {
             html += '<td>' + row.date + '</td>';
             html += '<td>' + row.type + '</td>';
             html += '<td>' + row.receiptNo + '</td>';
-            html += '<td>' + row.companyName + '</td>';
             html += '<td>' + row.productName + '</td>';
             html += '<td title="' + (row.testItems || '').replace(/"/g, '&quot;') + '">' + row.testItems + '</td>';
             html += '<td>' + row.testField + '</td>';
             html += '<td>' + row.testPurpose + '</td>';
-            html += '<td>' + row.salesRep + '</td>';
             html += '<td>' + _methodTag(row.payMethod) + '</td>';
             html += '<td class="text-right">' + _ledgerFmt(row.sales) + '</td>';
             html += '<td class="text-right">' + _ledgerFmt(row.payment) + '</td>';
@@ -723,7 +756,7 @@ async function loadTxnStatement() {
 
         // 합계행
         html += '<tr class="row-total">';
-        html += '<td colspan="11" class="text-right">합 계</td>';
+        html += '<td colspan="9" class="text-right">합 계</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalPayment) + '</td>';
         html += '<td></td>';
@@ -760,9 +793,18 @@ function _getTestItems(d) {
     if (!items.length && d.itemNames) {
         items = d.itemNames.split(/[,;]/).map(function(s) { return s.trim(); }).filter(Boolean);
     }
-    // samples[].items
+    // samples[] 하위 검사항목
     if (!items.length && d.samples && Array.isArray(d.samples)) {
         d.samples.forEach(function(s) {
+            // refTestItems (참고용/기준규격외 - 실제 저장 필드)
+            if (s.refTestItems && Array.isArray(s.refTestItems)) {
+                s.refTestItems.forEach(function(ri) {
+                    var name = ri.itemName || ri.testItemName || '';
+                    // itemName이 "항목명||제목" 형태일 수 있음
+                    if (name && name.indexOf('||') >= 0) name = name.split('||')[0];
+                    if (name && items.indexOf(name) < 0) items.push(name);
+                });
+            }
             if (s.items && Array.isArray(s.items)) {
                 s.items.forEach(function(it) {
                     var name = it.itemName || it.name || it.testItemName || '';
@@ -909,9 +951,9 @@ function exportTxnExcel() {
     var from = document.getElementById('txn-from').value;
     var to = document.getElementById('txn-to').value;
 
-    var data = [['No', '거래일', '구분', '접수번호', '업체명', '제품명', '검사항목', '검사분야', '검사목적', '영업담당', '입금수단', '매출', '입금', '비고']];
+    var data = [['No', '거래일', '구분', '접수번호', '제품명', '검사항목', '검사분야', '검사목적', '입금수단', '매출', '입금', '비고']];
     _txnRows.forEach(function(r, i) {
-        data.push([i+1, r.date, r.type, r.receiptNo, r.companyName, r.productName, r.testItems, r.testField, r.testPurpose, r.salesRep, r.payMethod, r.sales || '', r.payment || '', r.memo]);
+        data.push([i+1, r.date, r.type, r.receiptNo, r.productName, r.testItems, r.testField, r.testPurpose, r.payMethod, r.sales || '', r.payment || '', r.memo]);
     });
 
     var ws = XLSX.utils.aoa_to_sheet(data);
@@ -922,6 +964,69 @@ function exportTxnExcel() {
 }
 
 // ---- 인쇄 ----
+// 거래내역서 업체정보 로드
+async function _loadTxnCompanyInfo(companyName, receiptsSnap) {
+    var ids = ['ti-company','ti-bizno','ti-ceo','ti-phone','ti-addr','ti-lic-name','ti-lic-no','ti-lic-form','ti-lic-rep','ti-lic-addr','ti-salesrep','ti-contact','ti-contact-phone','ti-contact-email'];
+    ids.forEach(function(id) { document.getElementById(id).textContent = '-'; });
+    document.getElementById('ti-company').textContent = companyName;
+
+    try {
+        var compSnap = await db.collection('companies')
+            .where('name', '==', companyName).limit(1).get();
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('company', '==', companyName).limit(1).get();
+        }
+        if (!compSnap.empty) {
+            var c = compSnap.docs[0].data();
+            if (c.businessNo || c.bizNo) document.getElementById('ti-bizno').textContent = c.businessNo || c.bizNo;
+            if (c.ceo || c.repName) document.getElementById('ti-ceo').textContent = c.ceo || c.repName;
+            if (c.phone || c.contactPhone || c.tel) document.getElementById('ti-phone').textContent = c.phone || c.contactPhone || c.tel;
+            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
+            if (addr) document.getElementById('ti-addr').textContent = addr;
+
+            if (c.contacts && c.contacts.length > 0) {
+                var ct = c.contacts[0];
+                if (ct.name) document.getElementById('ti-contact').textContent = ct.name;
+                if (ct.phone || ct.mobile) document.getElementById('ti-contact-phone').textContent = ct.phone || ct.mobile;
+                if (ct.email) document.getElementById('ti-contact-email').textContent = ct.email;
+            } else {
+                if (c.contactName) document.getElementById('ti-contact').textContent = c.contactName;
+                if (c.contactPhone) document.getElementById('ti-contact-phone').textContent = c.contactPhone;
+                if (c.contactEmail) document.getElementById('ti-contact-email').textContent = c.contactEmail;
+            }
+
+            if (c.licenses && c.licenses.length > 0) {
+                var lic = c.licenses[0];
+                if (lic.licBizName) document.getElementById('ti-lic-name').textContent = lic.licBizName;
+                if (lic.licNo) document.getElementById('ti-lic-no').textContent = lic.licNo;
+                if (lic.licBizForm) document.getElementById('ti-lic-form').textContent = lic.licBizForm;
+                if (lic.licRepName) document.getElementById('ti-lic-rep').textContent = lic.licRepName;
+                var licAddr = ((lic.licAddr || '') + ' ' + (lic.licAddr2 || '')).trim();
+                if (licAddr) document.getElementById('ti-lic-addr').textContent = licAddr;
+            }
+        }
+
+        var salesRep = '';
+        if (receiptsSnap && receiptsSnap.docs) {
+            var sortedDocs = receiptsSnap.docs.slice().sort(function(a, b) {
+                return (b.data().receiptDate || '').localeCompare(a.data().receiptDate || '');
+            });
+            for (var i = 0; i < sortedDocs.length; i++) {
+                var sr = sortedDocs[i].data().salesRep;
+                if (sr) { salesRep = sr; break; }
+            }
+        }
+        if (salesRep) document.getElementById('ti-salesrep').textContent = salesRep;
+
+        document.getElementById('txn-info-title').textContent = companyName + ' - 거래내역서';
+        document.getElementById('txn-info-period').textContent = '조회기간: ' + document.getElementById('txn-from').value + ' ~ ' + document.getElementById('txn-to').value;
+        document.getElementById('txn-info').style.display = 'block';
+    } catch(e) {
+        console.warn('[txn] 업체정보 조회 실패:', e);
+    }
+}
+
 function printLedger() {
     var company = document.getElementById('ledger-company').value.trim();
     if (!company) { showToast('먼저 업체를 조회하세요'); return; }
