@@ -115,6 +115,21 @@ tr:hover{background:#f8f9fb}
 .ledger-tbl .product-name{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ledger-empty{text-align:center;padding:60px 20px;color:#9ca3af}
 
+/* 원장 헤더 정보 */
+.ledger-info{display:none;margin-bottom:14px;border:1px solid #e2e6ed;border-radius:10px;overflow:hidden}
+.ledger-info-top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f8f9fb;border-bottom:1px solid #e2e6ed}
+.ledger-info-top .title{font-size:16px;font-weight:700;color:#1a2332}
+.ledger-info-top .period{font-size:12px;color:#6b7280}
+.ledger-info-top .bfl-logo{font-size:12px;color:#6b7280;font-weight:500}
+.ledger-info-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.ledger-info-col{padding:12px 16px}
+.ledger-info-col:first-child{border-right:1px solid #eef0f4}
+.ledger-info-col .col-title{font-size:11px;font-weight:700;color:#1a73e8;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px}
+.ledger-info-row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}
+.ledger-info-row:last-child{margin-bottom:0}
+.ledger-info-row .lbl{color:#6b7280;min-width:70px;flex-shrink:0}
+.ledger-info-row .val{color:#1a2332;font-weight:500}
+
 /* 인쇄 */
 @media print{
 .sidebar,.topbar,.pm-tabs,.ledger-filter,.toast,.modal-overlay{display:none!important}
@@ -122,9 +137,10 @@ tr:hover{background:#f8f9fb}
 .content{padding:0!important;overflow:visible!important}
 .pm-tab-panel{display:block!important}
 #tab-payment{display:none!important}
-#ledger-print-header{display:block!important;margin-bottom:16px}
-#ledger-print-header h2{font-size:18px;margin-bottom:4px}
-#ledger-print-header p{font-size:12px;color:#6b7280}
+#ledger-print-header{display:none!important}
+.ledger-info{display:block!important;border:1px solid #999;margin-bottom:12px}
+.ledger-info-top{border-bottom:1px solid #999}
+.ledger-info-col:first-child{border-right:1px solid #999}
 .ledger-tbl{font-size:11px}
 .ledger-tbl th,.ledger-tbl td{padding:5px 8px;border:1px solid #ccc}
 .tbl-wrap{border:none}
@@ -324,6 +340,31 @@ tr:hover{background:#f8f9fb}
                 <label style="margin-left:6px"><input type="checkbox" id="ledger-exclude-zero"> 매출 0원 제외</label>
                 <button class="btn btn-primary" onclick="loadLedger()">조회</button>
                 <button class="btn btn-secondary" onclick="printLedger()">인쇄</button>
+            </div>
+            <!-- 업체정보 + 담당자정보 헤더 -->
+            <div class="ledger-info" id="ledger-info">
+                <div class="ledger-info-top">
+                    <div class="title" id="ledger-info-title">매출처 원장</div>
+                    <div class="period" id="ledger-info-period"></div>
+                    <div class="bfl-logo">BioFoodLab LIMS</div>
+                </div>
+                <div class="ledger-info-body">
+                    <div class="ledger-info-col">
+                        <div class="col-title">거래처 정보</div>
+                        <div class="ledger-info-row"><span class="lbl">업체명</span><span class="val" id="li-company">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">사업자번호</span><span class="val" id="li-bizno">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">대표자</span><span class="val" id="li-ceo">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">전화번호</span><span class="val" id="li-phone">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">주소</span><span class="val" id="li-addr">-</span></div>
+                    </div>
+                    <div class="ledger-info-col">
+                        <div class="col-title">담당자 정보</div>
+                        <div class="ledger-info-row"><span class="lbl">영업담당</span><span class="val" id="li-salesrep">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">거래처담당</span><span class="val" id="li-contact">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">담당연락처</span><span class="val" id="li-contact-phone">-</span></div>
+                        <div class="ledger-info-row"><span class="lbl">담당이메일</span><span class="val" id="li-contact-email">-</span></div>
+                    </div>
+                </div>
             </div>
             <div id="ledger-result">
                 <div class="ledger-empty">업체명을 입력하고 [조회] 버튼을 클릭하세요.</div>
@@ -1558,6 +1599,9 @@ async function loadLedger() {
 
         if (!allSnap) allSnap = { size: 0, forEach: function() {}, docs: [] };
 
+        // ---- 업체 정보 조회 (companies 컬렉션) ----
+        await _loadCompanyInfo(company, allSnap);
+
         var periodReceipts = [];
         var carrySales = 0, carryPayments = 0;
 
@@ -1713,6 +1757,9 @@ async function loadLedger() {
         // 인쇄 헤더 업데이트
         document.getElementById('ledger-print-title').textContent = company + ' - 매출처 원장';
         document.getElementById('ledger-print-period').textContent = '조회기간: ' + fromDate + ' ~ ' + toDate;
+        document.getElementById('ledger-info-title').textContent = company + ' - 매출처 원장';
+        document.getElementById('ledger-info-period').textContent = '조회기간: ' + fromDate + ' ~ ' + toDate;
+        document.getElementById('ledger-info').style.display = 'block';
 
     } catch(e) {
         console.error('[ledger]', e);
@@ -1748,6 +1795,75 @@ function _getDesc(d) {
     var purpose = d.testPurpose || d.purpose || d.inspectionPurpose || '';
     if (!field && !purpose) return '';
     return '[' + field + ', ' + purpose + ']';
+}
+
+async function _loadCompanyInfo(companyName, receiptsSnap) {
+    // 기본값 초기화
+    document.getElementById('li-company').textContent = companyName;
+    document.getElementById('li-bizno').textContent = '-';
+    document.getElementById('li-ceo').textContent = '-';
+    document.getElementById('li-phone').textContent = '-';
+    document.getElementById('li-addr').textContent = '-';
+    document.getElementById('li-salesrep').textContent = '-';
+    document.getElementById('li-contact').textContent = '-';
+    document.getElementById('li-contact-phone').textContent = '-';
+    document.getElementById('li-contact-email').textContent = '-';
+
+    try {
+        // companies 컬렉션에서 업체정보 조회
+        var compSnap = await db.collection('companies')
+            .where('name', '==', companyName).limit(1).get();
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('company', '==', companyName).limit(1).get();
+        }
+
+        if (!compSnap.empty) {
+            var c = compSnap.docs[0].data();
+            var bizNo = c.businessNo || c.bizNo || '';
+            if (bizNo) document.getElementById('li-bizno').textContent = bizNo;
+            var ceo = c.ceo || c.repName || '';
+            if (ceo) document.getElementById('li-ceo').textContent = ceo;
+            var phone = c.phone || c.contactPhone || c.tel || '';
+            if (phone) document.getElementById('li-phone').textContent = phone;
+            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
+            if (addr) document.getElementById('li-addr').textContent = addr;
+
+            // 거래처 담당자 (companies의 contacts 배열 또는 contactName)
+            var contactName = '';
+            var contactPhone = '';
+            var contactEmail = '';
+            if (c.contacts && c.contacts.length > 0) {
+                var ct = c.contacts[0];
+                contactName = ct.name || '';
+                contactPhone = ct.phone || ct.mobile || '';
+                contactEmail = ct.email || '';
+            } else {
+                contactName = c.contactName || '';
+                contactPhone = c.contactPhone || '';
+                contactEmail = c.contactEmail || '';
+            }
+            if (contactName) document.getElementById('li-contact').textContent = contactName;
+            if (contactPhone) document.getElementById('li-contact-phone').textContent = contactPhone;
+            if (contactEmail) document.getElementById('li-contact-email').textContent = contactEmail;
+        }
+
+        // 영업담당 (receipts에서 salesRep 추출 — 가장 최근 건 우선)
+        var salesRep = '';
+        if (receiptsSnap && receiptsSnap.docs) {
+            var sortedDocs = receiptsSnap.docs.slice().sort(function(a, b) {
+                return (b.data().receiptDate || '').localeCompare(a.data().receiptDate || '');
+            });
+            for (var i = 0; i < sortedDocs.length; i++) {
+                var sr = sortedDocs[i].data().salesRep;
+                if (sr) { salesRep = sr; break; }
+            }
+        }
+        if (salesRep) document.getElementById('li-salesrep').textContent = salesRep;
+
+    } catch(e) {
+        console.warn('[ledger] 업체정보 조회 실패:', e);
+    }
 }
 
 function printLedger() {
