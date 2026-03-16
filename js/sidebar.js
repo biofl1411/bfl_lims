@@ -205,6 +205,28 @@ const SIDEBAR_MENU = [
   }
 ];
 
+// 헬퍼: 특정 파일+hash 조합이 메뉴에서 hash 매칭되는 항목이 있는지 확인
+function _hasHashMatchInMenu(file, hash) {
+  if (!hash) return false;
+  for (var i = 0; i < SIDEBAR_MENU.length; i++) {
+    var group = SIDEBAR_MENU[i];
+    if (!group.sub) continue;
+    for (var j = 0; j < group.sub.length; j++) {
+      var item = group.sub[j];
+      if (!item.href) continue;
+      var hBase = item.href.split('#')[0];
+      var hHash = item.href.split('#')[1] || '';
+      if (hBase === file && hHash === hash) return true;
+      if (hBase === file && item.subTabs) {
+        for (var k = 0; k < item.subTabs.length; k++) {
+          if (item.subTabs[k].tab === hash) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 // ============================================================
 // 2. 사이드바 HTML 렌더링
 // ============================================================
@@ -275,9 +297,28 @@ function renderSidebar() {
         linkOnclick = '';
       }
 
-      // active 판별
+      // active 판별 (hash 고려 — salesMgmt.html이 영업관리/재무관리 양쪽에 있으므로)
       const hrefBase = item.href.split('#')[0];
-      const isActive = (hrefBase === currentFile);
+      const hrefHash = item.href.split('#')[1] || '';
+      const currentHash = location.hash.replace('#', '') || '';
+      let isActive = false;
+      if (hrefBase === currentFile) {
+        if (hrefHash) {
+          // href에 hash가 있으면 hash까지 일치해야 active
+          // subTabs가 있으면 해당 탭들도 같은 메뉴로 인식
+          if (currentHash === hrefHash) {
+            isActive = true;
+          } else if (item.subTabs) {
+            var tabNames = item.subTabs.map(function(t) { return t.tab; });
+            if (tabNames.indexOf(currentHash) !== -1) {
+              isActive = true;
+            }
+          }
+        } else if (!currentHash || !_hasHashMatchInMenu(currentFile, currentHash)) {
+          // href에 hash가 없고, 현재 URL에 hash가 없거나 다른 메뉴에서 매칭되지 않을 때
+          isActive = true;
+        }
+      }
       if (isActive) groupHasActive = true;
 
       return `        <li><a href="${linkHref}" class="nav-sub-item${isActive ? ' active' : ''}" data-page="${item.page || ''}"${linkOnclick}>${item.label}</a></li>`;
@@ -408,15 +449,17 @@ function _renderSubTabs() {
     tabBar.appendChild(btn);
   });
 
-  // .main 또는 .main-wrapper 요소의 맨 앞에 삽입
-  var mainEl = document.querySelector('.main') || document.querySelector('.main-wrapper');
-  if (mainEl) {
-    mainEl.insertBefore(tabBar, mainEl.firstChild);
+  // .topbar 바로 아래에 삽입 (제목 아래 위치)
+  var topbar = document.querySelector('.topbar');
+  if (topbar && topbar.nextSibling) {
+    topbar.parentNode.insertBefore(tabBar, topbar.nextSibling);
+  } else if (topbar) {
+    topbar.parentNode.appendChild(tabBar);
   } else {
-    // main이 없으면 sidebar 바로 다음에 삽입
-    var sidebar = document.getElementById('sidebar');
-    if (sidebar && sidebar.nextSibling) {
-      sidebar.parentNode.insertBefore(tabBar, sidebar.nextSibling);
+    // topbar 없으면 .main의 맨 앞에 삽입
+    var mainEl = document.querySelector('.main') || document.querySelector('.main-wrapper');
+    if (mainEl) {
+      mainEl.insertBefore(tabBar, mainEl.firstChild);
     }
   }
 
