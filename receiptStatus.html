@@ -530,7 +530,6 @@ var _sortDir = 'desc';
 var _page = 1;
 var _pageSize = 30;
 var _selectedRows = new Set();    // 선택된 행 키 (id_sampleIdx)
-var _selectedBaseMap = {};        // baseNo → rowKey (접수번호당 1건만)
 var _selectedRowId = null; // 현재 상세 패널에 표시 중인 행
 var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
 
@@ -1049,52 +1048,33 @@ function handleRowClick(e, rowIdx, baseNo, docId) {
 }
 
 // ============================================================================
-// 개별 행 선택 (접수번호당 1건만 허용)
+// 개별 행 선택 (자유 선택 — 제한 없음)
 // ============================================================================
 function toggleRowSelect(rowKey, baseNo) {
     if (_selectedRows.has(rowKey)) {
-        // 이미 선택된 행 해제
         _selectedRows.delete(rowKey);
-        delete _selectedBaseMap[baseNo];
     } else {
-        // 같은 접수번호의 기존 선택 해제
-        if (_selectedBaseMap[baseNo]) {
-            _selectedRows.delete(_selectedBaseMap[baseNo]);
-        }
         _selectedRows.add(rowKey);
-        _selectedBaseMap[baseNo] = rowKey;
     }
     updateSummaryBar();
     renderTable();
 }
 
 function toggleSelectAll() {
-    // 접수번호당 첫 번째 행만 선택
-    var allBaseNos = [];
-    var firstRows = {};
+    var allKeys = [];
     _filteredReceipts.forEach(function(r) {
-        var bno = r._baseReceiptNo || r.receiptNo || '';
-        var rk = r.id + '_' + r._sampleIdx;
-        if (bno && !firstRows[bno]) {
-            allBaseNos.push(bno);
-            firstRows[bno] = rk;
-        }
+        allKeys.push(r.id + '_' + r._sampleIdx);
     });
-    if (_selectedRows.size === allBaseNos.length) {
+    if (_selectedRows.size === allKeys.length) {
         _selectedRows.clear();
-        _selectedBaseMap = {};
     } else {
         _selectedRows.clear();
-        _selectedBaseMap = {};
-        allBaseNos.forEach(function(bno) {
-            _selectedRows.add(firstRows[bno]);
-            _selectedBaseMap[bno] = firstRows[bno];
-        });
+        allKeys.forEach(function(k) { _selectedRows.add(k); });
     }
     updateSummaryBar();
     renderTable();
     var cb = document.getElementById('select-all-cb');
-    if (cb) cb.checked = _selectedRows.size === allBaseNos.length && allBaseNos.length > 0;
+    if (cb) cb.checked = _selectedRows.size === allKeys.length && allKeys.length > 0;
 }
 
 function updateSummaryBar() {
@@ -1135,7 +1115,6 @@ function updateSummaryBar() {
 
 function clearSelection() {
     _selectedRows.clear();
-    _selectedBaseMap = {};
     _lastSelectedIdx = -1;
     var cb = document.getElementById('select-all-cb');
     if (cb) cb.checked = false;
@@ -1148,8 +1127,13 @@ async function deleteSelectedReceipts() {
         showToast('삭제할 접수건을 선택하세요', 'warning');
         return;
     }
-    // 선택된 행에서 접수번호 추출
-    var baseNos = Object.keys(_selectedBaseMap);
+    // 선택된 행에서 고유 접수번호 추출
+    var baseNos = [];
+    _filteredReceipts.forEach(function(r) {
+        var rk = r.id + '_' + r._sampleIdx;
+        var bno = r._baseReceiptNo || r.receiptNo || '';
+        if (_selectedRows.has(rk) && bno && baseNos.indexOf(bno) === -1) baseNos.push(bno);
+    });
     if (!confirm(baseNos.length + '개 접수건을 삭제하시겠습니까?\n\n' + baseNos.join(', ') + '\n\n⚠️ 관련 검사결과도 함께 삭제됩니다.')) return;
 
     try {
