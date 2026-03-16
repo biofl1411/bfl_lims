@@ -110,6 +110,7 @@ tr:hover{background:#f8f9fb}
 .ledger-tbl .row-payment{background:#eff6ff}
 .ledger-tbl .row-total{background:#f8f9fb;font-weight:700}
 .ledger-tbl .bal-pos{color:#ef4444;font-weight:600}
+.ledger-tbl .bal-neg{color:#2563eb;font-weight:600}
 .ledger-tbl .bal-zero{color:#10b981;font-weight:600}
 .ledger-tbl .receipt-no{font-size:11px;color:#6b7280}
 .ledger-tbl .product-name{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1699,32 +1700,24 @@ async function loadLedger() {
         var balance = carryBalance;
         var totalSales = 0, totalPayments = 0;
 
-        // 5) 렌더링
+        // 5) 렌더링 (기존 프로그램 스타일: 일자, 구분, 적요, 매출, 입금, 잔액)
         var html = '<div class="tbl-wrap"><table class="ledger-tbl"><thead><tr>';
-        html += '<th style="width:40px">번호</th>';
         html += '<th style="width:90px">일자</th>';
         html += '<th style="width:50px">구분</th>';
-        html += '<th style="width:70px">입금구분</th>';
-        html += '<th style="width:100px">접수번호</th>';
-        html += '<th style="width:200px">제품명</th>';
-        html += '<th>내용</th>';
-        html += '<th class="text-right" style="width:90px">매출</th>';
-        html += '<th class="text-right" style="width:90px">입금</th>';
-        html += '<th class="text-right" style="width:100px">잔액</th>';
+        html += '<th>적 요</th>';
+        html += '<th class="text-right" style="width:100px">매출</th>';
+        html += '<th class="text-right" style="width:100px">입금</th>';
+        html += '<th class="text-right" style="width:110px">잔액</th>';
         html += '</tr></thead><tbody>';
 
         // 이월 행
         html += '<tr class="row-carry">';
         html += '<td></td>';
-        html += '<td>' + fromDate + '</td>';
         html += '<td><strong>이월</strong></td>';
-        html += '<td></td>';
-        html += '<td></td>';
-        html += '<td></td>';
         html += '<td style="font-size:11px;color:#6b7280">조회기준 이전일까지의 이월금액</td>';
-        html += '<td class="text-right"></td>';
-        html += '<td class="text-right"></td>';
-        html += '<td class="text-right ' + (carryBalance > 0 ? 'bal-pos' : 'bal-zero') + '">' + _ledgerFmt(carryBalance) + '</td>';
+        html += '<td class="text-right">' + _ledgerFmt(carrySales) + '</td>';
+        html += '<td class="text-right">' + _ledgerFmt(carryPayments) + '</td>';
+        html += '<td class="text-right ' + (carryBalance > 0 ? 'bal-pos' : carryBalance < 0 ? 'bal-neg' : 'bal-zero') + '">' + _ledgerFmt(carryBalance) + '</td>';
         html += '</tr>';
 
         rows.forEach(function(row, idx) {
@@ -1732,27 +1725,40 @@ async function loadLedger() {
             totalSales += row.sales;
             totalPayments += row.payment;
 
+            // 적요: 제품명 + [검체유형, 검사목적] 합쳐서 표시
+            var summary = '';
+            if (row.type === '매출') {
+                var parts = [];
+                if (row.productName) parts.push(row.productName);
+                if (row.desc) parts.push(row.desc);
+                if (row.receiptNo) parts.push('<span class="receipt-no">' + row.receiptNo + '</span>');
+                summary = parts.join(' ');
+            } else {
+                // 입금 행
+                var parts2 = [];
+                if (row.payMethod) parts2.push(row.payMethod);
+                if (row.desc) parts2.push(row.desc);
+                if (row.receiptNo) parts2.push('<span class="receipt-no">' + row.receiptNo + '</span>');
+                summary = parts2.join(' · ');
+            }
+
             var cls = row.type === '입금' ? ' class="row-payment"' : '';
             html += '<tr' + cls + '>';
-            html += '<td class="text-center">' + (idx + 1) + '</td>';
             html += '<td>' + row.date + '</td>';
             html += '<td>' + row.type + '</td>';
-            html += '<td>' + row.payMethod + '</td>';
-            html += '<td class="receipt-no">' + row.receiptNo + '</td>';
-            html += '<td class="product-name" title="' + (row.productName || '').replace(/"/g, '&quot;') + '">' + (row.productName || '') + '</td>';
-            html += '<td style="font-size:11px">' + (row.desc || '') + '</td>';
+            html += '<td title="' + (summary || '').replace(/<[^>]*>/g,'').replace(/"/g, '&quot;') + '">' + summary + '</td>';
             html += '<td class="text-right">' + _ledgerFmt(row.sales) + '</td>';
             html += '<td class="text-right">' + _ledgerFmt(row.payment) + '</td>';
-            html += '<td class="text-right ' + (balance > 0 ? 'bal-pos' : 'bal-zero') + '">' + _ledgerFmt(balance) + '</td>';
+            html += '<td class="text-right ' + (balance > 0 ? 'bal-pos' : balance < 0 ? 'bal-neg' : 'bal-zero') + '">' + _ledgerFmt(balance) + '</td>';
             html += '</tr>';
         });
 
         // 합계 행
         html += '<tr class="row-total">';
-        html += '<td colspan="7" class="text-right" style="font-size:13px">합 계</td>';
+        html += '<td colspan="3" class="text-right" style="font-size:13px">합 계</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalPayments) + '</td>';
-        html += '<td class="text-right ' + (balance > 0 ? 'bal-pos' : 'bal-zero') + '">' + _ledgerFmt(balance) + '</td>';
+        html += '<td class="text-right ' + (balance > 0 ? 'bal-pos' : balance < 0 ? 'bal-neg' : 'bal-zero') + '">' + _ledgerFmt(balance) + '</td>';
         html += '</tr>';
 
         html += '</tbody></table></div>';
