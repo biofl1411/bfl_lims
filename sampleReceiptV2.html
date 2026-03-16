@@ -594,7 +594,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 <!-- ══════════════════════════════════════════
      바 3 : 시료 탭
 ══════════════════════════════════════════ -->
-<div class="cp-tab-bar">
+<div class="cp-tab-bar" id="sample-nav">
   <button type="button" onclick="switchSample(_currentSampleIdx-1)" id="sample-nav-prev"
     style="background:none;border:1px solid #d0d5dd;border-radius:4px;padding:2px 7px;font-size:13px;cursor:pointer;color:#344054;height:22px" disabled>◀</button>
   <div id="sample-nav-tabs" style="display:flex;gap:3px;flex:1;overflow-x:auto;scrollbar-width:none"></div>
@@ -2060,10 +2060,17 @@ async function loadReceiptForEdit(docId) {
             radios.forEach(function(r) { if (r.value === data.testField) r.checked = true; });
             await updateTestPurposeOptions(data.testField);
         }
-        // 검사목적
+        // 검사목적 — custom select UI 동기화
         if (data.testPurpose) {
             var sel = document.getElementById('test-purpose');
-            if (sel) { sel.value = data.testPurpose; sel.dispatchEvent(new Event('change')); }
+            if (sel) {
+                sel.value = data.testPurpose;
+                // custom select 텍스트 업데이트
+                var textSpan = document.querySelector('#test-purpose-display .custom-select-text');
+                if (textSpan) textSpan.textContent = data.testPurpose;
+                // onTestPurposeChange는 firestorePurposes 로드 후 안전하게 호출
+                try { sel.dispatchEvent(new Event('change')); } catch(e) { console.warn('검사목적 change 이벤트 오류:', e); }
+            }
         }
         // 긴급여부
         if (data.urgent === '긴급' || data.urgent === 'Y') {
