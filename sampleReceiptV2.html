@@ -576,13 +576,26 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     </div>
   </div>
 
-  <!-- 업체 변경이력 (hover 오버레이) -->
-  <div id="company-changelog" style="display:none;position:fixed;z-index:9500;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:10px 12px;min-width:500px;max-width:700px;max-height:320px;overflow-y:auto">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <span style="font-size:11px;font-weight:700;color:#344054">업체 변경이력</span>
-      <span id="changelog-count" style="font-size:10px;color:#8892a4"></span>
+  <!-- 업체 정보 오버레이 (hover) -->
+  <div id="company-changelog" style="display:none;position:fixed;z-index:9500;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:0;min-width:580px;max-width:750px;max-height:400px;overflow:hidden">
+    <!-- 탭 헤더 -->
+    <div style="display:flex;border-bottom:1px solid #e2e6ed;background:#f8f9fb;border-radius:8px 8px 0 0">
+      <button class="cl-tab active" data-cl-tab="changelog" onclick="switchClTab('changelog')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #1a73e8;color:#1a73e8;font-family:inherit">📋 업체 변경이력 <span id="changelog-count" style="font-size:9px;color:#8892a4"></span></button>
+      <button class="cl-tab" data-cl-tab="fss-info" onclick="switchClTab('fss-info')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#5f6b7a;font-family:inherit">🏢 식약처 업체 정보</button>
+      <button class="cl-tab" data-cl-tab="fss-change" onclick="switchClTab('fss-change')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#5f6b7a;font-family:inherit">📜 식약처 변경 이력 <span id="fss-change-count" style="font-size:9px;color:#8892a4"></span></button>
     </div>
-    <div id="company-changelog-body" style="font-size:10px"></div>
+    <!-- 탭 바디 -->
+    <div style="padding:10px 12px;max-height:340px;overflow-y:auto">
+      <div id="cl-pane-changelog" style="font-size:10px">
+        <div id="company-changelog-body"></div>
+      </div>
+      <div id="cl-pane-fss-info" style="display:none;font-size:11px">
+        <div id="fss-biz-info-body" style="color:#64748b;text-align:center;padding:20px">업체를 선택하면 조회됩니다</div>
+      </div>
+      <div id="cl-pane-fss-change" style="display:none;font-size:11px">
+        <div id="fss-change-body" style="color:#64748b;text-align:center;padding:20px">업체를 선택하면 조회됩니다</div>
+      </div>
+    </div>
   </div>
 
   <!-- 인허가 변경 알림 (I2859) -->
@@ -2234,20 +2247,119 @@ function toggleSection(header) {
 var _changelogHoverTimer = null;
 function showCompanyChangelog() {
     var cl = document.getElementById('company-changelog');
-    if (!cl || !cl.querySelector('table')) return; // 이력 없으면 표시 안 함
+    if (!cl) return;
+    // 어떤 탭이든 데이터가 있으면 표시
+    var hasData = cl.querySelector('table') || cl.querySelector('.fss-biz-row');
+    if (!hasData && !window._selectedCompanyLicNo) return;
     clearTimeout(_changelogHoverTimer);
     var inp = document.getElementById('company-search');
     if (!inp) return;
     var r = inp.getBoundingClientRect();
     cl.style.left = r.left + 'px';
     cl.style.top = (r.bottom + 4) + 'px';
-    // 화면 아래 넘어가면 위에 표시
     cl.style.display = 'block';
     var cr = cl.getBoundingClientRect();
     if (cr.bottom > window.innerHeight - 10) {
         cl.style.top = 'auto';
         cl.style.bottom = (window.innerHeight - r.top + 4) + 'px';
     }
+}
+
+function switchClTab(tabName) {
+    document.querySelectorAll('.cl-tab').forEach(function(btn) {
+        var isActive = btn.getAttribute('data-cl-tab') === tabName;
+        btn.style.borderBottom = isActive ? '2px solid #1a73e8' : '2px solid transparent';
+        btn.style.color = isActive ? '#1a73e8' : '#5f6b7a';
+        btn.classList.toggle('active', isActive);
+    });
+    ['changelog', 'fss-info', 'fss-change'].forEach(function(id) {
+        var el = document.getElementById('cl-pane-' + id);
+        if (el) el.style.display = (id === tabName) ? '' : 'none';
+    });
+}
+
+// 식약처 API 업체 정보 + 변경 이력 로드
+function loadFssCompanyData(licNo) {
+    window._selectedCompanyLicNo = licNo;
+    if (!licNo) return;
+
+    // 1) fss_businesses에서 업체 정보 조회
+    db.collection('fss_businesses').doc(licNo).get().then(function(doc) {
+        var el = document.getElementById('fss-biz-info-body');
+        if (!doc.exists) {
+            el.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">식약처 API에 등록된 정보가 없습니다</div>';
+            return;
+        }
+        var d = doc.data();
+        var rows = [
+            ['업소명', d.bssh_nm],
+            ['인허가번호', d.lcns_no],
+            ['대표자', d.prsdnt_nm],
+            ['업종', d.induty_nm],
+            ['인허가일', formatFssDate(d.prms_dt)],
+            ['전화번호', d.telno],
+            ['소재지', d.locp_addr],
+            ['관할기관', d.instt_nm],
+            ['폐업구분', d.clsbiz_dvs_nm || '영업중'],
+            ['API 출처', d.api_source],
+            ['수집일시', d.collected_at ? d.collected_at.toDate().toLocaleString('ko-KR') : '-']
+        ];
+        var html = '<div style="display:grid;grid-template-columns:90px 1fr;gap:4px 8px">';
+        rows.forEach(function(r) {
+            var val = r[1] || '-';
+            var style = '';
+            if (r[0] === '폐업구분' && val !== '영업중' && val !== '-') style = 'color:#e53935;font-weight:700';
+            html += '<div class="fss-biz-row" style="color:#5f6b7a;font-size:10px;padding:3px 0">' + r[0] + '</div>' +
+                    '<div style="font-size:11px;font-weight:500;color:#1a2332;padding:3px 0;' + style + '">' + val + '</div>';
+        });
+        html += '</div>';
+        el.innerHTML = html;
+    }).catch(function(err) {
+        document.getElementById('fss-biz-info-body').innerHTML = '<div style="color:#ef4444;padding:12px">조회 실패: ' + err.message + '</div>';
+    });
+
+    // 2) fss_changes에서 변경 이력 조회
+    db.collection('fss_changes').where('lcns_no', '==', licNo).get().then(function(snap) {
+        var el = document.getElementById('fss-change-body');
+        var countEl = document.getElementById('fss-change-count');
+        if (snap.empty) {
+            el.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">변경 이력이 없습니다</div>';
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+        var changes = [];
+        snap.forEach(function(doc) { changes.push(doc.data()); });
+        changes.sort(function(a, b) { return (b.chng_dt || '').localeCompare(a.chng_dt || ''); });
+        if (countEl) countEl.textContent = changes.length + '';
+
+        var html = '<table style="width:100%;border-collapse:collapse">' +
+            '<tr style="border-bottom:1px solid #e2e6ed;font-size:10px;color:#5f6b7a;font-weight:600">' +
+            '<th style="text-align:left;padding:4px 6px;width:80px">변경일자</th>' +
+            '<th style="text-align:left;padding:4px 6px">변경 전</th>' +
+            '<th style="text-align:center;padding:4px 2px;width:20px">→</th>' +
+            '<th style="text-align:left;padding:4px 6px">변경 후</th>' +
+            '<th style="text-align:left;padding:4px 6px;width:80px">사유</th></tr>';
+        changes.forEach(function(c) {
+            var dt = formatFssDate(c.chng_dt);
+            html += '<tr style="border-bottom:1px solid #f5f5f5">' +
+                '<td style="padding:4px 6px;font-weight:600;color:#344054;white-space:nowrap">' + dt + '</td>' +
+                '<td style="padding:4px 6px;color:#d32f2f;text-decoration:line-through;word-break:break-all">' + (c.chng_bf_cn || '-') + '</td>' +
+                '<td style="padding:4px 2px;text-align:center;color:#ff9800">→</td>' +
+                '<td style="padding:4px 6px;color:#2e7d32;font-weight:600;word-break:break-all">' + (c.chng_af_cn || '-') + '</td>' +
+                '<td style="padding:4px 6px;color:#5f6b7a;word-break:break-all">' + (c.chng_prvns || '-') + '</td></tr>';
+        });
+        html += '</table>';
+        el.innerHTML = html;
+    }).catch(function(err) {
+        document.getElementById('fss-change-body').innerHTML = '<div style="color:#ef4444;padding:12px">조회 실패: ' + err.message + '</div>';
+    });
+}
+
+function formatFssDate(dt) {
+    if (!dt) return '-';
+    dt = String(dt);
+    if (dt.length === 8) return dt.slice(0, 4) + '-' + dt.slice(4, 6) + '-' + dt.slice(6, 8);
+    return dt;
 }
 function hideCompanyChangelog() {
     _changelogHoverTimer = setTimeout(function() {
@@ -5366,6 +5478,9 @@ function selectCompany(elOrObj) {
 
     // 인허가 변경사항 확인 (I2859 fss_changes)
     checkLicenseChanges(lic.licNo || lic.licenseNo || '', c.createdAt || c.regDate || '');
+
+    // 식약처 API 정보 로드 (hover 오버레이용)
+    loadFssCompanyData(lic.licNo || lic.licenseNo || '');
 }
 
 // ============================================================================
