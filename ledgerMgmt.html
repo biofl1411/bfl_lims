@@ -66,6 +66,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .ledger-info-top .title{font-size:16px;font-weight:700;color:#1a2332}
 .ledger-info-top .period{font-size:12px;color:#6b7280}
 .ledger-info-top .bfl-logo{font-size:12px;color:#6b7280;font-weight:500}
+.ledger-info-top .vat-tag{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600}
+.ledger-info-top .vat-incl{background:#dcfce7;color:#166534}
+.ledger-info-top .vat-excl{background:#fef3c7;color:#92400e}
+.ledger-info-top .vat-mixed{background:#f1f5f9;color:#475569}
 .ledger-info-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0}
 .ledger-info-col{padding:12px 16px;border-right:1px solid #eef0f4}
 .ledger-info-col:last-child{border-right:none}
@@ -177,6 +181,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 <div class="ledger-info-top">
                     <div class="title" id="ledger-info-title">매출처 원장</div>
                     <div class="period" id="ledger-info-period"></div>
+                    <span class="vat-tag" id="ledger-vat-tag"></span>
                     <div class="bfl-logo">BioFoodLab LIMS</div>
                 </div>
                 <div class="ledger-info-body">
@@ -235,6 +240,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 <div class="ledger-info-top">
                     <div class="title" id="txn-info-title">거래내역서</div>
                     <div class="period" id="txn-info-period"></div>
+                    <span class="vat-tag" id="txn-vat-tag"></span>
                     <div class="bfl-logo">BioFoodLab LIMS</div>
                 </div>
                 <div class="ledger-info-body">
@@ -621,6 +627,7 @@ async function loadLedger() {
 
         document.getElementById('ledger-info-title').textContent = company + ' - 매출처 원장';
         document.getElementById('ledger-info-period').textContent = '조회기간: ' + fromDate + ' ~ ' + toDate;
+        _updateVatTag('ledger-vat-tag', allSnap);
         document.getElementById('ledger-info').style.display = 'block';
 
     } catch(e) {
@@ -864,6 +871,48 @@ function _buildTxnSummary(row) {
     return parts2.join(' ');
 }
 
+// 부가세 포함/별도 판단
+function _detectVatType(snap) {
+    var inclCount = 0, exclCount = 0;
+    snap.forEach(function(doc) {
+        var d = doc.data();
+        // discountFinalPrice, feeTotal, feeOriginal, totalFee → 부가세 포함 금액
+        if ((d.discountFinalPrice && Number(d.discountFinalPrice) > 0) ||
+            (d.feeTotal && Number(d.feeTotal) > 0) ||
+            (d.feeOriginal && Number(d.feeOriginal) > 0) ||
+            (d.totalFee && Number(d.totalFee) > 0)) {
+            inclCount++;
+        }
+        // supplyPrice + tax → 공급가 + 부가세 별도 표기
+        else if ((Number(d.supplyPrice) || 0) > 0 && (Number(d.tax) || 0) > 0) {
+            exclCount++;
+        }
+        // fee만 있는 경우 → 포함으로 간주
+        else if ((Number(d.fee) || 0) > 0) {
+            inclCount++;
+        }
+    });
+    if (inclCount > 0 && exclCount === 0) return 'incl';
+    if (exclCount > 0 && inclCount === 0) return 'excl';
+    if (inclCount > 0 && exclCount > 0) return 'mixed';
+    return 'incl'; // 기본값
+}
+
+function _updateVatTag(elementId, snap) {
+    var el = document.getElementById(elementId);
+    var type = _detectVatType(snap);
+    if (type === 'incl') {
+        el.textContent = '부가세 포함';
+        el.className = 'vat-tag vat-incl';
+    } else if (type === 'excl') {
+        el.textContent = '부가세 별도';
+        el.className = 'vat-tag vat-excl';
+    } else {
+        el.textContent = '부가세 혼합';
+        el.className = 'vat-tag vat-mixed';
+    }
+}
+
 // 입금수단 태그
 function _methodTag(method) {
     if (!method) return '';
@@ -1072,6 +1121,7 @@ async function _loadTxnCompanyInfo(companyName, receiptsSnap) {
 
         document.getElementById('txn-info-title').textContent = companyName + ' - 거래내역서';
         document.getElementById('txn-info-period').textContent = '조회기간: ' + document.getElementById('txn-from').value + ' ~ ' + document.getElementById('txn-to').value;
+        _updateVatTag('txn-vat-tag', receiptsSnap);
         document.getElementById('txn-info').style.display = 'block';
     } catch(e) {
         console.warn('[txn] 업체정보 조회 실패:', e);
