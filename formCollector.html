@@ -127,6 +127,27 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
 .fgp input:focus,.fgp select:focus{outline:none;border-color:var(--pri);
   box-shadow:0 0 0 3px rgba(37,99,235,.1)}
 
+/* ─── 저장 파일명 UI ─── */
+.fname-box{background:var(--g50);border:1px solid var(--g200);border-radius:9px;padding:12px 14px;margin-top:10px}
+.fname-label{font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.fname-preview{background:#fff;border:1px solid var(--g300);border-radius:7px;padding:8px 11px;
+  font-size:13px;font-family:'Consolas','Courier New',monospace;color:var(--pri-d);word-break:break-all;
+  min-height:34px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.fname-tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-right:2px}
+.fname-tag.field{background:#dbeafe;color:#1e40af}
+.fname-tag.purpose{background:#fef3c7;color:#92400e}
+.fname-tag.item{background:#d1fae5;color:#065f46}
+.fname-tag.basis{background:#ede9fe;color:#5b21b6}
+.fname-tag.sample{background:#fce7f3;color:#9d174d}
+.fname-sep{color:var(--g400);font-size:12px}
+.fname-row{display:flex;gap:10px;margin-top:8px;align-items:flex-end}
+.fname-row .fgp{flex:1}
+.sample-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.sample-chip{padding:3px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;
+  border:1px solid var(--g300);background:#fff;color:var(--g600);transition:all .15s;user-select:none}
+.sample-chip:hover{border-color:var(--pri);color:var(--pri)}
+.sample-chip.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+
 /* ─── 진행 바 ─── */
 .prog{display:none;background:var(--g50);border:1px solid var(--g200);
   border-radius:9px;padding:13px 16px;margin-bottom:12px}
@@ -443,6 +464,34 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
             <input type="text" id="inp-memo" placeholder="특이사항 등">
           </div>
         </div>
+
+        <!-- 저장 파일명 -->
+        <div class="fname-box" id="fname-box">
+          <div class="fname-label">📁 저장 파일명 (자동 조합)</div>
+          <div class="fname-preview" id="fname-preview">
+            <span style="color:var(--g400);font-size:12px">분야·목적·항목 선택 시 자동 생성</span>
+          </div>
+          <div class="fname-row">
+            <div class="fgp">
+              <label>시험법근거</label>
+              <input type="text" id="inp-test-basis" placeholder="예) 식품공전, KS H 2155" oninput="updateFileName()">
+            </div>
+            <div class="fgp">
+              <label>검체특성</label>
+              <input type="text" id="inp-sample-type" placeholder="직접 입력 또는 아래 선택" oninput="updateFileName()">
+            </div>
+          </div>
+          <div class="sample-chips" id="sample-chips">
+            <span class="sample-chip" onclick="pickSampleChip(this)">액상</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">고체</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">분말</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">캡슐</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">정제</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">과립</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">유지</span>
+            <span class="sample-chip" onclick="pickSampleChip(this)">페이스트</span>
+          </div>
+        </div>
       </div>
 
       <!-- 진행 상태 -->
@@ -727,6 +776,7 @@ function pickField(btn, fid) {
   });
   renderPurposes(list);
   goStep(2);
+  updateFileName();
 
   // 하위 초기화
   selPurpose=null; selItem=null;
@@ -777,6 +827,7 @@ async function pickPurpose(el, idx) {
   hide('share-box'); hide('sec-upload'); hide('btn-area');
   document.getElementById('sec-items').style.display = 'block';
   goStep(3);
+  updateFileName();
 
   // 항목 로딩 (itemSource 표시)
   var srcName = {mfdsTemplates:'식품유형(mfdsTemplates)', mfdsTestItems:'시험항목 DB', itemGroups:'항목그룹(itemGroups)'};
@@ -967,6 +1018,7 @@ function pickItem(el, idx) {
   document.getElementById('sec-upload').style.display = 'block';
   document.getElementById('btn-area').style.display = 'flex';
   goStep(4);
+  updateFileName();
 }
 
 /* 동일 계산식 후보 그룹 추천 (참고용 - 사용자가 직접 선택해야 적용됨) */
@@ -1087,6 +1139,57 @@ async function onDp(e,t){
   var file=e.dataTransfer.files[0];
   if (!file || file.type!=='application/pdf'){toast('PDF만 가능합니다','err');return;}
   setFile(t, await toB64(file), file.name);
+}
+
+/* =============================================================
+   저장 파일명 자동 생성
+============================================================= */
+var _generatedFileName = '';
+
+function updateFileName() {
+  var parts = [];
+  if (selField) parts.push(selField.name);
+  if (selPurpose) parts.push(selPurpose.n || '');
+  if (selItem) parts.push(selItem.name);
+  var basis = (document.getElementById('inp-test-basis') || {}).value || '';
+  if (basis.trim()) parts.push(basis.trim());
+  var sampleType = (document.getElementById('inp-sample-type') || {}).value || '';
+  if (sampleType.trim()) parts.push(sampleType.trim());
+
+  if (!parts.length) {
+    document.getElementById('fname-preview').innerHTML =
+      '<span style="color:var(--g400);font-size:12px">분야·목적·항목 선택 시 자동 생성</span>';
+    _generatedFileName = '';
+    return;
+  }
+
+  var tagClasses = ['field','purpose','item','basis','sample'];
+  var html = '';
+  parts.forEach(function(p, i) {
+    if (i > 0) html += '<span class="fname-sep">_</span>';
+    html += '<span class="fname-tag ' + (tagClasses[i] || '') + '">' + p + '</span>';
+  });
+
+  _generatedFileName = parts.join('_').replace(/[\\/:*?"<>|]/g, '_');
+  document.getElementById('fname-preview').innerHTML = html;
+}
+
+function pickSampleChip(el) {
+  var inp = document.getElementById('inp-sample-type');
+  if (el.classList.contains('on')) {
+    el.classList.remove('on');
+    var val = inp.value.split(/[,·]\s*/).filter(function(v) { return v.trim() && v.trim() !== el.textContent.trim(); });
+    inp.value = val.join('·');
+  } else {
+    el.classList.add('on');
+    var cur = inp.value.trim();
+    inp.value = cur ? cur + '·' + el.textContent.trim() : el.textContent.trim();
+  }
+  updateFileName();
+}
+
+function getGeneratedFileName() {
+  return _generatedFileName || null;
 }
 
 /* =============================================================
@@ -1441,13 +1544,22 @@ async function doConfirmSave() {
     var shared = getSelectedSharedItems();
     var person = document.getElementById('inp-person').value.trim();
 
-    var docId = (selField?selField.id:'X')+'_'
+    // 저장 파일명 사용 (없으면 기존 방식)
+    var savedFileName = _generatedFileName || (
+      (selField?selField.id:'X')+'_'
       +(selPurpose?selPurpose.prefix:'P')+'_'
       +(selItem.code||selItem.name).replace(/[^a-zA-Z0-9가-힣]/g,'_')
-      +'_'+Date.now();
+    );
+    var docId = savedFileName.replace(/[^a-zA-Z0-9가-힣_·]/g,'_') + '_' + Date.now();
+
+    var testBasis = (document.getElementById('inp-test-basis') || {}).value || '';
+    var sampleType = (document.getElementById('inp-sample-type') || {}).value || '';
 
     var row = {
       docId: docId,
+      savedFileName: savedFileName,
+      testBasis: testBasis.trim(),
+      sampleType: sampleType.trim(),
       fieldId:   selField ? selField.id   : null,
       fieldName: selField ? selField.name : '전체',
       fieldColor:selField ? selField.color: '#94a3b8',
@@ -1894,6 +2006,16 @@ function openDetail(i) {
     '['+(t.fieldName||'')+'] '+(t.purposeName||'')+' — '+(t.representativeItem||t.itemName||'');
   var a = t.analyzed||{}, html='';
 
+  // 저장 파일명
+  if (t.savedFileName) {
+    html+='<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:12px">';
+    html+='<span style="font-weight:700;color:#5b21b6">📁 파일명:</span> ';
+    html+='<span style="font-family:Consolas,monospace;color:#1e293b">'+t.savedFileName+'</span>';
+    if (t.testBasis) html+=' &nbsp;<span style="background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:4px;font-size:10px">시험법: '+t.testBasis+'</span>';
+    if (t.sampleType) html+=' &nbsp;<span style="background:#fce7f3;color:#9d174d;padding:1px 6px;border-radius:4px;font-size:10px">검체: '+t.sampleType+'</span>';
+    html+='</div>';
+  }
+
   // 연결 정보
   html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:11px 13px;margin-bottom:13px;font-size:12px">';
   html+='<div style="font-weight:700;color:#1d4ed8;margin-bottom:6px">📌 분야·목적·항목 연결</div>';
@@ -2095,9 +2217,13 @@ function doReset() {
   document.getElementById('ui-filled').textContent='✅';
   document.getElementById('uf-blank').textContent='';
   document.getElementById('uf-filled').textContent='';
-  ['inp-person','inp-sop','inp-memo'].forEach(function(id){
+  ['inp-person','inp-sop','inp-memo','inp-test-basis','inp-sample-type'].forEach(function(id){
     document.getElementById(id).value='';
   });
+  document.querySelectorAll('.sample-chip').forEach(function(c){ c.classList.remove('on'); });
+  _generatedFileName = '';
+  document.getElementById('fname-preview').innerHTML =
+    '<span style="color:var(--g400);font-size:12px">분야·목적·항목 선택 시 자동 생성</span>';
   goStep(1);
   toast('초기화됐습니다','info');
 }
