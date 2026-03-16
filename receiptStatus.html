@@ -1606,18 +1606,49 @@ function loadComparePanel(side, id, sampleIdx) {
     totalEl.textContent = '-';
     countEl.textContent = '';
     var docId = (r._baseReceiptNo || r.receiptNo || '') + '_S' + sampleIdx;
-    // 1단계: 접수 데이터에서 시험항목 추출 (가능한 모든 필드명 시도)
+    // 1단계: 접수 데이터에서 시험항목 추출 (refTestItems → mfdsTemplates 순)
     function getBaseItems() {
-        var s = (r.samples && r.samples[sampleIdx]) || {};
-        var items = s.testItems || s.items || s.selectedItems || s.inspectionItems || s.refTestItems
-                 || r.testItems || r.items || r.selectedItems || [];
-        if (items && items.length > 0) return Promise.resolve(items);
+        // Firestore에서 원본 receipts 문서 조회 (메모리 캐시에 없을 수 있으므로)
         return db.collection('receipts').doc(r.id).get().then(function(doc) {
-            if (!doc.exists) return [];
-            var data = doc.data();
-            var s2 = (data.samples && data.samples[sampleIdx]) || {};
-            return s2.testItems || s2.items || s2.selectedItems || s2.inspectionItems || s2.refTestItems
-                || data.testItems || data.items || data.selectedItems || [];
+            var data = doc.exists ? doc.data() : r;
+            var s = (data.samples && data.samples[sampleIdx]) || {};
+            // 1) 참고용(기준규격외) 항목: refTestItems 직접 사용
+            if (s.refTestItems && s.refTestItems.length > 0) {
+                return s.refTestItems.map(function(ri) {
+                    return {
+                        testItemName: ri.itemName || ri.testItemName || '',
+                        testItemCode: ri.testCode || ri.testItemCode || '',
+                        unit: ri.unit || '',
+                        fee: ri.fee || 0,
+                        standard: ri.standard || '-'
+                    };
+                });
+            }
+            // 2) 고시항목: mfdsProductCode로 mfdsTemplates 조회
+            var prodCode = s.mfdsProductCode || '';
+            var foodType = s.foodType || '';
+            if (!prodCode && !foodType) return [];
+            return db.collection('mfdsTemplates').get().then(function(snap) {
+                var matched = null;
+                snap.forEach(function(tdoc) {
+                    var t = tdoc.data();
+                    if (prodCode && t.foodTypeCode === prodCode) { matched = t; }
+                    if (!matched && foodType && (t.templateName === foodType || t.foodTypeName === foodType)) { matched = t; }
+                });
+                if (matched && matched.testItems && matched.testItems.length > 0) {
+                    return matched.testItems.map(function(ti) {
+                        return {
+                            testItemName: ti.testItemName || '',
+                            testItemCode: ti.testItemCode || '',
+                            standard: ti.standard || '-',
+                            unit: ti.unit || '',
+                            fee: ti.fee || 0,
+                            judgmentType: ti.judgmentType || ''
+                        };
+                    });
+                }
+                return [];
+            });
         });
     }
     // 2단계: testResults에서 결과값 조회 (없어도 괜찮음)
