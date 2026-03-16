@@ -529,8 +529,8 @@ var _sortKey = 'receiptDate';
 var _sortDir = 'desc';
 var _page = 1;
 var _pageSize = 30;
-var _selectedReceipts = new Set();
-var _selectedDocIds = {};  // baseNo → [docId, ...] 매핑
+var _selectedRows = new Set();    // 선택된 행 키 (id_sampleIdx)
+var _selectedBaseMap = {};        // baseNo → rowKey (접수번호당 1건만)
 var _selectedRowId = null; // 현재 상세 패널에 표시 중인 행
 var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
 
@@ -956,12 +956,13 @@ function renderTable() {
         } else if (r.trafficLight === 'red' || r.trafficLight === 'orange') {
             rowStyle = 'background-color:#fffde7;';
         }
+        var rowKey = r.id + '_' + r._sampleIdx;
         if (isSelected) rowStyle += 'border-left:3px solid #1a73e8;';
-        if (_selectedReceipts.has(baseNo)) rowStyle += 'background-color:#e3f2fd;';
+        if (_selectedRows.has(rowKey)) rowStyle += 'background-color:#e3f2fd;';
         var rowIdx = start + pageData.indexOf(r);
         bhtml += '<tr style="' + rowStyle + '" data-row-idx="' + rowIdx + '" onclick="handleCompareClick(event,\'' + r.id + '\',' + r._sampleIdx + ')" ondblclick="openDetailPanel(\'' + r.id + '\',' + r._sampleIdx + ')">';
-        var checked = _selectedReceipts.has(baseNo) ? 'checked' : '';
-        bhtml += '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleReceiptSelect(\'' + baseNo + '\',\'' + r.id + '\')"></td>';
+        var checked = _selectedRows.has(rowKey) ? 'checked' : '';
+        bhtml += '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleRowSelect(\'' + rowKey + '\',\'' + baseNo + '\')"></td>';
         visibleCols.forEach(function(col) {
             var val = r[col.key];
             if (val === undefined || val === null) val = '';
@@ -1044,78 +1045,60 @@ function goPage(p) { _page = p; renderTable(); }
 // 행 클릭 핸들러 (Shift+클릭 범위 선택)
 // ============================================================================
 function handleRowClick(e, rowIdx, baseNo, docId) {
-    if (e.shiftKey && _lastSelectedIdx >= 0) {
-        // Shift+클릭: 범위 선택
-        var fromIdx = Math.min(_lastSelectedIdx, rowIdx);
-        var toIdx = Math.max(_lastSelectedIdx, rowIdx);
-        for (var i = fromIdx; i <= toIdx; i++) {
-            var r = _filteredReceipts[i];
-            if (!r) continue;
-            var bno = r._baseReceiptNo || r.receiptNo || '';
-            if (!_selectedReceipts.has(bno)) {
-                _selectedReceipts.add(bno);
-                _selectedDocIds[bno] = _filteredReceipts
-                    .filter(function(x) { return (x._baseReceiptNo || x.receiptNo || '') === bno; })
-                    .map(function(x) { return x.id; })
-                    .filter(function(id, idx, arr) { return arr.indexOf(id) === idx; });
-            }
-        }
-    } else {
-        // 일반 클릭: 토글 선택
-        toggleReceiptSelect(baseNo, docId);
-    }
-    _lastSelectedIdx = rowIdx;
-    updateSummaryBar();
-    renderTable();
+    // 체크박스 클릭은 toggleRowSelect에서 처리
 }
 
 // ============================================================================
-// 선택 삭제
+// 개별 행 선택 (접수번호당 1건만 허용)
 // ============================================================================
-function toggleReceiptSelect(baseNo, docId) {
-    if (_selectedReceipts.has(baseNo)) {
-        _selectedReceipts.delete(baseNo);
-        delete _selectedDocIds[baseNo];
+function toggleRowSelect(rowKey, baseNo) {
+    if (_selectedRows.has(rowKey)) {
+        // 이미 선택된 행 해제
+        _selectedRows.delete(rowKey);
+        delete _selectedBaseMap[baseNo];
     } else {
-        _selectedReceipts.add(baseNo);
-        // 같은 baseNo의 모든 docId 수집
-        _selectedDocIds[baseNo] = _filteredReceipts
-            .filter(function(r) { return (r._baseReceiptNo || r.receiptNo || '') === baseNo; })
-            .map(function(r) { return r.id; })
-            .filter(function(id, i, arr) { return arr.indexOf(id) === i; });
+        // 같은 접수번호의 기존 선택 해제
+        if (_selectedBaseMap[baseNo]) {
+            _selectedRows.delete(_selectedBaseMap[baseNo]);
+        }
+        _selectedRows.add(rowKey);
+        _selectedBaseMap[baseNo] = rowKey;
     }
     updateSummaryBar();
     renderTable();
 }
 
 function toggleSelectAll() {
-    // 현재 필터된 목록의 고유 접수번호 추출
+    // 접수번호당 첫 번째 행만 선택
     var allBaseNos = [];
+    var firstRows = {};
     _filteredReceipts.forEach(function(r) {
         var bno = r._baseReceiptNo || r.receiptNo || '';
-        if (bno && allBaseNos.indexOf(bno) === -1) allBaseNos.push(bno);
+        var rk = r.id + '_' + r._sampleIdx;
+        if (bno && !firstRows[bno]) {
+            allBaseNos.push(bno);
+            firstRows[bno] = rk;
+        }
     });
-    if (_selectedReceipts.size === allBaseNos.length) {
-        _selectedReceipts.clear();
-        _selectedDocIds = {};
+    if (_selectedRows.size === allBaseNos.length) {
+        _selectedRows.clear();
+        _selectedBaseMap = {};
     } else {
+        _selectedRows.clear();
+        _selectedBaseMap = {};
         allBaseNos.forEach(function(bno) {
-            _selectedReceipts.add(bno);
-            _selectedDocIds[bno] = _filteredReceipts
-                .filter(function(r) { return (r._baseReceiptNo || r.receiptNo || '') === bno; })
-                .map(function(r) { return r.id; })
-                .filter(function(id, i, arr) { return arr.indexOf(id) === i; });
+            _selectedRows.add(firstRows[bno]);
+            _selectedBaseMap[bno] = firstRows[bno];
         });
     }
     updateSummaryBar();
     renderTable();
-    // 헤더 체크박스 동기화
     var cb = document.getElementById('select-all-cb');
-    if (cb) cb.checked = _selectedReceipts.size === allBaseNos.length && allBaseNos.length > 0;
+    if (cb) cb.checked = _selectedRows.size === allBaseNos.length && allBaseNos.length > 0;
 }
 
 function updateSummaryBar() {
-    var count = _selectedReceipts.size;
+    var count = _selectedRows.size;
     var countEl = document.getElementById('select-count');
     var delBtn = document.getElementById('btn-delete-selected');
     var bar = document.getElementById('summary-bar');
@@ -1136,11 +1119,9 @@ function updateSummaryBar() {
     }
     bar.style.display = 'flex';
     var sumSupply = 0, sumVat = 0, sumTotal = 0;
-    var counted = {};
     _filteredReceipts.forEach(function(r) {
-        var bno = r._baseReceiptNo || r.receiptNo || '';
-        if (_selectedReceipts.has(bno) && !counted[bno]) {
-            counted[bno] = true;
+        var rk = r.id + '_' + r._sampleIdx;
+        if (_selectedRows.has(rk)) {
             sumSupply += (r.feeSupply || 0);
             sumVat += (r.feeVat || 0);
             sumTotal += (r.feeTotal || 0);
@@ -1153,8 +1134,8 @@ function updateSummaryBar() {
 }
 
 function clearSelection() {
-    _selectedReceipts.clear();
-    _selectedDocIds = {};
+    _selectedRows.clear();
+    _selectedBaseMap = {};
     _lastSelectedIdx = -1;
     var cb = document.getElementById('select-all-cb');
     if (cb) cb.checked = false;
@@ -1163,24 +1144,19 @@ function clearSelection() {
 }
 
 async function deleteSelectedReceipts() {
-    if (_selectedReceipts.size === 0) {
+    if (_selectedRows.size === 0) {
         showToast('삭제할 접수건을 선택하세요', 'warning');
         return;
     }
-    var names = Array.from(_selectedReceipts);
-    if (!confirm(names.length + '개 접수건을 삭제하시겠습니까?\n\n' + names.join(', ') + '\n\n⚠️ 관련 검사결과도 함께 삭제됩니다.')) return;
+    // 선택된 행에서 접수번호 추출
+    var baseNos = Object.keys(_selectedBaseMap);
+    if (!confirm(baseNos.length + '개 접수건을 삭제하시겠습니까?\n\n' + baseNos.join(', ') + '\n\n⚠️ 관련 검사결과도 함께 삭제됩니다.')) return;
 
     try {
-        for (var i = 0; i < names.length; i++) {
-            var receiptNo = names[i];
-            // 방법1: 추적된 docId로 직접 삭제 (확실)
-            var docIds = _selectedDocIds[receiptNo] || [];
-            if (docIds.length > 0) {
-                for (var j = 0; j < docIds.length; j++) {
-                    await db.collection('receipts').doc(docIds[j]).delete();
-                }
-            } else {
-                // 방법2: 쿼리 기반 폴백
+        for (var i = 0; i < baseNos.length; i++) {
+            var receiptNo = baseNos[i];
+            // 쿼리 기반 삭제
+            {
                 var snap = await db.collection('receipts').where('receiptNo', '==', receiptNo).get();
                 for (var k = 0; k < snap.docs.length; k++) {
                     await snap.docs[k].ref.delete();
@@ -1189,7 +1165,7 @@ async function deleteSelectedReceipts() {
             // 관련 testResults 삭제
             await fsDeleteTestResultsByReceiptNo(receiptNo);
         }
-        showToast(names.length + '개 접수건이 삭제되었습니다', 'success');
+        showToast(baseNos.length + '개 접수건이 삭제되었습니다', 'success');
         clearSelection();
         loadReceipts();
     } catch(e) {
@@ -1242,7 +1218,7 @@ document.addEventListener('click', function(e) {
 
 // ESC 키로 선택 해제
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && _selectedReceipts.size > 0) {
+    if (e.key === 'Escape' && _selectedRows.size > 0) {
         clearSelection();
     }
 });
