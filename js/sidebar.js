@@ -164,7 +164,7 @@ const SIDEBAR_MENU = [
     icon: '💰',
     label: '재무 관리',
     sub: [
-      { label: '매출처원장',           href: 'paymentMgmt.html#ledger',  page: 'finance-ledger' },
+      { label: '매출처원장',           href: 'ledgerMgmt.html',  page: 'finance-ledger' },
       { label: '입금 관리',           href: 'paymentMgmt.html',    page: 'finance-payment' },
       { label: '세금계산서',          href: 'taxInvoice.html',     page: 'finance-tax' }
     ]
