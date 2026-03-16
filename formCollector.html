@@ -1248,11 +1248,56 @@ async function doAnalyze() {
     btn.disabled=false; btn.textContent='🚀 분석'; return;
   }
 
+  // 분석 결과에서 시험법근거 자동 채움
+  autoFillTestBasis(_lastAnalyzed);
+
   // 리뷰 패널 표시 (저장은 사용자 검증 후)
   showReviewPanel(_lastAnalyzed);
   goStep(6);
   btn.disabled=false; btn.textContent='🚀 재분석';
   toast('분석 완료 — PDF를 비교하고 누락사항을 확인하세요','info');
+}
+
+/* =============================================================
+   분석 결과에서 시험법근거 자동 추출
+============================================================= */
+function autoFillTestBasis(analyzed) {
+  if (!analyzed) return;
+  var inp = document.getElementById('inp-test-basis');
+  if (!inp || inp.value.trim()) return; // 이미 입력되어 있으면 덮어쓰지 않음
+
+  var basis = '';
+
+  // 1) 최상위 testBasis 필드
+  if (analyzed.testBasis) {
+    basis = analyzed.testBasis;
+  }
+
+  // 2) sections 내 시험방법근거/시험법 관련 필드 exampleValue에서 추출
+  if (!basis && analyzed.sections) {
+    var keywords = ['시험방법', '시험법', '시험근거', 'testMethod', 'testBasis', '분석방법', '분석법'];
+    analyzed.sections.forEach(function(sec) {
+      if (basis) return;
+      (sec.fields || []).forEach(function(f) {
+        if (basis) return;
+        var label = (f.label || '').toLowerCase();
+        var id = (f.id || '').toLowerCase();
+        for (var i = 0; i < keywords.length; i++) {
+          if (label.indexOf(keywords[i]) >= 0 || id.indexOf(keywords[i].toLowerCase()) >= 0) {
+            if (f.exampleValue && f.exampleValue.trim()) {
+              basis = f.exampleValue.trim();
+            }
+            break;
+          }
+        }
+      });
+    });
+  }
+
+  if (basis) {
+    inp.value = basis;
+    updateFileName();
+  }
 }
 
 /* =============================================================
@@ -1819,6 +1864,7 @@ async function callClaude(textContext) {
     + '  "testItem": "대표검사항목명",\n'
     + '  "testType": "' + testType + '",\n'
     + '  "sop": "SOP코드 또는 null",\n'
+    + '  "testBasis": "시험방법근거 (예: 식품공전, KS H 2155 등 PDF에 기재된 시험법 근거)",\n'
     + '  "sections": [\n'
     + '    {\n'
     + '      "title": "섹션명 (PDF 순서대로)",\n'
