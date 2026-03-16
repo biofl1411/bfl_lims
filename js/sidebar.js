@@ -93,6 +93,12 @@ body.sidebar-collapsed .main{margin-left:64px}
 .sidebar.collapsed .sidebar-weather .weather-city{display:none}
 .sidebar.collapsed .sidebar-weather .weather-detail{display:none}
 .sidebar.collapsed .sidebar-weather .weather-setup a{font-size:10px}
+/* ── subTabs (페이지 상단 탭 바) ── */
+.sidebar-subtabs{display:flex;background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;margin-left:250px;position:sticky;top:0;z-index:90}
+.sidebar-subtab{padding:6px 16px;font-size:13px;font-weight:500;color:#5f6b7a;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:inherit;transition:all .15s}
+.sidebar-subtab:hover{color:#1a2332;background:#f8f9fb}
+.sidebar-subtab.active{border-bottom:2px solid #1a73e8;color:#1a73e8;font-weight:600}
+body.sidebar-collapsed .sidebar-subtabs{margin-left:64px}
 /* ====== END UNIFIED SIDEBAR STYLES ====== */
 `;
   document.head.appendChild(style);
@@ -158,7 +164,12 @@ const SIDEBAR_MENU = [
     icon: '💰',
     label: '재무 관리',
     sub: [
-      { label: '매출 관리',           disabled: true },
+      { label: '매출처원장',           href: 'salesMgmt.html#ledger',  page: 'finance-sales',  internalPage: 'ledger',
+        subTabs: [
+          { label: '매출처 원장', tab: 'ledger' },
+          { label: '거래내역',    tab: 'transactions' }
+        ]
+      },
       { label: '입금 관리',           href: 'paymentMgmt.html',    page: 'finance-payment' },
       { label: '세금계산서',          href: 'taxInvoice.html',     page: 'finance-tax' }
     ]
@@ -332,6 +343,76 @@ function _restoreSidebarState() {
 }
 
 // ============================================================
+// 3-2. subTabs 렌더링 (메뉴 항목에 subTabs가 있을 때 페이지 상단에 탭 바 표시)
+// ============================================================
+function _renderSubTabs() {
+  var currentFile = decodeURIComponent(location.pathname.split('/').pop()) || 'index.html';
+  var currentHash = location.hash.replace('#', '') || '';
+
+  // 현재 페이지에 해당하는 subTabs 항목 찾기
+  var activeSubTabs = null;
+  SIDEBAR_MENU.forEach(function(group) {
+    if (!group.sub) return;
+    group.sub.forEach(function(item) {
+      if (!item.subTabs || item.disabled) return;
+      var hrefBase = (item.href || '').split('#')[0];
+      if (hrefBase === currentFile) {
+        activeSubTabs = item;
+      }
+    });
+  });
+
+  if (!activeSubTabs || !activeSubTabs.subTabs || !activeSubTabs.subTabs.length) return;
+
+  // 현재 활성 탭 판별 (URL hash 또는 첫번째 탭)
+  var activeTab = currentHash || activeSubTabs.subTabs[0].tab;
+
+  // 탭 바 HTML 생성
+  var tabBar = document.createElement('div');
+  tabBar.className = 'sidebar-subtabs';
+  tabBar.id = 'sidebar-subtabs';
+
+  activeSubTabs.subTabs.forEach(function(t) {
+    var btn = document.createElement('button');
+    btn.className = 'sidebar-subtab' + (t.tab === activeTab ? ' active' : '');
+    btn.textContent = t.label;
+    btn.setAttribute('data-subtab', t.tab);
+    btn.onclick = function() {
+      // 탭 버튼 활성 전환
+      tabBar.querySelectorAll('.sidebar-subtab').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      // URL hash 변경
+      history.replaceState(null, '', currentFile + '#' + t.tab);
+      // 커스텀 이벤트 발생 (페이지에서 수신)
+      window.dispatchEvent(new CustomEvent('subtab-change', { detail: { tab: t.tab } }));
+      // 페이지에 switchSubTab 함수가 있으면 호출
+      if (typeof window.switchSubTab === 'function') {
+        window.switchSubTab(t.tab);
+      }
+    };
+    tabBar.appendChild(btn);
+  });
+
+  // .main 또는 .main-wrapper 요소의 맨 앞에 삽입
+  var mainEl = document.querySelector('.main') || document.querySelector('.main-wrapper');
+  if (mainEl) {
+    mainEl.insertBefore(tabBar, mainEl.firstChild);
+  } else {
+    // main이 없으면 sidebar 바로 다음에 삽입
+    var sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.nextSibling) {
+      sidebar.parentNode.insertBefore(tabBar, sidebar.nextSibling);
+    }
+  }
+
+  // 초기 탭 이벤트 발생
+  window.dispatchEvent(new CustomEvent('subtab-change', { detail: { tab: activeTab } }));
+  if (typeof window.switchSubTab === 'function') {
+    window.switchSubTab(activeTab);
+  }
+}
+
+// ============================================================
 // 4. 사이드바 날씨 위젯
 // ============================================================
 var _weatherRefreshTimer = null;
@@ -500,6 +581,7 @@ async function loadSidebarWeather() {
   function _init() {
     renderSidebar();
     _restoreSidebarState();
+    _renderSubTabs();
     // 날씨 위젯 로드 (Firebase 준비 후)
     if (typeof waitForFirebase === 'function') {
       loadSidebarWeather();
