@@ -2905,8 +2905,9 @@ async function onRefCatLabelClick(cat, refresh) {
         var isAdded = addedCodes.has(code);
 
         var feeInfo = _refFeeMap ? _refFeeMap[code] : null;
-        var feeHtml = feeInfo && feeInfo.fee > 0
-            ? ' <span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + feeInfo.fee.toLocaleString() + '원</span>'
+        var feeVal = (feeInfo && feeInfo.fee > 0) ? feeInfo.fee : getFeeByCode(code, name);
+        var feeHtml = feeVal > 0
+            ? ' <span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + feeVal.toLocaleString() + '원</span>'
             : '';
 
         html += '<div class="autocomplete-item" style="padding:5px 10px;font-size:12px;' + (isAdded ? 'opacity:0.4;' : '') + '"'
@@ -2959,6 +2960,7 @@ async function addAllRefCatItems(cat) {
         var name = item['한글명'] || '';
         var eng = item['영문명'] || '';
         var fee = (_refFeeMap && _refFeeMap[code]) ? (_refFeeMap[code].fee || 0) : 0;
+        if (!fee) fee = getFeeByCode(code, name) || 0;
         var rowCount = tbody.querySelectorAll('tr[data-test-code]').length;
         var idx = rowCount + 1;
 
@@ -3219,8 +3221,9 @@ async function searchRefTestItems(query) {
         var addedBadge = isAdded ? ' <span style="font-size:9px;color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:3px">✕ 취소</span>' : '';
         // 수수료 매핑 정보
         var feeInfo = _refFeeMap[code];
-        var feeHtml = feeInfo && feeInfo.fee > 0
-            ? ' <span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + feeInfo.fee.toLocaleString() + '원</span>'
+        var feeVal2 = (feeInfo && feeInfo.fee > 0) ? feeInfo.fee : getFeeByCode(code, name);
+        var feeHtml = feeVal2 > 0
+            ? ' <span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + feeVal2.toLocaleString() + '원</span>'
             : '';
 
         var clickAction = isAdded ? 'removeRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')';
@@ -3281,10 +3284,13 @@ function selectRefTestItem(testItemCode) {
     var code = item['시험항목코드'] || '';
     var eng = item['영문명'] || '';
 
-    // ★ 수수료만 매칭 (참고용은 기준규격외이므로 기준규격/단위는 해당 없음)
+    // ★ 수수료 매칭: refFeeMap → getFeeByCode(코드+항목명) 폴백
     var fee = 0;
     if (_refFeeMap && _refFeeMap[code]) {
         fee = _refFeeMap[code].fee || 0;
+    }
+    if (!fee) {
+        fee = getFeeByCode(code, name) || 0;
     }
 
     // 새 행 추가
