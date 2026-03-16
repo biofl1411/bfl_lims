@@ -346,20 +346,30 @@ function _restoreSidebarState() {
 // 3-2. subTabs 렌더링 (메뉴 항목에 subTabs가 있을 때 페이지 상단에 탭 바 표시)
 // ============================================================
 function _renderSubTabs() {
+  var currentHref = location.href;
   var currentFile = decodeURIComponent(location.pathname.split('/').pop()) || 'index.html';
   var currentHash = location.hash.replace('#', '') || '';
 
-  // 현재 페이지+hash에 해당하는 subTabs 항목 찾기
+  // 현재 URL에 해당 메뉴의 href가 포함되고, subTabs가 있는 항목만 찾기
   var activeSubTabs = null;
   SIDEBAR_MENU.forEach(function(group) {
     if (!group.sub) return;
     group.sub.forEach(function(item) {
-      if (!item.subTabs || item.disabled) return;
-      var hrefBase = (item.href || '').split('#')[0];
+      if (!item.subTabs || !item.subTabs.length || item.disabled) return;
+      // 현재 URL에 item.href가 포함되는지 판단
+      var itemHref = item.href || '';
+      var hrefBase = itemHref.split('#')[0];
+      var hrefHash = itemHref.split('#')[1] || '';
       if (hrefBase !== currentFile) return;
-      // hash가 subTabs 중 하나와 일치해야 표시
+      // hash 매칭: URL hash가 subTabs 중 하나와 일치하거나, href의 hash와 일치
       var tabNames = item.subTabs.map(function(t) { return t.tab; });
+      var isCurrentPage = false;
       if (currentHash && tabNames.indexOf(currentHash) !== -1) {
+        isCurrentPage = true;
+      } else if (hrefHash && currentHash === hrefHash) {
+        isCurrentPage = true;
+      }
+      if (isCurrentPage) {
         activeSubTabs = item;
       }
     });
@@ -384,6 +394,8 @@ function _renderSubTabs() {
       // 탭 버튼 활성 전환
       tabBar.querySelectorAll('.sidebar-subtab').forEach(function(b) { b.classList.remove('active'); });
       btn.classList.add('active');
+      // localStorage에 활성 탭 저장 (페이지에서 읽을 수 있도록)
+      try { localStorage.setItem('salesMgmt_activeTab', t.tab); } catch(e) {}
       // URL hash 변경
       history.replaceState(null, '', currentFile + '#' + t.tab);
       // 커스텀 이벤트 발생 (페이지에서 수신)
@@ -408,7 +420,8 @@ function _renderSubTabs() {
     }
   }
 
-  // 초기 탭 이벤트 발생
+  // 초기 탭 상태 저장 및 이벤트 발생
+  try { localStorage.setItem('salesMgmt_activeTab', activeTab); } catch(e) {}
   window.dispatchEvent(new CustomEvent('subtab-change', { detail: { tab: activeTab } }));
   if (typeof window.switchSubTab === 'function') {
     window.switchSubTab(activeTab);
