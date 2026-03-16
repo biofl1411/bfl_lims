@@ -86,6 +86,49 @@ tr:hover{background:#f8f9fb}
 
 .empty-msg{text-align:center;padding:40px;color:#9ca3af}
 .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;background:#1f2937;color:#fff;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;z-index:1100}
+
+/* 탭 시스템 */
+.pm-tabs{display:flex;border-bottom:2px solid #e2e6ed;margin-bottom:16px;gap:0}
+.pm-tab{padding:10px 20px;font-size:14px;font-weight:600;color:#6b7280;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-family:inherit}
+.pm-tab:hover{color:#1a2332;background:#f8f9fb}
+.pm-tab.active{color:#1a73e8;border-bottom-color:#1a73e8}
+.pm-tab-panel{display:none}
+.pm-tab-panel.active{display:block}
+
+/* 매출처 원장 */
+.ledger-filter{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;margin-bottom:16px;padding:10px 16px;background:#fff;border:1px solid #e2e6ed;border-radius:10px}
+.ledger-filter input[type="text"]{padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit;width:160px;flex-shrink:0}
+.ledger-filter input[type="date"]{padding:7px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;width:130px;flex-shrink:0}
+.ledger-filter input:focus{outline:none;border-color:#1a73e8}
+.ledger-filter label{font-size:12px;font-weight:500;color:#5f6b7a;display:flex;align-items:center;gap:4px;cursor:pointer}
+.ledger-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.ledger-tbl thead{background:#f8f9fb;position:sticky;top:0}
+.ledger-tbl th{padding:8px 10px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap;font-size:11px}
+.ledger-tbl td{padding:7px 10px;border-bottom:1px solid #f0f2f5;color:#1a2332}
+.ledger-tbl .text-right{text-align:right}
+.ledger-tbl .row-carry{background:#f0fdf4}
+.ledger-tbl .row-payment{background:#eff6ff}
+.ledger-tbl .row-total{background:#f8f9fb;font-weight:700}
+.ledger-tbl .bal-pos{color:#ef4444;font-weight:600}
+.ledger-tbl .bal-zero{color:#10b981;font-weight:600}
+.ledger-tbl .receipt-no{font-size:11px;color:#6b7280}
+.ledger-tbl .product-name{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ledger-empty{text-align:center;padding:60px 20px;color:#9ca3af}
+
+/* 인쇄 */
+@media print{
+.sidebar,.topbar,.pm-tabs,.ledger-filter,.toast,.modal-overlay{display:none!important}
+.main{margin-left:0!important}
+.content{padding:0!important;overflow:visible!important}
+.pm-tab-panel{display:block!important}
+#tab-payment{display:none!important}
+#ledger-print-header{display:block!important;margin-bottom:16px}
+#ledger-print-header h2{font-size:18px;margin-bottom:4px}
+#ledger-print-header p{font-size:12px;color:#6b7280}
+.ledger-tbl{font-size:11px}
+.ledger-tbl th,.ledger-tbl td{padding:5px 8px;border:1px solid #ccc}
+.tbl-wrap{border:none}
+}
 .toast.show{opacity:1}
 
 /* 은행 매칭 */
@@ -184,6 +227,14 @@ tr:hover{background:#f8f9fb}
         <span class="topbar-sub">입금 관리</span>
     </div>
     <div class="content">
+        <!-- 탭 바 -->
+        <div class="pm-tabs">
+            <button class="pm-tab active" onclick="switchPmTab('payment')">입금 현황</button>
+            <button class="pm-tab" onclick="switchPmTab('ledger')">매출처 원장</button>
+        </div>
+
+        <!-- ===== 탭1: 입금 현황 ===== -->
+        <div class="pm-tab-panel active" id="tab-payment">
         <!-- 요약 -->
         <div class="summary-row" id="summary-row">
             <div class="summary-card"><div class="label">총 청구금액</div><div class="value blue" id="sum-total">0</div></div>
@@ -256,6 +307,29 @@ tr:hover{background:#f8f9fb}
                 </div>
             </div>
         </div>
+        </div><!-- /tab-payment -->
+
+        <!-- ===== 탭2: 매출처 원장 ===== -->
+        <div class="pm-tab-panel" id="tab-ledger">
+            <div id="ledger-print-header" style="display:none">
+                <h2 id="ledger-print-title">매출처 원장</h2>
+                <p id="ledger-print-period"></p>
+            </div>
+            <div class="ledger-filter" id="ledger-filter">
+                <input type="text" id="ledger-company" placeholder="업체명 입력" autocomplete="off">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ledger-company').value=''" title="초기화" style="padding:8px 10px">&times;</button>
+                <input type="date" id="ledger-from">
+                <span style="color:#9ca3af">~</span>
+                <input type="date" id="ledger-to">
+                <label style="margin-left:6px"><input type="checkbox" id="ledger-exclude-zero"> 매출 0원 제외</label>
+                <button class="btn btn-primary" onclick="loadLedger()">조회</button>
+                <button class="btn btn-secondary" onclick="printLedger()">인쇄</button>
+            </div>
+            <div id="ledger-result">
+                <div class="ledger-empty">업체명을 입력하고 [조회] 버튼을 클릭하세요.</div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -1376,6 +1450,227 @@ async function applySingleMatchSilent(idx) {
 
     saveMatchMapping(dep.depositor, r.data.companyName || r.data.company,
         r.data.companyId || r.data.companyCode, dep.matchedReceiptNo, dep._memo || '');
+}
+
+// ============================================================
+// 탭 전환
+// ============================================================
+function switchPmTab(tab) {
+    document.querySelectorAll('.pm-tab').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('.pm-tab-panel').forEach(function(p){ p.classList.remove('active'); });
+    var btn = document.querySelector('.pm-tab[onclick*="' + tab + '"]');
+    if (btn) btn.classList.add('active');
+    var panel = document.getElementById('tab-' + tab);
+    if (panel) panel.classList.add('active');
+}
+
+// ============================================================
+// 매출처 원장
+// ============================================================
+(function initLedgerDates() {
+    var now = new Date();
+    function fmtDate(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+    document.getElementById('ledger-to').value = fmtDate(now);
+    document.getElementById('ledger-from').value = fmtDate(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
+})();
+
+function _ledgerFmt(n) {
+    if (!n || n === 0) return '';
+    return n.toLocaleString('ko-KR');
+}
+
+async function loadLedger() {
+    var company = document.getElementById('ledger-company').value.trim();
+    if (!company) { showToast('업체명을 입력하세요'); return; }
+
+    var fromDate = document.getElementById('ledger-from').value;
+    var toDate = document.getElementById('ledger-to').value;
+    var excludeZero = document.getElementById('ledger-exclude-zero').checked;
+    var resultEl = document.getElementById('ledger-result');
+    resultEl.innerHTML = '<div class="ledger-empty">조회 중...</div>';
+
+    try {
+        await waitForFirebase();
+
+        // 1) 해당 업체 전체 데이터 조회 (복합 인덱스 불필요)
+        var allSnap = await db.collection('receipts')
+            .where('companyName', '==', company)
+            .get();
+
+        var periodReceipts = [];
+        var carrySales = 0, carryPayments = 0;
+
+        allSnap.forEach(function(doc) {
+            var d = doc.data();
+            var rDate = d.receiptDate || '';
+            if (rDate >= fromDate && rDate <= toDate) {
+                periodReceipts.push({ id: doc.id, data: d });
+            } else if (rDate < fromDate) {
+                carrySales += _getFee(d);
+                (d.payments || []).forEach(function(p) { carryPayments += (Number(p.amount) || 0); });
+            }
+        });
+        var carryBalance = carrySales - carryPayments;
+
+        // 3) 행 구성
+        var rows = [];
+
+        periodReceipts.forEach(function(r) {
+            var d = r.data;
+            var fee = _getFee(d);
+            if (excludeZero && fee === 0) return;
+
+            // 매출 행
+            rows.push({
+                date: d.receiptDate || '',
+                type: '매출',
+                payMethod: '',
+                receiptNo: d.receiptNo || '',
+                productName: d.productName || d.sampleName || '',
+                desc: '[' + (d.sampleType || '') + ', ' + (d.purpose || d.inspectionPurpose || '') + ']',
+                sales: fee,
+                payment: 0,
+                sortOrder: 0
+            });
+
+            // 입금 행
+            (d.payments || []).forEach(function(p) {
+                var pDate = p.date || '';
+                if (pDate < fromDate || pDate > toDate) return;
+                rows.push({
+                    date: pDate,
+                    type: '입금',
+                    payMethod: p.method || '',
+                    receiptNo: d.receiptNo || '',
+                    productName: '',
+                    desc: p.memo || '',
+                    sales: 0,
+                    payment: Number(p.amount) || 0,
+                    sortOrder: 1
+                });
+            });
+        });
+
+        // 조회기간 이전 접수건의 입금이 조회기간 내에 있는 경우도 포함
+        allSnap.forEach(function(doc) {
+            var d = doc.data();
+            var rDate = d.receiptDate || '';
+            if (rDate >= fromDate) return; // 이미 periodReceipts에서 처리됨
+            (d.payments || []).forEach(function(p) {
+                var pDate = p.date || '';
+                if (pDate >= fromDate && pDate <= toDate) {
+                    rows.push({
+                        date: pDate,
+                        type: '입금',
+                        payMethod: p.method || '',
+                        receiptNo: d.receiptNo || '',
+                        productName: '',
+                        desc: p.memo || '',
+                        sales: 0,
+                        payment: Number(p.amount) || 0,
+                        sortOrder: 1
+                    });
+                }
+            });
+        });
+
+        // 정렬: 날짜 오름차순, 같은 날짜면 매출→입금
+        rows.sort(function(a, b) {
+            if (a.date < b.date) return -1;
+            if (a.date > b.date) return 1;
+            return a.sortOrder - b.sortOrder;
+        });
+
+        // 4) 잔액 누적 계산
+        var balance = carryBalance;
+        var totalSales = 0, totalPayments = 0;
+
+        // 5) 렌더링
+        var html = '<div class="tbl-wrap"><table class="ledger-tbl"><thead><tr>';
+        html += '<th style="width:40px">번호</th>';
+        html += '<th style="width:90px">일자</th>';
+        html += '<th style="width:50px">구분</th>';
+        html += '<th style="width:70px">입금구분</th>';
+        html += '<th style="width:100px">접수번호</th>';
+        html += '<th style="width:200px">제품명</th>';
+        html += '<th>내용</th>';
+        html += '<th class="text-right" style="width:90px">매출</th>';
+        html += '<th class="text-right" style="width:90px">입금</th>';
+        html += '<th class="text-right" style="width:100px">잔액</th>';
+        html += '</tr></thead><tbody>';
+
+        // 이월 행
+        html += '<tr class="row-carry">';
+        html += '<td></td>';
+        html += '<td>' + fromDate + '</td>';
+        html += '<td><strong>이월</strong></td>';
+        html += '<td></td>';
+        html += '<td></td>';
+        html += '<td></td>';
+        html += '<td style="font-size:11px;color:#6b7280">조회기준 이전일까지의 이월금액</td>';
+        html += '<td class="text-right"></td>';
+        html += '<td class="text-right"></td>';
+        html += '<td class="text-right ' + (carryBalance > 0 ? 'bal-pos' : 'bal-zero') + '">' + _ledgerFmt(carryBalance) + '</td>';
+        html += '</tr>';
+
+        rows.forEach(function(row, idx) {
+            balance += row.sales - row.payment;
+            totalSales += row.sales;
+            totalPayments += row.payment;
+
+            var cls = row.type === '입금' ? ' class="row-payment"' : '';
+            html += '<tr' + cls + '>';
+            html += '<td class="text-center">' + (idx + 1) + '</td>';
+            html += '<td>' + row.date + '</td>';
+            html += '<td>' + row.type + '</td>';
+            html += '<td>' + row.payMethod + '</td>';
+            html += '<td class="receipt-no">' + row.receiptNo + '</td>';
+            html += '<td class="product-name" title="' + (row.productName || '').replace(/"/g, '&quot;') + '">' + (row.productName || '') + '</td>';
+            html += '<td style="font-size:11px">' + (row.desc || '') + '</td>';
+            html += '<td class="text-right">' + _ledgerFmt(row.sales) + '</td>';
+            html += '<td class="text-right">' + _ledgerFmt(row.payment) + '</td>';
+            html += '<td class="text-right ' + (balance > 0 ? 'bal-pos' : 'bal-zero') + '">' + _ledgerFmt(balance) + '</td>';
+            html += '</tr>';
+        });
+
+        // 합계 행
+        html += '<tr class="row-total">';
+        html += '<td colspan="7" class="text-right" style="font-size:13px">합 계</td>';
+        html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
+        html += '<td class="text-right">' + _ledgerFmt(totalPayments) + '</td>';
+        html += '<td class="text-right ' + (balance > 0 ? 'bal-pos' : 'bal-zero') + '">' + _ledgerFmt(balance) + '</td>';
+        html += '</tr>';
+
+        html += '</tbody></table></div>';
+
+        if (rows.length === 0 && carryBalance === 0) {
+            resultEl.innerHTML = '<div class="ledger-empty">해당 업체의 거래내역이 없습니다.</div>';
+        } else {
+            resultEl.innerHTML = html;
+        }
+
+        // 인쇄 헤더 업데이트
+        document.getElementById('ledger-print-title').textContent = company + ' - 매출처 원장';
+        document.getElementById('ledger-print-period').textContent = '조회기간: ' + fromDate + ' ~ ' + toDate;
+
+    } catch(e) {
+        console.error('[ledger]', e);
+        resultEl.innerHTML = '<div class="ledger-empty">조회 실패: ' + e.message + '</div>';
+    }
+}
+
+function _getFee(d) {
+    if (d.totalFee != null && d.totalFee !== '' && Number(d.totalFee) > 0) return Number(d.totalFee);
+    var supply = Number(d.supplyPrice) || 0;
+    var tax = Number(d.tax) || 0;
+    if (supply + tax > 0) return supply + tax;
+    return Number(d.fee) || 0;
+}
+
+function printLedger() {
+    var company = document.getElementById('ledger-company').value.trim();
+    if (!company) { showToast('먼저 업체를 조회하세요'); return; }
+    window.print();
 }
 </script>
 </body>
