@@ -1254,26 +1254,44 @@ function openDetailPanel(id, sampleIdx) {
         dpRow('업종', r.licBizForm) +
         '</div>';
 
-    // 탭2 시료정보 (클릭한 시료만 — 접수등록 UI 필드 기준)
+    // 탭2 시료정보 (클릭한 시료만 — 이전 접수 비교 포함)
     var s = (r.samples && r.samples[sampleIdx]) || {};
+    var productName = s.productName || r.productName || '';
+    var companyName = r.companyName || '';
+    var testPurpose = r.testPurpose || '';
+    var currentReceiptNo = r._baseReceiptNo || r.receiptNo || '';
+
+    // 이전 접수 비교 대상 필드
+    var compareFields = [
+        {key:'productName',   label:'제품/시료명', val: productName},
+        {key:'reportNo',      label:'보고번호',    val: s.reportNo || ''},
+        {key:'foodType',      label:'검체유형',    val: s.foodType || r.foodType || ''},
+        {key:'manufactureDate',label:'제조일자',   val: s.manufactureDate || ''},
+        {key:'expiryDate',    label:'소비기한',    val: s.expiryDate || ''},
+        {key:'expiryDays',    label:'소비기한(일수)',val: s.expiryDays || ''},
+        {key:'lotNo',         label:'로트번호',    val: s.lotNo || ''},
+        {key:'packageUnit',   label:'포장단위',    val: s.packageUnit || ''},
+        {key:'sampleCount',   label:'검체수',      val: s.sampleCount || ''},
+        {key:'sampleReceiveMethod',label:'시료접수',val: s.sampleReceiveMethod || ''},
+        {key:'receiptFormType',label:'접수형태',   val: s.receiptFormType || ''},
+        {key:'transportStatus',label:'운반상태',   val: s.transportStatus || ''},
+        {key:'noticeRequired', label:'공지여부',   val: s.noticeRequired || ''}
+    ];
+
+    // 먼저 기본 렌더링 (비교 결과는 비동기로 업데이트)
     var sampleHtml = '<div class="dp-sample-card">' +
         '<div style="font-weight:600;margin-bottom:6px">시료 #' + (sampleIdx+1) + '</div>' +
-        '<div class="dp-grid">' +
-        dpRow('제품/시료명', s.productName || r.productName) +
-        dpRow('보고번호', s.reportNo) +
-        dpRow('검체유형', s.foodType || r.foodType) +
-        dpRow('제조일자', s.manufactureDate) +
-        dpRow('소비기한', s.expiryDate) +
-        dpRow('소비기한(일수)', s.expiryDays) +
-        dpRow('로트번호', s.lotNo) +
-        dpRow('포장단위', s.packageUnit) +
-        dpRow('검체수', s.sampleCount) +
-        dpRow('시료접수', s.sampleReceiveMethod) +
-        dpRow('접수형태', s.receiptFormType) +
-        dpRow('운반상태', s.transportStatus) +
-        dpRow('공지여부', s.noticeRequired) +
-        '</div></div>';
+        '<div class="dp-grid" id="dp-sample-grid">';
+    compareFields.forEach(function(f) {
+        sampleHtml += '<div class="dp-lbl">' + f.label + '</div><div class="dp-val" id="dp-sf-' + f.key + '">' + (f.val || '-') + '</div>';
+    });
+    sampleHtml += '</div></div>';
     document.getElementById('dp-tab-sample').innerHTML = sampleHtml;
+
+    // 자가품질위탁검사용인 경우 이전 접수와 비교
+    if (testPurpose === '자가품질위탁검사용' && companyName && productName) {
+        comparePrevReceipt(companyName, productName, currentReceiptNo, compareFields);
+    }
 
     // 탭3 수수료/결제
     var feeHtml = '<div class="dp-grid">' +
@@ -1318,6 +1336,124 @@ function openDetailPanel(id, sampleIdx) {
 
 function dpRow(label, val) {
     return '<div class="dp-lbl">' + label + '</div><div class="dp-val">' + (val || '-') + '</div>';
+}
+
+// ============================================================================
+// 이전 접수 시료 비교 (자가품질위탁검사용)
+// ============================================================================
+var _dismissedWarnings = {}; // 해제된 경고 { 'receiptNo_fieldKey': true }
+
+function comparePrevReceipt(companyName, productName, currentReceiptNo, fields) {
+    // 같은 거래처 + 같은 제품명의 이전 접수 찾기 (메모리 캐시에서)
+    var prevSample = null;
+    var prevReceiptNo = '';
+    var candidates = _allReceipts
+        .filter(function(x) {
+            return x.companyName === companyName
+                && (x._baseReceiptNo || x.receiptNo) !== currentReceiptNo
+                && x.testPurpose === '자가품질위탁검사용';
+        })
+        .sort(function(a, b) {
+            return (b.receiptDate || '').localeCompare(a.receiptDate || '');
+        });
+
+    // 같은 제품명의 시료 찾기
+    for (var i = 0; i < candidates.length; i++) {
+        var c = candidates[i];
+        var samples = c.samples || [];
+        for (var j = 0; j < samples.length; j++) {
+            if ((samples[j].productName || '') === productName) {
+                prevSample = samples[j];
+                prevReceiptNo = c._baseReceiptNo || c.receiptNo || '';
+                break;
+            }
+        }
+        if (prevSample) break;
+    }
+
+    if (!prevSample) return; // 이전 접수 없음
+
+    // 필드별 비교
+    var diffCount = 0;
+    var prevMap = {
+        productName: prevSample.productName || '',
+        reportNo: prevSample.reportNo || '',
+        foodType: prevSample.foodType || '',
+        manufactureDate: prevSample.manufactureDate || '',
+        expiryDate: prevSample.expiryDate || '',
+        expiryDays: prevSample.expiryDays || '',
+        lotNo: prevSample.lotNo || '',
+        packageUnit: prevSample.packageUnit || '',
+        sampleCount: prevSample.sampleCount || '',
+        sampleReceiveMethod: prevSample.sampleReceiveMethod || '',
+        receiptFormType: prevSample.receiptFormType || '',
+        transportStatus: prevSample.transportStatus || '',
+        noticeRequired: prevSample.noticeRequired || ''
+    };
+
+    // 비교 제외 필드 (당연히 달라야 하는 것)
+    var skipFields = ['manufactureDate', 'expiryDate', 'lotNo'];
+
+    fields.forEach(function(f) {
+        if (skipFields.indexOf(f.key) >= 0) return;
+        var el = document.getElementById('dp-sf-' + f.key);
+        if (!el) return;
+        var curVal = String(f.val || '').trim();
+        var prevVal = String(prevMap[f.key] || '').trim();
+        if (!curVal && !prevVal) return; // 둘 다 비어있으면 비교 불필요
+        if (curVal !== prevVal && (curVal || prevVal)) {
+            var warnKey = currentReceiptNo + '_' + f.key;
+            if (_dismissedWarnings[warnKey]) return; // 이미 해제됨
+            diffCount++;
+            el.innerHTML = '<div style="display:flex;align-items:center;gap:4px">' +
+                '<span>' + (f.val || '-') + '</span>' +
+                '<span title="이전: ' + (prevVal || '없음') + ' (' + prevReceiptNo + ')" ' +
+                'style="cursor:pointer;font-size:16px" ' +
+                'onclick="dismissSampleWarning(this,\'' + warnKey.replace(/'/g, "\\'") + '\')">🧑‍🔧</span>' +
+                '</div>' +
+                '<div style="grid-column:1/3;font-size:10px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:4px;margin:-2px 0 4px">' +
+                '이전(' + prevReceiptNo + '): ' + (prevVal || '없음') +
+                '</div>';
+        }
+    });
+
+    // 상단에 비교 요약 표시
+    if (diffCount > 0) {
+        var grid = document.getElementById('dp-sample-grid');
+        if (grid) {
+            var summary = document.createElement('div');
+            summary.id = 'dp-sample-diff-summary';
+            summary.style.cssText = 'grid-column:1/3;background:#fff3e0;border:1px solid #ffcc80;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:#e65100';
+            summary.innerHTML = '🧑‍🔧 이전 접수와 <b>' + diffCount + '개</b> 항목이 다릅니다 <span style="font-size:10px;color:#999">(클릭하여 확인)</span>';
+            grid.insertBefore(summary, grid.firstChild);
+        }
+    }
+}
+
+function dismissSampleWarning(el, warnKey) {
+    _dismissedWarnings[warnKey] = true;
+    // 경고 이모지와 이전값 표시 제거
+    var parent = el.closest('.dp-val');
+    if (parent) {
+        var nextEl = parent.nextElementSibling;
+        // 이전값 비교 행 제거 (grid-column:1/3인 div)
+        if (nextEl && nextEl.style.gridColumn === '1/3') {
+            nextEl.remove();
+        }
+        // 이모지 제거, 값만 남기기
+        var span = parent.querySelector('span');
+        if (span) parent.innerHTML = span.textContent;
+    }
+    // 요약 카운트 업데이트
+    var summaryEl = document.getElementById('dp-sample-diff-summary');
+    if (summaryEl) {
+        var remaining = document.querySelectorAll('#dp-sample-grid [onclick*="dismissSampleWarning"]').length;
+        if (remaining === 0) {
+            summaryEl.remove();
+        } else {
+            summaryEl.innerHTML = '🧑‍🔧 이전 접수와 <b>' + remaining + '개</b> 항목이 다릅니다';
+        }
+    }
 }
 
 function closeDetailPanel() {
