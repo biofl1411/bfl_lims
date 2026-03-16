@@ -79,12 +79,6 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .modal-bd .detail-item .val{font-size:13px;color:#1a2332;font-weight:500}
 
 /* KPI 바 */
-#kpi-bar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;display:flex;align-items:center;gap:16px;height:64px;flex-shrink:0}
-.kpi-card{background:#f8f9fb;border:1px solid #e2e6ed;border-radius:10px;padding:10px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:background .15s}
-.kpi-card:hover{background:#eef0f4}
-.kpi-card .kpi-icon{font-size:20px}
-.kpi-card .kpi-info .kpi-val{font-size:18px;font-weight:700;color:#1a2332}
-.kpi-card .kpi-info .kpi-label{font-size:11px;color:#5f6b7a}
 
 /* 필터 존 */
 #filter-zone{background:#fff;border-bottom:1px solid #e2e6ed;padding:10px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0}
@@ -131,28 +125,6 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <span class="topbar-title">접수 관리</span>
         <span class="topbar-sep">›</span>
         <span class="topbar-sub">접수 현황</span>
-    </div>
-
-    <!-- KPI 요약바 (검사목적별 동적 생성) -->
-    <div id="kpi-bar"></div>
-
-    <!-- 집계 패널 -->
-    <div id="summary-panel-wrap" style="background:#fff;border-bottom:1px solid #e2e6ed;flex-shrink:0">
-        <div style="padding:6px 20px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #eef0f4">
-            <button id="summary-toggle-btn" onclick="toggleSummaryPanel()"
-                style="padding:4px 12px;border:1px solid #e2e6ed;border-radius:6px;background:#fff;
-                       font-size:12px;cursor:pointer;color:#5f6b7a;display:flex;align-items:center;gap:6px">
-                <span id="summary-toggle-icon">▼</span>
-                <span>검사목적별 집계</span>
-            </button>
-            <span id="summary-panel-desc" style="font-size:11px;color:#999">
-                현재 필터 기준 실시간 집계
-            </span>
-        </div>
-        <div id="summary-panel-body" style="display:none;overflow-x:auto;padding:12px 20px">
-            <table id="summary-tbl" style="border-collapse:collapse;font-size:12px;min-width:600px">
-            </table>
-        </div>
     </div>
 
     <!-- 필터 존 -->
@@ -722,7 +694,6 @@ function applyFilter() {
             var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '') + (r.testPurpose || '') + (r.billCompany || '') + (r.salesRep || '') + (r.bizNo || '') + (r.companyAddress || '')).toLowerCase();
             if (hay.indexOf(search) < 0) return false;
         }
-        if (_activeKpiPurpose && (r.testPurpose || '미분류') !== _activeKpiPurpose) return false;
         return true;
     });
 
@@ -738,145 +709,8 @@ function applyFilter() {
 
     _page = 1;
     renderTable();
-    updateKpi();
-    // 집계 패널이 열려있으면 자동 갱신
-    var summaryBody = document.getElementById('summary-panel-body');
-    if (summaryBody && summaryBody.style.display !== 'none') {
-        renderSummaryTable();
-    }
 }
 
-// ============================================================================
-// KPI 업데이트
-// ============================================================================
-var _activeKpiPurpose = ''; // 현재 선택된 검사목적 필터
-
-function updateKpi() {
-    var bar = document.getElementById('kpi-bar');
-    if (!bar) return;
-    // 검사목적별 건수 집계 (_allReceipts 기준)
-    var purposeCount = {};
-    var total = 0;
-    _allReceipts.forEach(function(r) {
-        var p = r.testPurpose || '미분류';
-        purposeCount[p] = (purposeCount[p] || 0) + 1;
-        total++;
-    });
-    var purposes = Object.keys(purposeCount).sort();
-    // 색상 팔레트
-    var colors = ['#1a73e8','#e53935','#ff9800','#4caf50','#9c27b0','#00bcd4','#795548','#607d8b','#f44336','#3f51b5'];
-    var icons = ['🔬','🧪','📊','🏭','📋','🔍','⚗️','🧫','📑','🔎'];
-    var html = '';
-    // 전체 카드
-    var totalActive = _activeKpiPurpose === '' ? 'border:2px solid #1a73e8;background:#eef4ff' : '';
-    html += '<div class="kpi-card" onclick="filterByPurpose(\'\')" style="' + totalActive + '">' +
-        '<span class="kpi-icon">📋</span>' +
-        '<div class="kpi-info"><div class="kpi-val">' + total + '</div><div class="kpi-label">전체</div></div></div>';
-    // 검사목적별 카드
-    purposes.forEach(function(p, i) {
-        var isActive = _activeKpiPurpose === p;
-        var activeStyle = isActive ? 'border:2px solid ' + colors[i % colors.length] + ';background:#eef4ff' : '';
-        html += '<div class="kpi-card" onclick="filterByPurpose(\'' + p.replace(/'/g, "\\'") + '\')" style="' + activeStyle + '">' +
-            '<span class="kpi-icon">' + icons[i % icons.length] + '</span>' +
-            '<div class="kpi-info"><div class="kpi-val" style="color:' + colors[i % colors.length] + '">' + purposeCount[p] + '</div>' +
-            '<div class="kpi-label">' + p + '</div></div></div>';
-    });
-    bar.innerHTML = html;
-}
-
-function filterByPurpose(purpose) {
-    _activeKpiPurpose = purpose;
-    applyFilter();
-}
-
-// ============================================================================
-// 집계 패널
-// ============================================================================
-function toggleSummaryPanel() {
-    var body = document.getElementById('summary-panel-body');
-    var icon = document.getElementById('summary-toggle-icon');
-    var isOpen = body.style.display !== 'none';
-    body.style.display = isOpen ? 'none' : 'block';
-    icon.textContent = isOpen ? '▼' : '▲';
-    if (!isOpen) renderSummaryTable();
-}
-
-function renderSummaryTable() {
-    var tbl = document.getElementById('summary-tbl');
-    if (!tbl) return;
-    var repSet = {};
-    _filteredReceipts.forEach(function(r) {
-        if (r.salesRep) repSet[r.salesRep] = true;
-    });
-    var reps = Object.keys(repSet).sort();
-    var agg = {};
-    _filteredReceipts.forEach(function(r) {
-        var field = r.testField || '미분류';
-        var purpose = r.testPurpose || '미분류';
-        var rep = r.salesRep || '미지정';
-        var sampleCnt = Number(r.sampleTotalCount) || 1;
-        var isUrgent = r.urgent === 'Y' ? 1 : 0;
-        if (!agg[field]) agg[field] = {};
-        if (!agg[field][purpose]) {
-            agg[field][purpose] = { sampleCount: 0, urgentCount: 0, repCounts: {} };
-        }
-        var cell = agg[field][purpose];
-        cell.sampleCount += sampleCnt;
-        cell.urgentCount += isUrgent;
-        cell.repCounts[rep] = (cell.repCounts[rep] || 0) + 1;
-    });
-    var totalSample = 0, totalUrgent = 0;
-    var totalRepCounts = {};
-    reps.forEach(function(rep) { totalRepCounts[rep] = 0; });
-    var html = '<thead><tr style="background:#f8f9fb">';
-    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#5f6b7a;white-space:nowrap;text-align:left">분야</th>';
-    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#5f6b7a;white-space:nowrap;text-align:left">검사목적</th>';
-    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#1a73e8;white-space:nowrap;text-align:right">시료수</th>';
-    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#e53935;white-space:nowrap;text-align:right">긴급</th>';
-    reps.forEach(function(rep) {
-        html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#5f6b7a;white-space:nowrap;text-align:right">'+rep+'</th>';
-    });
-    html += '</tr></thead>';
-    html += '<tbody>';
-    var fields = Object.keys(agg).sort();
-    fields.forEach(function(field) {
-        var purposes = Object.keys(agg[field]).sort();
-        purposes.forEach(function(purpose, pIdx) {
-            var cell = agg[field][purpose];
-            totalSample += cell.sampleCount;
-            totalUrgent += cell.urgentCount;
-            html += '<tr style="border-bottom:1px solid #eef0f4" onmouseover="this.style.background=\'#fafbfc\'" onmouseout="this.style.background=\'\'">';
-            if (pIdx === 0) {
-                html += '<td rowspan="'+purposes.length+'" style="padding:8px 14px;font-size:12px;color:#1a2332;font-weight:600;vertical-align:top;border-right:1px solid #eef0f4;white-space:nowrap">'+field+'</td>';
-            }
-            html += '<td style="padding:8px 14px;font-size:12px;color:#333;white-space:nowrap">'+purpose+'</td>';
-            html += '<td style="padding:8px 14px;font-size:12px;font-weight:600;color:#1a73e8;text-align:right">'+cell.sampleCount+'</td>';
-            html += '<td style="padding:8px 14px;font-size:12px;text-align:right">';
-            if (cell.urgentCount > 0) {
-                html += '<span style="color:#e53935;font-weight:700">'+cell.urgentCount+'</span>';
-            } else {
-                html += '<span style="color:#bbb">0</span>';
-            }
-            html += '</td>';
-            reps.forEach(function(rep) {
-                var cnt = cell.repCounts[rep] || 0;
-                totalRepCounts[rep] = (totalRepCounts[rep] || 0) + cnt;
-                html += '<td style="padding:8px 14px;font-size:12px;text-align:right;color:'+(cnt>0?'#1a2332':'#ccc')+'">'+(cnt>0?cnt:'-')+'</td>';
-            });
-            html += '</tr>';
-        });
-    });
-    html += '<tr style="background:#f8f9fb;font-weight:700;border-top:2px solid #e2e6ed">';
-    html += '<td colspan="2" style="padding:10px 14px;font-size:12px;color:#1a2332">합계</td>';
-    html += '<td style="padding:10px 14px;font-size:13px;color:#1a73e8;text-align:right">'+totalSample+'</td>';
-    html += '<td style="padding:10px 14px;font-size:13px;color:#e53935;text-align:right">'+(totalUrgent>0?totalUrgent:'0')+'</td>';
-    reps.forEach(function(rep) {
-        html += '<td style="padding:10px 14px;font-size:13px;color:#1a2332;text-align:right">'+(totalRepCounts[rep]||0)+'</td>';
-    });
-    html += '</tr>';
-    html += '</tbody>';
-    tbl.innerHTML = html;
-}
 
 // ============================================================================
 // 음성 검색 (Web Speech API)
