@@ -153,6 +153,25 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
     </div>
 
+    <!-- 집계 패널 -->
+    <div id="summary-panel-wrap" style="background:#fff;border-bottom:1px solid #e2e6ed;flex-shrink:0">
+        <div style="padding:6px 20px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #eef0f4">
+            <button id="summary-toggle-btn" onclick="toggleSummaryPanel()"
+                style="padding:4px 12px;border:1px solid #e2e6ed;border-radius:6px;background:#fff;
+                       font-size:12px;cursor:pointer;color:#5f6b7a;display:flex;align-items:center;gap:6px">
+                <span id="summary-toggle-icon">▼</span>
+                <span>검사목적별 집계</span>
+            </button>
+            <span id="summary-panel-desc" style="font-size:11px;color:#999">
+                현재 필터 기준 실시간 집계
+            </span>
+        </div>
+        <div id="summary-panel-body" style="display:none;overflow-x:auto;padding:12px 20px">
+            <table id="summary-tbl" style="border-collapse:collapse;font-size:12px;min-width:600px">
+            </table>
+        </div>
+    </div>
+
     <!-- 필터 존 -->
     <div id="filter-zone">
         <div class="filter-bar">
@@ -694,6 +713,11 @@ function applyFilter() {
     _page = 1;
     renderTable();
     updateKpi();
+    // 집계 패널이 열려있으면 자동 갱신
+    var summaryBody = document.getElementById('summary-panel-body');
+    if (summaryBody && summaryBody.style.display !== 'none') {
+        renderSummaryTable();
+    }
 }
 
 // ============================================================================
@@ -709,6 +733,95 @@ function updateKpi() {
     var vals = Object.values ? Object.values(_companyReceivables) : Object.keys(_companyReceivables).map(function(k){return _companyReceivables[k];});
     vals.forEach(function(v) { totalReceivable += v.totalAmount; });
     document.getElementById('kpi-receivable-val').textContent = totalReceivable.toLocaleString() + '원';
+}
+
+// ============================================================================
+// 집계 패널
+// ============================================================================
+function toggleSummaryPanel() {
+    var body = document.getElementById('summary-panel-body');
+    var icon = document.getElementById('summary-toggle-icon');
+    var isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    icon.textContent = isOpen ? '▼' : '▲';
+    if (!isOpen) renderSummaryTable();
+}
+
+function renderSummaryTable() {
+    var tbl = document.getElementById('summary-tbl');
+    if (!tbl) return;
+    var repSet = {};
+    _filteredReceipts.forEach(function(r) {
+        if (r.salesRep) repSet[r.salesRep] = true;
+    });
+    var reps = Object.keys(repSet).sort();
+    var agg = {};
+    _filteredReceipts.forEach(function(r) {
+        var field = r.testField || '미분류';
+        var purpose = r.testPurpose || '미분류';
+        var rep = r.salesRep || '미지정';
+        var sampleCnt = Number(r.sampleTotalCount) || 1;
+        var isUrgent = r.urgent === 'Y' ? 1 : 0;
+        if (!agg[field]) agg[field] = {};
+        if (!agg[field][purpose]) {
+            agg[field][purpose] = { sampleCount: 0, urgentCount: 0, repCounts: {} };
+        }
+        var cell = agg[field][purpose];
+        cell.sampleCount += sampleCnt;
+        cell.urgentCount += isUrgent;
+        cell.repCounts[rep] = (cell.repCounts[rep] || 0) + 1;
+    });
+    var totalSample = 0, totalUrgent = 0;
+    var totalRepCounts = {};
+    reps.forEach(function(rep) { totalRepCounts[rep] = 0; });
+    var html = '<thead><tr style="background:#f8f9fb">';
+    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#5f6b7a;white-space:nowrap;text-align:left">분야</th>';
+    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#5f6b7a;white-space:nowrap;text-align:left">검사목적</th>';
+    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#1a73e8;white-space:nowrap;text-align:right">시료수</th>';
+    html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#e53935;white-space:nowrap;text-align:right">긴급</th>';
+    reps.forEach(function(rep) {
+        html += '<th style="padding:8px 14px;border-bottom:2px solid #e2e6ed;font-size:11px;font-weight:700;color:#5f6b7a;white-space:nowrap;text-align:right">'+rep+'</th>';
+    });
+    html += '</tr></thead>';
+    html += '<tbody>';
+    var fields = Object.keys(agg).sort();
+    fields.forEach(function(field) {
+        var purposes = Object.keys(agg[field]).sort();
+        purposes.forEach(function(purpose, pIdx) {
+            var cell = agg[field][purpose];
+            totalSample += cell.sampleCount;
+            totalUrgent += cell.urgentCount;
+            html += '<tr style="border-bottom:1px solid #eef0f4" onmouseover="this.style.background=\'#fafbfc\'" onmouseout="this.style.background=\'\'">';
+            if (pIdx === 0) {
+                html += '<td rowspan="'+purposes.length+'" style="padding:8px 14px;font-size:12px;color:#1a2332;font-weight:600;vertical-align:top;border-right:1px solid #eef0f4;white-space:nowrap">'+field+'</td>';
+            }
+            html += '<td style="padding:8px 14px;font-size:12px;color:#333;white-space:nowrap">'+purpose+'</td>';
+            html += '<td style="padding:8px 14px;font-size:12px;font-weight:600;color:#1a73e8;text-align:right">'+cell.sampleCount+'</td>';
+            html += '<td style="padding:8px 14px;font-size:12px;text-align:right">';
+            if (cell.urgentCount > 0) {
+                html += '<span style="color:#e53935;font-weight:700">'+cell.urgentCount+'</span>';
+            } else {
+                html += '<span style="color:#bbb">0</span>';
+            }
+            html += '</td>';
+            reps.forEach(function(rep) {
+                var cnt = cell.repCounts[rep] || 0;
+                totalRepCounts[rep] = (totalRepCounts[rep] || 0) + cnt;
+                html += '<td style="padding:8px 14px;font-size:12px;text-align:right;color:'+(cnt>0?'#1a2332':'#ccc')+'">'+(cnt>0?cnt:'-')+'</td>';
+            });
+            html += '</tr>';
+        });
+    });
+    html += '<tr style="background:#f8f9fb;font-weight:700;border-top:2px solid #e2e6ed">';
+    html += '<td colspan="2" style="padding:10px 14px;font-size:12px;color:#1a2332">합계</td>';
+    html += '<td style="padding:10px 14px;font-size:13px;color:#1a73e8;text-align:right">'+totalSample+'</td>';
+    html += '<td style="padding:10px 14px;font-size:13px;color:#e53935;text-align:right">'+(totalUrgent>0?totalUrgent:'0')+'</td>';
+    reps.forEach(function(rep) {
+        html += '<td style="padding:10px 14px;font-size:13px;color:#1a2332;text-align:right">'+(totalRepCounts[rep]||0)+'</td>';
+    });
+    html += '</tr>';
+    html += '</tbody>';
+    tbl.innerHTML = html;
 }
 
 // ============================================================================
