@@ -115,7 +115,6 @@ const SIDEBAR_MENU = [
     sub: [
       { label: '고객사 관리',      href: 'salesMgmt.html',              page: 'customerList', internalPage: 'customerList' },
       { label: '업무일지',          href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily' },
-      { label: '차량일지',          href: 'salesMgmt.html#vehicle',      page: 'vehicle',      internalPage: 'vehicle' },
       { label: '업체조회',          href: 'salesMgmt.html#bizSearch',    page: 'bizSearch',    internalPage: 'bizSearch' },
       { label: '긴급 협조',         href: 'salesMgmt.html#urgent',       page: 'urgent',       internalPage: 'urgent' },
       { label: '영업통계',          disabled: true },
