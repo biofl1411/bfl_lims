@@ -349,14 +349,17 @@ function _renderSubTabs() {
   var currentFile = decodeURIComponent(location.pathname.split('/').pop()) || 'index.html';
   var currentHash = location.hash.replace('#', '') || '';
 
-  // 현재 페이지에 해당하는 subTabs 항목 찾기
+  // 현재 페이지+hash에 해당하는 subTabs 항목 찾기
   var activeSubTabs = null;
   SIDEBAR_MENU.forEach(function(group) {
     if (!group.sub) return;
     group.sub.forEach(function(item) {
       if (!item.subTabs || item.disabled) return;
       var hrefBase = (item.href || '').split('#')[0];
-      if (hrefBase === currentFile) {
+      if (hrefBase !== currentFile) return;
+      // hash가 subTabs 중 하나와 일치해야 표시
+      var tabNames = item.subTabs.map(function(t) { return t.tab; });
+      if (currentHash && tabNames.indexOf(currentHash) !== -1) {
         activeSubTabs = item;
       }
     });
