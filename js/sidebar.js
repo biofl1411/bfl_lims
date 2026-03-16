@@ -94,11 +94,11 @@ body.sidebar-collapsed .main{margin-left:64px}
 .sidebar.collapsed .sidebar-weather .weather-detail{display:none}
 .sidebar.collapsed .sidebar-weather .weather-setup a{font-size:10px}
 /* ── subTabs (페이지 상단 탭 바) ── */
-.sidebar-subtabs{display:flex;background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;margin-left:250px;position:sticky;top:0;z-index:90}
+.sidebar-subtabs{display:flex;background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;position:sticky;top:0;z-index:90}
 .sidebar-subtab{padding:6px 16px;font-size:13px;font-weight:500;color:#5f6b7a;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:inherit;transition:all .15s}
 .sidebar-subtab:hover{color:#1a2332;background:#f8f9fb}
 .sidebar-subtab.active{border-bottom:2px solid #1a73e8;color:#1a73e8;font-weight:600}
-body.sidebar-collapsed .sidebar-subtabs{margin-left:64px}
+body.sidebar-collapsed .sidebar-subtabs{margin-left:0}
 /* ====== END UNIFIED SIDEBAR STYLES ====== */
 `;
   document.head.appendChild(style);
