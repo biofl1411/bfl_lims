@@ -726,11 +726,7 @@ async function loadTxnStatement() {
         html += '<th style="width:30px">No</th>';
         html += '<th style="width:82px">거래일</th>';
         html += '<th style="width:45px">구분</th>';
-        html += '<th style="width:80px">접수번호</th>';
-        html += '<th>제품명</th>';
-        html += '<th>검사항목</th>';
-        html += '<th style="width:55px">검사분야</th>';
-        html += '<th style="width:65px">검사목적</th>';
+        html += '<th>적 요</th>';
         html += '<th style="width:60px">입금수단</th>';
         html += '<th class="text-right" style="width:85px">매출</th>';
         html += '<th class="text-right" style="width:85px">입금</th>';
@@ -741,15 +737,12 @@ async function loadTxnStatement() {
         rows.forEach(function(row, idx) {
             runBalance += row.sales - row.payment;
             var cls = row.type === '입금' ? ' class="row-payment"' : '';
+            var summary = _buildTxnSummary(row);
             html += '<tr' + cls + '>';
             html += '<td>' + (idx + 1) + '</td>';
             html += '<td>' + row.date + '</td>';
             html += '<td>' + row.type + '</td>';
-            html += '<td>' + row.receiptNo + '</td>';
-            html += '<td>' + row.productName + '</td>';
-            html += '<td title="' + (row.testItems || '').replace(/"/g, '&quot;') + '">' + row.testItems + '</td>';
-            html += '<td>' + row.testField + '</td>';
-            html += '<td>' + row.testPurpose + '</td>';
+            html += '<td>' + summary + '</td>';
             html += '<td>' + _methodTag(row.payMethod) + '</td>';
             html += '<td class="text-right">' + _ledgerFmt(row.sales) + '</td>';
             html += '<td class="text-right">' + _ledgerFmt(row.payment) + '</td>';
@@ -759,7 +752,7 @@ async function loadTxnStatement() {
 
         // 합계행
         html += '<tr class="row-total">';
-        html += '<td colspan="9" class="text-right">합 계</td>';
+        html += '<td colspan="5" class="text-right">합 계</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalPayment) + '</td>';
         html += '<td></td>';
@@ -848,6 +841,27 @@ function _getTestItems(d) {
     if (items.length === 0) return '';
     if (items.length <= 3) return items.join(', ');
     return items.slice(0, 3).join(', ') + ' 외 ' + (items.length - 3) + '개';
+}
+
+// 거래내역서 적요 한줄 조합
+function _buildTxnSummary(row) {
+    if (row.type === '입금') {
+        var parts = [];
+        if (row.payMethod) parts.push(row.payMethod);
+        if (row.memo) parts.push(row.memo);
+        if (row.receiptNo) parts.push('<span class="receipt-no">' + row.receiptNo + '</span>');
+        return parts.join(' · ');
+    }
+    // 매출: [접수번호] 제품명 · 검사목적 · 검사항목
+    var parts2 = [];
+    if (row.receiptNo) parts2.push('<span class="receipt-no">[' + row.receiptNo + ']</span>');
+    if (row.productName) parts2.push(row.productName);
+    var sub = [];
+    if (row.testField) sub.push(row.testField);
+    if (row.testPurpose) sub.push(row.testPurpose);
+    if (sub.length) parts2.push('<span style="color:#6b7280">' + sub.join('/') + '</span>');
+    if (row.testItems) parts2.push('<span style="color:#1a73e8;font-size:10px" title="' + (row.testItems || '').replace(/"/g, '&quot;') + '">' + row.testItems + '</span>');
+    return parts2.join(' ');
 }
 
 // 입금수단 태그
@@ -976,9 +990,21 @@ function exportTxnExcel() {
     var from = document.getElementById('txn-from').value;
     var to = document.getElementById('txn-to').value;
 
-    var data = [['No', '거래일', '구분', '접수번호', '제품명', '검사항목', '검사분야', '검사목적', '입금수단', '매출', '입금', '비고']];
+    var data = [['No', '거래일', '구분', '적요', '입금수단', '매출', '입금', '비고']];
     _txnRows.forEach(function(r, i) {
-        data.push([i+1, r.date, r.type, r.receiptNo, r.productName, r.testItems, r.testField, r.testPurpose, r.payMethod, r.sales || '', r.payment || '', r.memo]);
+        var summary = '';
+        if (r.type === '입금') {
+            summary = [r.payMethod, r.memo, r.receiptNo].filter(Boolean).join(' · ');
+        } else {
+            var parts = [];
+            if (r.receiptNo) parts.push('[' + r.receiptNo + ']');
+            if (r.productName) parts.push(r.productName);
+            var sub = [r.testField, r.testPurpose].filter(Boolean).join('/');
+            if (sub) parts.push(sub);
+            if (r.testItems) parts.push(r.testItems);
+            summary = parts.join(' ');
+        }
+        data.push([i+1, r.date, r.type, summary, r.payMethod, r.sales || '', r.payment || '', r.memo]);
     });
 
     var ws = XLSX.utils.aoa_to_sheet(data);
