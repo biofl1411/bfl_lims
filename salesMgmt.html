@@ -1624,6 +1624,26 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
     </div>
 
+    <!-- ===== 재무관리: 매출처 원장 ===== -->
+    <div class="page" id="page-ledger" style="display:none">
+      <div class="card">
+        <div class="card-hd"><h3>매출처 원장</h3></div>
+        <div class="card-bd">
+          <p style="color:#8892a4;font-size:13px">매출처 원장 콘텐츠가 여기에 표시됩니다.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 재무관리: 거래내역 ===== -->
+    <div class="page" id="page-transactions" style="display:none">
+      <div class="card">
+        <div class="card-hd"><h3>거래내역</h3></div>
+        <div class="card-bd">
+          <p style="color:#8892a4;font-size:13px">거래내역 콘텐츠가 여기에 표시됩니다.</p>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1637,7 +1657,8 @@ const pageNames = {
   vehicle:'차량일지', collection:'미수금 활동 내역',
   estimate:'견적서 관리', trade:'거래명세표 관리', urgent:'긴급 협조 요청',
   arManage:'세금계산서미발행', invoice:'계산서 발행 승인요청',
-  apiSettings:'API 수집 설정'
+  apiSettings:'API 수집 설정',
+  ledger:'매출처 원장', transactions:'거래내역'
 };
 
 // ============================================================
@@ -2011,6 +2032,21 @@ function showPage(id) {
   if(id === 'customerReg') resetCustomerRegForm();
   if(id === 'customerList') loadCustomers();
 }
+// 재무관리 subTab 전환
+window.switchSubTab = function(tab) {
+  var financePages = ['ledger', 'transactions'];
+  if (financePages.indexOf(tab) === -1) return;
+  // 모든 페이지 숨기기
+  document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
+  // 해당 페이지 표시
+  var page = document.getElementById('page-' + tab);
+  if (page) page.style.display = 'block';
+  // topbar 업데이트
+  var titleEl = document.querySelector('.topbar-title');
+  if (titleEl) titleEl.textContent = '재무 관리';
+  document.getElementById('topSub').textContent = pageNames[tab] || '';
+};
+
 function closePopup(id) { document.getElementById(id).classList.remove('show'); }
 function toast(msg) {
   const t = document.getElementById('toastEl');
@@ -5749,9 +5785,16 @@ function formatDate8(d) {
     'arManage': 'dailyTaxUnissued',
     'vehicle': 'dailyVehicle'
   };
+  // 재무관리 탭 (ledger, transactions)
+  var financePages = ['ledger', 'transactions'];
   if (dailyTabMap[h]) {
     showPage('daily');
     setTimeout(function(){ var b=document.querySelector('[data-tab='+dailyTabMap[h]+']'); if(b) switchDailyTab(b); }, 50);
+  } else if (financePages.indexOf(h) !== -1) {
+    // 재무관리 탭: switchSubTab으로 처리
+    if (typeof window.switchSubTab === 'function') {
+      window.switchSubTab(h);
+    }
   } else if (h && pageNames[h]) {
     showPage(h);
   }
@@ -5965,19 +6008,23 @@ function renderCollectStatus(data) {
 // 사이드바 JS → js/sidebar.js로 이관됨
 // 해시 기반 서브 페이지 전환은 sidebar.js renderSidebar 후 자동 처리
 (function initSalesHash() {
-  // sidebar.js가 DOMContentLoaded에서 renderSidebar를 실행한 후,
-  // 해시가 있으면 showPage 호출
+  var financePages = ['ledger', 'transactions'];
   function handleHash() {
-    const hash = location.hash.replace('#', '');
-    if (hash && typeof showPage === 'function') {
+    var hash = location.hash.replace('#', '');
+    if (hash && financePages.indexOf(hash) !== -1) {
+      // 재무관리 탭 → switchSubTab 사용
+      if (typeof window.switchSubTab === 'function') {
+        window.switchSubTab(hash);
+      }
+    } else if (hash && typeof showPage === 'function') {
       showPage(hash);
     }
   }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { setTimeout(handleHash, 50); setTimeout(loadCustomers, 100); });
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(handleHash, 50); setTimeout(function(){ var h=location.hash.replace('#',''); if(financePages.indexOf(h)===-1) loadCustomers(); }, 100); });
   } else {
     setTimeout(handleHash, 50);
-    setTimeout(loadCustomers, 100);
+    setTimeout(function(){ var h=location.hash.replace('#',''); if(financePages.indexOf(h)===-1) loadCustomers(); }, 100);
   }
 })();
 // ====== END SALES HASH HANDLER ======
