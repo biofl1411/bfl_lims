@@ -163,7 +163,7 @@ def fetch_api(service_id, start, end, chng_dt=None, max_retries=3):
     for attempt in range(1, max_retries + 1):
         try:
             req = Request(url, headers={'User-Agent': 'BioFoodLab-Collector/1.0'})
-            with urlopen(req, timeout=30) as resp:
+            with urlopen(req, timeout=90) as resp:
                 raw = resp.read()
 
             if not raw or len(raw) == 0:
