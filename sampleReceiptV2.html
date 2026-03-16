@@ -2279,18 +2279,31 @@ function switchClTab(tabName) {
 }
 
 // 식약처 API 업체 정보 + 변경 이력 로드
-function loadFssCompanyData(licNo) {
+// companies.licNo("제 2021-xxx 호") ≠ fss_businesses.lcns_no("19930355028") → 업소명(bssh_nm)으로 검색
+function loadFssCompanyData(licNo, regDate) {
     window._selectedCompanyLicNo = licNo;
-    if (!licNo) return;
+    window._selectedCompanyRegDate = regDate || '';
+    var bizName = document.getElementById('company-search').value || '';
+    if (!bizName) return;
 
-    // 1) fss_businesses에서 업체 정보 조회
-    db.collection('fss_businesses').doc(licNo).get().then(function(doc) {
-        var el = document.getElementById('fss-biz-info-body');
-        if (!doc.exists) {
-            el.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">식약처 API에 등록된 정보가 없습니다</div>';
+    var bizInfoEl = document.getElementById('fss-biz-info-body');
+    bizInfoEl.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:12px">조회 중...</div>';
+    document.getElementById('fss-change-body').innerHTML = '<div style="color:#94a3b8;text-align:center;padding:12px">조회 중...</div>';
+
+    _searchFssBusiness(bizName).then(function(result) {
+        if (!result) {
+            bizInfoEl.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">식약처 API에 등록된 정보가 없습니다</div>';
+            document.getElementById('fss-change-body').innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">변경 이력이 없습니다</div>';
+            document.getElementById('fss-change-count').textContent = '';
             return;
         }
-        var d = doc.data();
+        var d = result;
+        window._fssLcnsNo = d.lcns_no;
+
+        var collectedAt = '-';
+        if (d.collected_at) {
+            try { collectedAt = d.collected_at.toDate ? d.collected_at.toDate().toLocaleString('ko-KR') : String(d.collected_at); } catch(e) { collectedAt = String(d.collected_at); }
+        }
         var rows = [
             ['업소명', d.bssh_nm],
             ['인허가번호', d.lcns_no],
@@ -2302,7 +2315,7 @@ function loadFssCompanyData(licNo) {
             ['관할기관', d.instt_nm],
             ['폐업구분', d.clsbiz_dvs_nm || '영업중'],
             ['API 출처', d.api_source],
-            ['수집일시', d.collected_at ? d.collected_at.toDate().toLocaleString('ko-KR') : '-']
+            ['수집일시', collectedAt]
         ];
         var html = '<div style="display:grid;grid-template-columns:90px 1fr;gap:4px 8px">';
         rows.forEach(function(r) {
@@ -2313,15 +2326,46 @@ function loadFssCompanyData(licNo) {
                     '<div style="font-size:11px;font-weight:500;color:#1a2332;padding:3px 0;' + style + '">' + val + '</div>';
         });
         html += '</div>';
-        el.innerHTML = html;
-    }).catch(function(err) {
-        document.getElementById('fss-biz-info-body').innerHTML = '<div style="color:#ef4444;padding:12px">조회 실패: ' + err.message + '</div>';
-    });
+        bizInfoEl.innerHTML = html;
 
-    // 2) fss_changes에서 변경 이력 조회
-    db.collection('fss_changes').where('lcns_no', '==', licNo).get().then(function(snap) {
-        var el = document.getElementById('fss-change-body');
-        var countEl = document.getElementById('fss-change-count');
+        // 식약처 인허가번호로 변경 이력 조회 + 인허가 변경 알림
+        _loadFssChanges(d.lcns_no);
+        checkLicenseChanges(d.lcns_no, window._selectedCompanyRegDate);
+    }).catch(function(err) {
+        bizInfoEl.innerHTML = '<div style="color:#ef4444;padding:12px">조회 실패: ' + err.message + '</div>';
+    });
+}
+
+// fss_businesses에서 업소명으로 검색 (정확 매칭 → licBizName → company명)
+async function _searchFssBusiness(bizName) {
+    if (!bizName) return null;
+    // 1차: 업소명 정확 매칭
+    var snap = await db.collection('fss_businesses').where('bssh_nm', '==', bizName).limit(1).get();
+    if (!snap.empty) return snap.docs[0].data();
+
+    // 2차: 인허가 영업소명
+    var licBizNameEl = document.getElementById('lic-biz-name');
+    if (licBizNameEl && licBizNameEl.value && licBizNameEl.value !== bizName) {
+        snap = await db.collection('fss_businesses').where('bssh_nm', '==', licBizNameEl.value).limit(1).get();
+        if (!snap.empty) return snap.docs[0].data();
+    }
+
+    // 3차: _selectedCompany의 원본 company명
+    var sc = window._selectedCompany;
+    if (sc && sc.company && sc.company !== bizName) {
+        snap = await db.collection('fss_businesses').where('bssh_nm', '==', sc.company).limit(1).get();
+        if (!snap.empty) return snap.docs[0].data();
+    }
+
+    return null;
+}
+
+// fss_changes에서 식약처 인허가번호로 변경 이력 조회
+function _loadFssChanges(fssLcnsNo) {
+    var el = document.getElementById('fss-change-body');
+    var countEl = document.getElementById('fss-change-count');
+
+    db.collection('fss_changes').where('lcns_no', '==', fssLcnsNo).get().then(function(snap) {
         if (snap.empty) {
             el.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">변경 이력이 없습니다</div>';
             if (countEl) countEl.textContent = '';
@@ -2351,7 +2395,7 @@ function loadFssCompanyData(licNo) {
         html += '</table>';
         el.innerHTML = html;
     }).catch(function(err) {
-        document.getElementById('fss-change-body').innerHTML = '<div style="color:#ef4444;padding:12px">조회 실패: ' + err.message + '</div>';
+        el.innerHTML = '<div style="color:#ef4444;padding:12px">조회 실패: ' + err.message + '</div>';
     });
 }
 
@@ -5476,11 +5520,8 @@ function selectCompany(elOrObj) {
     // 보고번호 자동 조회 (인허가번호 설정 후)
     fetchReportNo();
 
-    // 인허가 변경사항 확인 (I2859 fss_changes)
-    checkLicenseChanges(lic.licNo || lic.licenseNo || '', c.createdAt || c.regDate || '');
-
-    // 식약처 API 정보 로드 (hover 오버레이용)
-    loadFssCompanyData(lic.licNo || lic.licenseNo || '');
+    // 식약처 API 정보 로드 (hover 오버레이용) → 완료 후 인허가 변경 알림도 처리
+    loadFssCompanyData(lic.licNo || lic.licenseNo || '', c.createdAt || c.regDate || '');
 }
 
 // ============================================================================
