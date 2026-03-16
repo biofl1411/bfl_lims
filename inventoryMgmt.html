@@ -340,7 +340,7 @@
             <tr>
               <th>코드</th><th>사용처</th><th>구분</th><th>제품명</th><th>규격</th>
               <th>Cat No.</th><th>CAS No.</th><th>제조사</th><th>구매처</th>
-              <th>단가</th><th>최소재고</th><th>변경이력</th>
+              <th>단가</th><th>최소재고</th><th>변경이력</th><th style="width:50px">활성</th>
             </tr>
           </thead>
           <tbody id="specTableBody"></tbody>
@@ -729,6 +729,7 @@ async function processOut(auto=false) {
   const barcodeVal = scanCodeEl.textContent || '';
   const reagent = allReagents.find(r => r.barcodeVal === barcodeVal || 'BFL-'+r.code === barcodeVal);
   if (!reagent) { showToast('제품을 찾을 수 없습니다','warning'); return; }
+  if (reagent.active === false) { showToast('비활성 제품입니다. 출고할 수 없습니다.','warning'); return; }
 
   const qty = 1;
   const userId = '현재사용자';
@@ -768,6 +769,7 @@ async function processIn() {
   const barcodeVal = scanCodeEl ? scanCodeEl.textContent : '';
   const reagent = allReagents.find(r => r.barcodeVal === barcodeVal || 'BFL-'+r.code === barcodeVal);
   if (!reagent) { showToast('제품을 찾을 수 없습니다','warning'); return; }
+  if (reagent.active === false) { showToast('비활성 제품입니다. 입고할 수 없습니다.','warning'); return; }
 
   // 입고 모달에서 값 가져오기 (실제 DOM ID에 맞춰 조정)
   const qty = parseInt(document.getElementById('inQty')?.value) || 1;
@@ -880,19 +882,23 @@ function renderSpecTable() {
       : `<span style="color:var(--text-light);font-size:12px">없음</span>`;
     const mfrExtra = d.changes.some(c=>c.type==='제조사') ? `<div style="font-size:10px;color:var(--warning)">⚠️ 변경이력</div>` : '';
     const supExtra = d.changes.some(c=>c.type==='구매처') ? `<div style="font-size:10px;color:var(--warning)">⚠️ 변경이력</div>` : '';
-    return `<tr onclick="openSpecDetail(${allReagents.indexOf(d)})">
-      <td style="font-size:11px;color:var(--text-muted)">${d.code}</td>
-      <td><span class="badge" style="${deptColors[d.dept]}">${d.dept}</span></td>
-      <td><span class="badge badge-warn">${d.cat}</span></td>
-      <td style="font-weight:600">${d.name}</td>
-      <td>${d.spec}</td>
-      <td style="font-size:12px">${d.catNo}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${d.casNo}</td>
-      <td>${d.mfr}${mfrExtra}</td>
-      <td>${d.supplier}${supExtra}</td>
-      <td>${priceHtml}</td>
-      <td>${d.minQty}개</td>
-      <td>${changeBadge}</td>
+    const isActive = d.active !== false;
+    const rowStyle = isActive ? '' : 'opacity:0.4;';
+    const globalIdx = allReagents.indexOf(d);
+    return `<tr style="${rowStyle}">
+      <td style="font-size:11px;color:var(--text-muted);cursor:pointer" onclick="openSpecDetail(${globalIdx})">${d.code}</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer"><span class="badge" style="${deptColors[d.dept]}">${d.dept}</span></td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer"><span class="badge badge-warn">${d.cat}</span></td>
+      <td style="font-weight:600;cursor:pointer" onclick="openSpecDetail(${globalIdx})">${d.name}</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer">${d.spec}</td>
+      <td style="font-size:12px;cursor:pointer" onclick="openSpecDetail(${globalIdx})">${d.catNo}</td>
+      <td style="font-size:12px;color:var(--text-muted);cursor:pointer" onclick="openSpecDetail(${globalIdx})">${d.casNo}</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer">${d.mfr}${mfrExtra}</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer">${d.supplier}${supExtra}</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer">${priceHtml}</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer">${d.minQty}개</td>
+      <td onclick="openSpecDetail(${globalIdx})" style="cursor:pointer">${changeBadge}</td>
+      <td style="text-align:center"><input type="checkbox" ${isActive ? 'checked' : ''} onclick="event.stopPropagation();toggleReagentActive('${d.id}',${globalIdx},this.checked)" title="${isActive ? '활성 (입고 중)' : '비활성 (미입고)'}" style="cursor:pointer;width:16px;height:16px"></td>
     </tr>`;
   }).join('');
 
@@ -1132,17 +1138,18 @@ function updateKPI() {
   if(el('kpiDeptSub')) el('kpiDeptSub').textContent = deptStr || '-';
 
   // 재고 있는 품목 / 없는 품목
-  const hasStock = allReagents.filter(r => (r.stockQty || 0) > 0).length;
-  const noStock = allReagents.filter(r => (r.stockQty || 0) <= 0).length;
+  const activeReagents = allReagents.filter(r => r.active !== false);
+  const hasStock = activeReagents.filter(r => (r.stockQty || 0) > 0).length;
+  const noStock = activeReagents.filter(r => (r.stockQty || 0) <= 0).length;
   if(el('kpiHasStock')) el('kpiHasStock').textContent = hasStock.toLocaleString();
   if(el('kpiNoStock')) el('kpiNoStock').textContent = noStock.toLocaleString();
 
   // 안전재고 미달 품목
-  const lowStock = allReagents.filter(r => (r.stockQty || 0) > 0 && (r.stockQty || 0) <= (r.minQty || 1)).length;
+  const lowStock = activeReagents.filter(r => (r.stockQty || 0) > 0 && (r.stockQty || 0) <= (r.minQty || 1)).length;
   if(el('kpiExpiry')) el('kpiExpiry').textContent = lowStock.toLocaleString();
 
   // 재고 총 자산
-  const totalCost = allReagents.reduce((sum, r) => sum + ((r.stockQty || 0) * (r.unitPrice || r.price || 0)), 0);
+  const totalCost = activeReagents.reduce((sum, r) => sum + ((r.stockQty || 0) * (r.unitPrice || r.price || 0)), 0);
   if(el('kpiStockCost')) el('kpiStockCost').textContent = totalCost > 0 ? totalCost.toLocaleString() + '원' : '-';
 }
 
@@ -1159,6 +1166,22 @@ window.addEventListener('firebase-ready', async function() {
 
 
 // ============================================================
+// 제품 활성/비활성 토글
+// ============================================================
+async function toggleReagentActive(docId, idx, isActive) {
+  try {
+    await db.collection('reagents').doc(docId).update({ active: isActive });
+    allReagents[idx].active = isActive;
+    renderSpecTable();
+    renderStockTable();
+    showToast(isActive ? '제품이 활성화되었습니다' : '제품이 비활성화되었습니다');
+  } catch(e) {
+    console.error('[재고관리] 활성 상태 변경 실패:', e);
+    showToast('상태 변경 실패', 'warning');
+  }
+}
+
+// ============================================================
 // Firestore 데이터 로드
 // ============================================================
 async function loadReagents() {
@@ -1171,6 +1194,7 @@ async function loadReagents() {
       data.changes = [];
       data.priceChange = 0;
       data.consume = '-';
+      if (data.active === undefined) data.active = true; // 기본값: 활성
       return data;
     });
     console.log('[재고관리] ' + allReagents.length + '건 로드 완료');
@@ -1188,7 +1212,7 @@ function renderStockTable() {
   const tbody = document.querySelector('#tab-stock table tbody');
   if (!tbody) return;
 
-  const hasStockItems = allReagents.filter(r => (r.stockQty || 0) > 0);
+  const hasStockItems = allReagents.filter(r => (r.stockQty || 0) > 0 && r.active !== false);
 
   if (hasStockItems.length === 0) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px">📭 재고 데이터가 없습니다.<br><span style="font-size:11px;color:var(--text-light)">입고 처리 후 이곳에 재고가 표시됩니다.</span></td></tr>';
