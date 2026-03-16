@@ -200,14 +200,13 @@ async function migrateReagentCodes(input) {
     // Firestore 기존 데이터 로드
     var snap = await db.collection('reagents').get();
     var matched = 0, unmatched = 0;
-    var batch = db.batch();
-    var batchCount = 0;
 
     var norm = function(s) { return (s || '').toLowerCase().replace(/[\s\-_,.]/g, ''); };
 
+    // 매칭 결과 수집
+    var updates = [];
     snap.docs.forEach(function(doc) {
       var fd = doc.data();
-      // 매칭: cat + (catNo 또는 casNo 또는 name+spec+mfr)
       var best = null, bestScore = 0;
       excelRows.forEach(function(ex) {
         var score = 0;
@@ -221,27 +220,31 @@ async function migrateReagentCodes(input) {
       });
 
       if (best && bestScore >= 8) {
-        var newCode = String(best.catNum).padStart(3, '0') + String(best.serialNo).padStart(4, '0');
-        batch.update(doc.ref, {
-          catNum: best.catNum,
-          serialNo: best.serialNo,
-          code: newCode,
-          barcodeVal: 'BFL-' + newCode,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        batchCount++;
+        updates.push({ ref: doc.ref, data: best });
         matched++;
-
-        if (batchCount >= 500) {
-          // 동기 커밋은 어려우므로 500건 이내에서 처리
-        }
       } else {
         unmatched++;
         console.warn('[미매칭] score=' + bestScore, fd.cat, fd.name, fd.catNo);
       }
     });
 
-    if (batchCount > 0) await batch.commit();
+    // 500건씩 배치 커밋
+    for (var i = 0; i < updates.length; i += 500) {
+      var batch = db.batch();
+      var chunk = updates.slice(i, i + 500);
+      chunk.forEach(function(u) {
+        var newCode = String(u.data.catNum).padStart(3, '0') + String(u.data.serialNo).padStart(4, '0');
+        batch.update(u.ref, {
+          catNum: u.data.catNum,
+          serialNo: u.data.serialNo,
+          code: newCode,
+          barcodeVal: 'BFL-' + newCode,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      await batch.commit();
+      showToast('커밋 중... ' + Math.min(i + 500, updates.length) + '/' + updates.length, 'info', 3000);
+    }
 
     showToast('코드 매칭 완료: ' + matched + '건 업데이트, ' + unmatched + '건 미매칭', 'success', 8000);
     console.log('[코드매칭] 매칭=' + matched + ', 미매칭=' + unmatched);
