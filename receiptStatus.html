@@ -133,25 +133,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <span class="topbar-sub">접수 현황</span>
     </div>
 
-    <!-- KPI 요약바 -->
-    <div id="kpi-bar">
-        <div class="kpi-card" id="kpi-total" onclick="document.getElementById('filter-status').value='';applyFilter()">
-            <span class="kpi-icon">📋</span>
-            <div class="kpi-info"><div class="kpi-val" id="kpi-total-val">0</div><div class="kpi-label">전체 접수</div></div>
-        </div>
-        <div class="kpi-card" id="kpi-inprogress" onclick="document.getElementById('filter-status').value='접수중';applyFilter()">
-            <span class="kpi-icon">⏳</span>
-            <div class="kpi-info"><div class="kpi-val" id="kpi-inprogress-val">0</div><div class="kpi-label">처리 중</div></div>
-        </div>
-        <div class="kpi-card" id="kpi-urgent" onclick="document.getElementById('filter-urgent').value='Y';applyFilter()">
-            <span class="kpi-icon">🚨</span>
-            <div class="kpi-info"><div class="kpi-val" id="kpi-urgent-val">0</div><div class="kpi-label">긴급</div></div>
-        </div>
-        <div class="kpi-card" id="kpi-receivable" onclick="document.getElementById('filter-traffic').value='red';applyFilter()">
-            <span class="kpi-icon">💰</span>
-            <div class="kpi-info"><div class="kpi-val" id="kpi-receivable-val">0원</div><div class="kpi-label">미수금 합계</div></div>
-        </div>
-    </div>
+    <!-- KPI 요약바 (검사목적별 동적 생성) -->
+    <div id="kpi-bar"></div>
 
     <!-- 집계 패널 -->
     <div id="summary-panel-wrap" style="background:#fff;border-bottom:1px solid #e2e6ed;flex-shrink:0">
@@ -697,6 +680,7 @@ function applyFilter() {
             var hay = ((r.receiptNo || '') + (r._baseReceiptNo || '') + (r.companyName || '') + (r.productName || '') + (r.foodType || '') + (r.testPurpose || '') + (r.billCompany || '') + (r.salesRep || '') + (r.bizNo || '') + (r.companyAddress || '')).toLowerCase();
             if (hay.indexOf(search) < 0) return false;
         }
+        if (_activeKpiPurpose && (r.testPurpose || '미분류') !== _activeKpiPurpose) return false;
         return true;
     });
 
@@ -723,16 +707,44 @@ function applyFilter() {
 // ============================================================================
 // KPI 업데이트
 // ============================================================================
+var _activeKpiPurpose = ''; // 현재 선택된 검사목적 필터
+
 function updateKpi() {
-    var baseNos = {};
-    _allReceipts.forEach(function(r) { baseNos[r._baseReceiptNo] = true; });
-    document.getElementById('kpi-total-val').textContent = Object.keys(baseNos).length;
-    document.getElementById('kpi-inprogress-val').textContent = _allReceipts.filter(function(r) { return r.status === '접수중'; }).length;
-    document.getElementById('kpi-urgent-val').textContent = _allReceipts.filter(function(r) { return r.urgent === '긴급' || r.urgent === 'Y'; }).length;
-    var totalReceivable = 0;
-    var vals = Object.values ? Object.values(_companyReceivables) : Object.keys(_companyReceivables).map(function(k){return _companyReceivables[k];});
-    vals.forEach(function(v) { totalReceivable += v.totalAmount; });
-    document.getElementById('kpi-receivable-val').textContent = totalReceivable.toLocaleString() + '원';
+    var bar = document.getElementById('kpi-bar');
+    if (!bar) return;
+    // 검사목적별 건수 집계 (_allReceipts 기준)
+    var purposeCount = {};
+    var total = 0;
+    _allReceipts.forEach(function(r) {
+        var p = r.testPurpose || '미분류';
+        purposeCount[p] = (purposeCount[p] || 0) + 1;
+        total++;
+    });
+    var purposes = Object.keys(purposeCount).sort();
+    // 색상 팔레트
+    var colors = ['#1a73e8','#e53935','#ff9800','#4caf50','#9c27b0','#00bcd4','#795548','#607d8b','#f44336','#3f51b5'];
+    var icons = ['🔬','🧪','📊','🏭','📋','🔍','⚗️','🧫','📑','🔎'];
+    var html = '';
+    // 전체 카드
+    var totalActive = _activeKpiPurpose === '' ? 'border:2px solid #1a73e8;background:#eef4ff' : '';
+    html += '<div class="kpi-card" onclick="filterByPurpose(\'\')" style="' + totalActive + '">' +
+        '<span class="kpi-icon">📋</span>' +
+        '<div class="kpi-info"><div class="kpi-val">' + total + '</div><div class="kpi-label">전체</div></div></div>';
+    // 검사목적별 카드
+    purposes.forEach(function(p, i) {
+        var isActive = _activeKpiPurpose === p;
+        var activeStyle = isActive ? 'border:2px solid ' + colors[i % colors.length] + ';background:#eef4ff' : '';
+        html += '<div class="kpi-card" onclick="filterByPurpose(\'' + p.replace(/'/g, "\\'") + '\')" style="' + activeStyle + '">' +
+            '<span class="kpi-icon">' + icons[i % icons.length] + '</span>' +
+            '<div class="kpi-info"><div class="kpi-val" style="color:' + colors[i % colors.length] + '">' + purposeCount[p] + '</div>' +
+            '<div class="kpi-label">' + p + '</div></div></div>';
+    });
+    bar.innerHTML = html;
+}
+
+function filterByPurpose(purpose) {
+    _activeKpiPurpose = purpose;
+    applyFilter();
 }
 
 // ============================================================================
