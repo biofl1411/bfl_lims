@@ -3038,3 +3038,78 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 - **materials-panel 세로 라인 제거**: `display:none` 상태에서 border 렌더링되는 문제 → JS에서 표시 시 동적 추가
 - **좌측 패널 너비 확대**: `.cp-left` width 440px → 500px
 - **할인 전액 처리 버그 수정**: 할인 입력란 비어있을 때 전액 할인으로 처리되던 문제 → 빈 입력 시 할인 없음으로 조기 리턴
+
+### 2026-03-16
+
+#### receiptStatus.html(접수현황) — 인라인 편집 기능
+
+**수정 파일**: `receiptStatus.html`
+
+##### 기본정보/시료정보 인라인 편집
+- 상세 패널 기본정보 탭: ✏️ 버튼 클릭 → 접수일자, 처리기한, 시험분야, 검사목적, 담당자, 긴급여부, 거래처, 인허가번호, 업종 인라인 편집
+- 상세 패널 시료정보 탭: ✏️ 버튼 클릭 → 제품/시료명, 보고번호, 검체유형, 제조일자, 소비기한 등 13개 필드 인라인 편집
+- 편집 후 💾 저장 버튼으로 Firestore 직접 업데이트 + 로컬 캐시 동기화
+- CSS: `.dp-edit-input`, `.dp-edit-select`, `.dp-edit-btn-row`, `.dp-edit-toggle`, `.dp-goto-edit` 추가
+- 변수: `_currentDetailId`, `_currentDetailSampleIdx`, `_currentDetailRecord` 추가
+- 함수: `toggleBasicEdit()`, `saveBasicEdit()`, `toggleSampleEdit()`, `saveSampleEdit()`, `dpEditRow()`, `dpEditSelect()`, `showDpToast()`
+
+##### 접수등록 편집 모드 연동
+- 기본정보 탭 하단: "📝 접수등록에서 수정하기" 버튼 → `sampleReceiptV2.html?edit=docId`로 새 탭 열기
+- 함수: `goToReceiptEdit()`
+
+#### sampleReceiptV2.html(접수등록) — URL 파라미터 편집 모드
+
+**수정 파일**: `sampleReceiptV2.html`
+
+##### 기존 접수 불러오기 (편집 모드)
+- `?edit=문서ID` URL 파라미터로 접근 시 Firestore에서 해당 접수 문서 로드
+- `loadReceiptForEdit(docId)` 함수 신규: 기본정보, 업체정보, 시료 데이터, 계산서 정보, 발송 정보 전체 필드 복원
+- 접수번호 상태: "✅ 편집 모드" 표시 (파란색)
+- 저장 시 `window._editDocId`로 기존 문서 덮어쓰기 (새 문서 생성 방지)
+- 검사목적 custom select UI 동기화 개선
+
+##### sample-nav id 누락 버그 수정
+- **문제**: `document.getElementById('sample-nav').style` → null 에러 (편집 모드 로드 시)
+- **원인**: `<div class="cp-tab-bar">`에 `id="sample-nav"` 누락
+- **수정**: `id="sample-nav"` 추가
+
+#### sampleReceiptV2.html(접수등록) — I2859 인허가 변경 알림
+
+**수정 파일**: `sampleReceiptV2.html`
+
+##### 업체 선택 시 인허가 변경사항 자동 확인
+- 업체 선택(`selectCompany`) → `checkLicenseChanges()` 호출
+- Firestore `fss_changes` 컬렉션에서 해당 인허가번호(`lcns_no`) 조회
+- 기준일: 업체등록일(`createdAt` 또는 `regDate`) 이후 변경사항만 필터 (없으면 최근 1년)
+- 변경사항 있으면 ⚠️ 경고 패널 표시: 변경일자, 변경전(취소선), → 변경후(녹색 강조), 변경사유
+- HTML: `#lic-change-alert` 패널 추가 (업체정보 섹션 하단)
+- Firestore 복합 인덱스(`lcns_no` + `chng_dt`) 미생성 시 폴백 쿼리 지원
+
+#### 사이드바 메뉴 재구성
+
+**수정 파일**: `js/sidebar.js`
+
+##### 접수관리 메뉴 변경
+- **삭제**: 접수 조회/수정, 접수공지(독립 메뉴), 모바일, 접수대장, 접수통계 개별 메뉴
+- **추가**: "설정" 메뉴 (`receiptSettings.html`)
+- 최종 메뉴 구조:
+  1. 업체등록·수정
+  2. 검사목적 관리
+  3. 접수 등록
+  4. 접수 현황
+  5. 설정
+
+#### receiptSettings.html(접수 설정) — 신규 페이지
+
+**신규 파일**: `receiptSettings.html`
+
+##### 4개 탭 구성
+| 탭 | 내용 | 상태 |
+|---|---|---|
+| 📢 접수 공지 | `receiptNotice.html` iframe embed | 완료 |
+| 📱 모바일 | `mobilePhoto.html` iframe embed | 완료 |
+| 📒 접수대장 | 준비중 플레이스홀더 | 미구현 |
+| 📊 접수 통계 | 준비중 플레이스홀더 | 미구현 |
+
+- URL 파라미터 `?tab=notice|mobile|ledger|stats`로 특정 탭 직접 진입 가능
+- `receiptNotice.html`에 `?embed=1` 모드 추가 (사이드바/topbar 숨김)
