@@ -22,7 +22,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .filter-bar input,.filter-bar select{padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit}
 
 /* 테이블 */
-.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;user-select:none;-webkit-user-select:none}
 .tbl th{background:#f8f9fb;padding:10px 8px;text-align:left;font-weight:600;color:#344054;border-bottom:2px solid #e2e6ed;white-space:nowrap;cursor:grab;user-select:none;position:sticky;top:0;z-index:1}
 .tbl th:active{cursor:grabbing}
 .tbl th:hover{background:#eef0f4}
@@ -200,13 +200,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <div class="filter-row2-right">
                 <span id="total-count" style="font-size:12px;color:#5f6b7a"></span>
                 <button class="btn btn-secondary btn-sm" onclick="loadReceipts()">🔄 새로고침</button>
-                <button class="btn btn-secondary btn-sm" id="select-mode-btn" onclick="toggleSelectMode()">☑️ 선택</button>
-                <div id="select-bar" style="display:none;align-items:center;gap:8px">
-                    <span id="select-count" style="font-size:12px;color:#5f6b7a">0개 선택</span>
-                    <button class="btn btn-secondary btn-sm" onclick="toggleSelectAll()">전체선택</button>
-                    <button class="btn btn-sm" style="background:#ef4444;color:#fff;border:none" onclick="deleteSelectedReceipts()">🗑️ 선택 삭제</button>
-                    <button class="btn btn-secondary btn-sm" onclick="toggleSelectMode()">취소</button>
-                </div>
+                <span id="select-count" style="font-size:12px;color:#5f6b7a;display:none">0개 선택</span>
+                <button class="btn btn-sm" id="btn-delete-selected" style="background:#ef4444;color:#fff;border:none;display:none" onclick="deleteSelectedReceipts()">🗑️ 선택 삭제</button>
                 <button class="btn btn-secondary btn-sm" onclick="downloadExcel()">📥 엑셀</button>
                 <div class="col-settings-wrap">
                     <button class="btn btn-secondary btn-sm" onclick="toggleColSettings()" id="col-settings-btn">⚙️ 컬럼</button>
@@ -227,6 +222,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             </div>
             <div id="loading" class="loading">데이터를 불러오는 중...</div>
             <div class="pagination" id="pagination"></div>
+            <div id="summary-bar" style="display:none;position:sticky;bottom:0;background:#1a2332;color:#fff;padding:10px 20px;border-radius:8px 8px 0 0;align-items:center;gap:20px;font-size:13px;margin-top:8px">
+                <span id="summary-count" style="font-weight:700"></span>
+                <span id="summary-supply"></span>
+                <span id="summary-vat"></span>
+                <span id="summary-total" style="font-weight:700;color:#4fc3f7"></span>
+                <button onclick="clearSelection()" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px">선택 해제 (ESC)</button>
+            </div>
         </div>
         <div id="detail-panel">
             <div id="detail-panel-empty">행을 클릭하면 상세 정보가 표시됩니다</div>
@@ -511,10 +513,10 @@ var _sortKey = 'receiptDate';
 var _sortDir = 'desc';
 var _page = 1;
 var _pageSize = 30;
-var _selectMode = false;
 var _selectedReceipts = new Set();
 var _selectedDocIds = {};  // baseNo → [docId, ...] 매핑
 var _selectedRowId = null; // 현재 상세 패널에 표시 중인 행
+var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
 
 // ============================================================================
 // 데이터 로드
@@ -906,9 +908,7 @@ function renderTable() {
     // 헤더
     var thead = document.getElementById('receipt-thead');
     var hhtml = '<tr>';
-    if (_selectMode) {
-        hhtml += '<th style="width:40px;text-align:center">선택</th>';
-    }
+    hhtml += '<th style="width:40px;text-align:center;cursor:default" onclick="event.stopPropagation()"><input type="checkbox" id="select-all-cb" onchange="toggleSelectAll()" title="전체선택"></th>';
     visibleCols.forEach(function(col, vi) {
         var cls = '';
         var icon = '↕';
@@ -932,7 +932,7 @@ function renderTable() {
     document.getElementById('loading').style.display = 'none';
 
     if (pageData.length === 0) {
-        var colSpan = visibleCols.length + (_selectMode ? 1 : 0);
+        var colSpan = visibleCols.length + 1;
         tbody.innerHTML = '<tr><td colspan="' + colSpan + '" style="text-align:center;padding:40px;color:#999">접수 데이터가 없습니다.</td></tr>';
         document.getElementById('total-count').textContent = '';
         document.getElementById('pagination').innerHTML = '';
@@ -956,11 +956,11 @@ function renderTable() {
             rowStyle = 'background-color:#fffde7;';
         }
         if (isSelected) rowStyle += 'border-left:3px solid #1a73e8;';
-        bhtml += '<tr style="' + rowStyle + '" onclick="openDetailPanel(\'' + r.id + '\',' + r._sampleIdx + ')">';
-        if (_selectMode) {
-            var checked = _selectedReceipts.has(baseNo) ? 'checked' : '';
-            bhtml += '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleReceiptSelect(\'' + baseNo + '\',\'' + r.id + '\')"></td>';
-        }
+        if (_selectedReceipts.has(baseNo)) rowStyle += 'background-color:#e3f2fd;';
+        var rowIdx = start + pageData.indexOf(r);
+        bhtml += '<tr style="' + rowStyle + '" data-row-idx="' + rowIdx + '" onclick="handleRowClick(event,' + rowIdx + ',\'' + baseNo + '\',\'' + r.id + '\')" ondblclick="openDetailPanel(\'' + r.id + '\',' + r._sampleIdx + ')">';
+        var checked = _selectedReceipts.has(baseNo) ? 'checked' : '';
+        bhtml += '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleReceiptSelect(\'' + baseNo + '\',\'' + r.id + '\')"></td>';
         visibleCols.forEach(function(col) {
             var val = r[col.key];
             if (val === undefined || val === null) val = '';
@@ -1040,18 +1040,37 @@ function renderPagination() {
 function goPage(p) { _page = p; renderTable(); }
 
 // ============================================================================
-// 선택 삭제
+// 행 클릭 핸들러 (Shift+클릭 범위 선택)
 // ============================================================================
-function toggleSelectMode() {
-    _selectMode = !_selectMode;
-    _selectedReceipts.clear();
-    _selectedDocIds = {};
-    document.getElementById('select-bar').style.display = _selectMode ? 'flex' : 'none';
-    document.getElementById('select-mode-btn').style.display = _selectMode ? 'none' : '';
-    updateSelectCount();
+function handleRowClick(e, rowIdx, baseNo, docId) {
+    if (e.shiftKey && _lastSelectedIdx >= 0) {
+        // Shift+클릭: 범위 선택
+        var fromIdx = Math.min(_lastSelectedIdx, rowIdx);
+        var toIdx = Math.max(_lastSelectedIdx, rowIdx);
+        for (var i = fromIdx; i <= toIdx; i++) {
+            var r = _filteredReceipts[i];
+            if (!r) continue;
+            var bno = r._baseReceiptNo || r.receiptNo || '';
+            if (!_selectedReceipts.has(bno)) {
+                _selectedReceipts.add(bno);
+                _selectedDocIds[bno] = _filteredReceipts
+                    .filter(function(x) { return (x._baseReceiptNo || x.receiptNo || '') === bno; })
+                    .map(function(x) { return x.id; })
+                    .filter(function(id, idx, arr) { return arr.indexOf(id) === idx; });
+            }
+        }
+    } else {
+        // 일반 클릭: 토글 선택
+        toggleReceiptSelect(baseNo, docId);
+    }
+    _lastSelectedIdx = rowIdx;
+    updateSummaryBar();
     renderTable();
 }
 
+// ============================================================================
+// 선택 삭제
+// ============================================================================
 function toggleReceiptSelect(baseNo, docId) {
     if (_selectedReceipts.has(baseNo)) {
         _selectedReceipts.delete(baseNo);
@@ -1064,7 +1083,7 @@ function toggleReceiptSelect(baseNo, docId) {
             .map(function(r) { return r.id; })
             .filter(function(id, i, arr) { return arr.indexOf(id) === i; });
     }
-    updateSelectCount();
+    updateSummaryBar();
     renderTable();
 }
 
@@ -1087,13 +1106,59 @@ function toggleSelectAll() {
                 .filter(function(id, i, arr) { return arr.indexOf(id) === i; });
         });
     }
-    updateSelectCount();
+    updateSummaryBar();
     renderTable();
+    // 헤더 체크박스 동기화
+    var cb = document.getElementById('select-all-cb');
+    if (cb) cb.checked = _selectedReceipts.size === allBaseNos.length && allBaseNos.length > 0;
 }
 
-function updateSelectCount() {
-    var el = document.getElementById('select-count');
-    if (el) el.textContent = _selectedReceipts.size + '개 선택';
+function updateSummaryBar() {
+    var count = _selectedReceipts.size;
+    var countEl = document.getElementById('select-count');
+    var delBtn = document.getElementById('btn-delete-selected');
+    var bar = document.getElementById('summary-bar');
+
+    if (count > 0) {
+        if (countEl) { countEl.style.display = ''; countEl.textContent = count + '개 선택'; }
+        if (delBtn) delBtn.style.display = '';
+    } else {
+        if (countEl) countEl.style.display = 'none';
+        if (delBtn) delBtn.style.display = 'none';
+    }
+
+    // 하단 합계바
+    if (!bar) return;
+    if (count === 0) {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = 'flex';
+    var sumSupply = 0, sumVat = 0, sumTotal = 0;
+    var counted = {};
+    _filteredReceipts.forEach(function(r) {
+        var bno = r._baseReceiptNo || r.receiptNo || '';
+        if (_selectedReceipts.has(bno) && !counted[bno]) {
+            counted[bno] = true;
+            sumSupply += (r.feeSupply || 0);
+            sumVat += (r.feeVat || 0);
+            sumTotal += (r.feeTotal || 0);
+        }
+    });
+    document.getElementById('summary-count').textContent = count + '건 선택';
+    document.getElementById('summary-supply').textContent = '공급가액: ' + sumSupply.toLocaleString() + '원';
+    document.getElementById('summary-vat').textContent = '세액: ' + sumVat.toLocaleString() + '원';
+    document.getElementById('summary-total').textContent = '총계: ' + sumTotal.toLocaleString() + '원';
+}
+
+function clearSelection() {
+    _selectedReceipts.clear();
+    _selectedDocIds = {};
+    _lastSelectedIdx = -1;
+    var cb = document.getElementById('select-all-cb');
+    if (cb) cb.checked = false;
+    updateSummaryBar();
+    renderTable();
 }
 
 async function deleteSelectedReceipts() {
@@ -1124,7 +1189,7 @@ async function deleteSelectedReceipts() {
             await fsDeleteTestResultsByReceiptNo(receiptNo);
         }
         showToast(names.length + '개 접수건이 삭제되었습니다', 'success');
-        toggleSelectMode();
+        clearSelection();
         loadReceipts();
     } catch(e) {
         console.error('삭제 오류:', e);
@@ -1171,6 +1236,13 @@ document.addEventListener('click', function(e) {
     var wrap = document.querySelector('.col-settings-wrap');
     if (wrap && !wrap.contains(e.target)) {
         document.getElementById('col-settings-panel').classList.remove('active');
+    }
+});
+
+// ESC 키로 선택 해제
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && _selectedReceipts.size > 0) {
+        clearSelection();
     }
 });
 
