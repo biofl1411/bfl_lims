@@ -1532,8 +1532,8 @@ async function loadLedger() {
                 type: '매출',
                 payMethod: '',
                 receiptNo: d.receiptNo || '',
-                productName: d.productName || d.sampleName || '',
-                desc: '[' + (d.sampleType || '') + ', ' + (d.purpose || d.inspectionPurpose || '') + ']',
+                productName: _getProductName(d),
+                desc: _getDesc(d),
                 sales: fee,
                 payment: 0,
                 sortOrder: 0
@@ -1666,11 +1666,33 @@ async function loadLedger() {
 }
 
 function _getFee(d) {
-    if (d.totalFee != null && d.totalFee !== '' && Number(d.totalFee) > 0) return Number(d.totalFee);
+    // 할인 후 최종가 > 수수료 합계 > 원래 수수료 > totalFee > supplyPrice+tax > fee
+    if (d.discountFinalPrice != null && Number(d.discountFinalPrice) > 0) return Number(d.discountFinalPrice);
+    if (d.feeTotal != null && Number(d.feeTotal) > 0) return Number(d.feeTotal);
+    if (d.feeOriginal != null && Number(d.feeOriginal) > 0) return Number(d.feeOriginal);
+    if (d.totalFee != null && Number(d.totalFee) > 0) return Number(d.totalFee);
     var supply = Number(d.supplyPrice) || 0;
     var tax = Number(d.tax) || 0;
     if (supply + tax > 0) return supply + tax;
     return Number(d.fee) || 0;
+}
+
+function _getProductName(d) {
+    if (d.productName) return d.productName;
+    if (d.sampleName) return d.sampleName;
+    if (d.samples && d.samples.length > 0) {
+        var first = d.samples[0].productName || '';
+        if (d.samples.length > 1) first += ' 외 ' + (d.samples.length - 1) + '건';
+        return first;
+    }
+    return '';
+}
+
+function _getDesc(d) {
+    var field = d.testField || d.sampleType || '';
+    var purpose = d.testPurpose || d.purpose || d.inspectionPurpose || '';
+    if (!field && !purpose) return '';
+    return '[' + field + ', ' + purpose + ']';
 }
 
 function printLedger() {
