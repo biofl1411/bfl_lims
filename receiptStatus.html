@@ -23,8 +23,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
 /* 테이블 */
 .tbl{width:100%;border-collapse:collapse;font-size:12px}
-.tbl th{background:#f8f9fb;padding:10px 8px;text-align:left;font-weight:600;color:#344054;border-bottom:2px solid #e2e6ed;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:1}
+.tbl th{background:#f8f9fb;padding:10px 8px;text-align:left;font-weight:600;color:#344054;border-bottom:2px solid #e2e6ed;white-space:nowrap;cursor:grab;user-select:none;position:sticky;top:0;z-index:1}
+.tbl th:active{cursor:grabbing}
 .tbl th:hover{background:#eef0f4}
+.tbl th.drag-over-left{border-left:3px solid #1a73e8}
+.tbl th.drag-over-right{border-right:3px solid #1a73e8}
 .tbl th .sort-icon{font-size:10px;color:#c8d6e5;margin-left:2px}
 .tbl th.sorted-asc .sort-icon,.tbl th.sorted-desc .sort-icon{color:#1a73e8}
 .tbl td{padding:10px 8px;border-bottom:1px solid #f0f2f5;white-space:nowrap;color:#344054}
@@ -728,6 +731,100 @@ function sortBy(key) {
 }
 
 // ============================================================================
+// 헤더 드래그 앤 드롭 (컬럼 순서 변경)
+// ============================================================================
+var _dragColKey = null;
+
+function initHeaderDrag(thead) {
+    var ths = thead.querySelectorAll('th[draggable="true"]');
+    ths.forEach(function(th) {
+        th.addEventListener('dragstart', function(e) {
+            _dragColKey = th.getAttribute('data-col-key');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', _dragColKey);
+            th.style.opacity = '0.5';
+            // 드래그 시작 시 클릭(정렬) 방지
+            th.setAttribute('data-dragging', '1');
+        });
+        th.addEventListener('dragend', function(e) {
+            th.style.opacity = '';
+            _dragColKey = null;
+            thead.querySelectorAll('th').forEach(function(t) {
+                t.classList.remove('drag-over-left', 'drag-over-right');
+            });
+            setTimeout(function() { th.removeAttribute('data-dragging'); }, 50);
+        });
+        th.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            var rect = th.getBoundingClientRect();
+            var midX = rect.left + rect.width / 2;
+            thead.querySelectorAll('th').forEach(function(t) {
+                t.classList.remove('drag-over-left', 'drag-over-right');
+            });
+            if (e.clientX < midX) {
+                th.classList.add('drag-over-left');
+            } else {
+                th.classList.add('drag-over-right');
+            }
+        });
+        th.addEventListener('dragleave', function(e) {
+            th.classList.remove('drag-over-left', 'drag-over-right');
+        });
+        th.addEventListener('drop', function(e) {
+            e.preventDefault();
+            var fromKey = e.dataTransfer.getData('text/plain');
+            var toKey = th.getAttribute('data-col-key');
+            if (fromKey === toKey) return;
+            // ALL_COLUMNS 배열에서 이동
+            var fromIdx = ALL_COLUMNS.findIndex(function(c) { return c.key === fromKey; });
+            var toIdx = ALL_COLUMNS.findIndex(function(c) { return c.key === toKey; });
+            if (fromIdx < 0 || toIdx < 0) return;
+            var rect = th.getBoundingClientRect();
+            var midX = rect.left + rect.width / 2;
+            var moved = ALL_COLUMNS.splice(fromIdx, 1)[0];
+            var newToIdx = ALL_COLUMNS.findIndex(function(c) { return c.key === toKey; });
+            if (e.clientX >= midX) newToIdx++;
+            ALL_COLUMNS.splice(newToIdx, 0, moved);
+            saveColumnOrder();
+            renderTable();
+        });
+    });
+    // 정렬 클릭과 드래그 충돌 방지: onclick에서 드래그 중이면 무시
+    var origSortBy = window.sortBy;
+    window.sortBy = function(key) {
+        var dragging = thead.querySelector('th[data-dragging="1"]');
+        if (dragging) return;
+        origSortBy(key);
+    };
+}
+
+function saveColumnOrder() {
+    var order = ALL_COLUMNS.map(function(c) { return c.key; });
+    localStorage.setItem('receiptStatus_colOrder', JSON.stringify(order));
+    // visibility도 함께 저장
+    var vis = {};
+    ALL_COLUMNS.forEach(function(c) { vis[c.key] = c.visible; });
+    localStorage.setItem('receiptStatus_columns', JSON.stringify(vis));
+}
+
+function loadColumnOrder() {
+    var saved = localStorage.getItem('receiptStatus_colOrder');
+    if (!saved) return;
+    var order = JSON.parse(saved);
+    var colMap = {};
+    ALL_COLUMNS.forEach(function(c) { colMap[c.key] = c; });
+    var sorted = [];
+    order.forEach(function(key) {
+        if (colMap[key]) { sorted.push(colMap[key]); delete colMap[key]; }
+    });
+    // 새로 추가된 컬럼은 뒤에 배치
+    Object.keys(colMap).forEach(function(key) { sorted.push(colMap[key]); });
+    ALL_COLUMNS.length = 0;
+    sorted.forEach(function(c) { ALL_COLUMNS.push(c); });
+}
+
+// ============================================================================
 // 테이블 렌더링
 // ============================================================================
 function renderTable() {
@@ -738,18 +835,21 @@ function renderTable() {
     if (_selectMode) {
         hhtml += '<th style="width:40px;text-align:center">선택</th>';
     }
-    visibleCols.forEach(function(col) {
+    visibleCols.forEach(function(col, vi) {
         var cls = '';
         var icon = '↕';
         if (_sortKey === col.key) {
             cls = _sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc';
             icon = _sortDir === 'asc' ? '▲' : '▼';
         }
-        hhtml += '<th class="' + cls + '" style="width:' + col.width + '" onclick="sortBy(\'' + col.key + '\')">' +
+        hhtml += '<th class="' + cls + '" style="width:' + col.width + '" draggable="true"' +
+            ' data-col-key="' + col.key + '" data-vi="' + vi + '"' +
+            ' onclick="sortBy(\'' + col.key + '\')">' +
             col.label + ' <span class="sort-icon">' + icon + '</span></th>';
     });
     hhtml += '</tr>';
     thead.innerHTML = hhtml;
+    initHeaderDrag(thead);
 
     // 데이터
     var tbody = document.getElementById('receipt-tbody');
@@ -1170,6 +1270,7 @@ function downloadExcel() {
 // ============================================================================
 window.onload = function() {
     loadColumnSettings();
+    loadColumnOrder();
     loadReceipts();
     // 기본 날짜 필터 (최근 30일)
     var now = new Date();
