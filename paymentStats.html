@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 입금 통계</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.content{flex:1;padding:24px;overflow-y:auto}
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-sm{padding:5px 10px;font-size:11px}
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.card-bd{padding:20px}
+.text-right{text-align:right}
+.text-center{text-align:center}
+
+/* 탭 바 */
+.tab-bar{display:flex;gap:0;border-bottom:2px solid #e2e6ed;margin-bottom:20px;background:#fff;border-radius:10px 10px 0 0;padding:0 8px}
+.tab-item{padding:12px 20px;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;user-select:none}
+.tab-item:hover{color:#1a73e8}
+.tab-item.active{color:#1a73e8;border-bottom-color:#1a73e8}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* 필터 바 */
+.filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:10px 16px;background:#fff;border:1px solid #e2e6ed;border-radius:10px}
+.filter-bar input,.filter-bar select{padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit}
+.filter-bar input:focus,.filter-bar select:focus{outline:none;border-color:#1a73e8}
+.filter-bar input[type="date"]{width:130px}
+
+/* KPI */
+.kpi-row{display:flex;gap:16px;margin-bottom:16px}
+.kpi-card{flex:1;padding:16px 20px;background:#fff;border:1px solid #e2e6ed;border-radius:10px;text-align:center}
+.kpi-card .kpi-label{font-size:12px;color:#6b7280;margin-bottom:4px}
+.kpi-card .kpi-value{font-size:22px;font-weight:700;color:#1a2332}
+
+/* 테이블 */
+.tbl-wrap{overflow-x:auto;border:1px solid #e2e6ed;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{background:#f8f9fb;position:sticky;top:0}
+th{padding:8px 10px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap;font-size:11px}
+td{padding:8px 10px;border-bottom:1px solid #f0f2f5;color:#1a2332}
+tr:hover{background:#f8f9fb}
+.row-total{background:#f8f9fb;font-weight:700}
+
+/* 신호등 */
+.traffic-light{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.traffic-green{background:#ecfdf5;color:#059669}
+.traffic-yellow{background:#fffbeb;color:#d97706}
+.traffic-orange{background:#fff7ed;color:#ea580c}
+.traffic-red{background:#fef2f2;color:#dc2626}
+.traffic-black{background:#1f2937;color:#fff}
+
+/* 결제수단 바 */
+.method-bar{display:flex;height:24px;border-radius:6px;overflow:hidden;margin-bottom:4px}
+.method-bar-seg{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;min-width:20px}
+
+/* 차트 placeholder */
+.chart-wrap{width:100%;height:300px;display:flex;align-items:center;justify-content:center;background:#f8f9fb;border-radius:10px;border:1px solid #e2e6ed}
+
+.empty-msg{text-align:center;padding:40px;color:#9ca3af}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;background:#1f2937;color:#fff;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;z-index:1100}
+.toast.show{opacity:1}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/sidebar.js?v=3"></script>
+</head>
+<body>
+<aside class="sidebar" id="sidebar"></aside>
+<div class="main">
+    <div class="topbar">
+        <span class="topbar-title">재무 관리</span>
+        <span class="topbar-sep">&#8250;</span>
+        <span class="topbar-sub">입금 통계</span>
+    </div>
+    <div class="content">
+        <!-- 공통 필터 -->
+        <div class="filter-bar">
+            <input type="date" id="filter-from">
+            <span style="color:#9ca3af">~</span>
+            <input type="date" id="filter-to">
+            <button class="btn btn-primary" onclick="loadStats()">조회</button>
+            <button class="btn btn-secondary" onclick="loadStats()">새로고침</button>
+        </div>
+
+        <!-- 탭 바 -->
+        <div class="tab-bar">
+            <div class="tab-item active" data-tab="aging" onclick="switchTab('aging')">결제 나이</div>
+            <div class="tab-item" data-tab="method" onclick="switchTab('method')">결제수단별</div>
+            <div class="tab-item" data-tab="dept" onclick="switchTab('dept')">부서별</div>
+            <div class="tab-item" data-tab="card" onclick="switchTab('card')">카드 수수료</div>
+        </div>
+
+        <!-- ===== 탭1: 결제 나이 (신호등 UI) ===== -->
+        <div class="tab-panel active" id="panel-aging">
+            <div class="kpi-row" id="aging-kpi"></div>
+            <div class="card">
+                <div class="card-hd"><h3>업체별 결제 나이 (미수금 기준)</h3></div>
+                <div class="card-bd">
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>업체명</th>
+                                    <th class="text-right">총 청구</th>
+                                    <th class="text-right">입금액</th>
+                                    <th class="text-right">미수금</th>
+                                    <th class="text-center">최종입금일</th>
+                                    <th class="text-center">경과일수</th>
+                                    <th class="text-center">신호등</th>
+                                </tr>
+                            </thead>
+                            <tbody id="aging-body">
+                                <tr><td colspan="7" class="empty-msg">로딩 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 탭2: 결제수단별 ===== -->
+        <div class="tab-panel" id="panel-method">
+            <div class="kpi-row" id="method-kpi"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="card">
+                    <div class="card-hd"><h3>결제수단별 분포</h3></div>
+                    <div class="card-bd">
+                        <canvas id="method-chart" height="250"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-hd"><h3>월별 결제수단 추이</h3></div>
+                    <div class="card-bd">
+                        <canvas id="method-trend-chart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-hd"><h3>상세 내역</h3></div>
+                <div class="card-bd">
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>결제수단</th>
+                                    <th class="text-right">건수</th>
+                                    <th class="text-right">금액</th>
+                                    <th class="text-right">비율</th>
+                                    <th>분포</th>
+                                </tr>
+                            </thead>
+                            <tbody id="method-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 탭3: 부서별 ===== -->
+        <div class="tab-panel" id="panel-dept">
+            <div class="kpi-row" id="dept-kpi"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="card">
+                    <div class="card-hd"><h3>부서별 매출/입금</h3></div>
+                    <div class="card-bd">
+                        <canvas id="dept-chart" height="250"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-hd"><h3>부서별 입금률</h3></div>
+                    <div class="card-bd">
+                        <canvas id="dept-rate-chart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-hd"><h3>상세 내역</h3></div>
+                <div class="card-bd">
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>부서</th>
+                                    <th class="text-right">접수건수</th>
+                                    <th class="text-right">매출합계</th>
+                                    <th class="text-right">입금합계</th>
+                                    <th class="text-right">미수금</th>
+                                    <th class="text-right">입금률</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dept-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 탭4: 카드 수수료 ===== -->
+        <div class="tab-panel" id="panel-card">
+            <div class="kpi-row" id="card-kpi"></div>
+            <div class="card">
+                <div class="card-hd">
+                    <h3>카드 결제 내역 및 수수료</h3>
+                    <div class="right">
+                        <span style="font-size:11px;color:#6b7280">수수료율</span>
+                        <input type="number" id="card-fee-rate" value="2.2" step="0.1" min="0" max="10"
+                            style="width:60px;padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right"
+                            onchange="renderCardStats()">
+                        <span style="font-size:11px;color:#6b7280">%</span>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>월</th>
+                                    <th class="text-right">카드결제 건수</th>
+                                    <th class="text-right">카드결제 금액</th>
+                                    <th class="text-right">수수료 (추정)</th>
+                                    <th class="text-right">실수령 (추정)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="card-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _receipts = [];
+var _methodChart = null;
+var _methodTrendChart = null;
+var _deptChart = null;
+var _deptRateChart = null;
+
+// ---- 탭 전환 ----
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-item').forEach(function(el) { el.classList.toggle('active', el.dataset.tab === tabId); });
+    document.querySelectorAll('.tab-panel').forEach(function(el) { el.classList.toggle('active', el.id === 'panel-' + tabId); });
+}
+
+// ---- 초기화 ----
+document.addEventListener('DOMContentLoaded', function() {
+    var now = new Date();
+    var y = now.getFullYear();
+    document.getElementById('filter-from').value = y + '-01-01';
+    document.getElementById('filter-to').value = y + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+    loadStats();
+});
+
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2500);
+}
+
+function fmtMoney(n) { return (n||0).toLocaleString('ko-KR') + '원'; }
+
+// ---- 데이터 로드 ----
+async function loadStats() {
+    try {
+        var snap = await db.collection('receipts').orderBy('createdAt', 'desc').limit(1000).get();
+        _receipts = [];
+        snap.forEach(function(doc) { _receipts.push({ id: doc.id, data: doc.data() }); });
+
+        var from = document.getElementById('filter-from').value;
+        var to = document.getElementById('filter-to').value;
+        _receipts = _receipts.filter(function(r) {
+            var d = r.data.receiptDate || '';
+            return d >= from && d <= to;
+        });
+
+        renderAgingStats();
+        renderMethodStats();
+        renderDeptStats();
+        renderCardStats();
+    } catch(e) {
+        console.error('통계 로드 실패:', e);
+        showToast('로드 실패: ' + e.message);
+    }
+}
+
+function _getTotalFee(d) { return Number(d.totalFee || d.totalAmount || 0); }
+function _getPaidAmount(d) {
+    var s = 0;
+    (d.payments || []).forEach(function(p) { s += Number(p.amount || 0); });
+    return s;
+}
+function _getLastPayDate(d) {
+    var payments = d.payments || [];
+    if (!payments.length) return '';
+    var dates = payments.map(function(p){ return p.date || ''; }).filter(Boolean).sort();
+    return dates.length ? dates[dates.length-1] : '';
+}
+
+// ---- 탭1: 결제 나이 (신호등) ----
+function renderAgingStats() {
+    var companyMap = {};
+    var today = new Date();
+
+    _receipts.forEach(function(r) {
+        var d = r.data;
+        var company = d.companyName || d.company || '(미상)';
+        if (!companyMap[company]) companyMap[company] = { total: 0, paid: 0, lastPay: '' };
+        companyMap[company].total += _getTotalFee(d);
+        companyMap[company].paid += _getPaidAmount(d);
+        var lp = _getLastPayDate(d);
+        if (lp > companyMap[company].lastPay) companyMap[company].lastPay = lp;
+    });
+
+    var rows = Object.keys(companyMap).map(function(name) {
+        var c = companyMap[name];
+        var unpaid = Math.max(0, c.total - c.paid);
+        var days = 0;
+        if (c.lastPay) {
+            days = Math.floor((today - new Date(c.lastPay)) / 86400000);
+        } else if (unpaid > 0) {
+            days = 999;
+        }
+        return { name: name, total: c.total, paid: c.paid, unpaid: unpaid, lastPay: c.lastPay, days: days };
+    }).filter(function(r) { return r.unpaid > 0; })
+      .sort(function(a, b) { return b.days - a.days; });
+
+    // 신호등 분류
+    var green = 0, yellow = 0, orange = 0, red = 0, black = 0;
+    rows.forEach(function(r) {
+        if (r.days <= 30) green++;
+        else if (r.days <= 60) yellow++;
+        else if (r.days <= 90) orange++;
+        else if (r.days <= 180) red++;
+        else black++;
+    });
+
+    document.getElementById('aging-kpi').innerHTML =
+        '<div class="kpi-card"><div class="kpi-label">미수 업체수</div><div class="kpi-value" style="color:#ef4444">' + rows.length + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">30일 이내</div><div class="kpi-value" style="color:#059669">' + green + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">31~60일</div><div class="kpi-value" style="color:#d97706">' + yellow + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">61~90일</div><div class="kpi-value" style="color:#ea580c">' + orange + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">90일 초과</div><div class="kpi-value" style="color:#dc2626">' + (red + black) + '</div></div>';
+
+    var tbody = document.getElementById('aging-body');
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">미수금 업체가 없습니다</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map(function(r) {
+        var light = getTrafficLight(r.days);
+        return '<tr>' +
+            '<td style="font-weight:600">' + r.name + '</td>' +
+            '<td class="text-right">' + fmtMoney(r.total) + '</td>' +
+            '<td class="text-right" style="color:#2563eb">' + fmtMoney(r.paid) + '</td>' +
+            '<td class="text-right" style="color:#ef4444;font-weight:600">' + fmtMoney(r.unpaid) + '</td>' +
+            '<td class="text-center">' + (r.lastPay || '-') + '</td>' +
+            '<td class="text-center" style="font-weight:600">' + (r.days === 999 ? '-' : r.days + '일') + '</td>' +
+            '<td class="text-center">' + light + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function getTrafficLight(days) {
+    if (days <= 30) return '<span class="traffic-light traffic-green">정상</span>';
+    if (days <= 60) return '<span class="traffic-light traffic-yellow">주의</span>';
+    if (days <= 90) return '<span class="traffic-light traffic-orange">경고</span>';
+    if (days <= 180) return '<span class="traffic-light traffic-red">위험</span>';
+    return '<span class="traffic-light traffic-black">장기</span>';
+}
+
+// ---- 탭2: 결제수단별 ----
+function renderMethodStats() {
+    var methodMap = {};
+    var monthMethodMap = {};
+    var totalAmount = 0;
+
+    _receipts.forEach(function(r) {
+        (r.data.payments || []).forEach(function(p) {
+            var m = p.method || '기타';
+            var amt = Number(p.amount || 0);
+            if (!methodMap[m]) methodMap[m] = { count: 0, amount: 0 };
+            methodMap[m].count++;
+            methodMap[m].amount += amt;
+            totalAmount += amt;
+
+            var mon = (p.date || '').substring(0, 7);
+            if (mon) {
+                if (!monthMethodMap[mon]) monthMethodMap[mon] = {};
+                if (!monthMethodMap[mon][m]) monthMethodMap[mon][m] = 0;
+                monthMethodMap[mon][m] += amt;
+            }
+        });
+    });
+
+    var methods = Object.keys(methodMap).sort(function(a, b) { return methodMap[b].amount - methodMap[a].amount; });
+
+    document.getElementById('method-kpi').innerHTML =
+        '<div class="kpi-card"><div class="kpi-label">총 입금액</div><div class="kpi-value" style="color:#2563eb">' + fmtMoney(totalAmount) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">결제수단 종류</div><div class="kpi-value">' + methods.length + '종</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">최다 수단</div><div class="kpi-value" style="font-size:16px">' + (methods[0] || '-') + '</div></div>';
+
+    // 테이블
+    var colors = { '카드': '#3b82f6', '현금': '#10b981', '계좌이체': '#f59e0b', '은행매칭': '#8b5cf6' };
+    var tbody = document.getElementById('method-body');
+    var html = methods.map(function(m) {
+        var d = methodMap[m];
+        var pct = totalAmount > 0 ? (d.amount / totalAmount * 100).toFixed(1) : 0;
+        var color = colors[m] || '#6b7280';
+        return '<tr>' +
+            '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';margin-right:6px"></span>' + m + '</td>' +
+            '<td class="text-right">' + d.count.toLocaleString() + '건</td>' +
+            '<td class="text-right" style="font-weight:600">' + fmtMoney(d.amount) + '</td>' +
+            '<td class="text-right">' + pct + '%</td>' +
+            '<td><div style="width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:4px"></div></div></td>' +
+            '</tr>';
+    }).join('');
+
+    html += '<tr class="row-total"><td>합계</td>' +
+        '<td class="text-right">' + methods.reduce(function(s,m){ return s + methodMap[m].count; }, 0).toLocaleString() + '건</td>' +
+        '<td class="text-right">' + fmtMoney(totalAmount) + '</td>' +
+        '<td class="text-right">100%</td><td></td></tr>';
+    tbody.innerHTML = html;
+
+    // 파이 차트
+    if (_methodChart) _methodChart.destroy();
+    var ctx = document.getElementById('method-chart').getContext('2d');
+    _methodChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: methods,
+            datasets: [{ data: methods.map(function(m){ return methodMap[m].amount; }),
+                backgroundColor: methods.map(function(m){ return colors[m] || '#9ca3af'; }),
+                borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // 월별 추이
+    var months = Object.keys(monthMethodMap).sort();
+    if (_methodTrendChart) _methodTrendChart.destroy();
+    var ctx2 = document.getElementById('method-trend-chart').getContext('2d');
+    _methodTrendChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: months,
+            datasets: methods.map(function(m) {
+                return {
+                    label: m,
+                    data: months.map(function(mon) { return (monthMethodMap[mon] && monthMethodMap[mon][m]) || 0; }),
+                    backgroundColor: colors[m] || '#9ca3af'
+                };
+            })
+        },
+        options: {
+            responsive: true,
+            scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: function(v) { return (v/10000).toLocaleString() + '만'; } } } },
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+}
+
+// ---- 탭3: 부서별 ----
+function renderDeptStats() {
+    var deptMap = {};
+
+    _receipts.forEach(function(r) {
+        var d = r.data;
+        var dept = d.department || d.salesDept || d.dept || '(미지정)';
+        if (!deptMap[dept]) deptMap[dept] = { count: 0, sales: 0, paid: 0 };
+        deptMap[dept].count++;
+        deptMap[dept].sales += _getTotalFee(d);
+        deptMap[dept].paid += _getPaidAmount(d);
+    });
+
+    var depts = Object.keys(deptMap).sort(function(a, b) { return deptMap[b].sales - deptMap[a].sales; });
+
+    var totalSales = 0, totalPaid = 0;
+    depts.forEach(function(d) { totalSales += deptMap[d].sales; totalPaid += deptMap[d].paid; });
+    var totalRate = totalSales > 0 ? Math.round(totalPaid / totalSales * 100) : 0;
+
+    document.getElementById('dept-kpi').innerHTML =
+        '<div class="kpi-card"><div class="kpi-label">부서 수</div><div class="kpi-value">' + depts.length + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">총 매출</div><div class="kpi-value" style="color:#ef4444">' + fmtMoney(totalSales) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">총 입금</div><div class="kpi-value" style="color:#2563eb">' + fmtMoney(totalPaid) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">전체 입금률</div><div class="kpi-value" style="color:' + (totalRate >= 80 ? '#10b981' : '#f59e0b') + '">' + totalRate + '%</div></div>';
+
+    var tbody = document.getElementById('dept-body');
+    var html = depts.map(function(dept) {
+        var d = deptMap[dept];
+        var unpaid = Math.max(0, d.sales - d.paid);
+        var rate = d.sales > 0 ? Math.round(d.paid / d.sales * 100) : 0;
+        return '<tr>' +
+            '<td style="font-weight:600">' + dept + '</td>' +
+            '<td class="text-right">' + d.count.toLocaleString() + '</td>' +
+            '<td class="text-right">' + fmtMoney(d.sales) + '</td>' +
+            '<td class="text-right" style="color:#2563eb">' + fmtMoney(d.paid) + '</td>' +
+            '<td class="text-right" style="color:#ef4444">' + fmtMoney(unpaid) + '</td>' +
+            '<td class="text-right" style="font-weight:600;color:' + (rate >= 80 ? '#10b981' : rate >= 50 ? '#d97706' : '#ef4444') + '">' + rate + '%</td>' +
+            '</tr>';
+    }).join('');
+
+    html += '<tr class="row-total"><td>합계</td>' +
+        '<td class="text-right">' + _receipts.length.toLocaleString() + '</td>' +
+        '<td class="text-right">' + fmtMoney(totalSales) + '</td>' +
+        '<td class="text-right">' + fmtMoney(totalPaid) + '</td>' +
+        '<td class="text-right">' + fmtMoney(Math.max(0, totalSales - totalPaid)) + '</td>' +
+        '<td class="text-right">' + totalRate + '%</td></tr>';
+    tbody.innerHTML = html;
+
+    // 차트
+    var deptColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+    if (_deptChart) _deptChart.destroy();
+    var ctx = document.getElementById('dept-chart').getContext('2d');
+    _deptChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: depts,
+            datasets: [
+                { label: '매출', data: depts.map(function(d){ return deptMap[d].sales; }), backgroundColor: '#fca5a5' },
+                { label: '입금', data: depts.map(function(d){ return deptMap[d].paid; }), backgroundColor: '#93c5fd' }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { ticks: { callback: function(v) { return (v/10000).toLocaleString() + '만'; } } } },
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+
+    if (_deptRateChart) _deptRateChart.destroy();
+    var ctx2 = document.getElementById('dept-rate-chart').getContext('2d');
+    _deptRateChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: depts,
+            datasets: [{ label: '입금률(%)', data: depts.map(function(d){ var dd = deptMap[d]; return dd.sales > 0 ? Math.round(dd.paid/dd.sales*100) : 0; }),
+                backgroundColor: depts.map(function(d, i){ return deptColors[i % deptColors.length]; }) }]
+        },
+        options: {
+            responsive: true,
+            indexAxis: 'y',
+            scales: { x: { max: 100, ticks: { callback: function(v){ return v + '%'; } } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+// ---- 탭4: 카드 수수료 ----
+function renderCardStats() {
+    var rate = parseFloat(document.getElementById('card-fee-rate').value) || 2.2;
+    var monthMap = {};
+    var totalAmt = 0, totalCount = 0;
+
+    _receipts.forEach(function(r) {
+        (r.data.payments || []).forEach(function(p) {
+            if ((p.method || '').indexOf('카드') < 0) return;
+            var amt = Number(p.amount || 0);
+            var mon = (p.date || '').substring(0, 7);
+            if (!mon) return;
+            if (!monthMap[mon]) monthMap[mon] = { count: 0, amount: 0 };
+            monthMap[mon].count++;
+            monthMap[mon].amount += amt;
+            totalAmt += amt;
+            totalCount++;
+        });
+    });
+
+    var months = Object.keys(monthMap).sort();
+    var totalFee = Math.round(totalAmt * rate / 100);
+
+    document.getElementById('card-kpi').innerHTML =
+        '<div class="kpi-card"><div class="kpi-label">카드결제 총액</div><div class="kpi-value" style="color:#2563eb">' + fmtMoney(totalAmt) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">카드 건수</div><div class="kpi-value">' + totalCount.toLocaleString() + '건</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">수수료 합계 (추정)</div><div class="kpi-value" style="color:#ef4444">' + fmtMoney(totalFee) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">실수령 (추정)</div><div class="kpi-value" style="color:#10b981">' + fmtMoney(totalAmt - totalFee) + '</div></div>';
+
+    var tbody = document.getElementById('card-body');
+    if (months.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">카드 결제 내역이 없습니다</td></tr>';
+        return;
+    }
+
+    var html = months.map(function(mon) {
+        var d = monthMap[mon];
+        var fee = Math.round(d.amount * rate / 100);
+        return '<tr>' +
+            '<td style="font-weight:600">' + mon + '</td>' +
+            '<td class="text-right">' + d.count.toLocaleString() + '건</td>' +
+            '<td class="text-right" style="font-weight:600">' + fmtMoney(d.amount) + '</td>' +
+            '<td class="text-right" style="color:#ef4444">' + fmtMoney(fee) + '</td>' +
+            '<td class="text-right" style="color:#10b981">' + fmtMoney(d.amount - fee) + '</td>' +
+            '</tr>';
+    }).join('');
+
+    html += '<tr class="row-total"><td>합계</td>' +
+        '<td class="text-right">' + totalCount.toLocaleString() + '건</td>' +
+        '<td class="text-right">' + fmtMoney(totalAmt) + '</td>' +
+        '<td class="text-right">' + fmtMoney(totalFee) + '</td>' +
+        '<td class="text-right">' + fmtMoney(totalAmt - totalFee) + '</td></tr>';
+    tbody.innerHTML = html;
+}
+</script>
+</body>
+</html>
