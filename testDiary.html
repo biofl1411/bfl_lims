@@ -680,6 +680,8 @@ function renderFormTemplateDetail(ft) {
   var a = ft.analyzed || {};
   var foodType = getFoodTypeFromForm(ft);
   var foodTypeCount = ft._foodTypeCount || 0;
+  // Firestore에 저장된 오버라이드 값 로드
+  var overrides = ft._overrides || {};
 
   var html = '<div class="diary-section">';
 
@@ -709,33 +711,42 @@ function renderFormTemplateDetail(ft) {
   html += '<div class="form-row"><div class="form-group"><label>SOP</label><input type="text" value="' + escA(a.sop) + '" readonly></div>';
   html += '<div class="form-group"><label>장비</label><input type="text" value="' + escA((a.equipment || []).join(', ')) + '" readonly></div></div>';
 
-  // 표준물질정보
+  // 적용 기간 (시작일~종료일)
+  var applyFrom = overrides.applyFrom || '';
+  var applyTo = overrides.applyTo || '';
+  html += '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-bottom:14px">';
+  html += '<label style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px;display:block">📅 값 적용 기간</label>';
+  html += '<div style="display:flex;gap:8px;align-items:center">';
+  html += '<input type="date" id="ft-apply-from" value="' + escA(applyFrom) + '" style="padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:12px">';
+  html += '<span style="color:#64748b">~</span>';
+  html += '<input type="date" id="ft-apply-to" value="' + escA(applyTo) + '" style="padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:12px">';
+  html += '</div></div>';
+
+  // 표준물질정보 (수정 가능)
   var stdSection = getSectionByTitle(a, '표준물질정보');
   if (stdSection && stdSection.fields && stdSection.fields.length) {
     html += '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:14px">';
     html += '<label style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;display:block">⚗ 표준물질정보</label>';
-    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
-    html += '<tr>';
+    html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(stdSection.fields.length, 3) + ',1fr);gap:8px">';
     stdSection.fields.forEach(function(f) {
-      html += '<th style="text-align:left;padding:3px 6px;color:#78716c;font-weight:600">' + escH(f.label) + '</th>';
+      var ovVal = (overrides.stdInfo && overrides.stdInfo[f.id]) || f.exampleValue || '';
+      html += '<div class="form-group" style="margin-bottom:4px"><label>' + escH(f.label) + (f.unit ? ' (' + escH(f.unit) + ')' : '') + '</label>';
+      html += '<input type="text" data-ft-field="stdInfo.' + escA(f.id) + '" value="' + escA(ovVal) + '" style="font-size:12px;padding:5px 8px"></div>';
     });
-    html += '</tr><tr>';
-    stdSection.fields.forEach(function(f) {
-      html += '<td style="padding:3px 6px;font-weight:500">' + escH(f.exampleValue || '-') + (f.unit ? ' <span style="color:#a8a29e">' + escH(f.unit) + '</span>' : '') + '</td>';
-    });
-    html += '</tr></table></div>';
+    html += '</div></div>';
   }
 
-  // 표준용액농도
+  // 표준용액농도 (수정 가능)
   var concSection = getSectionByTitle(a, '표준용액농도');
   if (concSection && concSection.fields && concSection.fields.length) {
     html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:14px">';
     html += '<label style="font-size:12px;font-weight:700;color:#166534;margin-bottom:8px;display:block">🧪 표준용액농도</label>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
     concSection.fields.forEach(function(f) {
-      html += '<div style="text-align:center;background:white;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;min-width:70px">';
-      html += '<div style="font-size:10px;color:#6b7280">' + escH(f.label) + '</div>';
-      html += '<div style="font-size:13px;font-weight:600">' + escH(f.exampleValue || '-') + '</div>';
+      var ovVal = (overrides.stdConc && overrides.stdConc[f.id]) || f.exampleValue || '';
+      html += '<div style="text-align:center;min-width:70px">';
+      html += '<div style="font-size:10px;color:#6b7280;margin-bottom:2px">' + escH(f.label) + '</div>';
+      html += '<input type="text" data-ft-field="stdConc.' + escA(f.id) + '" value="' + escA(ovVal) + '" style="width:80px;text-align:center;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600">';
       if (f.unit) html += '<div style="font-size:9px;color:#9ca3af">' + escH(f.unit) + '</div>';
       html += '</div>';
     });
@@ -765,24 +776,111 @@ function renderFormTemplateDetail(ft) {
     html += '</div>';
   }
 
-  // 측정값 필드 (입력 가능)
-  var measureSection = getSectionByTitle(a, '측정값');
-  if (measureSection && measureSection.fields && measureSection.fields.length) {
-    html += '<div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:12px;margin-bottom:14px">';
-    html += '<label style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;display:block">📊 측정값 필드</label>';
-    html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">';
-    measureSection.fields.forEach(function(f) {
-      html += '<div class="form-group" style="margin-bottom:4px"><label>' + escH(f.label) + (f.unit ? ' (' + escH(f.unit) + ')' : '') + '</label>';
-      html += '<input type="text" value="' + escA(f.exampleValue || '') + '" readonly style="font-size:12px;padding:5px 8px"></div>';
+  // 저장 버튼
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  html += '<button class="btn btn-primary" onclick="saveFormTemplateOverrides()" style="flex:1">💾 값 저장</button>';
+  html += '</div>';
+
+  // 변경 이력
+  var history = ft._changeHistory || [];
+  html += '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;margin-bottom:14px">';
+  html += '<label style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;display:block">📝 변경 이력</label>';
+  if (history.length) {
+    html += '<div style="max-height:150px;overflow-y:auto">';
+    history.slice().reverse().forEach(function(h) {
+      html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:11px">';
+      html += '<span style="color:#6b7280">' + escH(h.date || '') + '</span> ';
+      html += '<span style="color:#1e293b">' + escH(h.detail || '') + '</span>';
+      if (h.applyFrom || h.applyTo) {
+        html += ' <span style="color:#0369a1;font-size:10px">[' + escH(h.applyFrom || '') + ' ~ ' + escH(h.applyTo || '') + ']</span>';
+      }
+      html += '</div>';
     });
-    html += '</div></div>';
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:8px">변경 이력 없음</div>';
   }
+  html += '</div>';
 
   // 등록일
   html += '<div style="text-align:right;font-size:11px;color:#9ca3af;margin-top:8px">등록: ' + escH(ft.createdAtStr || '') + '</div>';
 
   html += '</div>';
   panel.innerHTML = html;
+}
+
+/* formTemplates 오버라이드 값 저장 */
+async function saveFormTemplateOverrides() {
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) { showToast('기록서를 선택하세요', 'error'); return; }
+
+  var a = ft.analyzed || {};
+
+  // 수정된 값 수집
+  var newOverrides = {
+    applyFrom: (document.getElementById('ft-apply-from') || {}).value || '',
+    applyTo: (document.getElementById('ft-apply-to') || {}).value || '',
+    stdInfo: {},
+    stdConc: {},
+    updatedAt: new Date().toISOString()
+  };
+
+  // 표준물질/표준용액 값 수집
+  document.querySelectorAll('[data-ft-field]').forEach(function(inp) {
+    var path = inp.getAttribute('data-ft-field');
+    var parts = path.split('.');
+    if (parts.length === 2) {
+      newOverrides[parts[0]] = newOverrides[parts[0]] || {};
+      newOverrides[parts[0]][parts[1]] = inp.value;
+    }
+  });
+
+  // 변경 내용 비교 → 이력 생성
+  var oldOverrides = ft._overrides || {};
+  var changes = [];
+  var stdSection = getSectionByTitle(a, '표준물질정보');
+  if (stdSection) {
+    stdSection.fields.forEach(function(f) {
+      var oldVal = (oldOverrides.stdInfo && oldOverrides.stdInfo[f.id]) || f.exampleValue || '';
+      var newVal = (newOverrides.stdInfo[f.id]) || '';
+      if (oldVal !== newVal) changes.push(f.label + ': ' + oldVal + ' → ' + newVal);
+    });
+  }
+  var concSection = getSectionByTitle(a, '표준용액농도');
+  if (concSection) {
+    concSection.fields.forEach(function(f) {
+      var oldVal = (oldOverrides.stdConc && oldOverrides.stdConc[f.id]) || f.exampleValue || '';
+      var newVal = (newOverrides.stdConc[f.id]) || '';
+      if (oldVal !== newVal) changes.push(f.label + ': ' + oldVal + ' → ' + newVal);
+    });
+  }
+  if (oldOverrides.applyFrom !== newOverrides.applyFrom || oldOverrides.applyTo !== newOverrides.applyTo) {
+    changes.push('적용기간 변경');
+  }
+
+  // 이력 추가
+  var history = ft._changeHistory || [];
+  if (changes.length) {
+    history.push({
+      date: new Date().toLocaleString('ko-KR'),
+      detail: changes.join(', '),
+      applyFrom: newOverrides.applyFrom,
+      applyTo: newOverrides.applyTo
+    });
+  }
+
+  try {
+    await db.collection('formTemplates').doc(ft._id).update({
+      _overrides: newOverrides,
+      _changeHistory: history
+    });
+    ft._overrides = newOverrides;
+    ft._changeHistory = history;
+    showToast('값 저장 완료' + (changes.length ? ' (' + changes.length + '건 변경)' : ''), 'success');
+    renderFormTemplateDetail(ft);
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+  }
 }
 
 /* 섹션명으로 analyzed.sections 검색 */
