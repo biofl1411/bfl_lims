@@ -1481,7 +1481,13 @@ function showReviewPanel(data) {
       html += '<div class="finfo">';
       html += '<div class="flbl">'+(f._added?'<span style="background:#d8b4fe;padding:1px 5px;border-radius:4px;font-size:10px;margin-right:4px">NEW</span>':'')+(f._corrected?'<span style="background:#fde68a;padding:1px 5px;border-radius:4px;font-size:10px;margin-right:4px">수정</span>':'')+f.label+(f.required?' <span style="color:var(--err)">*</span>':'')+'</div>';
       html += '<div class="fmeta">'+f.id+' | '+f.type+(f.unit?' | '+f.unit:'')+'</div>';
-      if (f.exampleValue) html += '<div class="fval">예시값: '+f.exampleValue+'</div>';
+      if (f.exampleValue) {
+        html += '<div class="fval">예시값: '+f.exampleValue+'</div>';
+        // sampleType 필드인 경우 식약처 품목코드 매칭 표시 영역 추가
+        if (f.id === 'sampleType') {
+          html += '<div class="fval mfds-match" id="rv-mfds-match-'+si+'-'+fi+'" data-sample="'+f.exampleValue.replace(/"/g,'&quot;')+'" style="margin-top:2px;font-size:11px;color:#1565c0;"></div>';
+        }
+      }
       html += '<textarea class="fmemo rv-memo" id="'+fid+'-memo" placeholder="이 필드 관련 메모 (누락·수정·특이사항)"></textarea>';
       html += '</div>';
       html += '<span class="memo-toggle" onclick="toggleFieldMemo(\''+fid+'\')">메모</span>';
@@ -1516,11 +1522,43 @@ function showReviewPanel(data) {
   // 텍스트 비교 그리드 렌더
   renderTextCompare();
 
+  // 시료유형 → 식약처 품목코드 매칭
+  matchSampleTypeToMfds();
+
   // 누락 메모 초기화
   document.getElementById('rv-missing-memo').value = '';
 
   // 리뷰 패널로 스크롤
   document.getElementById('review-panel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/* 시료유형 예시값 → 식약처 품목코드 매칭 표시 */
+async function matchSampleTypeToMfds() {
+  var els = document.querySelectorAll('.mfds-match[data-sample]');
+  if (!els.length) return;
+  try {
+    var allCodes = await MFDS_CODES.loadProductCodes();
+    els.forEach(function(el) {
+      var sample = el.getAttribute('data-sample').trim();
+      if (!sample) return;
+      var matches = MFDS_CODES.searchProductCodes(sample, allCodes);
+      if (matches.length > 0) {
+        var tags = matches.slice(0, 5).map(function(m) {
+          var code = m['품목 코드'] || '';
+          var name = m['한글 명'] || '';
+          var level = m['수준'] || '';
+          var lvlLabel = level == 1 ? '대' : level == 2 ? '중' : '소';
+          return '<span style="display:inline-block;background:#e3f2fd;padding:1px 6px;border-radius:4px;margin:1px 2px;font-size:10px;">' +
+            '<b>' + code + '</b> ' + name + ' <span style="color:#999">(' + lvlLabel + ')</span></span>';
+        });
+        el.innerHTML = '📦 식약처 품목코드: ' + tags.join(' ');
+      } else {
+        el.innerHTML = '<span style="color:#999">📦 식약처 품목코드: 매칭 없음</span>';
+      }
+    });
+  } catch(e) {
+    console.warn('[품목코드 매칭] 실패:', e.message);
+  }
 }
 
 function renderTextCompare() {
