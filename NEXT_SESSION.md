@@ -11,35 +11,119 @@
 
 | 날짜 | 주요 작업 |
 |------|-----------|
+| 2026-03-17(오후) | prefix 동기화 버그 수정, 하드코딩 제거, 기록서 양식 수집기 개선(시료유형 품목코드 매칭, 저장 후 다른 식품유형 적용 워크플로우) |
+| 2026-03-17 | formCollector 파일명UI/시험법근거자동추출, 재고관리 코드매칭, **paymentMgmt 재구성 진행중(미완료)** |
 | 2026-03-09 | 시험일지 전용 페이지 생성 (`testDiary.html`), mfds-api.js API 래퍼 3개 추가, sidebar 메뉴 추가 |
 | 2026-03-06 | 서버 교체 복구 (nginx 설치, SSL 인증서, 권한 수정, 수집기 cron 복구) |
 | 2026-03-05 | 보고번호 자동조회, 원재료 조회 버튼, 검사목적 항목 순서 정렬, 단위코드 검색 개선, 패키지 수수료, 검체유형 자연정렬 |
 | 2026-03-04 | P코드 331종 생성, 한글명 우선순위, 수수료 필드, 데이터 손실 방지 (`WORK_LOG_20260304.md`) |
 | 2026-03-01 | 수수료 Firestore 연동, 참고용 매핑 서브탭 (`WORK_LOG_20260301.md`) |
 
-## 🔵 다음 작업 목록 (2026-03-09 기준)
+## 🔴 긴급 작업 목록 (2026-03-18 기준) — 다음 세션 최우선
 
-### 1. 재고/시약 관리 페이지 — 다음 세션 예정
-- 재고/시약 관리 페이지 신규 구성
-- 사이드바 메뉴에 이미 "재고/시약 관리" 그룹 존재 (현재 disabled)
-- 구현 범위: 시약 입출고, 재고 현황, 시약 관리 등
+### 0. 기록서 양식 → 시험일지/결과입력 연동 — **미착수, 최우선**
 
-### 2. 접수등록 페이지 개선 (sampleReceipt.html) — 예정
+#### 0-1. 시험일지 반영 → 결과 입력 자동값 설정
+- 시험 결재 > 시험 진행 현황 > 결과 입력에서 formTemplates 기반 입력 폼 생성 시, 자동으로 불러올 값 설정
+- 현재 구조: `loadFormTemplates()` → `appliedToLims === true`인 템플릿 로드 → `renderCalcForm()` 으로 인라인 폼 생성
+- **할 일**: 표준품 농도, 장비번호 등 반복 입력 필드를 사전 설정값으로 자동 채움
+- 관련: `_formTemplatesCache`, `findFormTemplate()`, `renderCalcForm()`, `calcItemResult()`
+
+#### 0-2. 시험일지에서 식품유형 선택/관리
+- 시험 결재 > 시험 진행 현황 > 시험일지에서 해당 일지를 불러올 식품유형 선택 및 관리
+- 현재: `diaryTemplates` 컬렉션에 항목코드별 양식 저장, `mfdsTemplates`에서 식품유형별 시험항목 매핑
+- **할 일**: 일지 양식을 변경/수정할 때 해당 양식이 적용될 식품유형을 선택·관리하는 UI
+- formTemplates(기록서 양식 수집기 저장 데이터)와 diaryTemplates(시험일지 양식) 연결
+
+#### 0-3. 표준품 농도 등 입력값 관리
+- 표준품 농도, 희석배수, 장비번호 등 반복 사용되는 입력값을 관리하는 기능
+- analyzed.sections.fields 중 type이 number/text인 필드에 사전 설정값(preset) 저장
+- Firestore에 저장하여 다음 입력 시 자동 채움
+
+#### 참고: 현재 데이터 흐름
+```
+기록서 양식 수집 (formCollector)
+  ↓ PDF 분석 → analyzed (sections, fields, calculations, judgmentRule)
+  ↓ 검증완료 저장 → formTemplates 컬렉션
+  ↓
+결과 입력 (testResultInput)
+  ↓ loadFormTemplates() → appliedToLims=true인 템플릿 로드
+  ↓ renderCalcForm() → 인라인 계산 폼 생성
+  ↓ calcItemResult() → 동적 계산 실행
+  ↓
+시험일지 (testDiary)
+  ↓ diaryTemplates 컬렉션 → 항목별 일지 양식
+  ↓ saveDiary() → 식약처 API 등록
+  ↓ saveDiaryLocal() → Firestore testDiaries 저장
+```
+
+### 1. paymentMgmt.html 전면 재구성 — **미완료, 최우선**
+- **현재 상태**: 기존 파일(1390줄) 분석 완료, 새 파일 작성 직전
+- **목표**: 4탭 구조로 전면 재구성
+  - **탭1 매출처 원장**: ledgerMgmt.html의 기능을 탭으로 통합 (서브탭: 원장+거래내역서), 이월행/매출행/입금행/합계행, KPI 4개, mfdsTemplates 검사항목 매칭
+  - **탭2 입금 현황**: 기존 paymentMgmt.html의 입금 테이블+모달 그대로 유지 (탭 안으로 이동)
+  - **탭3 은행 매칭**: 5단계 워크플로우(파일업로드→분석→유사도제안→입금반영→보고서), parseBankFile 개선(BANK_COL_MAP 헤더 자동탐지, 파일명 은행 감지, 주소 파싱), findBestMatch 5순위 매칭(학습DB 98%→업체명 90%→대표자 80%→주소 65%→미매칭), payment_depositors/payment_ambiguous/payment_reports 컬렉션 사용
+  - **탭4 역추적 관리**: payment_ambiguous 목록, 역추적 4단계(주소→미수금범위→토큰분해→유사사례), 위험업체 등록
+- **기존 JS 함수 모두 보존 필요** (목록):
+  ```
+  loadData(), loadCompanies(), loadMatchHistory(), saveMatchMapping()
+  applyFilter(), renderTable(), updateSummary()
+  getTotalFee(d), getPaidAmount(d), getPaymentStatus(d), getBadgeClass(), getPaymentMethods(), getLastPayDate()
+  openModal(), closeModal(), processPayment(), deletePayment(), renderPayHistory()
+  handleBankFiles(), parseBankFile(), parseBankDate(), parseAmt()
+  renderBankTable(), clearBankData()
+  autoMatchAll(), findAutoMatch(), cleanDepositorName()
+  reverseTrack(), runReverseTrack(), renderTrackModal()
+  selectTrackMatch(), searchManualMatch(), closeTrackModal(), unmatchDeposit()
+  applySingleMatch(), applyAllMatches(), applySingleMatchSilent()
+  formatDate(), formatMoney(), showToast()
+  ```
+- **ledgerMgmt.html에서 가져올 함수들**:
+  ```
+  switchSubTab(), _ledgerFmt(), _loadCompaniesCache(), _searchCompanies()
+  _initAutocomplete(), _resolveCompanyAndFetch()
+  loadLedger(), loadTxnStatement(), _loadMfdsTemplates(), _getTestItems()
+  _buildTxnSummary(), _detectVatType(), _updateVatTag(), _methodTag()
+  _getFee(), _getProductName(), _getDesc()
+  _loadCompanyInfo(), _loadTxnCompanyInfo()
+  exportTxnExcel(), printLedger(), printTxn()
+  ```
+- **참고 파일**: 기존 `paymentMgmt.html` (1390줄), `ledgerMgmt.html` (1149줄)
+
+### 2. paymentStats.html 신규 생성 — paymentMgmt 완료 후 진행
+- 4탭 구조: 결제나이(신호등 UI)/결제수단별/부서별/카드수수료
+- 커밋 메시지: `feat: 입금통계 페이지 신규 생성 (신호등 UI, 결제주기/수단/부서/카드수수료)`
+
+### 3. sidebar.js 수정 — paymentStats 완료 후 진행
+- 재무관리 그룹에 `{ label: '입금 통계', page: 'finance-stats', href: 'paymentStats.html' }` 추가
+- 위치: `js/sidebar.js` lines 166-170 사이
+
+### 4. 커밋 + push + 서버 배포
+- paymentMgmt: `git commit -m "feat: 입금관리 전면 재구성 - 원장/입금현황/은행매칭/역추적"`
+- paymentStats: `git commit -m "feat: 입금통계 페이지 신규 생성"`
+- `git push origin master:main`
+- `ssh 192.168.0.96 → cd /home/biofl/bfl_lims && git pull origin main`
+
+---
+
+## 🔵 기존 작업 목록 (우선순위 낮음)
+
+### 5. 접수등록 페이지 개선 (sampleReceipt.html) — 예정
 - 보고번호 자동조회 + 검체유형 자동채움 (prdlst_dcnm → food-type)
 - 원재료 조회 패널 UI 개선
 - 기타 접수등록 UX 개선 사항
 
-### 3. 업체조회 > 제품 원재료/변경사항 연결
+### 6. 업체조회 > 제품 원재료/변경사항 연결
 - **위치**: salesMgmt.html `bizDetail()` 모달
 - **현재**: 품목 + 변경이력 2탭만 존재
 - **추가 필요**: 원재료 탭 (fss_materials 컬렉션 연결)
 - `fss_materials` — C002(원재료 1,040,551건), C003(건강기능식품원재료 44,386건)
 
-### 4. 참고용 영문명/체크 개선 (inspectionMgmt.html)
+### 7. 참고용 영문명/체크 개선 (inspectionMgmt.html)
 - 영문명 컬럼에 영문 화학명이 표시되지 않는 항목 수정
 - testItemCode 없는 항목의 사용 체크박스 연동 완성
 
-### 5. 식약처 통합LIMS 연동 (보류 중)
+### 8. 식약처 통합LIMS 연동 (보류 중)
 - MAC/인증서 등록 완료, API 연결 테스트 성공 확인 (2026-03-06)
 - 31단계 테스트 시나리오 진행
 
