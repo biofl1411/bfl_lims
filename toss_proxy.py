@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-토스페이먼츠 API 프록시 서버
+토스페이먼츠 API 프록시 서버 (다중 MID 지원)
 - 시크릿 키를 서버에서 관리하여 클라이언트 노출 방지
-- /toss/transactions: 기간별 거래 내역 조회
+- /toss/transactions: 기간별 거래 내역 조회 (mid 파라미터로 상점 선택)
 - /toss/settlements: 정산 내역 (수수료 포함) 조회
-- /toss/config: 시크릿 키 설정/확인
+- /toss/config: 시크릿 키 설정/확인 (다중 MID)
 """
 
 import os
@@ -22,6 +22,12 @@ CORS(app)
 TOSS_API_BASE = 'https://api.tosspayments.com'
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.toss_config.json')
 
+# 상점 아이디 목록
+MIDS = {
+    'bioflw9bnm': '바이오푸드랩',
+    'link_bioflc7qd': '바이오푸드랩(링크)'
+}
+
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -35,35 +41,87 @@ def save_config(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def get_auth_header():
+def get_auth_header(mid=None):
+    """특정 MID의 시크릿 키로 인증 헤더 생성"""
     config = load_config()
-    secret_key = config.get('secret_key', '')
+    keys = config.get('keys', {})
+
+    # mid 지정 시 해당 키 사용
+    if mid and mid in keys:
+        secret_key = keys[mid].get('secret_key', '')
+    else:
+        # 하위 호환: 기존 단일 키
+        secret_key = config.get('secret_key', '')
+        # keys에서 첫번째 키 사용
+        if not secret_key and keys:
+            first_mid = list(keys.keys())[0]
+            secret_key = keys[first_mid].get('secret_key', '')
+
     if not secret_key:
         return None
-    # Basic Auth: base64(secret_key:)
     encoded = base64.b64encode((secret_key + ':').encode()).decode()
     return {'Authorization': f'Basic {encoded}'}
 
 
 @app.route('/toss/config', methods=['GET'])
 def get_config():
-    """시크릿 키 설정 여부 확인 (키 자체는 반환하지 않음)"""
+    """다중 MID 설정 상태 확인"""
     config = load_config()
-    has_key = bool(config.get('secret_key', ''))
-    return jsonify({
-        'configured': has_key,
-        'keyPrefix': config.get('secret_key', '')[:12] + '...' if has_key else '',
-        'lastUpdated': config.get('updated_at', '')
-    })
+    keys = config.get('keys', {})
+
+    # 하위 호환: 기존 단일 키가 있으면 포함
+    if not keys and config.get('secret_key'):
+        result = {
+            'configured': True,
+            'mids': MIDS,
+            'keys': {
+                'default': {
+                    'configured': True,
+                    'keyPrefix': config['secret_key'][:12] + '...',
+                    'label': '기본',
+                    'lastUpdated': config.get('updated_at', '')
+                }
+            }
+        }
+        return jsonify(result)
+
+    result = {
+        'configured': any(k.get('secret_key') for k in keys.values()) if keys else False,
+        'mids': MIDS,
+        'keys': {}
+    }
+
+    for mid, label in MIDS.items():
+        if mid in keys and keys[mid].get('secret_key'):
+            sk = keys[mid]['secret_key']
+            result['keys'][mid] = {
+                'configured': True,
+                'keyPrefix': sk[:12] + '...',
+                'label': label,
+                'lastUpdated': keys[mid].get('updated_at', '')
+            }
+        else:
+            result['keys'][mid] = {
+                'configured': False,
+                'keyPrefix': '',
+                'label': label,
+                'lastUpdated': ''
+            }
+
+    return jsonify(result)
 
 
 @app.route('/toss/config', methods=['POST'])
 def set_config():
-    """시크릿 키 설정"""
+    """특정 MID의 시크릿 키 설정"""
     data = request.get_json()
     secret_key = data.get('secret_key', '').strip()
+    mid = data.get('mid', '').strip()
+
     if not secret_key:
         return jsonify({'error': '시크릿 키를 입력하세요'}), 400
+    if not mid:
+        return jsonify({'error': '상점 아이디(MID)를 지정하세요'}), 400
 
     # 키 유효성 테스트
     encoded = base64.b64encode((secret_key + ':').encode()).decode()
@@ -83,77 +141,137 @@ def set_config():
         return jsonify({'error': f'연결 테스트 실패: {str(e)}'}), 500
 
     config = load_config()
-    config['secret_key'] = secret_key
-    config['updated_at'] = datetime.now().isoformat()
+    if 'keys' not in config:
+        config['keys'] = {}
+    config['keys'][mid] = {
+        'secret_key': secret_key,
+        'updated_at': datetime.now().isoformat()
+    }
     save_config(config)
 
-    return jsonify({'success': True, 'message': '시크릿 키 설정 완료'})
+    label = MIDS.get(mid, mid)
+    return jsonify({'success': True, 'message': f'{label} 시크릿 키 설정 완료'})
 
 
-@app.route('/toss/transactions', methods=['GET'])
-def get_transactions():
-    """기간별 거래 내역 조회"""
-    auth = get_auth_header()
+def _fetch_transactions_for_mid(mid, start_date, end_date):
+    """특정 MID의 거래 내역 조회"""
+    auth = get_auth_header(mid)
     if not auth:
-        return jsonify({'error': '토스페이먼츠 시크릿 키가 설정되지 않았습니다'}), 401
-
-    start_date = request.args.get('startDate', '')
-    end_date = request.args.get('endDate', '')
-
-    if not start_date or not end_date:
-        return jsonify({'error': 'startDate, endDate 필수'}), 400
-
-    # 시간이 없으면 추가
-    if 'T' not in start_date:
-        start_date += 'T00:00:00'
-    if 'T' not in end_date:
-        end_date += 'T23:59:59'
+        return [], f'{MIDS.get(mid, mid)} 시크릿 키 미설정'
 
     all_transactions = []
-    starting_after = request.args.get('startingAfter', '')
+    starting_after = ''
 
-    # 페이지네이션으로 전체 조회 (최대 10페이지)
     for _ in range(10):
         params = {'startDate': start_date, 'endDate': end_date}
         if starting_after:
             params['startingAfter'] = starting_after
 
-        try:
-            resp = requests.get(
-                f'{TOSS_API_BASE}/v1/transactions',
-                headers=auth,
-                params=params,
-                timeout=60
-            )
-            if resp.status_code != 200:
-                error_data = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
-                return jsonify({
-                    'error': f'토스 API 오류 ({resp.status_code})',
-                    'detail': error_data.get('message', resp.text[:200])
-                }), resp.status_code
+        resp = requests.get(
+            f'{TOSS_API_BASE}/v1/transactions',
+            headers=auth,
+            params=params,
+            timeout=60
+        )
+        if resp.status_code != 200:
+            error_data = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
+            return [], f'토스 API 오류 ({resp.status_code}): {error_data.get("message", resp.text[:200])}'
 
-            data = resp.json()
-            if not data or not isinstance(data, list) or len(data) == 0:
-                break
+        data = resp.json()
+        if not data or not isinstance(data, list) or len(data) == 0:
+            break
 
-            all_transactions.extend(data)
-            # 마지막 transactionKey로 다음 페이지
-            starting_after = data[-1].get('transactionKey', '')
-            if len(data) < 100:  # 100건 미만이면 마지막 페이지
-                break
+        all_transactions.extend(data)
+        starting_after = data[-1].get('transactionKey', '')
+        if len(data) < 100:
+            break
 
-        except requests.Timeout:
-            return jsonify({'error': '토스 API 타임아웃 (60초 초과)'}), 504
-        except Exception as e:
-            return jsonify({'error': f'요청 실패: {str(e)}'}), 500
+    return all_transactions, None
 
-    # 입금(결제) 건만 필터링 + 포맷 변환
+
+@app.route('/toss/transactions', methods=['GET'])
+def get_transactions():
+    """기간별 거래 내역 조회 (mid 파라미터: 특정 MID 또는 'all')"""
+    start_date = request.args.get('startDate', '')
+    end_date = request.args.get('endDate', '')
+    mid = request.args.get('mid', 'all')
+
+    if not start_date or not end_date:
+        return jsonify({'error': 'startDate, endDate 필수'}), 400
+
+    if 'T' not in start_date:
+        start_date += 'T00:00:00'
+    if 'T' not in end_date:
+        end_date += 'T23:59:59'
+
+    config = load_config()
+    keys = config.get('keys', {})
+
+    # 조회할 MID 목록
+    if mid == 'all':
+        target_mids = [m for m in MIDS.keys() if m in keys and keys[m].get('secret_key')]
+        if not target_mids:
+            # 하위 호환: 기존 단일 키
+            if config.get('secret_key'):
+                auth = get_auth_header()
+                if auth:
+                    target_mids = ['_default']
+            if not target_mids:
+                return jsonify({'error': '설정된 시크릿 키가 없습니다'}), 401
+    else:
+        target_mids = [mid]
+
+    all_transactions = []
+    errors = []
+
+    for m in target_mids:
+        if m == '_default':
+            # 하위 호환 모드
+            auth = get_auth_header()
+            txs = []
+            starting_after = ''
+            for _ in range(10):
+                params = {'startDate': start_date, 'endDate': end_date}
+                if starting_after:
+                    params['startingAfter'] = starting_after
+                try:
+                    resp = requests.get(f'{TOSS_API_BASE}/v1/transactions', headers=auth, params=params, timeout=60)
+                    if resp.status_code != 200:
+                        break
+                    data = resp.json()
+                    if not data or not isinstance(data, list) or len(data) == 0:
+                        break
+                    txs.extend(data)
+                    starting_after = data[-1].get('transactionKey', '')
+                    if len(data) < 100:
+                        break
+                except:
+                    break
+            for tx in txs:
+                tx['_mid'] = 'default'
+                tx['_midLabel'] = '기본'
+            all_transactions.extend(txs)
+        else:
+            try:
+                txs, err = _fetch_transactions_for_mid(m, start_date, end_date)
+                if err:
+                    errors.append(err)
+                else:
+                    for tx in txs:
+                        tx['_mid'] = m
+                        tx['_midLabel'] = MIDS.get(m, m)
+                    all_transactions.extend(txs)
+            except requests.Timeout:
+                errors.append(f'{MIDS.get(m, m)} 타임아웃')
+            except Exception as e:
+                errors.append(f'{MIDS.get(m, m)}: {str(e)}')
+
+    # 입금(결제) 건만 필터링
     deposits = []
     for tx in all_transactions:
         amount = tx.get('amount', 0)
         if amount <= 0:
-            continue  # 취소/환불 건 제외
-
+            continue
         status = tx.get('status', '')
         if status in ['CANCELED', 'PARTIAL_CANCELED']:
             continue
@@ -169,19 +287,26 @@ def get_transactions():
             'transactionAt': tx.get('transactionAt', ''),
             'cardCompany': tx.get('cardCompany', ''),
             'cardNumber': tx.get('cardNumber', ''),
+            'mid': tx.get('_mid', ''),
+            'midLabel': tx.get('_midLabel', ''),
         })
 
-    return jsonify({
+    result = {
         'count': len(deposits),
         'totalCount': len(all_transactions),
         'deposits': deposits
-    })
+    }
+    if errors:
+        result['errors'] = errors
+
+    return jsonify(result)
 
 
 @app.route('/toss/settlements', methods=['GET'])
 def get_settlements():
     """정산 내역 조회 (수수료 포함)"""
-    auth = get_auth_header()
+    mid = request.args.get('mid', '')
+    auth = get_auth_header(mid if mid else None)
     if not auth:
         return jsonify({'error': '토스페이먼츠 시크릿 키가 설정되지 않았습니다'}), 401
 
@@ -221,7 +346,8 @@ def get_settlements():
 @app.route('/toss/payment/<payment_key>', methods=['GET'])
 def get_payment(payment_key):
     """개별 결제 상세 조회"""
-    auth = get_auth_header()
+    mid = request.args.get('mid', '')
+    auth = get_auth_header(mid if mid else None)
     if not auth:
         return jsonify({'error': '시크릿 키 미설정'}), 401
 
@@ -244,5 +370,5 @@ def health():
 
 
 if __name__ == '__main__':
-    print('[토스 프록시] 포트 5004에서 시작...')
+    print('[토스 프록시] 포트 5004에서 시작 (다중 MID 지원)...')
     app.run(host='0.0.0.0', port=5004, debug=False)

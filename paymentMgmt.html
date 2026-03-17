@@ -430,23 +430,25 @@ tr:hover{background:#f8f9fb}
         <div class="modal-bd">
             <div id="toss-config-area">
                 <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:14px">
-                    <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">API 키 설정</div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <span id="toss-key-status" style="font-size:12px;color:#9ca3af">확인 중...</span>
-                        <button class="btn btn-sm btn-secondary" onclick="toggleTossKeyInput()">키 변경</button>
-                    </div>
-                    <div id="toss-key-input-area" style="display:none;margin-top:8px">
-                        <div class="form-group">
-                            <label>시크릿 키 (test_sk_... 또는 live_sk_...)</label>
-                            <input type="password" id="toss-secret-key" placeholder="시크릿 키 입력">
+                    <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">상점(MID) 선택 및 API 키 설정</div>
+                    <div id="toss-mid-list" style="font-size:12px;color:#9ca3af">확인 중...</div>
+                    <div id="toss-key-input-area" style="display:none;margin-top:10px;background:#fff;border:1px solid #e2e6ed;border-radius:6px;padding:10px">
+                        <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px" id="toss-key-input-label">시크릿 키 설정</div>
+                        <input type="hidden" id="toss-key-mid">
+                        <div class="form-group" style="margin-bottom:6px">
+                            <input type="password" id="toss-secret-key" placeholder="시크릿 키 입력 (test_sk_... 또는 live_sk_...)" style="font-size:12px">
                         </div>
                         <button class="btn btn-sm btn-primary" onclick="saveTossKey()">저장 및 테스트</button>
+                        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('toss-key-input-area').style.display='none'" style="margin-left:4px">취소</button>
                     </div>
                 </div>
             </div>
             <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:14px">
                 <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">조회 기간</div>
-                <div style="display:flex;gap:8px;align-items:center">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <select id="toss-mid-select" style="padding:8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">
+                        <option value="all">전체 상점</option>
+                    </select>
                     <input type="date" id="toss-from" style="padding:8px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px">
                     <span style="color:#9ca3af">~</span>
                     <input type="date" id="toss-to" style="padding:8px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px">
@@ -1901,40 +1903,74 @@ document.getElementById('toss-modal-overlay').addEventListener('click', function
     if (e.target === this) closeTossModal();
 });
 
-function toggleTossKeyInput() {
-    var el = document.getElementById('toss-key-input-area');
-    el.style.display = el.style.display === 'none' ? '' : 'none';
+function openTossKeyInput(mid, label) {
+    document.getElementById('toss-key-mid').value = mid;
+    document.getElementById('toss-key-input-label').textContent = label + ' 시크릿 키 설정';
+    document.getElementById('toss-secret-key').value = '';
+    document.getElementById('toss-key-input-area').style.display = '';
 }
 
 async function checkTossConfig() {
     try {
         var resp = await fetch(TOSS_API_BASE + '/config');
         var data = await resp.json();
-        var el = document.getElementById('toss-key-status');
-        if (data.configured) {
-            el.innerHTML = '<span style="color:#10b981;font-weight:600">설정됨</span> <span style="color:#9ca3af">' + data.keyPrefix + '</span>';
-        } else {
-            el.innerHTML = '<span style="color:#ef4444;font-weight:600">미설정</span> — 시크릿 키를 입력하세요';
-            document.getElementById('toss-key-input-area').style.display = '';
-        }
+        var el = document.getElementById('toss-mid-list');
+        var selectEl = document.getElementById('toss-mid-select');
+
+        // MID 선택 드롭다운 업데이트
+        selectEl.innerHTML = '<option value="all">전체 상점</option>';
+        var keys = data.keys || {};
+        var mids = data.mids || {};
+
+        var html = '';
+        var anyUnconfigured = false;
+        Object.keys(mids).forEach(function(mid) {
+            var label = mids[mid];
+            var info = keys[mid] || {};
+            var configured = info.configured;
+
+            if (configured) {
+                html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
+                    '<span style="color:#10b981;font-weight:600">●</span> ' +
+                    '<span style="font-weight:600;color:#374151">' + label + '</span> ' +
+                    '<span style="color:#9ca3af;font-size:11px">' + mid + '</span> ' +
+                    '<span style="color:#9ca3af;font-size:11px">' + (info.keyPrefix || '') + '</span> ' +
+                    '<button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 6px" onclick="openTossKeyInput(\'' + mid + '\',\'' + label + '\')">키 변경</button>' +
+                    '</div>';
+            } else {
+                anyUnconfigured = true;
+                html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
+                    '<span style="color:#ef4444;font-weight:600">●</span> ' +
+                    '<span style="font-weight:600;color:#374151">' + label + '</span> ' +
+                    '<span style="color:#9ca3af;font-size:11px">' + mid + '</span> ' +
+                    '<button class="btn btn-sm btn-primary" style="font-size:10px;padding:2px 6px" onclick="openTossKeyInput(\'' + mid + '\',\'' + label + '\')">키 설정</button>' +
+                    '</div>';
+            }
+
+            selectEl.innerHTML += '<option value="' + mid + '">' + label + ' (' + mid + ')' + '</option>';
+        });
+
+        el.innerHTML = html || '<span style="color:#ef4444">상점 정보 없음</span>';
     } catch(e) {
-        document.getElementById('toss-key-status').innerHTML = '<span style="color:#ef4444">프록시 서버 연결 실패</span> <span style="color:#9ca3af;font-size:11px">(toss_proxy 실행 필요)</span>';
+        document.getElementById('toss-mid-list').innerHTML = '<span style="color:#ef4444">프록시 서버 연결 실패</span> <span style="color:#9ca3af;font-size:11px">(toss_proxy 실행 필요)</span>';
     }
 }
 
 async function saveTossKey() {
     var key = document.getElementById('toss-secret-key').value.trim();
+    var mid = document.getElementById('toss-key-mid').value;
     if (!key) { showToast('시크릿 키를 입력하세요'); return; }
+    if (!mid) { showToast('상점 아이디가 지정되지 않았습니다'); return; }
 
     try {
         var resp = await fetch(TOSS_API_BASE + '/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ secret_key: key })
+            body: JSON.stringify({ secret_key: key, mid: mid })
         });
         var data = await resp.json();
         if (resp.ok) {
-            showToast('시크릿 키 설정 완료');
+            showToast(data.message || '시크릿 키 설정 완료');
             document.getElementById('toss-key-input-area').style.display = 'none';
             document.getElementById('toss-secret-key').value = '';
             checkTossConfig();
@@ -1957,8 +1993,10 @@ async function fetchTossTransactions() {
     var area = document.getElementById('toss-result-area');
     area.innerHTML = '<div class="empty-msg" style="padding:20px">토스페이먼츠에서 결제 내역을 조회하고 있습니다...</div>';
 
+    var mid = document.getElementById('toss-mid-select').value || 'all';
+
     try {
-        var resp = await fetch(TOSS_API_BASE + '/transactions?startDate=' + from + '&endDate=' + to);
+        var resp = await fetch(TOSS_API_BASE + '/transactions?startDate=' + from + '&endDate=' + to + '&mid=' + mid);
         var data = await resp.json();
         btn.disabled = false;
         btn.textContent = '조회';
@@ -1982,15 +2020,21 @@ async function fetchTossTransactions() {
             '(총 ' + formatMoney(totalAmt) + ')' +
             '</div>';
 
+        if (data.errors && data.errors.length > 0) {
+            html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px;color:#dc2626">' +
+                data.errors.join('<br>') + '</div>';
+        }
+
         html += '<div class="tbl-wrap" style="max-height:300px;overflow-y:auto"><table class="bank-tbl"><thead><tr>' +
-            '<th>결제일시</th><th>주문명</th><th>결제수단</th><th class="text-right">금액</th><th>주문번호</th>' +
+            '<th>상점</th><th>결제일시</th><th>주문명</th><th>결제수단</th><th class="text-right">금액</th><th>주문번호</th>' +
             '</tr></thead><tbody>';
 
         _tossDeposits.forEach(function(d) {
             var dt = d.transactionAt ? d.transactionAt.substring(0, 16).replace('T', ' ') : '-';
             html += '<tr>' +
+                '<td style="font-size:11px;white-space:nowrap">' + (d.midLabel || '-') + '</td>' +
                 '<td style="white-space:nowrap;font-size:12px">' + dt + '</td>' +
-                '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.orderName || '-') + '</td>' +
+                '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.orderName || '-') + '</td>' +
                 '<td><span class="method-tag card">' + (d.method || '카드') + '</span></td>' +
                 '<td class="text-right" style="font-weight:700">' + formatMoney(d.amount) + '</td>' +
                 '<td style="font-size:11px;color:#6b7280">' + (d.orderId || '-') + '</td>' +
@@ -2023,7 +2067,7 @@ function addTossToBank() {
         bankDeposits.push({
             date: dt,
             time: time,
-            bank: '토스페이먼츠',
+            bank: '토스' + (d.midLabel ? '(' + d.midLabel + ')' : ''),
             depositor: d.orderName || d.orderId || '',
             depositorRaw: (d.orderName || '') + (d.orderId ? ' [' + d.orderId + ']' : ''),
             amount: d.amount,
@@ -2031,7 +2075,8 @@ function addTossToBank() {
             note2: d.orderId || '',
             branch: d.cardCompany || '',
             account: '',
-            fileName: '토스페이먼츠',
+            fileName: '토스' + (d.midLabel ? '(' + d.midLabel + ')' : ''),
+            mid: d.mid || '',
             paymentKey: d.paymentKey,
             orderId: d.orderId,
             matched: false,
