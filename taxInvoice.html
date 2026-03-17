@@ -20,9 +20,9 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .btn-danger{background:#fff;color:#ef4444;border:1px solid #fecaca}.btn-danger:hover{background:#fef2f2}
 .btn-sm{padding:5px 10px;font-size:11px}
 .card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
-.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.card-hd{padding:16px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .card-hd h3{font-size:15px;font-weight:700;color:#1a2332}
-.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .card-bd{padding:20px}
 
 /* 탭 */
@@ -41,9 +41,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .search-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
 .search-bar input,.search-bar select{padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-family:inherit}
 .search-bar input:focus,.search-bar select:focus{outline:none;border-color:#1a73e8}
-.search-bar input[type="text"]{width:200px}
+.search-bar input[type="text"]{width:180px}
 .search-bar input[type="date"]{width:140px}
 .search-bar input[type="month"]{width:140px}
+.search-bar label{font-size:12px;color:#6b7280;font-weight:600}
 
 /* 테이블 */
 .tbl-wrap{overflow-x:auto;border:1px solid #e2e6ed;border-radius:10px}
@@ -75,6 +76,13 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
 .select-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#eef6ff;border-radius:8px;margin-bottom:12px;font-size:13px;display:none}
 .select-bar.show{display:flex}
 .select-bar .count{font-weight:700;color:#1a73e8}
+
+.filter-row{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;padding:12px 16px;background:#f8f9fb;border-radius:8px;border:1px solid #eef0f4}
+.filter-row input,.filter-row select{padding:6px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit}
+.filter-row input:focus,.filter-row select:focus{outline:none;border-color:#1a73e8}
+.filter-row label{font-size:11px;color:#6b7280;font-weight:600;margin-right:2px}
+.filter-row input[type="text"]{width:160px}
+.page-info{font-size:12px;color:#6b7280;margin-top:10px;text-align:right}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -115,6 +123,10 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                     </div>
                 </div>
                 <div class="card-bd">
+                    <div class="filter-row">
+                        <label>업체명</label><input type="text" id="batch-filter-company" placeholder="업체명 검색" onkeyup="renderBatchTable()">
+                        <label>구분</label><select id="batch-filter-type" onchange="renderBatchTable()"><option value="">전체</option><option value="청구">청구</option><option value="영수">영수</option></select>
+                    </div>
                     <div class="select-bar" id="batch-select-bar">
                         <span>선택: <span class="count" id="batch-select-count">0</span>건</span>
                         <span style="margin-left:auto"></span>
@@ -145,6 +157,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                             </tbody>
                         </table>
                     </div>
+                    <div class="page-info" id="batch-info"></div>
                 </div>
             </div>
         </div>
@@ -161,6 +174,10 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                     </div>
                 </div>
                 <div class="card-bd">
+                    <div class="filter-row">
+                        <label>업체명</label><input type="text" id="date-filter-company" placeholder="업체명 검색" onkeyup="renderDateTable()">
+                        <label>구분</label><select id="date-filter-type" onchange="renderDateTable()"><option value="">전체</option><option value="청구">청구</option><option value="영수">영수</option></select>
+                    </div>
                     <div class="select-bar" id="date-select-bar">
                         <span>선택: <span class="count" id="date-select-count">0</span>건</span>
                         <span style="margin-left:auto"></span>
@@ -191,6 +208,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                             </tbody>
                         </table>
                     </div>
+                    <div class="page-info" id="date-info"></div>
                 </div>
             </div>
         </div>
@@ -209,6 +227,11 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                     <div class="summary-row">
                         <div class="summary-card"><div class="label">미발행 건수</div><div class="value" style="color:#2563eb" id="request-count">0건</div></div>
                         <div class="summary-card"><div class="label">미발행 합계</div><div class="value" style="color:#2563eb" id="request-total">0원</div></div>
+                    </div>
+                    <div class="filter-row">
+                        <label>업체명</label><input type="text" id="request-filter-company" placeholder="업체명 검색" onkeyup="renderRequestTable()">
+                        <label>구분</label><select id="request-filter-type" onchange="renderRequestTable()"><option value="">전체</option><option value="청구">청구</option><option value="영수">영수</option></select>
+                        <label>발행유형</label><select id="request-filter-bdt" onchange="renderRequestTable()"><option value="">전체</option><option value="receipt">접수일</option><option value="specific">특정일</option><option value="monthEnd">월말</option><option value="deferred">추후발행</option></select>
                     </div>
                     <div class="select-bar" id="request-select-bar">
                         <span>선택: <span class="count" id="request-select-count">0</span>건</span>
@@ -241,22 +264,27 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                             </tbody>
                         </table>
                     </div>
+                    <div class="page-info" id="request-info"></div>
                 </div>
             </div>
         </div>
 
-        <!-- 탭4: 발행완료 -->
+        <!-- 탭4: 발행완료 (history 컬렉션에서 검색) -->
         <div class="tab-panel" id="panel-issued">
             <div class="card">
                 <div class="card-hd">
                     <h3>발행완료 내역</h3>
                     <div class="right">
-                        <input type="month" id="issued-month" style="padding:6px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
-                        <button class="btn btn-primary" onclick="loadIssuedData()">조회</button>
                         <button class="btn btn-secondary" onclick="downloadIssuedExcel()">📥 엑셀 다운로드</button>
                     </div>
                 </div>
                 <div class="card-bd">
+                    <div class="filter-row">
+                        <label>발행월</label><input type="month" id="issued-month" style="width:140px">
+                        <label>업체명</label><input type="text" id="issued-filter-company" placeholder="업체명 검색" style="width:160px">
+                        <label>구분</label><select id="issued-filter-type"><option value="">전체</option><option value="청구">청구</option><option value="영수">영수</option></select>
+                        <button class="btn btn-primary btn-sm" onclick="loadIssuedData()">조회</button>
+                    </div>
                     <div class="summary-row">
                         <div class="summary-card"><div class="label">발행 건수</div><div class="value" style="color:#10b981" id="issued-count">0</div></div>
                         <div class="summary-card"><div class="label">발행 합계</div><div class="value" style="color:#10b981" id="issued-total">0원</div></div>
@@ -282,10 +310,11 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                                 </tr>
                             </thead>
                             <tbody id="issued-body">
-                                <tr><td colspan="14" class="empty-msg">월을 선택 후 조회하세요</td></tr>
+                                <tr><td colspan="14" class="empty-msg">발행월을 선택 후 조회하세요</td></tr>
                             </tbody>
                         </table>
                     </div>
+                    <div class="page-info" id="issued-info"></div>
                 </div>
             </div>
         </div>
@@ -304,6 +333,10 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                     <div class="summary-row">
                         <div class="summary-card"><div class="label">미발행 건수</div><div class="value" style="color:#ef4444" id="unissued-count">0</div></div>
                         <div class="summary-card"><div class="label">미발행 합계</div><div class="value" style="color:#ef4444" id="unissued-total">0원</div></div>
+                    </div>
+                    <div class="filter-row">
+                        <label>업체명</label><input type="text" id="unissued-filter-company" placeholder="업체명 검색" onkeyup="renderUnissuedTable()">
+                        <label>구분</label><select id="unissued-filter-type" onchange="renderUnissuedTable()"><option value="">전체</option><option value="청구">청구</option><option value="영수">영수</option></select>
                     </div>
                     <div class="select-bar" id="unissued-select-bar">
                         <span>선택: <span class="count" id="unissued-select-count">0</span>건</span>
@@ -335,6 +368,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                             </tbody>
                         </table>
                     </div>
+                    <div class="page-info" id="unissued-info"></div>
                 </div>
             </div>
         </div>
@@ -384,6 +418,7 @@ var batchList = [];
 var dateList = [];
 var requestList = [];
 var unissuedList = [];
+var issuedList = []; // 발행완료 (history에서 로드)
 var batchSelected = {};
 var dateSelected = {};
 var requestSelected = {};
@@ -393,6 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var today = new Date();
     document.getElementById('batch-date').value = formatDate(today);
     document.getElementById('date-target').value = formatDate(today);
+    document.getElementById('issued-month').value = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
     loadAllReceipts();
 });
 
@@ -401,19 +437,17 @@ function formatDate(d) {
 }
 function formatMoney(n) { return (n || 0).toLocaleString() + '원'; }
 
-var _companiesMap = {}; // 업체명 → 업체정보
+var _companiesMap = {};
 
 async function loadAllReceipts() {
     try {
-        // 공급자 정보 + 접수 데이터 + 업체정보 병렬 로드
         var [snap, cSnap] = await Promise.all([
-            db.collection('receipts').orderBy('createdAt', 'desc').limit(1000).get(),
+            db.collection('receipts').orderBy('createdAt', 'desc').limit(2000).get(),
             db.collection('companies').get(),
             loadSupplierInfo()
         ]);
         allReceipts = [];
         snap.forEach(function(doc) { allReceipts.push({ id: doc.id, data: doc.data() }); });
-        // 업체 정보 매핑
         _companiesMap = {};
         cSnap.forEach(function(doc) {
             var cd = doc.data();
@@ -428,33 +462,17 @@ async function loadAllReceipts() {
 }
 
 function updateAllBadges() {
-    var today = formatDate(new Date());
-    var thisMonth = today.substring(0,7);
-
-    // 발행 요청 (미발행 전체)
     var requestCnt = allReceipts.filter(function(r) {
         var d = r.data;
         return !d.taxInvoiceIssued && !d.taxCancelled && getTotalFee(d) > 0;
     }).length;
-
-    // 발행완료 (이번 달)
-    var issuedCnt = allReceipts.filter(function(r) {
-        var d = r.data;
-        return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === thisMonth;
-    }).length;
-
-    // 미발행 계산서
     var unissuedCnt = allReceipts.filter(function(r) {
         return !r.data.taxInvoiceIssued && getTotalFee(r.data) > 0;
     }).length;
-
-    // 계산서 취소
     var cancelCnt = allReceipts.filter(function(r) {
         return r.data.taxCancelRequested && !r.data.taxCancelled;
     }).length;
-
     setBadge('badge-request', requestCnt, 'has-data');
-    setBadge('badge-issued', issuedCnt, 'issued');
     setBadge('badge-unissued', unissuedCnt, 'danger');
     setBadge('badge-cancel', cancelCnt, cancelCnt > 0 ? 'danger' : '');
 }
@@ -477,6 +495,29 @@ function getPayStatus(d) {
     return { label: '미입금', cls: 'badge-unissued', type: '청구' };
 }
 
+/* === 필터 헬퍼 === */
+function applyFilter(list, companyInputId, typeSelectId, bdtSelectId) {
+    var companyKey = document.getElementById(companyInputId) ? document.getElementById(companyInputId).value.trim().toLowerCase() : '';
+    var typeFilter = document.getElementById(typeSelectId) ? document.getElementById(typeSelectId).value : '';
+    var bdtFilter = bdtSelectId && document.getElementById(bdtSelectId) ? document.getElementById(bdtSelectId).value : '';
+    return list.filter(function(r) {
+        var d = r.data;
+        if (companyKey) {
+            var cn = (d.companyName || d.company || d.billCompany || '').toLowerCase();
+            if (cn.indexOf(companyKey) === -1) return false;
+        }
+        if (typeFilter) {
+            var ps = getPayStatus(d);
+            if (ps.type !== typeFilter) return false;
+        }
+        if (bdtFilter) {
+            var bdt = d.billingDateType || 'receipt';
+            if (bdt !== bdtFilter) return false;
+        }
+        return true;
+    });
+}
+
 /* === 엑셀 양식 미리보기 행 생성 (공통) === */
 function buildExcelStyleRow(d, docId, idx, issued, selectedMap, checkFnName, fallbackDate) {
     var total = getTotalFee(d);
@@ -491,11 +532,44 @@ function buildExcelStyleRow(d, docId, idx, issued, selectedMap, checkFnName, fal
     var ps = getPayStatus(d);
     var psStyle = ps.style ? ' style="' + ps.style + '"' : '';
     var bizNoFmt = buyer.bizNo ? buyer.bizNo.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3') : '-';
+    var checkHtml = checkFnName ? '<td class="text-center"><input type="checkbox" ' + (issued ? 'disabled' : '') + ' ' + (selectedMap && selectedMap[idx] ? 'checked' : '') + ' onchange="' + checkFnName + '(' + idx + ',this.checked)"></td>' : '';
     return '<tr>' +
-        '<td class="text-center"><input type="checkbox" ' + (issued ? 'disabled' : '') + ' ' + (selectedMap[idx] ? 'checked' : '') + ' onchange="' + checkFnName + '(' + idx + ',this.checked)"></td>' +
+        checkHtml +
         '<td>' + (d.receiptNo || docId) + '</td>' +
         '<td class="text-center"><span class="badge" style="' + (ps.type === '영수' ? 'background:#ecfdf5;color:#10b981' : 'background:#fef2f2;color:#ef4444') + '">' + ps.type + '</span></td>' +
         '<td>' + writeDateFmt + '</td>' +
+        '<td>' + (buyer.name || d.companyName || d.company || '-') + '</td>' +
+        '<td>' + bizNoFmt + '</td>' +
+        '<td>' + (buyer.ceo || '-') + '</td>' +
+        '<td>' + itemName + '</td>' +
+        '<td class="text-center">' + qty + '</td>' +
+        '<td class="text-right">' + formatMoney(unitPrice) + '</td>' +
+        '<td class="text-right">' + formatMoney(supply) + '</td>' +
+        '<td class="text-right">' + formatMoney(tax) + '</td>' +
+        '<td class="text-right" style="font-weight:700">' + formatMoney(total) + '</td>' +
+        '<td class="text-center"><span class="badge ' + ps.cls + '"' + psStyle + '>' + ps.label + '</span></td>' +
+        '</tr>';
+}
+
+/* 발행완료 전용 행 (체크박스 없이 + 발행일 컬럼) */
+function buildIssuedRow(d, docId) {
+    var total = getTotalFee(d);
+    var supply = getSupplyAmount(d);
+    var tax = getTaxAmount(d);
+    var buyer = buildBuyerInfo(d);
+    var writeDate = getWriteDate(d, (d.taxInvoiceDate || '').replace(/-/g, ''));
+    var writeDateFmt = writeDate.length === 8 ? writeDate.substring(0,4)+'-'+writeDate.substring(4,6)+'-'+writeDate.substring(6,8) : writeDate;
+    var itemName = getItemName(d);
+    var qty = getSampleCount(d);
+    var unitPrice = qty > 0 ? Math.round(supply / qty) : supply;
+    var ps = getPayStatus(d);
+    var psStyle = ps.style ? ' style="' + ps.style + '"' : '';
+    var bizNoFmt = buyer.bizNo ? buyer.bizNo.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3') : '-';
+    return '<tr>' +
+        '<td>' + (d.receiptNo || docId) + '</td>' +
+        '<td class="text-center"><span class="badge" style="' + (ps.type === '영수' ? 'background:#ecfdf5;color:#10b981' : 'background:#fef2f2;color:#ef4444') + '">' + ps.type + '</span></td>' +
+        '<td>' + writeDateFmt + '</td>' +
+        '<td style="color:#10b981;font-weight:600">' + (d.taxInvoiceDate || '-') + '</td>' +
         '<td>' + (buyer.name || d.companyName || d.company || '-') + '</td>' +
         '<td>' + bizNoFmt + '</td>' +
         '<td>' + (buyer.ceo || '-') + '</td>' +
@@ -524,19 +598,16 @@ function switchTab(name) {
 
 /* === 탭1: 일괄발행 === */
 function loadBatchData() {
-    var target = document.getElementById('batch-date').value; // YYYY-MM-DD
+    var target = document.getElementById('batch-date').value;
     if (!target) { showToast('날짜를 선택하세요'); return; }
-
-    // 해당일에 발행해야 할 건: 월말발행(해당월 마지막일) + 접수일발행(해당일) + 특정일발행(해당일)
     batchList = allReceipts.filter(function(r) {
         var d = r.data;
-        if (d.taxInvoiceIssued) return false; // 이미 발행됨
+        if (d.taxInvoiceIssued) return false;
         var bdt = d.billingDateType || 'receipt';
-        if (bdt === 'deferred') return false; // 추후발행은 발행요청탭
+        if (bdt === 'deferred') return false;
         if (bdt === 'receipt') return d.receiptDate === target;
         if (bdt === 'specific') return d.billingDate === target;
         if (bdt === 'monthEnd') {
-            // 월말발행: target이 해당월 마지막 날인지 확인
             var dt = new Date(target);
             var lastDay = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
             return dt.getDate() === lastDay && (d.receiptDate || '').substring(0,7) === target.substring(0,7);
@@ -549,31 +620,31 @@ function loadBatchData() {
 }
 
 function renderBatchTable() {
+    var filtered = applyFilter(batchList, 'batch-filter-company', 'batch-filter-type');
     var tbody = document.getElementById('batch-body');
-    if (batchList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">해당 월 데이터가 없습니다</td></tr>';
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">' + (batchList.length === 0 ? '해당일 데이터가 없습니다' : '검색 결과가 없습니다') + '</td></tr>';
+        document.getElementById('batch-info').textContent = '';
         return;
     }
     var fallback = (document.getElementById('batch-date').value || '').replace(/-/g, '');
-    tbody.innerHTML = batchList.map(function(r, idx) {
+    // filtered에서 원래 index 찾기
+    tbody.innerHTML = filtered.map(function(r, fi) {
+        var origIdx = batchList.indexOf(r);
         var d = r.data;
-        var issued = d.taxInvoiceIssued || false;
-        return buildExcelStyleRow(d, r.id, idx, issued, batchSelected, 'batchCheck', fallback);
+        return buildExcelStyleRow(d, r.id, origIdx, d.taxInvoiceIssued || false, batchSelected, 'batchCheck', fallback);
     }).join('');
+    var totalSum = 0; filtered.forEach(function(r) { totalSum += getTotalFee(r.data); });
+    document.getElementById('batch-info').textContent = '조회 ' + filtered.length + '건 / 합계 ' + formatMoney(totalSum);
     updateBatchBar();
 }
 
-function batchCheck(idx, checked) {
-    if (checked) batchSelected[idx] = true;
-    else delete batchSelected[idx];
-    updateBatchBar();
-}
+function batchCheck(idx, checked) { if (checked) batchSelected[idx] = true; else delete batchSelected[idx]; updateBatchBar(); }
 function toggleBatchAll(checked) {
-    batchList.forEach(function(r, idx) {
-        if (!r.data.taxInvoiceIssued) {
-            if (checked) batchSelected[idx] = true;
-            else delete batchSelected[idx];
-        }
+    var filtered = applyFilter(batchList, 'batch-filter-company', 'batch-filter-type');
+    filtered.forEach(function(r) {
+        var idx = batchList.indexOf(r);
+        if (!r.data.taxInvoiceIssued) { if (checked) batchSelected[idx] = true; else delete batchSelected[idx]; }
     });
     renderBatchTable();
 }
@@ -587,7 +658,8 @@ async function issueBatch() {
     var idxs = Object.keys(batchSelected).map(Number);
     if (idxs.length === 0) return;
     if (!confirm(idxs.length + '건 세금계산서를 발행처리 하시겠습니까?')) return;
-    await issueReceipts(idxs.map(function(i) { return batchList[i]; }));
+    var targets = idxs.map(function(i) { return batchList[i]; });
+    await issueReceipts(targets);
     idxs.forEach(function(i) { batchList[i].data.taxInvoiceIssued = true; batchList[i].data.taxInvoiceDate = new Date().toISOString().substring(0,10); });
     batchSelected = {};
     renderBatchTable();
@@ -600,10 +672,9 @@ async function issueBatch() {
 function loadDateData() {
     var target = document.getElementById('date-target').value;
     if (!target) { showToast('날짜를 선택하세요'); return; }
-
     dateList = allReceipts.filter(function(r) {
         var d = r.data;
-        if (d.taxCancelled) return false; // 취소된 건 제외
+        if (d.taxCancelled) return false;
         return d.receiptDate === target;
     });
     dateSelected = {};
@@ -613,31 +684,29 @@ function loadDateData() {
 }
 
 function renderDateTable() {
+    var filtered = applyFilter(dateList, 'date-filter-company', 'date-filter-type');
     var tbody = document.getElementById('date-body');
-    if (dateList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">해당 날짜 데이터가 없습니다</td></tr>';
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">' + (dateList.length === 0 ? '해당 날짜 데이터가 없습니다' : '검색 결과가 없습니다') + '</td></tr>';
+        document.getElementById('date-info').textContent = '';
         return;
     }
     var fallback = (document.getElementById('date-target').value || '').replace(/-/g, '');
-    tbody.innerHTML = dateList.map(function(r, idx) {
-        var d = r.data;
-        var issued = d.taxInvoiceIssued || false;
-        return buildExcelStyleRow(d, r.id, idx, issued, dateSelected, 'dateCheck', fallback);
+    tbody.innerHTML = filtered.map(function(r) {
+        var origIdx = dateList.indexOf(r);
+        return buildExcelStyleRow(r.data, r.id, origIdx, r.data.taxInvoiceIssued || false, dateSelected, 'dateCheck', fallback);
     }).join('');
+    var totalSum = 0; filtered.forEach(function(r) { totalSum += getTotalFee(r.data); });
+    document.getElementById('date-info').textContent = '조회 ' + filtered.length + '건 / 합계 ' + formatMoney(totalSum);
     updateDateBar();
 }
 
-function dateCheck(idx, checked) {
-    if (checked) dateSelected[idx] = true;
-    else delete dateSelected[idx];
-    updateDateBar();
-}
+function dateCheck(idx, checked) { if (checked) dateSelected[idx] = true; else delete dateSelected[idx]; updateDateBar(); }
 function toggleDateAll(checked) {
-    dateList.forEach(function(r, idx) {
-        if (!r.data.taxInvoiceIssued) {
-            if (checked) dateSelected[idx] = true;
-            else delete dateSelected[idx];
-        }
+    var filtered = applyFilter(dateList, 'date-filter-company', 'date-filter-type');
+    filtered.forEach(function(r) {
+        var idx = dateList.indexOf(r);
+        if (!r.data.taxInvoiceIssued) { if (checked) dateSelected[idx] = true; else delete dateSelected[idx]; }
     });
     renderDateTable();
 }
@@ -651,7 +720,8 @@ async function issueDate() {
     var idxs = Object.keys(dateSelected).map(Number);
     if (idxs.length === 0) return;
     if (!confirm(idxs.length + '건 세금계산서를 발행처리 하시겠습니까?')) return;
-    await issueReceipts(idxs.map(function(i) { return dateList[i]; }));
+    var targets = idxs.map(function(i) { return dateList[i]; });
+    await issueReceipts(targets);
     idxs.forEach(function(i) { dateList[i].data.taxInvoiceIssued = true; dateList[i].data.taxInvoiceDate = new Date().toISOString().substring(0,10); });
     dateSelected = {};
     renderDateTable();
@@ -660,7 +730,7 @@ async function issueDate() {
     showToast(idxs.length + '건 발행처리 완료');
 }
 
-/* === 탭3: 미발행 계산서 === */
+/* === 탭5: 미발행 계산서 === */
 function loadUnissued() {
     unissuedList = allReceipts.filter(function(r) {
         return !r.data.taxInvoiceIssued && getTotalFee(r.data) > 0;
@@ -678,28 +748,29 @@ function loadUnissuedCount() {
 }
 
 function renderUnissuedTable() {
+    var filtered = applyFilter(unissuedList, 'unissued-filter-company', 'unissued-filter-type');
     var tbody = document.getElementById('unissued-body');
-    if (unissuedList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">미발행 계산서가 없습니다</td></tr>';
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">' + (unissuedList.length === 0 ? '미발행 계산서가 없습니다' : '검색 결과가 없습니다') + '</td></tr>';
+        document.getElementById('unissued-info').textContent = '';
         return;
     }
     var today = formatDate(new Date()).replace(/-/g, '');
-    tbody.innerHTML = unissuedList.map(function(r, idx) {
-        var d = r.data;
-        return buildExcelStyleRow(d, r.id, idx, false, unissuedSelected, 'unissuedCheck', today);
+    tbody.innerHTML = filtered.map(function(r) {
+        var origIdx = unissuedList.indexOf(r);
+        return buildExcelStyleRow(r.data, r.id, origIdx, false, unissuedSelected, 'unissuedCheck', today);
     }).join('');
+    var totalSum = 0; filtered.forEach(function(r) { totalSum += getTotalFee(r.data); });
+    document.getElementById('unissued-info').textContent = '조회 ' + filtered.length + '건 / 합계 ' + formatMoney(totalSum);
     updateUnissuedBar();
 }
 
-function unissuedCheck(idx, checked) {
-    if (checked) unissuedSelected[idx] = true;
-    else delete unissuedSelected[idx];
-    updateUnissuedBar();
-}
+function unissuedCheck(idx, checked) { if (checked) unissuedSelected[idx] = true; else delete unissuedSelected[idx]; updateUnissuedBar(); }
 function toggleUnissuedAll(checked) {
-    unissuedList.forEach(function(r, idx) {
-        if (checked) unissuedSelected[idx] = true;
-        else delete unissuedSelected[idx];
+    var filtered = applyFilter(unissuedList, 'unissued-filter-company', 'unissued-filter-type');
+    filtered.forEach(function(r) {
+        var idx = unissuedList.indexOf(r);
+        if (checked) unissuedSelected[idx] = true; else delete unissuedSelected[idx];
     });
     renderUnissuedTable();
 }
@@ -713,7 +784,8 @@ async function issueUnissued() {
     var idxs = Object.keys(unissuedSelected).map(Number);
     if (idxs.length === 0) return;
     if (!confirm(idxs.length + '건 세금계산서를 발행처리 하시겠습니까?')) return;
-    await issueReceipts(idxs.map(function(i) { return unissuedList[i]; }));
+    var targets = idxs.map(function(i) { return unissuedList[i]; });
+    await issueReceipts(targets);
     idxs.forEach(function(i) { unissuedList[i].data.taxInvoiceIssued = true; unissuedList[i].data.taxInvoiceDate = new Date().toISOString().substring(0,10); });
     unissuedSelected = {};
     loadUnissued();
@@ -721,19 +793,32 @@ async function issueUnissued() {
     showToast(idxs.length + '건 발행처리 완료');
 }
 
-/* === 공통: Firestore 발행처리 === */
+/* === 공통: Firestore 발행처리 + history 저장 === */
 async function issueReceipts(receipts) {
-    var batch = db.batch();
+    var fbBatch = db.batch();
     var today = new Date().toISOString().substring(0,10);
+    var yearMonth = today.substring(0,7); // YYYY-MM
     receipts.forEach(function(r) {
         var ref = db.collection('receipts').doc(r.id);
-        batch.update(ref, {
+        fbBatch.update(ref, {
             taxInvoiceIssued: true,
             taxInvoiceDate: today,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
+        // history에 스냅샷 저장 (발행완료 탭에서 검색용)
+        var histRef = db.collection('taxInvoiceHistory').doc(r.id);
+        var histData = Object.assign({}, r.data);
+        histData.taxInvoiceIssued = true;
+        histData.taxInvoiceDate = today;
+        histData.taxInvoiceYearMonth = yearMonth;
+        histData.receiptId = r.id;
+        histData.savedAt = firebase.firestore.FieldValue.serverTimestamp();
+        // Firestore 타임스탬프는 복사 불가 → 문자열화
+        if (histData.createdAt && histData.createdAt.toDate) histData.createdAt = histData.createdAt.toDate().toISOString();
+        if (histData.updatedAt && histData.updatedAt.toDate) histData.updatedAt = null;
+        fbBatch.set(histRef, histData);
     });
-    await batch.commit();
+    await fbBatch.commit();
 }
 
 /* === 탭3: 발행 요청 === */
@@ -746,24 +831,24 @@ function loadRequestData() {
         return true;
     });
     requestSelected = {};
-
-    // 카운팅
     var totalSum = 0;
     requestList.forEach(function(r) { totalSum += getTotalFee(r.data); });
     document.getElementById('request-count').textContent = requestList.length + '건';
     document.getElementById('request-total').textContent = formatMoney(totalSum);
-
     renderRequestTable();
 }
 
 function renderRequestTable() {
+    var filtered = applyFilter(requestList, 'request-filter-company', 'request-filter-type', 'request-filter-bdt');
     var tbody = document.getElementById('request-body');
-    if (requestList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="empty-msg">미발행 건이 없습니다</td></tr>';
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="15" class="empty-msg">' + (requestList.length === 0 ? '미발행 건이 없습니다' : '검색 결과가 없습니다') + '</td></tr>';
+        document.getElementById('request-info').textContent = '';
         return;
     }
     var today = formatDate(new Date()).replace(/-/g, '');
-    tbody.innerHTML = requestList.map(function(r, idx) {
+    tbody.innerHTML = filtered.map(function(r) {
+        var origIdx = requestList.indexOf(r);
         var d = r.data;
         var total = getTotalFee(d);
         var supply = getSupplyAmount(d);
@@ -779,7 +864,7 @@ function renderRequestTable() {
         var bdt = d.billingDateType || 'receipt';
         var bdtLabel = bdt === 'receipt' ? '접수일' : bdt === 'specific' ? '특정일' : bdt === 'monthEnd' ? '월말' : bdt === 'deferred' ? '추후발행' : '-';
         return '<tr>' +
-            '<td class="text-center"><input type="checkbox" ' + (requestSelected[idx] ? 'checked' : '') + ' onchange="requestCheck(' + idx + ',this.checked)"></td>' +
+            '<td class="text-center"><input type="checkbox" ' + (requestSelected[origIdx] ? 'checked' : '') + ' onchange="requestCheck(' + origIdx + ',this.checked)"></td>' +
             '<td>' + (d.receiptNo || r.id) + '</td>' +
             '<td class="text-center"><span class="badge" style="' + (ps.type === '영수' ? 'background:#ecfdf5;color:#10b981' : 'background:#fef2f2;color:#ef4444') + '">' + ps.type + '</span></td>' +
             '<td>' + writeDateFmt + '</td>' +
@@ -796,18 +881,17 @@ function renderRequestTable() {
             '<td class="text-center"><span class="badge" style="background:#eef6ff;color:#2563eb">' + bdtLabel + '</span></td>' +
             '</tr>';
     }).join('');
+    var totalSum = 0; filtered.forEach(function(r) { totalSum += getTotalFee(r.data); });
+    document.getElementById('request-info').textContent = '조회 ' + filtered.length + '건 / 합계 ' + formatMoney(totalSum);
     updateRequestBar();
 }
 
-function requestCheck(idx, checked) {
-    if (checked) requestSelected[idx] = true;
-    else delete requestSelected[idx];
-    updateRequestBar();
-}
+function requestCheck(idx, checked) { if (checked) requestSelected[idx] = true; else delete requestSelected[idx]; updateRequestBar(); }
 function toggleRequestAll(checked) {
-    requestList.forEach(function(r, idx) {
-        if (checked) requestSelected[idx] = true;
-        else delete requestSelected[idx];
+    var filtered = applyFilter(requestList, 'request-filter-company', 'request-filter-type', 'request-filter-bdt');
+    filtered.forEach(function(r) {
+        var idx = requestList.indexOf(r);
+        if (checked) requestSelected[idx] = true; else delete requestSelected[idx];
     });
     renderRequestTable();
 }
@@ -821,7 +905,8 @@ async function issueRequest() {
     var idxs = Object.keys(requestSelected).map(Number);
     if (idxs.length === 0) return;
     if (!confirm(idxs.length + '건 세금계산서를 발행처리 하시겠습니까?')) return;
-    await issueReceipts(idxs.map(function(i) { return requestList[i]; }));
+    var targets = idxs.map(function(i) { return requestList[i]; });
+    await issueReceipts(targets);
     idxs.forEach(function(i) { requestList[i].data.taxInvoiceIssued = true; requestList[i].data.taxInvoiceDate = new Date().toISOString().substring(0,10); });
     requestSelected = {};
     renderRequestTable();
@@ -830,60 +915,82 @@ async function issueRequest() {
     showToast(idxs.length + '건 발행처리 완료');
 }
 
-/* === 탭4: 발행완료 === */
-function loadIssuedData() {
+/* === 탭4: 발행완료 (taxInvoiceHistory 컬렉션에서 검색) === */
+async function loadIssuedData() {
     var month = document.getElementById('issued-month').value;
     if (!month) {
         var today = new Date();
         month = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
         document.getElementById('issued-month').value = month;
     }
-
-    var issuedList = allReceipts.filter(function(r) {
-        var d = r.data;
-        return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === month;
-    });
+    var companyKey = (document.getElementById('issued-filter-company').value || '').trim().toLowerCase();
+    var typeFilter = document.getElementById('issued-filter-type').value;
 
     var tbody = document.getElementById('issued-body');
-    var totalSum = 0;
-    if (issuedList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
-    } else {
-        tbody.innerHTML = issuedList.map(function(r) {
+    tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">조회 중...</td></tr>';
+
+    try {
+        // 먼저 history 컬렉션에서 해당 월 조회
+        var histSnap = await db.collection('taxInvoiceHistory')
+            .where('taxInvoiceYearMonth', '==', month)
+            .orderBy('taxInvoiceDate', 'desc')
+            .get();
+
+        issuedList = [];
+        histSnap.forEach(function(doc) { issuedList.push({ id: doc.id, data: doc.data() }); });
+
+        // history가 비어있으면 receipts에서 폴백 (이전 데이터 호환)
+        if (issuedList.length === 0) {
+            var fallbackList = allReceipts.filter(function(r) {
+                var d = r.data;
+                return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === month;
+            });
+            issuedList = fallbackList;
+        }
+
+        // 클라이언트 필터 (업체명, 구분)
+        var filtered = issuedList.filter(function(r) {
             var d = r.data;
-            var total = getTotalFee(d);
-            var supply = getSupplyAmount(d);
-            var tax = getTaxAmount(d);
-            totalSum += total;
-            var buyer = buildBuyerInfo(d);
-            var writeDate = getWriteDate(d, (d.taxInvoiceDate || '').replace(/-/g, ''));
-            var writeDateFmt = writeDate.length === 8 ? writeDate.substring(0,4)+'-'+writeDate.substring(4,6)+'-'+writeDate.substring(6,8) : writeDate;
-            var itemName = getItemName(d);
-            var qty = getSampleCount(d);
-            var unitPrice = qty > 0 ? Math.round(supply / qty) : supply;
-            var ps = getPayStatus(d);
-            var psStyle = ps.style ? ' style="' + ps.style + '"' : '';
-            var bizNoFmt = buyer.bizNo ? buyer.bizNo.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3') : '-';
-            return '<tr>' +
-                '<td>' + (d.receiptNo || r.id) + '</td>' +
-                '<td class="text-center"><span class="badge" style="' + (ps.type === '영수' ? 'background:#ecfdf5;color:#10b981' : 'background:#fef2f2;color:#ef4444') + '">' + ps.type + '</span></td>' +
-                '<td>' + writeDateFmt + '</td>' +
-                '<td style="color:#10b981;font-weight:600">' + (d.taxInvoiceDate || '-') + '</td>' +
-                '<td>' + (buyer.name || d.companyName || d.company || '-') + '</td>' +
-                '<td>' + bizNoFmt + '</td>' +
-                '<td>' + (buyer.ceo || '-') + '</td>' +
-                '<td>' + itemName + '</td>' +
-                '<td class="text-center">' + qty + '</td>' +
-                '<td class="text-right">' + formatMoney(unitPrice) + '</td>' +
-                '<td class="text-right">' + formatMoney(supply) + '</td>' +
-                '<td class="text-right">' + formatMoney(tax) + '</td>' +
-                '<td class="text-right" style="font-weight:700">' + formatMoney(total) + '</td>' +
-                '<td class="text-center"><span class="badge ' + ps.cls + '"' + psStyle + '>' + ps.label + '</span></td>' +
-                '</tr>';
-        }).join('');
+            if (companyKey) {
+                var cn = (d.companyName || d.company || d.billCompany || '').toLowerCase();
+                if (cn.indexOf(companyKey) === -1) return false;
+            }
+            if (typeFilter) {
+                var ps = getPayStatus(d);
+                if (ps.type !== typeFilter) return false;
+            }
+            return true;
+        });
+
+        var totalSum = 0;
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
+        } else {
+            tbody.innerHTML = filtered.map(function(r) {
+                totalSum += getTotalFee(r.data);
+                return buildIssuedRow(r.data, r.id);
+            }).join('');
+        }
+        document.getElementById('issued-count').textContent = filtered.length + '건';
+        document.getElementById('issued-total').textContent = formatMoney(totalSum);
+        setBadge('badge-issued', filtered.length, 'issued');
+        document.getElementById('issued-info').textContent = filtered.length > 0 ? '조회 ' + filtered.length + '건 / 합계 ' + formatMoney(totalSum) : '';
+    } catch(e) {
+        console.error('발행완료 조회 실패:', e);
+        // 폴백: receipts에서 조회
+        var fallbackList = allReceipts.filter(function(r) {
+            var d = r.data;
+            return d.taxInvoiceIssued && !d.taxCancelled && (d.taxInvoiceDate || '').substring(0,7) === month;
+        });
+        issuedList = fallbackList;
+        var totalSum = 0;
+        tbody.innerHTML = fallbackList.map(function(r) {
+            totalSum += getTotalFee(r.data);
+            return buildIssuedRow(r.data, r.id);
+        }).join('') || '<tr><td colspan="14" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
+        document.getElementById('issued-count').textContent = fallbackList.length + '건';
+        document.getElementById('issued-total').textContent = formatMoney(totalSum);
     }
-    document.getElementById('issued-count').textContent = issuedList.length + '건';
-    document.getElementById('issued-total').textContent = formatMoney(totalSum);
 }
 
 /* === 탭6: 계산서 취소 === */
@@ -891,7 +998,6 @@ function loadCancelData() {
     var cancelList = allReceipts.filter(function(r) {
         return r.data.taxCancelRequested && !r.data.taxCancelled;
     });
-
     var tbody = document.getElementById('cancel-body');
     if (cancelList.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">취소 요청된 건이 없습니다</td></tr>';
@@ -922,7 +1028,8 @@ async function processCancelTax(receiptId) {
             taxCancelledDate: new Date().toISOString().substring(0,10),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        // 로컬 데이터 갱신
+        // history에서도 삭제
+        try { await db.collection('taxInvoiceHistory').doc(receiptId).delete(); } catch(e) {}
         var r = allReceipts.find(function(x) { return x.id === receiptId; });
         if (r) {
             r.data.taxInvoiceIssued = false;
@@ -937,7 +1044,7 @@ async function processCancelTax(receiptId) {
     }
 }
 
-/* === 공급자 정보 (Firestore settings/companyInfo에서 로드) === */
+/* === 공급자 정보 === */
 var SUPPLIER = {
     bizNo: '6588700076',
     name: '주식회사 바이오푸드랩',
@@ -953,7 +1060,6 @@ var SUPPLIER = {
     phone: ''
 };
 
-// Firestore에서 공급자 정보 로드 (없으면 기본값 유지)
 async function loadSupplierInfo() {
     try {
         var doc = await db.collection('settings').doc('companyInfo').get();
@@ -972,7 +1078,6 @@ async function loadSupplierInfo() {
             SUPPLIER.contactName = d.contactName || SUPPLIER.contactName;
             SUPPLIER.phone = d.phone || SUPPLIER.phone;
         } else {
-            // 최초 1회: 기본값을 Firestore에 저장
             await db.collection('settings').doc('companyInfo').set(SUPPLIER);
         }
     } catch(e) {
@@ -980,7 +1085,7 @@ async function loadSupplierInfo() {
     }
 }
 
-/* === 더존 빌36524 엑셀 다운로드 (공통) === */
+/* === 더존 빌36524 엑셀 (홈택스 양식) === */
 function buildDuzonHeaders() {
     var row1 = [];
     for (var i = 1; i <= 84; i++) row1.push(i);
@@ -1012,8 +1117,7 @@ function buildDuzonHeaders() {
 function buildBuyerInfo(d) {
     var buyer = {};
     var companyName = d.billCompany || d.companyName || '';
-    var ci = _companiesMap[companyName] || {}; // companies 컬렉션에서 보완
-
+    var ci = _companiesMap[companyName] || {};
     if (d.billEditEnabled && d.billEdit) {
         buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g, '');
         buyer.name = d.billEdit.company || '';
@@ -1043,7 +1147,6 @@ function buildBuyerInfo(d) {
 }
 
 function getWriteDate(d, fallbackDate) {
-    // 건별 작성일자: 특정일→billingDate, 추후발행→deferredIssueDate, 접수일→receiptDate, fallback
     if (d.billingDateType === 'specific' && d.billingDate) return d.billingDate.replace(/-/g, '');
     if (d.billingDateType === 'deferred' && d.deferredIssueDate) return d.deferredIssueDate.replace(/-/g, '');
     if (d.billingDateType === 'monthEnd') {
@@ -1059,17 +1162,14 @@ function getWriteDate(d, fallbackDate) {
 }
 
 function getItemName(d) {
-    // 품목명: productName → sampleName → testPurpose 기반 → 기본값
     if (d.productName) return d.productName;
     if (d.sampleName) return d.sampleName;
-    // 검사목적 기반 품목명
     var purpose = d.testPurpose || d.purpose || '';
     if (purpose) return purpose + ' 검사수수료';
     return '검사수수료';
 }
 
 function getSampleCount(d) {
-    // 시료수
     if (d.sampleCount) return Number(d.sampleCount);
     if (d.samples && d.samples.length) return d.samples.length;
     return 1;
@@ -1084,13 +1184,9 @@ function buildDuzonRow(d, fallbackDate) {
     var itemName = getItemName(d);
     var qty = getSampleCount(d);
     var unitPrice = qty > 0 ? Math.round(supply / qty) : supply;
-
-    // 청구유형코드(col3): 1=청구, 2=영수 (입금완료면 영수)
-    // 거래구분코드(col4): 1=매출 (BFL은 항상 매출)
     var paidAmt = 0;
     (d.payments || []).forEach(function(p) { paidAmt += Number(p.amount || 0); });
-    var billTypeCode = (paidAmt >= total && total > 0) ? 2 : 1; // 1=청구, 2=영수
-
+    var billTypeCode = (paidAmt >= total && total > 0) ? 2 : 1;
     return [
         '', 'EXCEL', billTypeCode, 1, 1, 1, '', '', '',
         SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
@@ -1132,7 +1228,6 @@ function downloadListExcel(list, columns, filenamePrefix) {
     });
     var wsData = [headerRow].concat(dataRows);
     var ws = XLSX.utils.aoa_to_sheet(wsData);
-    // 컬럼 너비 설정
     ws['!cols'] = columns.map(function(c) { return { wch: c.width || 14 }; });
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, filenamePrefix);
@@ -1142,7 +1237,7 @@ function downloadListExcel(list, columns, filenamePrefix) {
     showToast(list.length + '건 엑셀 다운로드 완료');
 }
 
-/* 탭1: 일괄발행 엑셀 */
+/* 탭별 엑셀 다운로드 */
 function downloadBatchExcel() {
     var idxs = Object.keys(batchSelected).map(Number);
     var list = idxs.length > 0 ? idxs.map(function(i) { return batchList[i]; }) :
@@ -1151,7 +1246,6 @@ function downloadBatchExcel() {
     downloadDuzonExcel(list, targetDate, '세금계산서_일괄발행');
 }
 
-/* 탭2: 특정일 엑셀 */
 function downloadDateExcel() {
     var idxs = Object.keys(dateSelected).map(Number);
     var list = idxs.length > 0 ? idxs.map(function(i) { return dateList[i]; }) :
@@ -1160,7 +1254,6 @@ function downloadDateExcel() {
     downloadDuzonExcel(list, targetDate, '세금계산서_특정일');
 }
 
-/* 탭3: 발행요청 엑셀 */
 function downloadRequestExcel() {
     var idxs = Object.keys(requestSelected).map(Number);
     var list = idxs.length > 0 ? idxs.map(function(i) { return requestList[i]; }) : requestList;
@@ -1168,28 +1261,21 @@ function downloadRequestExcel() {
     downloadDuzonExcel(list, today, '세금계산서_발행요청');
 }
 
-/* 탭4: 발행완료 엑셀 (목록형) */
 function downloadIssuedExcel() {
-    var month = document.getElementById('issued-month').value || '';
-    var list = allReceipts.filter(function(r) {
-        var d = r.data;
-        if (!d.taxInvoiceIssued || d.taxCancelled) return false;
-        if (month && (d.taxInvoiceDate || '').substring(0,7) !== month) return false;
-        return true;
-    });
-    downloadListExcel(list, [
+    if (issuedList.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+    downloadListExcel(issuedList, [
         { label: '접수번호', width: 14, fn: function(r) { return r.data.receiptNo || r.id; } },
         { label: '접수일', width: 12, fn: function(r) { return r.data.receiptDate || ''; } },
         { label: '발행일', width: 12, fn: function(r) { return r.data.taxInvoiceDate || ''; } },
         { label: '업체명', width: 20, fn: function(r) { return r.data.companyName || ''; } },
         { label: '사업자번호', width: 14, fn: function(r) { return r.data.bizNo || ''; } },
+        { label: '구분', width: 6, fn: function(r) { return getPayStatus(r.data).type; } },
         { label: '공급가액', width: 12, fn: function(r) { return getSupplyAmount(r.data); } },
         { label: '세액', width: 10, fn: function(r) { return getTaxAmount(r.data); } },
         { label: '합계', width: 12, fn: function(r) { return getTotalFee(r.data); } }
     ], '발행완료');
 }
 
-/* 탭5: 미발행 엑셀 */
 function downloadUnissuedExcel() {
     var idxs = Object.keys(unissuedSelected).map(Number);
     var list = idxs.length > 0 ? idxs.map(function(i) { return unissuedList[i]; }) : unissuedList;
@@ -1197,7 +1283,6 @@ function downloadUnissuedExcel() {
     downloadDuzonExcel(list, today, '세금계산서_미발행');
 }
 
-/* 탭6: 취소 엑셀 (목록형) */
 function downloadCancelExcel() {
     var list = allReceipts.filter(function(r) {
         return r.data.taxCancelRequested && !r.data.taxCancelled;
