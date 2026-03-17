@@ -54,7 +54,6 @@
 .nav-sub-item.active{color:#4fc3f7;font-weight:600;background:rgba(79,195,247,0.08)}
 .nav-sub-item.disabled{color:#3d5068;cursor:default}
 .nav-sub-item.disabled:hover{background:transparent;color:#3d5068}
-.nav-section-header{display:block;padding:10px 12px 4px;font-size:11px;font-weight:700;color:#5a7a9a;text-transform:uppercase;letter-spacing:0.5px;cursor:default;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px}
 /* ── Sidebar Collapse Toggle ── */
 .sidebar{transition:width 0.25s ease}
 .sidebar-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;cursor:pointer;color:#e2e8f0;font-size:16px;transition:all .15s;flex-shrink:0;background:rgba(255,255,255,.08);margin-left:auto}
@@ -71,7 +70,7 @@
 .sidebar.collapsed .nav-icon{font-size:18px;width:auto}
 .sidebar.collapsed .nav-submenu{display:none!important;max-height:0!important}
 .sidebar.collapsed .nav-sub-item{display:none}
-.sidebar.collapsed .nav-section-header{display:none}
+
 .main{transition:margin-left 0.25s ease}
 body.sidebar-collapsed .main{margin-left:64px}
 @media(max-width:768px){.sidebar{display:none}}
@@ -148,15 +147,23 @@ const SIDEBAR_MENU = [
     icon: '🔬',
     label: '시험 결재',
     sub: [
-      { label: '시험 진행 현황', section: true },
-      { label: '결과 입력',         href: 'testResultInput.html',  page: 'testing-result', indent: true },
-      { label: '시험일지',         href: 'testDiary.html',  page: 'testing-diary', indent: true },
-      { label: '결재 승인',         disabled: true, indent: true },
+      { label: '시험 진행 현황',    href: 'testResultInput.html',  page: 'testing-progress',
+        tabGroup: 'testProgress',
+        pageTabs: [
+          { label: '결과 입력', href: 'testResultInput.html' },
+          { label: '시험일지',  href: 'testDiary.html?from=progress' },
+          { label: '결재 승인', disabled: true }
+        ]
+      },
       { label: '시험 이력 조회',    disabled: true },
       { label: '일정관리',          disabled: true },
-      { label: '설정', section: true },
-      { label: '항목배정',          href: 'itemAssign.html',  page: 'testing-assignment', indent: true },
-      { label: '시험일지 설정',     href: 'testDiary.html',  page: 'testing-diary-settings', indent: true },
+      { label: '설정',              href: 'itemAssign.html',  page: 'testing-settings',
+        tabGroup: 'testSettings',
+        pageTabs: [
+          { label: '항목배정', href: 'itemAssign.html' },
+          { label: '시험일지', href: 'testDiary.html?from=settings' }
+        ]
+      },
       { label: '기록서 양식 수집',  href: 'formCollector.html',  page: 'testing-formCollector' }
     ]
   },
@@ -274,15 +281,8 @@ function renderSidebar() {
     // 서브메뉴가 있는 그룹
     let groupHasActive = false;
     const subHtmlArr = group.sub.map(item => {
-      // 섹션 헤더 (시험 진행 현황, 설정 등)
-      if (item.section) {
-        return `        <li><span class="nav-section-header">${item.label}</span></li>`;
-      }
-
-      const indentStyle = item.indent ? ' style="padding-left:28px;font-size:11.5px"' : '';
-
       if (item.disabled) {
-        return `        <li><span class="nav-sub-item disabled"${indentStyle}>${item.label}</span></li>`;
+        return `        <li><span class="nav-sub-item disabled">${item.label}</span></li>`;
       }
 
       // 링크 결정: 같은 페이지에서 showPage가 있으면 내부 탭 전환
@@ -308,7 +308,24 @@ function renderSidebar() {
       const hrefHash = item.href.split('#')[1] || '';
       const currentHash = location.hash.replace('#', '') || '';
       let isActive = false;
-      if (hrefBase === currentFile) {
+
+      // pageTabs가 있으면 해당 페이지들도 이 메뉴로 인식
+      if (item.pageTabs) {
+        var _curSearch = location.search || '';
+        var _curFrom = '';
+        try { _curFrom = (new URLSearchParams(_curSearch)).get('from') || ''; } catch(e) {}
+        isActive = item.pageTabs.some(function(pt) {
+          var ptFile = (pt.href || '').split('?')[0];
+          if (ptFile !== currentFile) return false;
+          var ptFrom = '';
+          if (pt.href && pt.href.indexOf('from=') !== -1) {
+            try { ptFrom = (new URLSearchParams(pt.href.split('?')[1])).get('from') || ''; } catch(e) {}
+          }
+          if (ptFrom && _curFrom) return ptFrom === _curFrom;
+          if (!ptFrom && !_curFrom) return true;
+          return false;
+        });
+      } else if (hrefBase === currentFile) {
         if (hrefHash) {
           // href에 hash가 있으면 hash까지 일치해야 active
           // subTabs가 있으면 해당 탭들도 같은 메뉴로 인식
@@ -327,7 +344,7 @@ function renderSidebar() {
       }
       if (isActive) groupHasActive = true;
 
-      return `        <li><a href="${linkHref}" class="nav-sub-item${isActive ? ' active' : ''}" data-page="${item.page || ''}"${linkOnclick}${indentStyle}>${item.label}</a></li>`;
+      return `        <li><a href="${linkHref}" class="nav-sub-item${isActive ? ' active' : ''}" data-page="${item.page || ''}"${linkOnclick}>${item.label}</a></li>`;
     });
 
     html += `
@@ -393,22 +410,86 @@ function _restoreSidebarState() {
 // 3-2. subTabs 렌더링 (메뉴 항목에 subTabs가 있을 때 페이지 상단에 탭 바 표시)
 // ============================================================
 function _renderSubTabs() {
-  var currentHref = location.href;
   var currentFile = decodeURIComponent(location.pathname.split('/').pop()) || 'index.html';
   var currentHash = location.hash.replace('#', '') || '';
 
-  // 현재 URL에 해당 메뉴의 href가 포함되고, subTabs가 있는 항목만 찾기
+  // ── A. pageTabs (페이지 간 탭 네비게이션) ──
+  var currentSearch = location.search || '';
+  var currentFrom = (new URLSearchParams(currentSearch)).get('from') || '';
+  var activePageTabItem = null;
+  SIDEBAR_MENU.forEach(function(group) {
+    if (!group.sub) return;
+    group.sub.forEach(function(item) {
+      if (!item.pageTabs || !item.pageTabs.length || item.disabled) return;
+      var match = item.pageTabs.some(function(pt) {
+        var ptFile = (pt.href || '').split('?')[0];
+        var ptFrom = '';
+        if (pt.href && pt.href.indexOf('from=') !== -1) {
+          try { ptFrom = (new URLSearchParams(pt.href.split('?')[1])).get('from') || ''; } catch(e) {}
+        }
+        // 파일명 일치 확인
+        if (ptFile !== currentFile) return false;
+        // from 파라미터가 있는 경우 정확히 일치해야 함
+        if (ptFrom && currentFrom) return ptFrom === currentFrom;
+        // from 파라미터가 없으면 기본 매칭
+        if (!currentFrom && !ptFrom) return true;
+        // 현재 URL에 from이 없고 pageTabs에 from이 있는 경우 → 불일치
+        if (!currentFrom && ptFrom) return false;
+        // 현재 URL에 from이 있고 pageTabs에 from이 없는 경우 → 불일치
+        return false;
+      });
+      if (match) activePageTabItem = item;
+    });
+  });
+
+  if (activePageTabItem && activePageTabItem.pageTabs) {
+    var tabBar = document.createElement('div');
+    tabBar.className = 'sidebar-subtabs';
+    tabBar.id = 'sidebar-subtabs';
+
+    activePageTabItem.pageTabs.forEach(function(pt) {
+      if (pt.disabled) {
+        var span = document.createElement('span');
+        span.className = 'sidebar-subtab disabled';
+        span.textContent = pt.label;
+        span.style.color = '#c0c8d0';
+        span.style.cursor = 'default';
+        tabBar.appendChild(span);
+        return;
+      }
+      var ptFile = (pt.href || '').split('?')[0];
+      var isActiveTab = (ptFile === currentFile);
+      var btn = document.createElement('a');
+      btn.className = 'sidebar-subtab' + (isActiveTab ? ' active' : '');
+      btn.textContent = pt.label;
+      btn.href = pt.href;
+      btn.style.textDecoration = 'none';
+      tabBar.appendChild(btn);
+    });
+
+    // top-header 바로 아래에 삽입
+    var topHeader = document.querySelector('.top-header');
+    if (topHeader && topHeader.nextSibling) {
+      topHeader.parentNode.insertBefore(tabBar, topHeader.nextSibling);
+    } else if (topHeader) {
+      topHeader.parentNode.appendChild(tabBar);
+    } else {
+      var mainEl = document.querySelector('.main-container') || document.querySelector('.main') || document.querySelector('.main-wrapper');
+      if (mainEl) mainEl.insertBefore(tabBar, mainEl.firstChild);
+    }
+    return; // pageTabs가 있으면 subTabs는 무시
+  }
+
+  // ── B. subTabs (같은 페이지 내 hash 탭 전환) ──
   var activeSubTabs = null;
   SIDEBAR_MENU.forEach(function(group) {
     if (!group.sub) return;
     group.sub.forEach(function(item) {
       if (!item.subTabs || !item.subTabs.length || item.disabled) return;
-      // 현재 URL에 item.href가 포함되는지 판단
       var itemHref = item.href || '';
       var hrefBase = itemHref.split('#')[0];
       var hrefHash = itemHref.split('#')[1] || '';
       if (hrefBase !== currentFile) return;
-      // hash 매칭: URL hash가 subTabs 중 하나와 일치하거나, href의 hash와 일치
       var tabNames = item.subTabs.map(function(t) { return t.tab; });
       var isCurrentPage = false;
       if (currentHash && tabNames.indexOf(currentHash) !== -1) {
@@ -416,18 +497,14 @@ function _renderSubTabs() {
       } else if (hrefHash && currentHash === hrefHash) {
         isCurrentPage = true;
       }
-      if (isCurrentPage) {
-        activeSubTabs = item;
-      }
+      if (isCurrentPage) activeSubTabs = item;
     });
   });
 
   if (!activeSubTabs || !activeSubTabs.subTabs || !activeSubTabs.subTabs.length) return;
 
-  // 현재 활성 탭 판별 (URL hash 또는 첫번째 탭)
   var activeTab = currentHash || activeSubTabs.subTabs[0].tab;
 
-  // 탭 바 HTML 생성
   var tabBar = document.createElement('div');
   tabBar.className = 'sidebar-subtabs';
   tabBar.id = 'sidebar-subtabs';
@@ -438,16 +515,11 @@ function _renderSubTabs() {
     btn.textContent = t.label;
     btn.setAttribute('data-subtab', t.tab);
     btn.onclick = function() {
-      // 탭 버튼 활성 전환
       tabBar.querySelectorAll('.sidebar-subtab').forEach(function(b) { b.classList.remove('active'); });
       btn.classList.add('active');
-      // localStorage에 활성 탭 저장 (페이지에서 읽을 수 있도록)
       try { localStorage.setItem('salesMgmt_activeTab', t.tab); } catch(e) {}
-      // URL hash 변경
       history.replaceState(null, '', currentFile + '#' + t.tab);
-      // 커스텀 이벤트 발생 (페이지에서 수신)
       window.dispatchEvent(new CustomEvent('subtab-change', { detail: { tab: t.tab } }));
-      // 페이지에 switchSubTab 함수가 있으면 호출
       if (typeof window.switchSubTab === 'function') {
         window.switchSubTab(t.tab);
       }
@@ -455,21 +527,16 @@ function _renderSubTabs() {
     tabBar.appendChild(btn);
   });
 
-  // .topbar 바로 아래에 삽입 (제목 아래 위치)
   var topbar = document.querySelector('.topbar');
   if (topbar && topbar.nextSibling) {
     topbar.parentNode.insertBefore(tabBar, topbar.nextSibling);
   } else if (topbar) {
     topbar.parentNode.appendChild(tabBar);
   } else {
-    // topbar 없으면 .main의 맨 앞에 삽입
     var mainEl = document.querySelector('.main') || document.querySelector('.main-wrapper');
-    if (mainEl) {
-      mainEl.insertBefore(tabBar, mainEl.firstChild);
-    }
+    if (mainEl) mainEl.insertBefore(tabBar, mainEl.firstChild);
   }
 
-  // 초기 탭 상태 저장 및 이벤트 발생
   try { localStorage.setItem('salesMgmt_activeTab', activeTab); } catch(e) {}
   window.dispatchEvent(new CustomEvent('subtab-change', { detail: { tab: activeTab } }));
   if (typeof window.switchSubTab === 'function') {
