@@ -493,6 +493,22 @@ function findCompanyForReceipt(r) {
         || null;
 }
 
+/**
+ * 계산서업체 사업자등록증 상호 조회
+ * 사업자번호로 companies 컬렉션에서 정식 상호를 찾아 반환
+ * 없으면 원래 billCompany 반환
+ */
+function resolveBillCompanyName(r) {
+    var bizNo = (r.bizNo || '').trim();
+    if (bizNo) {
+        var ci = _companyByBizNo[bizNo];
+        if (ci) {
+            return ci.companyName || ci.company || ci.name || r.billCompany || '';
+        }
+    }
+    return r.billCompany || '';
+}
+
 // ============================================================================
 // 컬럼 정의
 // ============================================================================
@@ -1021,6 +1037,8 @@ function renderTable() {
                     else if (days <= 7) val = '<span style="color:#f9a825;font-weight:600">D-' + days + '</span>';
                     else val = '<span style="color:#999">D-' + days + '</span>';
                 } else { val = '-'; }
+            } else if (col.key === 'billCompany') {
+                val = resolveBillCompanyName(r);
             } else if (col.key === 'payStatus') {
                 if (r.payDate) val = '✅완료';
                 else if (r.feeTotal > 0) val = '<span style="color:#e53935;font-weight:700">미수금</span>';
@@ -1330,7 +1348,7 @@ function openDetailPanel(id, sampleIdx) {
         '</div>' +
         '<div class="dp-section-title">계산서 정보</div>' +
         '<div class="dp-grid">' +
-        dpRow('계산서업체', r.billCompany) +
+        dpRow('계산서업체', resolveBillCompanyName(r)) +
         dpRow('사업자번호', r.bizNo) +
         dpRow('대표자', r.ceo) +
         dpRow('담당자명', r.billName) +
