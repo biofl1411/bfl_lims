@@ -160,8 +160,7 @@ const SIDEBAR_MENU = [
       { label: '설정',              href: 'itemAssign.html',  page: 'testing-settings',
         tabGroup: 'testSettings',
         pageTabs: [
-          { label: '항목배정', href: 'itemAssign.html' },
-          { label: '시험일지', href: 'testDiary.html?from=settings' }
+          { label: '항목배정', href: 'itemAssign.html' }
         ]
       },
       { label: '기록서 양식 수집',  href: 'formCollector.html',  page: 'testing-formCollector' }
