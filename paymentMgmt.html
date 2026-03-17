@@ -269,6 +269,7 @@ tr:hover{background:#f8f9fb}
                             은행 파일 업로드
                             <input type="file" multiple accept=".xls,.xlsx,.csv" onchange="handleBankFiles(event)">
                         </label>
+                        <button class="btn btn-primary" onclick="openTossModal()" style="background:#1b64da">토스페이먼츠</button>
                         <button class="btn btn-success" onclick="autoMatchAll()" id="btn-auto-match" style="display:none">자동매칭</button>
                         <button class="btn btn-secondary" onclick="applyAllMatches()" id="btn-apply-all" style="display:none">일괄 입금처리</button>
                         <button class="btn btn-secondary" onclick="clearBankData()" id="btn-clear-bank" style="display:none">초기화</button>
@@ -390,9 +391,56 @@ tr:hover{background:#f8f9fb}
     </div>
 </div>
 
+<!-- 토스페이먼츠 모달 -->
+<div class="modal-overlay" id="toss-modal-overlay">
+    <div class="modal" style="width:620px">
+        <div class="modal-hd">
+            <h3>토스페이먼츠 카드결제 조회</h3>
+            <button class="close" onclick="closeTossModal()">&#10005;</button>
+        </div>
+        <div class="modal-bd">
+            <div id="toss-config-area">
+                <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:14px">
+                    <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">API 키 설정</div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <span id="toss-key-status" style="font-size:12px;color:#9ca3af">확인 중...</span>
+                        <button class="btn btn-sm btn-secondary" onclick="toggleTossKeyInput()">키 변경</button>
+                    </div>
+                    <div id="toss-key-input-area" style="display:none;margin-top:8px">
+                        <div class="form-group">
+                            <label>시크릿 키 (test_sk_... 또는 live_sk_...)</label>
+                            <input type="password" id="toss-secret-key" placeholder="시크릿 키 입력">
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="saveTossKey()">저장 및 테스트</button>
+                    </div>
+                </div>
+            </div>
+            <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:14px">
+                <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">조회 기간</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="date" id="toss-from" style="padding:8px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px">
+                    <span style="color:#9ca3af">~</span>
+                    <input type="date" id="toss-to" style="padding:8px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px">
+                    <button class="btn btn-primary" onclick="fetchTossTransactions()" id="btn-toss-fetch">조회</button>
+                </div>
+            </div>
+            <div id="toss-result-area">
+                <div class="empty-msg" style="padding:20px">API 키를 설정하고 기간을 선택하여 조회하세요</div>
+            </div>
+        </div>
+        <div class="modal-ft">
+            <button class="btn btn-secondary" onclick="closeTossModal()">닫기</button>
+            <button class="btn btn-success" onclick="addTossToBank()" id="btn-toss-add" style="display:none">매칭에 추가</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
+var TOSS_API_BASE = '/toss';
+var _tossDeposits = [];
+
 // ======================== 전역 변수 ========================
 var allReceipts = [];
 var filteredList = [];
@@ -1777,6 +1825,200 @@ async function removeDangerCompany(idx) {
         renderDangerList();
         showToast('위험업체 삭제 완료');
     } catch(e) { showToast('삭제 실패: ' + e.message); }
+}
+
+// ======================== 토스페이먼츠 연동 ========================
+function openTossModal() {
+    document.getElementById('toss-modal-overlay').classList.add('show');
+    var today = new Date();
+    var from = new Date(today);
+    from.setDate(from.getDate() - 7);
+    document.getElementById('toss-to').value = formatDate(today);
+    document.getElementById('toss-from').value = formatDate(from);
+    checkTossConfig();
+}
+
+function closeTossModal() {
+    document.getElementById('toss-modal-overlay').classList.remove('show');
+}
+
+document.getElementById('toss-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeTossModal();
+});
+
+function toggleTossKeyInput() {
+    var el = document.getElementById('toss-key-input-area');
+    el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function checkTossConfig() {
+    try {
+        var resp = await fetch(TOSS_API_BASE + '/config');
+        var data = await resp.json();
+        var el = document.getElementById('toss-key-status');
+        if (data.configured) {
+            el.innerHTML = '<span style="color:#10b981;font-weight:600">설정됨</span> <span style="color:#9ca3af">' + data.keyPrefix + '</span>';
+        } else {
+            el.innerHTML = '<span style="color:#ef4444;font-weight:600">미설정</span> — 시크릿 키를 입력하세요';
+            document.getElementById('toss-key-input-area').style.display = '';
+        }
+    } catch(e) {
+        document.getElementById('toss-key-status').innerHTML = '<span style="color:#ef4444">프록시 서버 연결 실패</span> <span style="color:#9ca3af;font-size:11px">(toss_proxy 실행 필요)</span>';
+    }
+}
+
+async function saveTossKey() {
+    var key = document.getElementById('toss-secret-key').value.trim();
+    if (!key) { showToast('시크릿 키를 입력하세요'); return; }
+
+    try {
+        var resp = await fetch(TOSS_API_BASE + '/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret_key: key })
+        });
+        var data = await resp.json();
+        if (resp.ok) {
+            showToast('시크릿 키 설정 완료');
+            document.getElementById('toss-key-input-area').style.display = 'none';
+            document.getElementById('toss-secret-key').value = '';
+            checkTossConfig();
+        } else {
+            showToast('설정 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+    } catch(e) {
+        showToast('프록시 서버 연결 실패');
+    }
+}
+
+async function fetchTossTransactions() {
+    var from = document.getElementById('toss-from').value;
+    var to = document.getElementById('toss-to').value;
+    if (!from || !to) { showToast('조회 기간을 설정하세요'); return; }
+
+    var btn = document.getElementById('btn-toss-fetch');
+    btn.disabled = true;
+    btn.textContent = '조회 중...';
+    var area = document.getElementById('toss-result-area');
+    area.innerHTML = '<div class="empty-msg" style="padding:20px">토스페이먼츠에서 결제 내역을 조회하고 있습니다...</div>';
+
+    try {
+        var resp = await fetch(TOSS_API_BASE + '/transactions?startDate=' + from + '&endDate=' + to);
+        var data = await resp.json();
+        btn.disabled = false;
+        btn.textContent = '조회';
+
+        if (!resp.ok) {
+            area.innerHTML = '<div class="empty-msg" style="color:#ef4444">' + (data.error || '조회 실패') + (data.detail ? '<br>' + data.detail : '') + '</div>';
+            return;
+        }
+
+        _tossDeposits = data.deposits || [];
+
+        if (_tossDeposits.length === 0) {
+            area.innerHTML = '<div class="empty-msg" style="padding:20px">해당 기간에 결제 내역이 없습니다</div>';
+            document.getElementById('btn-toss-add').style.display = 'none';
+            return;
+        }
+
+        var totalAmt = _tossDeposits.reduce(function(s, d) { return s + d.amount; }, 0);
+        var html = '<div style="margin-bottom:10px;font-size:13px">' +
+            '<span style="font-weight:700;color:#1b64da">' + _tossDeposits.length + '건</span> 조회 완료 ' +
+            '(총 ' + formatMoney(totalAmt) + ')' +
+            '</div>';
+
+        html += '<div class="tbl-wrap" style="max-height:300px;overflow-y:auto"><table class="bank-tbl"><thead><tr>' +
+            '<th>결제일시</th><th>주문명</th><th>결제수단</th><th class="text-right">금액</th><th>주문번호</th>' +
+            '</tr></thead><tbody>';
+
+        _tossDeposits.forEach(function(d) {
+            var dt = d.transactionAt ? d.transactionAt.substring(0, 16).replace('T', ' ') : '-';
+            html += '<tr>' +
+                '<td style="white-space:nowrap;font-size:12px">' + dt + '</td>' +
+                '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (d.orderName || '-') + '</td>' +
+                '<td><span class="method-tag card">' + (d.method || '카드') + '</span></td>' +
+                '<td class="text-right" style="font-weight:700">' + formatMoney(d.amount) + '</td>' +
+                '<td style="font-size:11px;color:#6b7280">' + (d.orderId || '-') + '</td>' +
+                '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+        area.innerHTML = html;
+        document.getElementById('btn-toss-add').style.display = '';
+
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '조회';
+        area.innerHTML = '<div class="empty-msg" style="color:#ef4444">프록시 서버 연결 실패: ' + e.message + '</div>';
+    }
+}
+
+function addTossToBank() {
+    if (_tossDeposits.length === 0) return;
+
+    var added = 0;
+    _tossDeposits.forEach(function(d) {
+        // 중복 체크 (paymentKey 기준)
+        var dup = bankDeposits.some(function(b) { return b.paymentKey === d.paymentKey; });
+        if (dup) return;
+
+        var dt = d.transactionAt ? d.transactionAt.substring(0, 10) : '';
+        var time = d.transactionAt ? d.transactionAt.substring(11, 19) : '';
+
+        bankDeposits.push({
+            date: dt,
+            time: time,
+            bank: '토스페이먼츠',
+            depositor: d.orderName || d.orderId || '',
+            depositorRaw: (d.orderName || '') + (d.orderId ? ' [' + d.orderId + ']' : ''),
+            amount: d.amount,
+            memo: d.method || '카드',
+            note2: d.orderId || '',
+            branch: d.cardCompany || '',
+            account: '',
+            fileName: '토스페이먼츠',
+            paymentKey: d.paymentKey,
+            orderId: d.orderId,
+            matched: false,
+            matchedReceiptId: null,
+            matchedReceiptNo: '',
+            matchType: null,
+            applied: false
+        });
+        added++;
+    });
+
+    if (added > 0) {
+        document.getElementById('btn-auto-match').style.display = '';
+        document.getElementById('btn-clear-bank').style.display = '';
+
+        // orderId로 접수번호 자동매칭 시도
+        var autoMatched = 0;
+        bankDeposits.forEach(function(dep) {
+            if (dep.matched || dep.applied || !dep.orderId) return;
+            // orderId가 접수번호와 일치하는지 확인
+            var r = allReceipts.find(function(x) {
+                return (x.data.receiptNo || '') === dep.orderId;
+            });
+            if (r) {
+                dep.matched = true;
+                dep.matchedReceiptId = r.id;
+                dep.matchedReceiptNo = r.data.receiptNo || r.id;
+                dep.matchType = 'auto';
+                autoMatched++;
+            }
+        });
+
+        renderBankTable();
+        updateTabCounts();
+        closeTossModal();
+
+        var msg = '토스페이먼츠 ' + added + '건 추가';
+        if (autoMatched > 0) msg += ' (자동매칭 ' + autoMatched + '건)';
+        showToast(msg);
+    } else {
+        showToast('추가할 새 내역이 없습니다 (중복)');
+    }
 }
 </script>
 </body>
