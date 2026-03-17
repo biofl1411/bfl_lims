@@ -831,14 +831,28 @@ document.getElementById('modal-overlay').addEventListener('click', function(e) {
 async function handleBankFiles(event) {
     var files = event.target.files;
     if (!files || files.length === 0) return;
+    var beforeCount = bankDeposits.length;
+    var fileNames = [];
     for (var i = 0; i < files.length; i++) {
+        fileNames.push(files[i].name);
         await parseBankFile(files[i]);
+    }
+    var newCount = bankDeposits.length - beforeCount;
+    if (newCount === 0) {
+        showToast('입금 내역을 찾지 못했습니다. 파일 형식을 확인하세요');
+        return;
     }
     document.getElementById('btn-auto-match').style.display = '';
     document.getElementById('btn-clear-bank').style.display = '';
+
+    // Step 1: 파싱 결과 테이블 표시
     renderBankTable();
     updateTabCounts();
-    showToast(bankDeposits.length + '건 입금 내역 로드 완료');
+
+    // Step 2: 파싱 요약 + 자동매칭 안내
+    var totalAmt = 0;
+    bankDeposits.forEach(function(d) { if (!d.applied) totalAmt += d.amount; });
+    showToast(fileNames.join(', ') + ' → ' + newCount + '건 (' + formatMoney(totalAmt) + ') 로드 완료. 자동매칭을 실행하세요.');
 }
 
 function parseBankFile(file) {
@@ -962,9 +976,15 @@ function renderBankTable() {
     var matched=0, unmatched=0, applied=0;
     bankDeposits.forEach(function(d){ if(d.applied) applied++; else if(d.matched) matched++; else unmatched++; });
 
+    var totalAmt = 0, matchedAmt = 0;
+    bankDeposits.forEach(function(d) {
+        totalAmt += d.amount;
+        if (d.matched || d.applied) matchedAmt += d.amount;
+    });
+
     var html = '<div class="bank-summary">' +
-        '<span class="bank-stat total">전체 ' + bankDeposits.length + '건</span>' +
-        '<span class="bank-stat matched">매칭 ' + matched + '건</span>' +
+        '<span class="bank-stat total">전체 ' + bankDeposits.length + '건 (' + formatMoney(totalAmt) + ')</span>' +
+        '<span class="bank-stat matched">매칭 ' + matched + '건 (' + formatMoney(matchedAmt) + ')</span>' +
         '<span class="bank-stat unmatched">미매칭 ' + unmatched + '건</span>' +
         (applied > 0 ? '<span class="bank-stat partial">처리완료 ' + applied + '건</span>' : '') +
         '</div>';
@@ -1037,7 +1057,12 @@ function autoMatchAll() {
     });
     renderBankTable();
     updateTabCounts();
-    showToast('자동매칭 ' + count + '건 완료');
+    var unmatched = bankDeposits.filter(function(d) { return !d.matched && !d.applied; }).length;
+    if (count > 0) {
+        showToast('자동매칭 ' + count + '건 성공' + (unmatched > 0 ? ' / 미매칭 ' + unmatched + '건 (역추적 필요)' : ' / 전체 매칭 완료!'));
+    } else {
+        showToast('자동매칭 0건 — 미매칭 ' + unmatched + '건은 역추적 또는 수동 매칭이 필요합니다');
+    }
 }
 
 function findAutoMatch(dep) {
