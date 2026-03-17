@@ -3113,3 +3113,79 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.anthropic.claude_b
 
 - URL 파라미터 `?tab=notice|mobile|ledger|stats`로 특정 탭 직접 진입 가능
 - `receiptNotice.html`에 `?embed=1` 모드 추가 (사이드바/topbar 숨김)
+
+---
+
+### 2026-03-17 작업 내역
+
+#### formCollector.html(기록서 양식 수집) — 파일명 UI + 시험법근거 자동추출
+
+##### 저장 파일명 UI 추가
+- 담당자 이름 행 아래에 파일명 프리뷰 영역 추가
+- 분야 + 검사목적 + 검사항목 + 시험법근거 + 검체특성 자동 조합
+- CSS: `.fname-box`, `.fname-preview`, `.fname-tag`, `.sample-chip`
+- HTML: `fname-preview`, `inp-test-basis`, `inp-sample-type`, `sample-chips`
+- JS: `updateFileName()`, `pickSampleChip()`, `getGeneratedFileName()`
+- `doConfirmSave()` 수정: `savedFileName`, `testBasis`, `sampleType` 필드 추가
+
+##### 시험법근거 PDF 분석 결과에서 자동 추출
+- `autoFillTestBasis()`: `_lastAnalyzed.testBasis` 또는 sections 내 시험방법/시험법 키워드에서 추출
+- AI 프롬프트에 `"testBasis": "시험방법근거"` 필드 추가 요청
+
+#### inventoryMgmt.html(재고/시약 관리) — 구분번호/일련번호/코드 매칭
+
+##### 테이블 컬럼 추가
+- 제품 사양 테이블 헤더에 `구분번호`, `일련번호` 컬럼 추가
+- `renderSpecTable`에서 `d.catNum || '-'`, `d.serialNo || '-'` 렌더링
+- 상세 모달에 `sdCodeDetail` div (구분번호/일련번호 표시)
+
+##### 엑셀 기반 코드 매칭 (js/excel-upload.js)
+- `handleExcelUpload()` 수정: `catNum`, `serialNo` 필드 추가, `code = 구분번호3자리 + 일련번호4자리`
+- `migrateReagentCodes()` 신규: 기존 Firestore reagents를 엑셀 기준으로 매칭 업데이트
+  - 매칭 스코어: cat(+3) + catNo(+5) + casNo(+4) + mfr(+2) + spec(+1) + name(+5) = 최대 20점, 8점 이상 시 업데이트
+  - 500건씩 배치 커밋
+
+#### paymentMgmt.html(입금 관리) — 전면 재구성 **[미완료]**
+
+##### 설계 완료, 구현 미착수
+- 기존 파일 1390줄 전체 분석 완료
+- ledgerMgmt.html 1149줄 분석 완료
+- 4탭 구조 설계:
+  - **탭1 매출처 원장**: ledgerMgmt.html 기능 통합 (서브탭: 원장+거래내역서)
+  - **탭2 입금 현황**: 기존 입금 테이블+모달 유지
+  - **탭3 은행 매칭**: 5단계 워크플로우, BANK_COL_MAP 헤더 자동탐지, 5순위 매칭
+  - **탭4 역추적 관리**: payment_ambiguous 목록, 역추적 4단계, 위험업체 등록
+- **다음 세션에서 파일 작성 필요** → `NEXT_SESSION.md` 참조
+
+#### paymentStats.html(입금 통계) — **[미착수]**
+- 4탭 구조: 결제나이(신호등 UI)/결제수단별/부서별/카드수수료
+- paymentMgmt 완료 후 진행 예정
+
+### 2026-03-17 (검사목적 prefix 동기화 + 기록서 양식 수집기 개선)
+
+#### 검사목적 prefix 동기화 버그 수정
+- **문제**: 접수 관리 > 검사목적 관리에서 접수번호 구분1(고정문자)을 변경해도 `prefix` 필드가 업데이트되지 않음
+- **원인**: `saveDetail()`에서 `segments`만 저장하고 `prefix`는 반영하지 않아 Firestore에 옛날 값이 남음
+- **수정**: 저장 시 세그먼트의 첫 번째 고정문자를 `prefix`에 동기화, 로드 시 불일치 자동 보정
+- **하드코딩 제거**: `var P=[...]` 27개 검사목적 하드코딩 배열 삭제 → `var P=[]`, Firestore 전용 로드
+
+#### 검사목적 데이터 흐름 (확정)
+```
+접수 관리 > 검사목적 관리 > 검사목적
+  ↓ 관리자가 추가/수정/삭제 → 즉시 Firestore 저장
+  ↓
+Firestore: settings/inspectionPurposes
+  ↓ (읽기 전용)
+  ├─ 접수 관리 > 접수 등록
+  ├─ 시험 결재 > 시험 진행 현황 > 결과 입력
+  ├─ 시험 결재 > 시험 진행 현황 > 시험일지
+  ├─ 시험 결재 > 기록서 양식 수집
+  └─ 성적서 > 성적서 발급
+```
+
+#### 시험 결재 > 기록서 양식 수집 개선
+- **시료유형 식약처 품목코드 매칭**: 분석 결과의 `sampleType` 예시값에 대해 `mfds_product_codes`에서 자동 검색, 매칭된 품목코드(최대 5건) 표시
+- **검증완료 저장 후 워크플로우 추가**:
+  1. 저장 후 "다른 식품유형에도 동일 양식 적용" 모달 표시 (mfdsTemplates에서 동일 검사항목 보유 식품유형 자동 검색)
+  2. "예" → 선택한 식품유형에 일괄 복사 저장 → 시험일지 변환 문의
+  3. "아니요(건너뛰기)" → 시험일지 변환 문의
