@@ -399,12 +399,16 @@ async function loadFormTemplates() {
   }
 }
 
-/* 적용 식품유형 카운트: mfdsTemplates에서 해당 시험항목코드를 보유한 식품유형 수 */
+/* 적용 식품유형 카운트: _appliedFoodTypes 우선, 없으면 mfdsTemplates에서 동적 검색 */
 function countAppliedFoodTypes(ft) {
+  // 사용자가 선택 저장한 목록이 있으면 그 수 사용
+  if (ft._appliedFoodTypes && ft._appliedFoodTypes.length) {
+    return ft._appliedFoodTypes.length;
+  }
+  // 없으면 mfdsTemplates에서 해당 시험항목코드 보유 식품유형 수 동적 계산
   var code = ft.representativeItemCode || '';
   if (!code) return 0;
   var count = 0;
-  // mfdsTemplates 캐시에서 검색
   if (window._mfdsTemplatesCache) {
     window._mfdsTemplatesCache.forEach(function(tmpl) {
       if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === code; })) {
@@ -912,32 +916,105 @@ function getSectionByTitle(a, title) {
 }
 
 /* 적용 식품유형 목록 팝업 */
+var _ftModalItemCode = '';
+var _ftModalCurrentFoodType = '';
+
 function showAppliedFoodTypes(itemCode, currentFoodType) {
   if (!window._mfdsTemplatesCache) return;
+  _ftModalItemCode = itemCode;
+  _ftModalCurrentFoodType = currentFoodType;
+
+  // 현재 formTemplate의 적용된 식품유형 목록 (Firestore 저장값)
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  var appliedList = (ft && ft._appliedFoodTypes) || [];
+
   var list = [];
   window._mfdsTemplatesCache.forEach(function(tmpl) {
     if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === itemCode; })) {
-      list.push(tmpl.foodTypeName || tmpl.templateName || '-');
+      var name = tmpl.foodTypeName || tmpl.templateName || '-';
+      var code = tmpl.foodTypeCode || '';
+      var isCurrent = (name === currentFoodType);
+      var isApplied = isCurrent || appliedList.indexOf(name) >= 0;
+      list.push({ name: name, code: code, isCurrent: isCurrent, isApplied: isApplied });
     }
   });
   if (!list.length) { showToast('적용 식품유형 없음', 'info'); return; }
+  list.sort(function(a, b) { return a.name.localeCompare(b.name, 'ko'); });
 
   var modal = document.getElementById('spec-modal');
   document.querySelector('#spec-modal .modal-header h3').textContent = '적용 식품유형 (' + list.length + '개)';
+
   var body = document.getElementById('spec-modal-body');
-  var html = '<div style="max-height:400px;overflow-y:auto">';
-  list.sort();
-  list.forEach(function(name, idx) {
-    var isCurrent = (name === currentFoodType);
-    html += '<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px;display:flex;align-items:center;gap:8px' + (isCurrent ? ';background:#dbeafe;font-weight:600' : '') + '">';
+  var html = '';
+
+  // 상단 버튼
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">';
+  html += '<button class="btn btn-sm btn-outline" onclick="ftFoodTypeSelectAll(true)">전체 선택</button>';
+  html += '<button class="btn btn-sm btn-outline" onclick="ftFoodTypeSelectAll(false)">전체 해제</button>';
+  html += '<span style="margin-left:auto;font-size:12px;color:#64748b" id="ft-food-sel-count"></span>';
+  html += '</div>';
+
+  // 목록 (체크박스)
+  html += '<div style="max-height:380px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px" id="ft-food-list">';
+  list.forEach(function(item, idx) {
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:13px' + (item.isCurrent ? ';background:#dbeafe' : '') + '">';
+    html += '<input type="checkbox" data-ft-food-name="' + escA(item.name) + '"' + (item.isApplied ? ' checked' : '') + (item.isCurrent ? ' disabled' : '') + ' onchange="ftFoodTypeUpdateCount()" style="width:16px;height:16px;accent-color:#2563eb">';
     html += '<span style="color:#9ca3af;font-size:11px;width:24px">' + (idx + 1) + '</span>';
-    html += '<span>' + escH(name) + '</span>';
-    if (isCurrent) html += '<span style="font-size:10px;color:#2563eb;background:#bfdbfe;padding:1px 6px;border-radius:8px">현재</span>';
-    html += '</div>';
+    html += '<span style="flex:1">' + escH(item.name) + '</span>';
+    if (item.isCurrent) html += '<span style="font-size:10px;color:#2563eb;background:#bfdbfe;padding:1px 6px;border-radius:8px">현재</span>';
+    html += '</label>';
   });
   html += '</div>';
+
+  // 하단 적용 버튼
+  html += '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">';
+  html += '<button class="btn btn-outline" onclick="closeSpecModal()">취소</button>';
+  html += '<button class="btn btn-primary" onclick="saveFtAppliedFoodTypes()">선택 적용</button>';
+  html += '</div>';
+
   body.innerHTML = html;
   modal.classList.add('active');
+  ftFoodTypeUpdateCount();
+}
+
+function ftFoodTypeSelectAll(checked) {
+  document.querySelectorAll('#ft-food-list input[type="checkbox"]:not(:disabled)').forEach(function(cb) {
+    cb.checked = checked;
+  });
+  ftFoodTypeUpdateCount();
+}
+
+function ftFoodTypeUpdateCount() {
+  var total = document.querySelectorAll('#ft-food-list input[type="checkbox"]').length;
+  var sel = document.querySelectorAll('#ft-food-list input[type="checkbox"]:checked').length;
+  var el = document.getElementById('ft-food-sel-count');
+  if (el) el.textContent = sel + '/' + total + '개 선택';
+}
+
+async function saveFtAppliedFoodTypes() {
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+
+  var selected = [];
+  document.querySelectorAll('#ft-food-list input[type="checkbox"]:checked').forEach(function(cb) {
+    var name = cb.getAttribute('data-ft-food-name');
+    if (name) selected.push(name);
+  });
+
+  try {
+    await db.collection('formTemplates').doc(ft._id).update({
+      _appliedFoodTypes: selected
+    });
+    ft._appliedFoodTypes = selected;
+    ft._foodTypeCount = selected.length;
+    showToast(selected.length + '개 식품유형 적용 완료', 'success');
+    closeSpecModal();
+    // 목록 + 상세 갱신
+    renderDiaryItemList();
+    renderFormTemplateDetail(ft);
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+  }
 }
 
 function escA(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
