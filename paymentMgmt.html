@@ -360,6 +360,35 @@ tr:hover{background:#f8f9fb}
                         <input type="text" id="pay-amount" placeholder="금액 입력" inputmode="numeric">
                     </div>
                     <div class="form-group">
+                        <label>입금 계좌</label>
+                        <select id="pay-account">
+                            <option value="">선택</option>
+                            <option value="기업 02408802101017">기업 024-0880-2101017</option>
+                            <option value="우리 1005702799176">우리 1005-702-799176</option>
+                            <option value="농협 3010178172211">농협 301-0178-172211</option>
+                            <option value="신한 140011400990">신한 140-011-400990</option>
+                            <option value="국민 03760104078662">국민 037-60-1040-78662</option>
+                            <option value="기업 02408802104021">기업 024-0880-2104021</option>
+                            <option value="기업 02408802104038">기업 024-0880-2104038</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>적요1 (입금자명)</label>
+                        <input type="text" id="pay-dep1" placeholder="입금자명">
+                    </div>
+                    <div class="form-group">
+                        <label>적요2</label>
+                        <input type="text" id="pay-dep2" placeholder="타행이체, 인터넷 등">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>취급지점</label>
+                        <input type="text" id="pay-branch" placeholder="취급지점">
+                    </div>
+                    <div class="form-group">
                         <label>비고</label>
                         <input type="text" id="pay-memo" placeholder="메모 (선택)">
                     </div>
@@ -726,6 +755,10 @@ function openModal(receiptId) {
     document.getElementById('modal-remain').className = 'val ' + (remain > 0 ? 'red' : 'green');
     document.getElementById('pay-amount').value = remain > 0 ? remain.toLocaleString() : '';
     document.getElementById('pay-memo').value = '';
+    document.getElementById('pay-dep1').value = '';
+    document.getElementById('pay-dep2').value = '';
+    document.getElementById('pay-branch').value = '';
+    document.getElementById('pay-account').value = '';
     document.getElementById('modal-title').textContent = '입금 처리 - ' + (d.receiptNo || '');
 
     var detailHtml = '';
@@ -778,10 +811,16 @@ function renderPayHistory(payments) {
         var tagCls = getMethodTagClass(p.method || '기타');
         var isBank = p.bankMatch ? true : false;
         var bankHtml = isBank ? ' <span class="bank-tag">' + (p.bankMatch.bank || '은행') + '</span>' : '';
+        var extraParts = [];
+        if (p.depositor) extraParts.push(p.depositor);
+        if (p.note2) extraParts.push(p.note2);
+        if (p.branch) extraParts.push(p.branch);
+        if (p.account) extraParts.push(p.account);
+        var extraHtml = extraParts.length > 0 ? '<div style="font-size:10px;color:#9ca3af;margin-top:2px">' + extraParts.join(' | ') + '</div>' : '';
         return '<div class="pay-hist-item2">' +
             '<span class="date">' + (p.date || '-') + '</span>' +
             '<span class="method"><span class="method-tag ' + tagCls + '">' + (p.method || '-') + '</span>' + bankHtml + '</span>' +
-            '<span class="memo" title="' + (p.memo || '') + '">' + (p.memo || '') + '</span>' +
+            '<span class="memo" title="' + (p.memo || '') + '">' + (p.memo || '') + extraHtml + '</span>' +
             '<span class="amt">' + formatMoney(p.amount) + '</span>' +
             '<button class="del" onclick="deletePayment(' + idx + ')" title="삭제">&#10005;</button>' +
             '</div>';
@@ -798,10 +837,18 @@ async function processPayment() {
     var method = document.getElementById('pay-method').value;
     var date = document.getElementById('pay-date').value;
     var memo = document.getElementById('pay-memo').value.trim();
+    var account = document.getElementById('pay-account').value;
+    var dep1 = document.getElementById('pay-dep1').value.trim();
+    var dep2 = document.getElementById('pay-dep2').value.trim();
+    var branch = document.getElementById('pay-branch').value.trim();
 
     if (!date) { showToast('입금일자를 선택하세요'); return; }
 
-    var payment = { amount: amount, method: method, date: date, memo: memo, createdAt: new Date().toISOString() };
+    var payment = {
+        amount: amount, method: method, date: date, memo: memo,
+        account: account, depositor: dep1, note2: dep2, branch: branch,
+        createdAt: new Date().toISOString()
+    };
 
     try {
         await db.collection('receipts').doc(currentReceiptId).update({
@@ -1662,6 +1709,10 @@ async function applySingleMatch(idx) {
         method: '계좌이체',
         date: dep.date,
         memo: memo,
+        depositor: dep.depositorRaw || dep.depositor || '',
+        note2: dep.note2 || '',
+        branch: dep.branch || '',
+        account: dep.account || '',
         createdAt: new Date().toISOString(),
         bankMatch: { bank: dep.bank, depositor: dep.depositor, matchType: dep.matchType }
     };
@@ -1725,6 +1776,10 @@ async function applySingleMatchSilent(idx) {
         method: '계좌이체',
         date: dep.date,
         memo: memo,
+        depositor: dep.depositorRaw || dep.depositor || '',
+        note2: dep.note2 || '',
+        branch: dep.branch || '',
+        account: dep.account || '',
         createdAt: new Date().toISOString(),
         bankMatch: { bank: dep.bank, depositor: dep.depositor, matchType: dep.matchType }
     };
