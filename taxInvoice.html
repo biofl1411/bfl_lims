@@ -307,10 +307,11 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                                     <th class="text-right">세액</th>
                                     <th class="text-right">합계</th>
                                     <th class="text-center">입금상태</th>
+                                    <th class="text-center">발행유형</th>
                                 </tr>
                             </thead>
                             <tbody id="issued-body">
-                                <tr><td colspan="14" class="empty-msg">발행월을 선택 후 조회하세요</td></tr>
+                                <tr><td colspan="15" class="empty-msg">발행월을 선택 후 조회하세요</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -551,7 +552,7 @@ function buildExcelStyleRow(d, docId, idx, issued, selectedMap, checkFnName, fal
         '</tr>';
 }
 
-/* 발행완료 전용 행 (체크박스 없이 + 발행일 컬럼) */
+/* 발행완료 전용 행 (체크박스 없이 + 발행일 + 발행유형 컬럼) */
 function buildIssuedRow(d, docId) {
     var total = getTotalFee(d);
     var supply = getSupplyAmount(d);
@@ -565,6 +566,8 @@ function buildIssuedRow(d, docId) {
     var ps = getPayStatus(d);
     var psStyle = ps.style ? ' style="' + ps.style + '"' : '';
     var bizNoFmt = buyer.bizNo ? buyer.bizNo.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3') : '-';
+    var bdt = d.billingDateType || 'receipt';
+    var bdtLabel = bdt === 'receipt' ? '접수일' : bdt === 'specific' ? '특정일' : bdt === 'monthEnd' ? '월말' : bdt === 'deferred' ? '추후발행' : '-';
     return '<tr>' +
         '<td>' + (d.receiptNo || docId) + '</td>' +
         '<td class="text-center"><span class="badge" style="' + (ps.type === '영수' ? 'background:#ecfdf5;color:#10b981' : 'background:#fef2f2;color:#ef4444') + '">' + ps.type + '</span></td>' +
@@ -580,6 +583,7 @@ function buildIssuedRow(d, docId) {
         '<td class="text-right">' + formatMoney(tax) + '</td>' +
         '<td class="text-right" style="font-weight:700">' + formatMoney(total) + '</td>' +
         '<td class="text-center"><span class="badge ' + ps.cls + '"' + psStyle + '>' + ps.label + '</span></td>' +
+        '<td class="text-center"><span class="badge" style="background:#eef6ff;color:#2563eb">' + bdtLabel + '</span></td>' +
         '</tr>';
 }
 
@@ -964,7 +968,7 @@ async function loadIssuedData() {
 
         var totalSum = 0;
         if (filtered.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="15" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
         } else {
             tbody.innerHTML = filtered.map(function(r) {
                 totalSum += getTotalFee(r.data);
@@ -987,7 +991,7 @@ async function loadIssuedData() {
         tbody.innerHTML = fallbackList.map(function(r) {
             totalSum += getTotalFee(r.data);
             return buildIssuedRow(r.data, r.id);
-        }).join('') || '<tr><td colspan="14" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
+        }).join('') || '<tr><td colspan="15" class="empty-msg">발행완료 내역이 없습니다</td></tr>';
         document.getElementById('issued-count').textContent = fallbackList.length + '건';
         document.getElementById('issued-total').textContent = formatMoney(totalSum);
     }
@@ -1272,7 +1276,9 @@ function downloadIssuedExcel() {
         { label: '구분', width: 6, fn: function(r) { return getPayStatus(r.data).type; } },
         { label: '공급가액', width: 12, fn: function(r) { return getSupplyAmount(r.data); } },
         { label: '세액', width: 10, fn: function(r) { return getTaxAmount(r.data); } },
-        { label: '합계', width: 12, fn: function(r) { return getTotalFee(r.data); } }
+        { label: '합계', width: 12, fn: function(r) { return getTotalFee(r.data); } },
+        { label: '입금상태', width: 8, fn: function(r) { return getPayStatus(r.data).label; } },
+        { label: '발행유형', width: 8, fn: function(r) { var b = r.data.billingDateType || 'receipt'; return b === 'receipt' ? '접수일' : b === 'specific' ? '특정일' : b === 'monthEnd' ? '월말' : b === 'deferred' ? '추후발행' : '-'; } }
     ], '발행완료');
 }
 
