@@ -152,6 +152,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                     <div class="right">
                         <input type="date" id="date-target" style="padding:6px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
                         <button class="btn btn-primary" onclick="loadDateData()">조회</button>
+                        <button class="btn btn-secondary" onclick="downloadDateExcel()" title="더존 빌36524 양식">📥 엑셀 다운로드</button>
                     </div>
                 </div>
                 <div class="card-bd">
@@ -190,6 +191,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                 <div class="card-hd">
                     <h3>발행 요청</h3>
                     <div class="right">
+                        <button class="btn btn-secondary" onclick="downloadRequestExcel()" title="더존 빌36524 양식">📥 엑셀 다운로드</button>
                         <button class="btn btn-secondary" onclick="loadRequestData()">새로고침</button>
                     </div>
                 </div>
@@ -236,6 +238,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                     <div class="right">
                         <input type="month" id="issued-month" style="padding:6px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
                         <button class="btn btn-primary" onclick="loadIssuedData()">조회</button>
+                        <button class="btn btn-secondary" onclick="downloadIssuedExcel()">📥 엑셀 다운로드</button>
                     </div>
                 </div>
                 <div class="card-bd">
@@ -273,6 +276,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                 <div class="card-hd">
                     <h3>미발행 계산서</h3>
                     <div class="right">
+                        <button class="btn btn-secondary" onclick="downloadUnissuedExcel()" title="더존 빌36524 양식">📥 엑셀 다운로드</button>
                         <button class="btn btn-secondary" onclick="loadUnissued()">새로고침</button>
                     </div>
                 </div>
@@ -315,6 +319,7 @@ input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:#1a73e
                 <div class="card-hd">
                     <h3>계산서 취소 요청</h3>
                     <div class="right">
+                        <button class="btn btn-secondary" onclick="downloadCancelExcel()">📥 엑셀 다운로드</button>
                         <button class="btn btn-secondary" onclick="loadCancelData()">새로고침</button>
                     </div>
                 </div>
@@ -909,21 +914,10 @@ async function loadSupplierInfo() {
     }
 }
 
-/* === 더존 빌36524 엑셀 다운로드 === */
-function downloadBatchExcel() {
-    // 선택된 건만 (없으면 전체 미발행 건)
-    var idxs = Object.keys(batchSelected).map(Number);
-    var list = idxs.length > 0 ? idxs.map(function(i) { return batchList[i]; }) :
-        batchList.filter(function(r) { return !r.data.taxInvoiceIssued; });
-
-    if (list.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
-
-    var targetDate = document.getElementById('batch-date').value.replace(/-/g, '');
-
-    // 헤더 행 (Row 1: 번호, Row 2: 카테고리, Row 3: 필드명)
+/* === 더존 빌36524 엑셀 다운로드 (공통) === */
+function buildDuzonHeaders() {
     var row1 = [];
     for (var i = 1; i <= 84; i++) row1.push(i);
-
     var row2 = ['발송시스템_고유번호','결과_고유번호','청구유형코드','거래구분코드','사용자구분코드','과세구분코드',
         '책번호_권','책번호_호','일련번호',
         '공급자정보','','','','','','','','','','','','','',
@@ -937,7 +931,6 @@ function downloadBatchExcel() {
         '비고1','비고2','비고3',
         '수정세금계산서여부','수정코드','원천세금계산서 고유번호','원천세금계산서 승인번호',
         '협력업체코드','종료'];
-
     var row3 = ['','','','','','','','','',
         '등록번호','상호','대표자명','주소','주소상세','종사업장번호','업태','종목','부서명','담당자이메일','담당자휴대번호','담당자명','담당자전화번호',
         '등록번호','상호','대표자명','주소','주소상세','종사업장번호','업태','종목','부서명','담당자이메일','담당자휴대번호','담당자명','담당자전화번호',
@@ -947,80 +940,165 @@ function downloadBatchExcel() {
         '일자','품목','규격','수량','단가','공급가액','세액','비고',
         '일자','품목','규격','수량','단가','공급가액','세액','비고',
         '','','','','','','','','','','','','',''];
+    return [row1, row2, row3];
+}
 
-    // 데이터 행
-    var dataRows = list.map(function(r, idx) {
-        var d = r.data;
-        var total = getTotalFee(d);
-        var supply = getSupplyAmount(d);
-        var tax = getTaxAmount(d);
+function buildBuyerInfo(d) {
+    var buyer = {};
+    if (d.billEditEnabled && d.billEdit) {
+        buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g, '');
+        buyer.name = d.billEdit.company || '';
+        buyer.ceo = d.billEdit.ceo || '';
+        buyer.addr1 = d.billEdit.address || '';
+        buyer.addr2 = '';
+        buyer.bizStatus = d.billEdit.bizType || '';
+        buyer.bizType = d.billEdit.bizItem || '';
+        buyer.email = d.billEdit.email || '';
+        buyer.contactName = d.billEdit.name || '';
+        buyer.phone = d.billEdit.phone || '';
+        buyer.mobile = d.billEdit.mobile || '';
+    } else {
+        buyer.bizNo = (d.bizNo || '').replace(/-/g, '');
+        buyer.name = d.billCompany || d.companyName || '';
+        buyer.ceo = d.ceo || '';
+        buyer.addr1 = d.companyAddress || '';
+        buyer.addr2 = '';
+        buyer.bizStatus = '';
+        buyer.bizType = '';
+        buyer.email = d.billEmail || '';
+        buyer.contactName = d.billName || '';
+        buyer.phone = d.billPhone || '';
+        buyer.mobile = d.billMobile || '';
+    }
+    return buyer;
+}
 
-        // 공급받는자 정보 (수정 체크 시 수정 정보 우선)
-        var buyer = {};
-        if (d.billEditEnabled && d.billEdit) {
-            buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g, '');
-            buyer.name = d.billEdit.company || '';
-            buyer.ceo = d.billEdit.ceo || '';
-            buyer.addr1 = d.billEdit.address || '';
-            buyer.addr2 = '';
-            buyer.bizStatus = d.billEdit.bizType || '';
-            buyer.bizType = d.billEdit.bizItem || '';
-            buyer.email = d.billEdit.email || '';
-            buyer.contactName = d.billEdit.name || '';
-            buyer.phone = d.billEdit.phone || '';
-            buyer.mobile = d.billEdit.mobile || '';
-        } else {
-            buyer.bizNo = (d.bizNo || '').replace(/-/g, '');
-            buyer.name = d.billCompany || d.companyName || '';
-            buyer.ceo = d.ceo || '';
-            buyer.addr1 = d.companyAddress || '';
-            buyer.addr2 = '';
-            buyer.bizStatus = '';
-            buyer.bizType = '';
-            buyer.email = d.billEmail || '';
-            buyer.contactName = d.billName || '';
-            buyer.phone = d.billPhone || '';
-            buyer.mobile = d.billMobile || '';
-        }
+function buildDuzonRow(d, targetDate) {
+    var total = getTotalFee(d);
+    var supply = getSupplyAmount(d);
+    var tax = getTaxAmount(d);
+    var buyer = buildBuyerInfo(d);
+    var dateNum = parseInt(targetDate);
+    return [
+        '', 'EXCEL', 2, 1, 1, 1, '', '', '',
+        SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
+        '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
+        SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
+        buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
+        '', buyer.bizStatus, buyer.bizType, '', buyer.email,
+        buyer.mobile, buyer.contactName, buyer.phone,
+        dateNum, supply, tax,
+        dateNum, d.testPurpose || '검사수수료', '', 1, supply, supply, tax, '',
+        '','','','','','','','',
+        '','','','','','','','',
+        '','','','','','','','',
+        total, 0, 0, 0, total,
+        d.receiptNo || '', '', '',
+        'N', '', '', '', '',
+        'END'
+    ];
+}
 
-        var row = [
-            '', 'EXCEL', 2, 1, 1, 1, '', '', '',
-            // 공급자
-            SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
-            '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
-            SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
-            // 공급받는자
-            buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
-            '', buyer.bizStatus, buyer.bizType, '', buyer.email,
-            buyer.mobile, buyer.contactName, buyer.phone,
-            // 작성일자, 공급가액, 세액
-            parseInt(targetDate), supply, tax,
-            // 품목1
-            parseInt(targetDate), d.testPurpose || '검사수수료', '', 1, supply, supply, tax, '',
-            // 품목2~4 (빈값)
-            '','','','','','','','',
-            '','','','','','','','',
-            '','','','','','','','',
-            // 합계, 현금, 수표, 어음, 외상미수금
-            total, 0, 0, 0, total,
-            // 비고
-            d.receiptNo || '', '', '',
-            // 수정
-            'N', '', '', '', '',
-            'END'
-        ];
-        return row;
-    });
-
-    // SheetJS로 엑셀 생성
-    var wsData = [row1, row2, row3].concat(dataRows);
+function downloadDuzonExcel(list, targetDate, filenamePrefix) {
+    if (list.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+    var headers = buildDuzonHeaders();
+    var dataRows = list.map(function(r) { return buildDuzonRow(r.data, targetDate); });
+    var wsData = headers.concat(dataRows);
     var ws = XLSX.utils.aoa_to_sheet(wsData);
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '세금계산서');
-
-    var filename = '세금계산서_' + targetDate + '_' + list.length + '건.xlsx';
+    var filename = filenamePrefix + '_' + targetDate + '_' + list.length + '건.xlsx';
     XLSX.writeFile(wb, filename);
     showToast(list.length + '건 엑셀 다운로드 완료');
+}
+
+function downloadListExcel(list, columns, filenamePrefix) {
+    if (list.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+    var headerRow = columns.map(function(c) { return c.label; });
+    var dataRows = list.map(function(r) {
+        return columns.map(function(c) { return c.fn(r); });
+    });
+    var wsData = [headerRow].concat(dataRows);
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    // 컬럼 너비 설정
+    ws['!cols'] = columns.map(function(c) { return { wch: c.width || 14 }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, filenamePrefix);
+    var today = formatDate(new Date()).replace(/-/g, '');
+    var filename = filenamePrefix + '_' + today + '_' + list.length + '건.xlsx';
+    XLSX.writeFile(wb, filename);
+    showToast(list.length + '건 엑셀 다운로드 완료');
+}
+
+/* 탭1: 일괄발행 엑셀 */
+function downloadBatchExcel() {
+    var idxs = Object.keys(batchSelected).map(Number);
+    var list = idxs.length > 0 ? idxs.map(function(i) { return batchList[i]; }) :
+        batchList.filter(function(r) { return !r.data.taxInvoiceIssued; });
+    var targetDate = document.getElementById('batch-date').value.replace(/-/g, '');
+    downloadDuzonExcel(list, targetDate, '세금계산서_일괄발행');
+}
+
+/* 탭2: 특정일 엑셀 */
+function downloadDateExcel() {
+    var idxs = Object.keys(dateSelected).map(Number);
+    var list = idxs.length > 0 ? idxs.map(function(i) { return dateList[i]; }) :
+        dateList.filter(function(r) { return !r.data.taxInvoiceIssued; });
+    var targetDate = document.getElementById('date-target').value.replace(/-/g, '');
+    downloadDuzonExcel(list, targetDate, '세금계산서_특정일');
+}
+
+/* 탭3: 발행요청 엑셀 */
+function downloadRequestExcel() {
+    var idxs = Object.keys(requestSelected).map(Number);
+    var list = idxs.length > 0 ? idxs.map(function(i) { return requestList[i]; }) : requestList;
+    var today = formatDate(new Date()).replace(/-/g, '');
+    downloadDuzonExcel(list, today, '세금계산서_발행요청');
+}
+
+/* 탭4: 발행완료 엑셀 (목록형) */
+function downloadIssuedExcel() {
+    var month = document.getElementById('issued-month').value || '';
+    var list = allReceipts.filter(function(r) {
+        var d = r.data;
+        if (!d.taxInvoiceIssued || d.taxCancelled) return false;
+        if (month && (d.taxInvoiceDate || '').substring(0,7) !== month) return false;
+        return true;
+    });
+    downloadListExcel(list, [
+        { label: '접수번호', width: 14, fn: function(r) { return r.data.receiptNo || r.id; } },
+        { label: '접수일', width: 12, fn: function(r) { return r.data.receiptDate || ''; } },
+        { label: '발행일', width: 12, fn: function(r) { return r.data.taxInvoiceDate || ''; } },
+        { label: '업체명', width: 20, fn: function(r) { return r.data.companyName || ''; } },
+        { label: '사업자번호', width: 14, fn: function(r) { return r.data.bizNo || ''; } },
+        { label: '공급가액', width: 12, fn: function(r) { return getSupplyAmount(r.data); } },
+        { label: '세액', width: 10, fn: function(r) { return getTaxAmount(r.data); } },
+        { label: '합계', width: 12, fn: function(r) { return getTotalFee(r.data); } }
+    ], '발행완료');
+}
+
+/* 탭5: 미발행 엑셀 */
+function downloadUnissuedExcel() {
+    var idxs = Object.keys(unissuedSelected).map(Number);
+    var list = idxs.length > 0 ? idxs.map(function(i) { return unissuedList[i]; }) : unissuedList;
+    var today = formatDate(new Date()).replace(/-/g, '');
+    downloadDuzonExcel(list, today, '세금계산서_미발행');
+}
+
+/* 탭6: 취소 엑셀 (목록형) */
+function downloadCancelExcel() {
+    var list = allReceipts.filter(function(r) {
+        return r.data.taxCancelRequested && !r.data.taxCancelled;
+    });
+    downloadListExcel(list, [
+        { label: '접수번호', width: 14, fn: function(r) { return r.data.receiptNo || r.id; } },
+        { label: '접수일', width: 12, fn: function(r) { return r.data.receiptDate || ''; } },
+        { label: '발행일', width: 12, fn: function(r) { return r.data.taxInvoiceDate || ''; } },
+        { label: '업체명', width: 20, fn: function(r) { return r.data.companyName || ''; } },
+        { label: '합계', width: 12, fn: function(r) { return getTotalFee(r.data); } },
+        { label: '취소사유', width: 24, fn: function(r) { return r.data.taxCancelReason || ''; } },
+        { label: '요청일', width: 12, fn: function(r) { return r.data.taxCancelRequestDate || ''; } }
+    ], '계산서취소');
 }
 
 function showToast(msg) {
