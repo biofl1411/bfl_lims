@@ -126,9 +126,14 @@ tr:hover{background:#f8f9fb}
 
         <!-- ===== 탭1: 결제주기 (신호등 UI) ===== -->
         <div class="tab-panel active" id="panel-aging">
+            <!-- 결제주기 KPI (입금 패턴) -->
+            <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:#1a2332">결제주기 <span style="font-weight:400;font-size:11px;color:#6b7280">(접수→입금 평균 소요일수)</span></div>
+            <div class="kpi-row" id="cycle-kpi"></div>
+            <!-- 채권주기 KPI (미수금 에이징) -->
+            <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:#1a2332">채권주기 <span style="font-weight:400;font-size:11px;color:#6b7280">(미수금 경과기간)</span></div>
             <div class="kpi-row" id="aging-kpi"></div>
             <div class="card">
-                <div class="card-hd"><h3>업체별 채권 주기 (미수금 기준)</h3></div>
+                <div class="card-hd"><h3>업체별 결제·채권 현황</h3></div>
                 <div class="card-bd">
                     <div class="tbl-wrap">
                         <table>
@@ -138,8 +143,8 @@ tr:hover{background:#f8f9fb}
                                     <th class="text-right">총 청구</th>
                                     <th class="text-right">입금액</th>
                                     <th class="text-right">미수금</th>
+                                    <th class="text-center">결제주기</th>
                                     <th class="text-center">최종입금일</th>
-                                    <th class="text-center">최초접수일</th>
                                     <th class="text-center">경과일수</th>
                                     <th class="text-center">채권주기</th>
                                 </tr>
@@ -348,7 +353,7 @@ function _getLastPayDate(d) {
     return dates.length ? dates[dates.length-1] : '';
 }
 
-// ---- 탭1: 결제 나이 (신호등) ----
+// ---- 탭1: 결제주기 + 채권주기 ----
 function renderAgingStats() {
     var companyMap = {};
     var today = new Date();
@@ -358,7 +363,8 @@ function renderAgingStats() {
         var company = d.companyName || d.company || '(미상)';
         if (!companyMap[company]) companyMap[company] = {
             total: 0, paid: 0, lastPay: '', oldestReceipt: '', receipts: [],
-            bizNo: '', tel: '', manager: '', email: '', companyId: '', address: ''
+            bizNo: '', tel: '', manager: '', email: '', companyId: '', address: '',
+            payDaysSum: 0, payDaysCount: 0 // 결제주기 계산용
         };
         var fee = _getTotalFee(d);
         var paid = _getPaidAmount(d);
@@ -374,13 +380,28 @@ function renderAgingStats() {
         if (!companyMap[company].companyId) companyMap[company].companyId = d.companyId || d.companyCode || ci.companyId || ci.companyCode || '';
         if (!companyMap[company].address) companyMap[company].address = ci.address || ci.companyAddress || d.companyAddress || '';
 
+        // 결제주기 계산: 접수일 → 최초입금일까지 소요일수
+        var rd = d.receiptDate || '';
+        var payments = d.payments || [];
+        if (rd && payments.length > 0) {
+            var firstPayDate = '';
+            payments.forEach(function(p) {
+                var pd = p.date || '';
+                if (pd && (!firstPayDate || pd < firstPayDate)) firstPayDate = pd;
+            });
+            if (firstPayDate && firstPayDate >= rd) {
+                var diffDays = Math.floor((new Date(firstPayDate) - new Date(rd)) / 86400000);
+                companyMap[company].payDaysSum += diffDays;
+                companyMap[company].payDaysCount++;
+            }
+        }
+
         // 접수 건별 정보
         var remain = Math.max(0, fee - paid);
         var lp = _getLastPayDate(d);
         if (lp > companyMap[company].lastPay) companyMap[company].lastPay = lp;
 
         // 미수금이 있는 접수 중 가장 오래된 접수일 추적
-        var rd = d.receiptDate || '';
         if (remain > 0 && rd) {
             if (!companyMap[company].oldestReceipt || rd < companyMap[company].oldestReceipt) {
                 companyMap[company].oldestReceipt = rd;
@@ -407,29 +428,60 @@ function renderAgingStats() {
         var c = companyMap[name];
         var unpaid = Math.max(0, c.total - c.paid);
         var days = 0;
-        var daysBase = ''; // 경과일수 기준: 'pay' = 최종입금일, 'receipt' = 최초접수일
+        var daysBase = '';
         if (c.lastPay) {
-            // 입금 이력이 있으면 최종입금일 기준
             days = Math.floor((today - new Date(c.lastPay)) / 86400000);
             daysBase = 'pay';
         } else if (unpaid > 0 && c.oldestReceipt) {
-            // 입금 없으면 가장 오래된 미수 접수일 기준
             days = Math.floor((today - new Date(c.oldestReceipt)) / 86400000);
             daysBase = 'receipt';
         } else if (unpaid > 0) {
             days = 999;
             daysBase = 'unknown';
         }
+        // 결제주기 평균 (접수→입금 소요일)
+        var avgPayDays = c.payDaysCount > 0 ? Math.round(c.payDaysSum / c.payDaysCount) : -1;
         return {
             name: name, total: c.total, paid: c.paid, unpaid: unpaid,
             lastPay: c.lastPay, days: days, daysBase: daysBase,
             oldestReceipt: c.oldestReceipt, receipts: c.receipts,
+            avgPayDays: avgPayDays, payDaysCount: c.payDaysCount,
             bizNo: c.bizNo, tel: c.tel, manager: c.manager, email: c.email, companyId: c.companyId, address: c.address
         };
     }).filter(function(r) { return r.unpaid > 0; })
       .sort(function(a, b) { return b.days - a.days; });
 
-    // 채권 주기 분류 (3/6/9/12/12+개월)
+    // ── 결제주기 KPI (입금 패턴: 접수→입금 평균 소요일) ──
+    var allCompanies = Object.keys(companyMap);
+    var cy30 = 0, cy60 = 0, cy90 = 0, cy180 = 0, cy270 = 0, cy365 = 0, cyOver = 0, cyNone = 0;
+    var totalAvgDays = 0, totalAvgCount = 0;
+    allCompanies.forEach(function(name) {
+        var c = companyMap[name];
+        if (c.payDaysCount === 0) { cyNone++; return; }
+        var avg = Math.round(c.payDaysSum / c.payDaysCount);
+        totalAvgDays += avg;
+        totalAvgCount++;
+        if (avg <= 30) cy30++;
+        else if (avg <= 60) cy60++;
+        else if (avg <= 90) cy90++;
+        else if (avg <= 180) cy180++;
+        else if (avg <= 270) cy270++;
+        else if (avg <= 365) cy365++;
+        else cyOver++;
+    });
+    var overallAvg = totalAvgCount > 0 ? Math.round(totalAvgDays / totalAvgCount) : 0;
+
+    document.getElementById('cycle-kpi').innerHTML =
+        '<div class="kpi-card"><div class="kpi-label">평균 결제주기</div><div class="kpi-value" style="color:#1a73e8">' + (overallAvg > 0 ? overallAvg + '일' : '-') + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">30일 이내</div><div class="kpi-value" style="color:#059669">' + cy30 + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">31~60일</div><div class="kpi-value" style="color:#2563eb">' + cy60 + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">61~90일</div><div class="kpi-value" style="color:#d97706">' + cy90 + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">~6개월</div><div class="kpi-value" style="color:#ea580c">' + cy180 + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">~9개월</div><div class="kpi-value" style="color:#dc2626">' + cy270 + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">~12개월</div><div class="kpi-value" style="color:#9333ea">' + cy365 + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">12개월+</div><div class="kpi-value" style="color:#fff;background:#1f2937;border-radius:6px;padding:2px 8px;display:inline-block">' + cyOver + '</div></div>';
+
+    // ── 채권주기 KPI (미수금 에이징) ──
     var m3 = 0, m6 = 0, m9 = 0, m12 = 0, mOver = 0;
     var totalUnpaid = 0;
     var m3Amt = 0, m6Amt = 0, m9Amt = 0, m12Amt = 0, mOverAmt = 0;
@@ -475,6 +527,11 @@ function renderAgingStats() {
             daysText = '-';
         }
 
+        // 결제주기 표시
+        var cycleText = r.avgPayDays >= 0 ? r.avgPayDays + '일' : '<span style="color:#9ca3af">-</span>';
+        var cycleColor = r.avgPayDays < 0 ? '' : r.avgPayDays <= 30 ? 'color:#059669' : r.avgPayDays <= 60 ? 'color:#2563eb' : r.avgPayDays <= 90 ? 'color:#d97706' : 'color:#ef4444';
+        var cycleTitle = r.payDaysCount > 0 ? '입금 ' + r.payDaysCount + '건 기준 평균' : '입금 이력 없음';
+
         // 업체 요약 행
         html += '<tr class="aging-parent" onclick="toggleAgingDetail(' + idx + ')" id="aging-row-' + idx + '">' +
             '<td style="font-weight:600">' + r.name +
@@ -483,8 +540,8 @@ function renderAgingStats() {
             '<td class="text-right">' + fmtMoney(r.total) + '</td>' +
             '<td class="text-right" style="color:#2563eb">' + fmtMoney(r.paid) + '</td>' +
             '<td class="text-right" style="color:#ef4444;font-weight:600">' + fmtMoney(r.unpaid) + '</td>' +
+            '<td class="text-center" style="font-weight:600;' + cycleColor + '" title="' + cycleTitle + '">' + cycleText + '</td>' +
             '<td class="text-center">' + (r.lastPay || '<span style="color:#9ca3af">없음</span>') + '</td>' +
-            '<td class="text-center">' + (r.oldestReceipt || '-') + '</td>' +
             '<td class="text-center" style="font-weight:600" title="' + daysTitle + '">' + daysText + '</td>' +
             '<td class="text-center">' + light + '</td>' +
             '</tr>';
