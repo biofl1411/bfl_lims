@@ -54,6 +54,7 @@
 .nav-sub-item.active{color:#4fc3f7;font-weight:600;background:rgba(79,195,247,0.08)}
 .nav-sub-item.disabled{color:#3d5068;cursor:default}
 .nav-sub-item.disabled:hover{background:transparent;color:#3d5068}
+.nav-section-header{display:block;padding:10px 12px 4px;font-size:11px;font-weight:700;color:#5a7a9a;text-transform:uppercase;letter-spacing:0.5px;cursor:default;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px}
 /* ── Sidebar Collapse Toggle ── */
 .sidebar{transition:width 0.25s ease}
 .sidebar-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;cursor:pointer;color:#e2e8f0;font-size:16px;transition:all .15s;flex-shrink:0;background:rgba(255,255,255,.08);margin-left:auto}
@@ -70,6 +71,7 @@
 .sidebar.collapsed .nav-icon{font-size:18px;width:auto}
 .sidebar.collapsed .nav-submenu{display:none!important;max-height:0!important}
 .sidebar.collapsed .nav-sub-item{display:none}
+.sidebar.collapsed .nav-section-header{display:none}
 .main{transition:margin-left 0.25s ease}
 body.sidebar-collapsed .main{margin-left:64px}
 @media(max-width:768px){.sidebar{display:none}}
@@ -136,6 +138,8 @@ const SIDEBAR_MENU = [
       { label: '검사목적 관리',     href: 'inspectionMgmt.html',  page: 'reception-inspection' },
       { label: '접수 등록',         href: 'sampleReceiptV2.html',   page: 'reception-register' },
       { label: '접수 현황',         href: 'receiptStatus.html',  page: 'reception-status' },
+      { label: '실적보고',          disabled: true },
+      { label: '지부관리',          disabled: true },
       { label: '설정',              href: 'receiptSettings.html',  page: 'reception-settings' }
     ]
   },
@@ -144,16 +148,15 @@ const SIDEBAR_MENU = [
     icon: '🔬',
     label: '시험 결재',
     sub: [
-      { label: '항목배정',          href: 'itemAssign.html',  page: 'testing-assignment' },
-      { label: '시험 진행 현황',    disabled: true },
-      { label: '결과 입력',         href: 'testResultInput.html',  page: 'testing-result' },
-      { label: '시험일지',         href: 'testDiary.html',  page: 'testing-diary' },
-      { label: '결재 승인',         disabled: true },
+      { label: '시험 진행 현황', section: true },
+      { label: '결과 입력',         href: 'testResultInput.html',  page: 'testing-result', indent: true },
+      { label: '시험일지',         href: 'testDiary.html',  page: 'testing-diary', indent: true },
+      { label: '결재 승인',         disabled: true, indent: true },
       { label: '시험 이력 조회',    disabled: true },
       { label: '일정관리',          disabled: true },
-      { label: '지부관리',          disabled: true },
-      { label: '실적보고',          disabled: true },
-      { label: 'LIMS 연동',        disabled: true },
+      { label: '설정', section: true },
+      { label: '항목배정',          href: 'itemAssign.html',  page: 'testing-assignment', indent: true },
+      { label: '시험일지 설정',     href: 'testDiary.html',  page: 'testing-diary-settings', indent: true },
       { label: '기록서 양식 수집',  href: 'formCollector.html',  page: 'testing-formCollector' }
     ]
   },
@@ -271,8 +274,15 @@ function renderSidebar() {
     // 서브메뉴가 있는 그룹
     let groupHasActive = false;
     const subHtmlArr = group.sub.map(item => {
+      // 섹션 헤더 (시험 진행 현황, 설정 등)
+      if (item.section) {
+        return `        <li><span class="nav-section-header">${item.label}</span></li>`;
+      }
+
+      const indentStyle = item.indent ? ' style="padding-left:28px;font-size:11.5px"' : '';
+
       if (item.disabled) {
-        return `        <li><span class="nav-sub-item disabled">${item.label}</span></li>`;
+        return `        <li><span class="nav-sub-item disabled"${indentStyle}>${item.label}</span></li>`;
       }
 
       // 링크 결정: 같은 페이지에서 showPage가 있으면 내부 탭 전환
@@ -317,7 +327,7 @@ function renderSidebar() {
       }
       if (isActive) groupHasActive = true;
 
-      return `        <li><a href="${linkHref}" class="nav-sub-item${isActive ? ' active' : ''}" data-page="${item.page || ''}"${linkOnclick}>${item.label}</a></li>`;
+      return `        <li><a href="${linkHref}" class="nav-sub-item${isActive ? ' active' : ''}" data-page="${item.page || ''}"${linkOnclick}${indentStyle}>${item.label}</a></li>`;
     });
 
     html += `
