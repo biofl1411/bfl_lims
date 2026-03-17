@@ -711,17 +711,6 @@ function renderFormTemplateDetail(ft) {
   html += '<div class="form-row"><div class="form-group"><label>SOP</label><input type="text" value="' + escA(a.sop) + '" readonly></div>';
   html += '<div class="form-group"><label>장비</label><input type="text" value="' + escA((a.equipment || []).join(', ')) + '" readonly></div></div>';
 
-  // 적용 기간 (시작일~종료일)
-  var applyFrom = overrides.applyFrom || '';
-  var applyTo = overrides.applyTo || '';
-  html += '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-bottom:14px">';
-  html += '<label style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px;display:block">📅 값 적용 기간</label>';
-  html += '<div style="display:flex;gap:8px;align-items:center">';
-  html += '<input type="date" id="ft-apply-from" value="' + escA(applyFrom) + '" style="padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:12px">';
-  html += '<span style="color:#64748b">~</span>';
-  html += '<input type="date" id="ft-apply-to" value="' + escA(applyTo) + '" style="padding:6px 8px;border:1px solid #7dd3fc;border-radius:6px;font-size:12px">';
-  html += '</div></div>';
-
   // 표준물질정보 (수정 가능)
   var stdSection = getSectionByTitle(a, '표준물질정보');
   if (stdSection && stdSection.fields && stdSection.fields.length) {
@@ -736,10 +725,23 @@ function renderFormTemplateDetail(ft) {
     html += '</div></div>';
   }
 
-  // 표준용액농도 (수정 가능)
+  // 표준용액농도 + 값 적용 기간 (나란히)
   var concSection = getSectionByTitle(a, '표준용액농도');
+  // 기본 적용 기간: 작성일 ~ 작성일+3개월
+  var createdDate = ft.createdAt ? new Date(ft.createdAt) : new Date();
+  if (isNaN(createdDate.getTime())) createdDate = new Date();
+  var defaultFrom = formatDateISO(createdDate);
+  var plus3m = new Date(createdDate);
+  plus3m.setMonth(plus3m.getMonth() + 3);
+  var defaultTo = formatDateISO(plus3m);
+  var applyFrom = overrides.applyFrom || defaultFrom;
+  var applyTo = overrides.applyTo || defaultTo;
+
+  html += '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:14px">';
+
+  // 좌: 표준용액농도
   if (concSection && concSection.fields && concSection.fields.length) {
-    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:14px">';
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px">';
     html += '<label style="font-size:12px;font-weight:700;color:#166534;margin-bottom:8px;display:block">🧪 표준용액농도</label>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
     concSection.fields.forEach(function(f) {
@@ -751,7 +753,19 @@ function renderFormTemplateDetail(ft) {
       html += '</div>';
     });
     html += '</div></div>';
+  } else {
+    html += '<div></div>';
   }
+
+  // 우: 값 적용 기간
+  html += '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;min-width:160px">';
+  html += '<label style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px;display:block">📅 적용 기간</label>';
+  html += '<div style="display:flex;flex-direction:column;gap:6px">';
+  html += '<div><span style="font-size:10px;color:#64748b">시작일</span><input type="date" id="ft-apply-from" value="' + escA(applyFrom) + '" style="width:100%;padding:5px 6px;border:1px solid #7dd3fc;border-radius:6px;font-size:12px;margin-top:2px"></div>';
+  html += '<div><span style="font-size:10px;color:#64748b">종료일</span><input type="date" id="ft-apply-to" value="' + escA(applyTo) + '" style="width:100%;padding:5px 6px;border:1px solid #7dd3fc;border-radius:6px;font-size:12px;margin-top:2px"></div>';
+  html += '</div></div>';
+
+  html += '</div>'; // grid 닫기
 
   // 판정기준
   if (a.judgmentRule) {
@@ -881,6 +895,11 @@ async function saveFormTemplateOverrides() {
   } catch(e) {
     showToast('저장 실패: ' + e.message, 'error');
   }
+}
+
+/* 날짜를 YYYY-MM-DD 형식으로 변환 */
+function formatDateISO(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 /* 섹션명으로 analyzed.sections 검색 */
