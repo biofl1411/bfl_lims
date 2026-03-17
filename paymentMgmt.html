@@ -861,12 +861,14 @@ function parseBankFile(file) {
         reader.onload = function(e) {
             try {
                 var data = new Uint8Array(e.target.result);
-                var wb = XLSX.read(data, {type:'array', cellDates:true});
+                var wb = XLSX.read(data, {type:'array', cellDates:true, codepage:949});
                 var ws = wb.Sheets[wb.SheetNames[0]];
-                var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
-                if (rows.length < 2) { resolve(); return; }
+                // raw:true로 숫자 원본 유지 + dateNF로 날짜 포맷
+                var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+                console.log('[은행파일]', file.name, '행수:', rows.length, '첫행:', JSON.stringify(rows[0]));
+                if (rows.length < 2) { console.warn('행이 부족:', file.name); resolve(); return; }
 
-                // BANK_COL_MAP 헤더 자동탐지
+                // ===== 헤더 자동탐지 =====
                 var hdr = null;
                 var hdrIdx = 0;
                 for (var hi = 0; hi < Math.min(rows.length, 10); hi++) {
@@ -877,30 +879,36 @@ function parseBankFile(file) {
                     if (hasDate && hasAmt) { hdr = row; hdrIdx = hi; break; }
                 }
                 if (!hdr) { hdr = rows[0]; hdrIdx = 0; }
+                console.log('[은행파일] 헤더:', JSON.stringify(hdr), '헤더행:', hdrIdx);
 
+                // ===== 열 매핑 =====
                 var col = {};
                 var BANK_COL_MAP = {
                     date: ['거래일자','거래일','날짜','일자','적용일','적용일자'],
                     time: ['거래시간','시간'],
                     bank: ['은행','금융기관','은행명'],
-                    dep: ['적요1','적요','입금자','기재내용','거래내용','비고','의뢰인/수취인','보낸분'],
+                    dep: ['적요1','적요','입금자','기재내용','거래내용','의뢰인/수취인','보낸분'],
                     in: ['입금','입금액','입금금액','수입금액','대변','입금(원)','수입'],
                     out: ['출금','출금액','출금금액','지출금액','차변','출금(원)','지출'],
                     bal: ['잔액','잔고','취급후잔액','거래후잔액'],
-                    memo: ['비고','메모','적요2'],
+                    memo: ['비고','메모'],
                     note2: ['적요2','적요 2'],
+                    branch: ['취급지점','지점'],
+                    counter: ['상대계좌'],
                     acct: ['계좌번호','계좌','계좌 번호']
                 };
 
                 hdr.forEach(function(h, i) {
                     var s = String(h||'').trim();
+                    if (!s) return;
                     Object.keys(BANK_COL_MAP).forEach(function(key) {
                         if (col[key] !== undefined) return;
                         if (BANK_COL_MAP[key].some(function(pat) { return s === pat; })) col[key] = i;
                     });
                 });
+                console.log('[은행파일] 열매핑:', JSON.stringify(col));
 
-                // 파일명에서 은행 감지
+                // 파일명에서 은행 감지 (col.bank 없을 때 fallback)
                 var bankFromFile = '';
                 var bankPatterns = [
                     {re:/신한/,name:'신한'},  {re:/국민|KB/i,name:'국민'},
@@ -915,23 +923,40 @@ function parseBankFile(file) {
                     return false;
                 });
 
+                // ===== 데이터 파싱 =====
+                var parsed = 0, skipped = 0;
                 for (var r = hdrIdx + 1; r < rows.length; r++) {
                     var row = rows[r];
-                    var dateVal = col.date !== undefined ? row[col.date] : null;
-                    if (!dateVal) continue;
-                    var dateStr = parseBankDate(dateVal);
-                    if (!dateStr) continue;
-                    var amt = parseAmt(col.in !== undefined ? row[col.in] : null);
-                    if (amt <= 0) continue;
+                    if (!row) { skipped++; continue; }
+
+                    // 날짜 파싱
+                    var dateRaw = col.date !== undefined ? row[col.date] : null;
+                    if (dateRaw === null || dateRaw === undefined || dateRaw === '') { skipped++; continue; }
+                    var dateStr = parseBankDate(dateRaw);
+                    if (!dateStr) { skipped++; continue; }
+
+                    // 입금액 파싱
+                    var amtRaw = col.in !== undefined ? row[col.in] : null;
+                    var amt = parseAmt(amtRaw);
+                    if (amt <= 0) { skipped++; continue; }
+
+                    // 적요(입금자) 정리
+                    var rawDep = String(col.dep !== undefined ? row[col.dep] || '' : '');
+                    var depositor = cleanBankDepositor(rawDep);
+                    var bankName = String(col.bank !== undefined ? row[col.bank] || '' : '') || bankFromFile;
+                    var note2 = String(col.note2 !== undefined ? row[col.note2] || '' : '');
+                    var branch = String(col.branch !== undefined ? row[col.branch] || '' : '');
 
                     bankDeposits.push({
                         date: dateStr,
                         time: String(col.time !== undefined ? row[col.time] || '' : ''),
-                        bank: String(col.bank !== undefined ? row[col.bank] || '' : '') || bankFromFile,
-                        depositor: String(col.dep !== undefined ? row[col.dep] || '' : ''),
+                        bank: bankName,
+                        depositor: depositor,
+                        depositorRaw: rawDep,
                         amount: amt,
                         memo: String(col.memo !== undefined ? row[col.memo] || '' : ''),
-                        note2: String(col.note2 !== undefined ? row[col.note2] || '' : ''),
+                        note2: note2,
+                        branch: branch,
                         account: String(col.acct !== undefined ? row[col.acct] || '' : ''),
                         fileName: file.name,
                         matched: false,
@@ -940,22 +965,54 @@ function parseBankFile(file) {
                         matchType: null,
                         applied: false
                     });
+                    parsed++;
                 }
-            } catch(ex) { console.error('파싱 오류:', file.name, ex); }
+                console.log('[은행파일]', file.name, '파싱완료:', parsed + '건, 스킵:', skipped + '건');
+            } catch(ex) {
+                console.error('[은행파일] 파싱 오류:', file.name, ex);
+                showToast('파싱 오류: ' + file.name + ' - ' + ex.message);
+            }
             resolve();
         };
         reader.readAsArrayBuffer(file);
     });
 }
 
+// 입금자명(적요) 정리 — 은행 라우팅 정보 제거
+function cleanBankDepositor(raw) {
+    if (!raw) return '';
+    // "입금자/은행정보" 패턴 → 슬래시 앞쪽이 실제 입금자
+    // 예: "오뚜기제유(주)/e_만기" → "오뚜기제유(주)"
+    // 예: "(주)씨홀릭/E-신한은행" → "(주)씨홀릭"
+    // 예: "도영푸드피아/인터넷당행" → "도영푸드피아"
+    var bankSuffixes = /\/(e_만기|e_|E-|인터넷당행|인터넷|당행이체|타행이체|이체|대체|대량|B2B|펌뱅킹|모바일|스마트|기업|신한|국민|우리|하나|농협|경남|대구|부산|카카오|토스|케이뱅크).*$/i;
+    var cleaned = raw.replace(bankSuffixes, '');
+    // 혹시 슬래시 뒤에 은행명이 붙은 패턴이 아직 남아있으면
+    if (cleaned.indexOf('/') > 0) {
+        var parts = cleaned.split('/');
+        // 첫 파트가 2글자 이상이면 첫 파트만 사용
+        if (parts[0].length >= 2) cleaned = parts[0];
+    }
+    return cleaned.trim();
+}
+
 function parseBankDate(v) {
-    if (!v) return null;
-    var s = String(v);
-    if (s.match(/^\d{4}-\d{2}-\d{2}/)) return s.substring(0,10);
-    if (s.match(/^\d{4}\.\d{2}\.\d{2}/)) return s.substring(0,10).replace(/\./g,'-');
+    if (v === null || v === undefined || v === '') return null;
+    // Date 객체 (cellDates:true 사용 시)
     if (v instanceof Date) {
+        if (isNaN(v.getTime())) return null;
         return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
     }
+    // Excel 시리얼 넘버 (raw:true 사용 시, 25569 = 1970-01-01)
+    if (typeof v === 'number') {
+        if (v < 30000 || v > 60000) return null; // 1982~2064 범위만 유효
+        var d = new Date((v - 25569) * 86400000);
+        return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    }
+    var s = String(v).trim();
+    if (s.match(/^\d{4}-\d{2}-\d{2}/)) return s.substring(0,10);
+    if (s.match(/^\d{4}\.\d{2}\.\d{2}/)) return s.substring(0,10).replace(/\./g,'-');
+    if (s.match(/^\d{4}\/\d{2}\/\d{2}/)) return s.substring(0,10).replace(/\//g,'-');
     if (s.match(/^\d{8}$/)) return s.substring(0,4)+'-'+s.substring(4,6)+'-'+s.substring(6,8);
     return null;
 }
@@ -1013,12 +1070,18 @@ function renderBankTable() {
             actionHtml = '<button class="track-btn" onclick="reverseTrack('+idx+')">역추적</button>';
         }
 
+        var depDisplay = d.depositor;
+        if (d.depositorRaw && d.depositorRaw !== d.depositor) {
+            depDisplay += '<div style="font-size:10px;color:#9ca3af">' + d.depositorRaw + '</div>';
+        }
+        var note2Html = d.note2 ? '<div style="font-size:10px;color:#6b7280">' + d.note2 + '</div>' : '';
+
         html += '<tr class="' + (d.applied?'applied-row':'') + '">' +
             '<td>' + d.bank + '</td>' +
-            '<td>' + d.date + '</td>' +
-            '<td class="dep-name">' + d.depositor + '</td>' +
+            '<td style="white-space:nowrap">' + d.date + '<div style="font-size:10px;color:#9ca3af">' + (d.time||'') + '</div></td>' +
+            '<td class="dep-name">' + depDisplay + '</td>' +
             '<td class="text-right" style="font-weight:700">' + formatMoney(d.amount) + '</td>' +
-            '<td>' + statusHtml + '</td>' +
+            '<td>' + statusHtml + note2Html + '</td>' +
             '<td>' + matchInfo + '</td>' +
             '<td class="text-center">' + actionHtml + '</td>' +
             '</tr>';
