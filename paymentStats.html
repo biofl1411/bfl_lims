@@ -118,17 +118,17 @@ tr:hover{background:#f8f9fb}
 
         <!-- 탭 바 -->
         <div class="tab-bar">
-            <div class="tab-item active" data-tab="aging" onclick="switchTab('aging')">결제 나이</div>
+            <div class="tab-item active" data-tab="aging" onclick="switchTab('aging')">결제주기</div>
             <div class="tab-item" data-tab="method" onclick="switchTab('method')">결제수단별</div>
             <div class="tab-item" data-tab="dept" onclick="switchTab('dept')">부서별</div>
             <div class="tab-item" data-tab="card" onclick="switchTab('card')">카드 수수료</div>
         </div>
 
-        <!-- ===== 탭1: 결제 나이 (신호등 UI) ===== -->
+        <!-- ===== 탭1: 결제주기 (신호등 UI) ===== -->
         <div class="tab-panel active" id="panel-aging">
             <div class="kpi-row" id="aging-kpi"></div>
             <div class="card">
-                <div class="card-hd"><h3>업체별 결제 나이 (미수금 기준)</h3></div>
+                <div class="card-hd"><h3>업체별 채권 주기 (미수금 기준)</h3></div>
                 <div class="card-bd">
                     <div class="tbl-wrap">
                         <table>
@@ -141,7 +141,7 @@ tr:hover{background:#f8f9fb}
                                     <th class="text-center">최종입금일</th>
                                     <th class="text-center">최초접수일</th>
                                     <th class="text-center">경과일수</th>
-                                    <th class="text-center">신호등</th>
+                                    <th class="text-center">채권주기</th>
                                 </tr>
                             </thead>
                             <tbody id="aging-body">
@@ -429,25 +429,27 @@ function renderAgingStats() {
     }).filter(function(r) { return r.unpaid > 0; })
       .sort(function(a, b) { return b.days - a.days; });
 
-    // 신호등 분류
-    var green = 0, yellow = 0, orange = 0, red = 0, black = 0;
+    // 채권 주기 분류 (3/6/9/12/12+개월)
+    var m3 = 0, m6 = 0, m9 = 0, m12 = 0, mOver = 0;
     var totalUnpaid = 0;
+    var m3Amt = 0, m6Amt = 0, m9Amt = 0, m12Amt = 0, mOverAmt = 0;
     rows.forEach(function(r) {
         totalUnpaid += r.unpaid;
-        if (r.days <= 30) green++;
-        else if (r.days <= 60) yellow++;
-        else if (r.days <= 90) orange++;
-        else if (r.days <= 180) red++;
-        else black++;
+        if (r.days <= 90) { m3++; m3Amt += r.unpaid; }
+        else if (r.days <= 180) { m6++; m6Amt += r.unpaid; }
+        else if (r.days <= 270) { m9++; m9Amt += r.unpaid; }
+        else if (r.days <= 365) { m12++; m12Amt += r.unpaid; }
+        else { mOver++; mOverAmt += r.unpaid; }
     });
 
     document.getElementById('aging-kpi').innerHTML =
         '<div class="kpi-card"><div class="kpi-label">미수 업체수</div><div class="kpi-value" style="color:#ef4444">' + rows.length + '</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">미수금 합계</div><div class="kpi-value" style="color:#ef4444;font-size:18px">' + fmtMoney(totalUnpaid) + '</div></div>' +
-        '<div class="kpi-card"><div class="kpi-label">30일 이내</div><div class="kpi-value" style="color:#059669">' + green + '</div></div>' +
-        '<div class="kpi-card"><div class="kpi-label">31~60일</div><div class="kpi-value" style="color:#d97706">' + yellow + '</div></div>' +
-        '<div class="kpi-card"><div class="kpi-label">61~90일</div><div class="kpi-value" style="color:#ea580c">' + orange + '</div></div>' +
-        '<div class="kpi-card"><div class="kpi-label">90일 초과</div><div class="kpi-value" style="color:#dc2626">' + (red + black) + '</div></div>';
+        '<div class="kpi-card"><div class="kpi-label">3개월 이내</div><div class="kpi-value" style="color:#059669">' + m3 + '</div><div style="font-size:11px;color:#6b7280;margin-top:2px">' + fmtMoney(m3Amt) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">3~6개월</div><div class="kpi-value" style="color:#d97706">' + m6 + '</div><div style="font-size:11px;color:#6b7280;margin-top:2px">' + fmtMoney(m6Amt) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">6~9개월</div><div class="kpi-value" style="color:#ea580c">' + m9 + '</div><div style="font-size:11px;color:#6b7280;margin-top:2px">' + fmtMoney(m9Amt) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">9~12개월</div><div class="kpi-value" style="color:#dc2626">' + m12 + '</div><div style="font-size:11px;color:#6b7280;margin-top:2px">' + fmtMoney(m12Amt) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">12개월 초과</div><div class="kpi-value" style="color:#fff;background:#1f2937;border-radius:6px;padding:2px 8px;display:inline-block">' + mOver + '</div><div style="font-size:11px;color:#6b7280;margin-top:2px">' + fmtMoney(mOverAmt) + '</div></div>';
 
     var tbody = document.getElementById('aging-body');
     if (rows.length === 0) {
@@ -543,11 +545,11 @@ function toggleAgingDetail(idx) {
 }
 
 function getTrafficLight(days) {
-    if (days <= 30) return '<span class="traffic-light traffic-green">정상</span>';
-    if (days <= 60) return '<span class="traffic-light traffic-yellow">주의</span>';
-    if (days <= 90) return '<span class="traffic-light traffic-orange">경고</span>';
-    if (days <= 180) return '<span class="traffic-light traffic-red">위험</span>';
-    return '<span class="traffic-light traffic-black">장기</span>';
+    if (days <= 90) return '<span class="traffic-light traffic-green">3개월</span>';
+    if (days <= 180) return '<span class="traffic-light traffic-yellow">6개월</span>';
+    if (days <= 270) return '<span class="traffic-light traffic-orange">9개월</span>';
+    if (days <= 365) return '<span class="traffic-light traffic-red">12개월</span>';
+    return '<span class="traffic-light traffic-black">12개월+</span>';
 }
 
 // ---- 탭2: 결제수단별 ----
