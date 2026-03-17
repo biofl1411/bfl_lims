@@ -405,13 +405,17 @@ function countAppliedFoodTypes(ft) {
   if (ft._appliedFoodTypes && ft._appliedFoodTypes.length) {
     return ft._appliedFoodTypes.length;
   }
-  // 없으면 mfdsTemplates에서 해당 시험항목코드 보유 식품유형 수 동적 계산
+  // 없으면 mfdsTemplates에서 해당 시험항목코드 보유 식품유형 수 동적 계산 (중복명 제거)
   var code = ft.representativeItemCode || '';
   if (!code) return 0;
+  var seen = {};
   var count = 0;
   if (window._mfdsTemplatesCache) {
     window._mfdsTemplatesCache.forEach(function(tmpl) {
+      var name = tmpl.foodTypeName || tmpl.templateName || '';
+      if (seen[name]) return;
       if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === code; })) {
+        seen[name] = true;
         count++;
       }
     });
@@ -940,9 +944,12 @@ function showAppliedFoodTypes(itemCode, currentFoodType) {
   var appliedList = (ft && ft._appliedFoodTypes) || [];
 
   var list = [];
+  var seen = {};
   window._mfdsTemplatesCache.forEach(function(tmpl) {
     if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === itemCode; })) {
       var name = tmpl.foodTypeName || tmpl.templateName || '-';
+      if (seen[name]) return;
+      seen[name] = true;
       var code = tmpl.foodTypeCode || '';
       var isCurrent = (name === currentFoodType);
       var isApplied = isCurrent || appliedList.indexOf(name) >= 0;
