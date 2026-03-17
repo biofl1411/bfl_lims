@@ -375,15 +375,25 @@ function formatDate(d) {
 }
 function formatMoney(n) { return (n || 0).toLocaleString() + '원'; }
 
+var _companiesMap = {}; // 업체명 → 업체정보
+
 async function loadAllReceipts() {
     try {
-        // 공급자 정보 + 접수 데이터 병렬 로드
-        var [snap] = await Promise.all([
+        // 공급자 정보 + 접수 데이터 + 업체정보 병렬 로드
+        var [snap, cSnap] = await Promise.all([
             db.collection('receipts').orderBy('createdAt', 'desc').limit(1000).get(),
+            db.collection('companies').get(),
             loadSupplierInfo()
         ]);
         allReceipts = [];
         snap.forEach(function(doc) { allReceipts.push({ id: doc.id, data: doc.data() }); });
+        // 업체 정보 매핑
+        _companiesMap = {};
+        cSnap.forEach(function(doc) {
+            var cd = doc.data();
+            var name = cd.companyName || cd.name || '';
+            if (name) _companiesMap[name] = cd;
+        });
         loadUnissued();
         updateAllBadges();
     } catch(e) {
@@ -430,7 +440,7 @@ function setBadge(id, count, cls) {
     el.className = 'tab-badge' + (count > 0 && cls ? ' ' + cls : '');
 }
 
-function getTotalFee(d) { return Number(d.feeTotal || d.totalFee || d.totalAmount || 0); }
+function getTotalFee(d) { return Number(d.discountFinalPrice || d.feeTotal || d.feeOriginal || d.totalFee || d.totalAmount || 0); }
 function getSupplyAmount(d) { return Math.round(getTotalFee(d) / 1.1); }
 function getTaxAmount(d) { return getTotalFee(d) - getSupplyAmount(d); }
 
@@ -945,6 +955,9 @@ function buildDuzonHeaders() {
 
 function buildBuyerInfo(d) {
     var buyer = {};
+    var companyName = d.billCompany || d.companyName || '';
+    var ci = _companiesMap[companyName] || {}; // companies 컬렉션에서 보완
+
     if (d.billEditEnabled && d.billEdit) {
         buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g, '');
         buyer.name = d.billEdit.company || '';
@@ -958,37 +971,80 @@ function buildBuyerInfo(d) {
         buyer.phone = d.billEdit.phone || '';
         buyer.mobile = d.billEdit.mobile || '';
     } else {
-        buyer.bizNo = (d.bizNo || '').replace(/-/g, '');
-        buyer.name = d.billCompany || d.companyName || '';
-        buyer.ceo = d.ceo || '';
-        buyer.addr1 = d.companyAddress || '';
+        buyer.bizNo = (d.bizNo || d.businessNo || ci.bizNo || ci.businessNo || '').replace(/-/g, '');
+        buyer.name = companyName;
+        buyer.ceo = d.ceo || ci.ceo || ci.representative || '';
+        buyer.addr1 = d.companyAddress || ci.address || ci.companyAddress || '';
         buyer.addr2 = '';
-        buyer.bizStatus = '';
-        buyer.bizType = '';
-        buyer.email = d.billEmail || '';
-        buyer.contactName = d.billName || '';
-        buyer.phone = d.billPhone || '';
-        buyer.mobile = d.billMobile || '';
+        buyer.bizStatus = d.bizStatus || ci.bizStatus || ci.businessType || '';
+        buyer.bizType = d.bizType || ci.bizType || ci.businessItem || '';
+        buyer.email = d.billEmail || ci.email || '';
+        buyer.contactName = d.billName || ci.managerName || ci.contactPerson || '';
+        buyer.phone = d.billPhone || ci.phone || ci.tel || '';
+        buyer.mobile = d.billMobile || ci.mobile || '';
     }
     return buyer;
 }
 
-function buildDuzonRow(d, targetDate) {
+function getWriteDate(d, fallbackDate) {
+    // 건별 작성일자: 특정일→billingDate, 추후발행→deferredIssueDate, 접수일→receiptDate, fallback
+    if (d.billingDateType === 'specific' && d.billingDate) return d.billingDate.replace(/-/g, '');
+    if (d.billingDateType === 'deferred' && d.deferredIssueDate) return d.deferredIssueDate.replace(/-/g, '');
+    if (d.billingDateType === 'monthEnd') {
+        var rd = d.receiptDate || '';
+        if (rd) {
+            var ym = rd.substring(0, 7);
+            var lastDay = new Date(parseInt(ym.substring(0,4)), parseInt(ym.substring(5,7)), 0).getDate();
+            return ym.replace(/-/g, '') + String(lastDay).padStart(2, '0');
+        }
+    }
+    if (d.receiptDate) return d.receiptDate.replace(/-/g, '');
+    return fallbackDate;
+}
+
+function getItemName(d) {
+    // 품목명: productName → sampleName → testPurpose 기반 → 기본값
+    if (d.productName) return d.productName;
+    if (d.sampleName) return d.sampleName;
+    // 검사목적 기반 품목명
+    var purpose = d.testPurpose || d.purpose || '';
+    if (purpose) return purpose + ' 검사수수료';
+    return '검사수수료';
+}
+
+function getSampleCount(d) {
+    // 시료수
+    if (d.sampleCount) return Number(d.sampleCount);
+    if (d.samples && d.samples.length) return d.samples.length;
+    return 1;
+}
+
+function buildDuzonRow(d, fallbackDate) {
     var total = getTotalFee(d);
     var supply = getSupplyAmount(d);
     var tax = getTaxAmount(d);
     var buyer = buildBuyerInfo(d);
-    var dateNum = parseInt(targetDate);
+    var writeDate = getWriteDate(d, fallbackDate);
+    var itemName = getItemName(d);
+    var qty = getSampleCount(d);
+    var unitPrice = qty > 0 ? Math.round(supply / qty) : supply;
+
+    // 청구/영수 구분: 거래구분코드 (1=청구, 2=영수)
+    // 입금 완료(payments 합계 >= 청구액)이면 영수, 아니면 청구
+    var paidAmt = 0;
+    (d.payments || []).forEach(function(p) { paidAmt += Number(p.amount || 0); });
+    var dealTypeCode = (paidAmt >= total && total > 0) ? 2 : 1; // 1=청구, 2=영수
+
     return [
-        '', 'EXCEL', 2, 1, 1, 1, '', '', '',
+        '', '', 2, dealTypeCode, 1, 1, '', '', '',
         SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
         '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
         SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
         buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
         '', buyer.bizStatus, buyer.bizType, '', buyer.email,
         buyer.mobile, buyer.contactName, buyer.phone,
-        dateNum, supply, tax,
-        dateNum, d.testPurpose || '검사수수료', '', 1, supply, supply, tax, '',
+        writeDate, supply, tax,
+        writeDate, itemName, '', qty, unitPrice, supply, tax, '',
         '','','','','','','','',
         '','','','','','','','',
         '','','','','','','','',
