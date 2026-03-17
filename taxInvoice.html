@@ -439,6 +439,7 @@ function formatDate(d) {
 function formatMoney(n) { return (n || 0).toLocaleString() + '원'; }
 
 var _companiesMap = {};
+var _companiesByBizNo = {};
 
 async function loadAllReceipts() {
     try {
@@ -450,10 +451,14 @@ async function loadAllReceipts() {
         allReceipts = [];
         snap.forEach(function(doc) { allReceipts.push({ id: doc.id, data: doc.data() }); });
         _companiesMap = {};
+        _companiesByBizNo = {};
         cSnap.forEach(function(doc) {
             var cd = doc.data();
-            var name = cd.companyName || cd.name || '';
+            var name = cd.companyName || cd.company || cd.name || '';
             if (name) _companiesMap[name] = cd;
+            // 사업자번호 기준 매핑 (업체명 불일치 시 폴백)
+            var biz = (cd.bizNo || cd.businessNo || '').replace(/-/g, '');
+            if (biz) _companiesByBizNo[biz] = cd;
         });
         loadUnissued();
         updateAllBadges();
@@ -1121,7 +1126,12 @@ function buildDuzonHeaders() {
 function buildBuyerInfo(d) {
     var buyer = {};
     var companyName = d.billCompany || d.companyName || '';
+    // 업체명으로 매칭 → 실패 시 사업자번호로 폴백
     var ci = _companiesMap[companyName] || {};
+    if (!ci.bizNo && !ci.businessNo) {
+        var rawBiz = (d.bizNo || d.businessNo || '').replace(/-/g, '');
+        if (rawBiz && _companiesByBizNo[rawBiz]) ci = _companiesByBizNo[rawBiz];
+    }
     if (d.billEditEnabled && d.billEdit) {
         buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g, '');
         buyer.name = d.billEdit.company || '';
@@ -1136,16 +1146,17 @@ function buildBuyerInfo(d) {
         buyer.mobile = d.billEdit.mobile || '';
     } else {
         buyer.bizNo = (d.bizNo || d.businessNo || ci.bizNo || ci.businessNo || '').replace(/-/g, '');
-        buyer.name = companyName;
-        buyer.ceo = d.ceo || ci.ceo || ci.representative || '';
-        buyer.addr1 = d.companyAddress || ci.address || ci.companyAddress || '';
-        buyer.addr2 = '';
-        buyer.bizStatus = d.bizStatus || ci.bizStatus || ci.businessType || '';
-        buyer.bizType = d.bizType || ci.bizType || ci.businessItem || '';
-        buyer.email = d.billEmail || ci.email || '';
-        buyer.contactName = d.billName || ci.managerName || ci.contactPerson || '';
-        buyer.phone = d.billPhone || ci.phone || ci.tel || '';
-        buyer.mobile = d.billMobile || ci.mobile || '';
+        // 사업자등록증 상호(company) 우선, 없으면 접수 시 입력한 업체명 사용
+        buyer.name = ci.companyName || ci.company || ci.name || companyName;
+        buyer.ceo = d.ceo || ci.ceo || ci.repName || ci.representative || '';
+        buyer.addr1 = d.companyAddress || ci.addr1 || ci.address || ci.companyAddress || '';
+        buyer.addr2 = ci.addr2 || '';
+        buyer.bizStatus = d.bizStatus || ci.bizStatus || ci.bizType || ci.businessType || '';
+        buyer.bizType = d.bizType || ci.bizItem || ci.businessItem || '';
+        buyer.email = d.billEmail || ci.taxEmail || ci.email || '';
+        buyer.contactName = d.billName || ci.contactName || ci.managerName || ci.contactPerson || '';
+        buyer.phone = d.billPhone || ci.contactPhone || ci.phone || ci.tel || '';
+        buyer.mobile = d.billMobile || ci.contactMobile || ci.mobile || '';
     }
     return buyer;
 }
