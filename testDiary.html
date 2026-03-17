@@ -185,6 +185,11 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
 .rec-result-label{font-size:12px;font-weight:600;color:#065f46}
 .rec-result-value{font-size:20px;font-weight:700;color:#059669}
 .rec-std-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+
+/* formTemplate 행 스타일 */
+.ft-row{background:linear-gradient(to right,#faf5ff,#fff);transition:all .15s}
+.ft-row:hover{background:linear-gradient(to right,#f3e8ff,#faf5ff)}
+.ft-row.active{background:linear-gradient(to right,#ede9fe,#f5f3ff);border-left:3px solid #8b5cf6!important}
 </style>
 </head>
 <body>
@@ -305,15 +310,16 @@ window.addEventListener('firebase-ready', function() {
 });
 
 var _allDiaryTemplates = [];
+var _allFormTemplates = [];   // formCollector에서 등록된 기록서 양식
 var _filteredDiaryTemplates = [];
 var _selectedDiaryTmplIdx = -1;
 
 async function initDiary() {
   checkMfdsStatus();
-  // 마스터 데이터 + diaryTemplates 로드
+  // 마스터 데이터 + diaryTemplates + formTemplates 로드
   await loadMasterData();
   populateDiaryFilterDropdowns();
-  await loadAllDiaryTemplates();
+  await Promise.all([loadAllDiaryTemplates(), loadFormTemplates()]);
   filterDiaryItems();
 }
 
@@ -341,9 +347,11 @@ async function loadMasterData() {
       }
     });
     var tmplItems = [];
+    window._mfdsTemplatesCache = [];
     var tmplSnap = await db.collection('mfdsTemplates').get();
     tmplSnap.docs.forEach(function(d) {
       var data = d.data();
+      window._mfdsTemplatesCache.push(data);
       if (data.testItems) data.testItems.forEach(function(ti) {
         if (ti.testItemName && tmplItems.indexOf(ti.testItemName) === -1) tmplItems.push(ti.testItemName);
       });
@@ -371,6 +379,42 @@ async function loadAllDiaryTemplates() {
   }
 }
 
+/* formTemplates 로드 (기록서 양식 수집기에서 등록, appliedToLims=true) */
+async function loadFormTemplates() {
+  try {
+    var snap = await db.collection('formTemplates').where('appliedToLims', '==', true).get();
+    _allFormTemplates = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      d._id = doc.id;
+      d._isFormTemplate = true;
+      _allFormTemplates.push(d);
+    });
+    // 식품유형 카운트: sharedItems에 동일 코드를 가진 다른 formTemplate 수 + mfdsTemplates에서 해당 항목 보유 식품유형 수
+    _allFormTemplates.forEach(function(ft) {
+      ft._foodTypeCount = countAppliedFoodTypes(ft);
+    });
+  } catch(e) {
+    console.error('formTemplates 로드 실패:', e);
+  }
+}
+
+/* 적용 식품유형 카운트: mfdsTemplates에서 해당 시험항목코드를 보유한 식품유형 수 */
+function countAppliedFoodTypes(ft) {
+  var code = ft.representativeItemCode || '';
+  if (!code) return 0;
+  var count = 0;
+  // mfdsTemplates 캐시에서 검색
+  if (window._mfdsTemplatesCache) {
+    window._mfdsTemplatesCache.forEach(function(tmpl) {
+      if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === code; })) {
+        count++;
+      }
+    });
+  }
+  return count;
+}
+
 /* 필터링 */
 function filterDiaryItems() {
   var fieldVal = (document.getElementById('diary-filter-field').value || '').trim();
@@ -378,7 +422,8 @@ function filterDiaryItems() {
   var catVal = (document.getElementById('diary-filter-cat').value || '').trim();
   var searchVal = (document.getElementById('diary-search-input').value || '').trim().toLowerCase();
 
-  _filteredDiaryTemplates = _allDiaryTemplates.filter(function(t) {
+  // diaryTemplates 필터
+  var filteredDiary = _allDiaryTemplates.filter(function(t) {
     if (fieldVal && t.field !== fieldVal) return false;
     if (purposeVal && t.purpose !== purposeVal) return false;
     if (catVal && t.category !== catVal) return false;
@@ -389,7 +434,26 @@ function filterDiaryItems() {
     return true;
   });
 
-  document.getElementById('diary-filter-count').textContent = _filteredDiaryTemplates.length + '건' + (_allDiaryTemplates.length !== _filteredDiaryTemplates.length ? ' / ' + _allDiaryTemplates.length : '');
+  // formTemplates 필터
+  var filteredForm = _allFormTemplates.filter(function(ft) {
+    if (fieldVal && (ft.fieldName || '') !== fieldVal) return false;
+    if (purposeVal && (ft.purposeName || '') !== purposeVal) return false;
+    if (catVal) {
+      var testType = (ft.analyzed && ft.analyzed.testType) || '';
+      if (testType !== catVal) return false;
+    }
+    if (searchVal) {
+      var s = ((ft.representativeItem || '') + ' ' + (ft.representativeItemCode || '') + ' ' + (ft.testBasis || '')).toLowerCase();
+      return s.indexOf(searchVal) >= 0;
+    }
+    return true;
+  });
+
+  // formTemplates를 앞에, diaryTemplates를 뒤에 병합
+  _filteredDiaryTemplates = filteredForm.concat(filteredDiary);
+
+  var totalCount = _allFormTemplates.length + _allDiaryTemplates.length;
+  document.getElementById('diary-filter-count').textContent = _filteredDiaryTemplates.length + '건' + (totalCount !== _filteredDiaryTemplates.length ? ' / ' + totalCount : '');
   renderDiaryItemList();
 }
 
@@ -407,23 +471,150 @@ function renderDiaryItemList() {
   var html = '';
   _filteredDiaryTemplates.forEach(function(t, i) {
     var cls = (_selectedDiaryTmplIdx === i) ? ' active' : '';
-    var catColor = catColors[t.category] || '#95a5a6';
-    var formulaTag = t.calcFormula ? '<span style="font-size:10px;color:#8e44ad;background:#f3e8ff;padding:1px 4px;border-radius:3px">fx</span>' : '';
 
-    html += '<div class="item-row' + cls + '" onclick="selectDiaryItem(' + i + ')" id="dtmpl-' + i + '">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<span class="item-name">' + escH(t.itemName || '-') + '</span>';
-    html += '<span style="background:' + catColor + ';color:#fff;font-size:10px;padding:1px 6px;border-radius:3px;">' + (t.category || '') + '</span>';
-    html += '</div>';
-    html += '<div class="item-meta">';
-    if (t.itemCode) html += '<span class="item-code">' + escH(t.itemCode) + '</span>';
-    if (t.field) html += '<span style="font-size:10px;color:#4361ee;background:#e8f0ff;padding:1px 4px;border-radius:3px">' + escH(t.field) + '</span>';
-    if (t.purpose) html += '<span style="font-size:10px;color:#666;background:#f0f0f0;padding:1px 4px;border-radius:3px">' + escH(t.purpose) + '</span>';
-    html += formulaTag;
-    html += '</div>';
-    html += '</div>';
+    if (t._isFormTemplate) {
+      // ========== formTemplates (기록서 양식 수집기) ==========
+      html += renderFormTemplateRow(t, i, cls, catColors);
+    } else {
+      // ========== diaryTemplates (기존 일지 양식) ==========
+      var catColor = catColors[t.category] || '#95a5a6';
+      var formulaTag = t.calcFormula ? '<span style="font-size:10px;color:#8e44ad;background:#f3e8ff;padding:1px 4px;border-radius:3px">fx</span>' : '';
+
+      html += '<div class="item-row' + cls + '" onclick="selectDiaryItem(' + i + ')" id="dtmpl-' + i + '">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span class="item-name">' + escH(t.itemName || '-') + '</span>';
+      html += '<span style="background:' + catColor + ';color:#fff;font-size:10px;padding:1px 6px;border-radius:3px;">' + (t.category || '') + '</span>';
+      html += '</div>';
+      html += '<div class="item-meta">';
+      if (t.itemCode) html += '<span class="item-code">' + escH(t.itemCode) + '</span>';
+      if (t.field) html += '<span style="font-size:10px;color:#4361ee;background:#e8f0ff;padding:1px 4px;border-radius:3px">' + escH(t.field) + '</span>';
+      if (t.purpose) html += '<span style="font-size:10px;color:#666;background:#f0f0f0;padding:1px 4px;border-radius:3px">' + escH(t.purpose) + '</span>';
+      html += formulaTag;
+      html += '</div>';
+      html += '</div>';
+    }
   });
   el.innerHTML = html;
+}
+
+/* formTemplates 행 렌더링 */
+function renderFormTemplateRow(ft, idx, cls, catColors) {
+  var a = ft.analyzed || {};
+  var catColor = catColors[a.testType] || '#95a5a6';
+
+  // 식품유형 (analyzed.sections에서 시료유형 exampleValue)
+  var foodType = getFoodTypeFromForm(ft);
+  var foodTypeCount = ft._foodTypeCount || 0;
+
+  // 표준물질정보
+  var stdInfo = getStdInfoSummary(a);
+  // 표준용액농도
+  var stdConc = getStdConcSummary(a);
+  // 판정기준
+  var judgmentText = '';
+  if (a.judgmentRule) {
+    judgmentText = (a.judgmentRule.standardText || '') + (a.judgmentRule.unit ? ' ' + a.judgmentRule.unit : '');
+  }
+  // 계산식
+  var hasCalc = a.calculations && a.calculations.length > 0;
+
+  var html = '<div class="item-row ft-row' + cls + '" onclick="selectDiaryItem(' + idx + ')" id="dtmpl-' + idx + '" style="border-left:3px solid #8b5cf6;padding:12px 14px">';
+
+  // 1행: 항목명 + 카테고리 + 기록서 뱃지
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+  html += '<span class="item-name" style="font-size:14px">' + escH(ft.representativeItem || '-') + '</span>';
+  html += '<div style="display:flex;gap:4px;align-items:center">';
+  html += '<span style="background:#8b5cf6;color:#fff;font-size:9px;padding:1px 6px;border-radius:3px">기록서</span>';
+  html += '<span style="background:' + catColor + ';color:#fff;font-size:10px;padding:1px 6px;border-radius:3px">' + escH(a.testType || '') + '</span>';
+  html += '</div></div>';
+
+  // 2행: 코드 + 분야 + 검사목적
+  html += '<div class="item-meta" style="margin-bottom:5px">';
+  if (ft.representativeItemCode) html += '<span class="item-code">' + escH(ft.representativeItemCode) + '</span>';
+  if (ft.fieldName) html += '<span style="font-size:10px;color:' + (ft.fieldColor || '#4361ee') + ';background:#e8f0ff;padding:1px 4px;border-radius:3px">' + escH(ft.fieldName) + '</span>';
+  if (ft.purposeName) html += '<span style="font-size:10px;color:#666;background:#f0f0f0;padding:1px 4px;border-radius:3px">' + escH(ft.purposeName) + '</span>';
+  if (hasCalc) html += '<span style="font-size:10px;color:#8e44ad;background:#f3e8ff;padding:1px 4px;border-radius:3px">fx</span>';
+  html += '</div>';
+
+  // 3행: 시험법근거
+  if (ft.testBasis) {
+    html += '<div style="font-size:11px;color:#4338ca;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escA(ft.testBasis) + '">';
+    html += '📖 ' + escH(ft.testBasis);
+    html += '</div>';
+  }
+
+  // 4행: 식품유형 + 카운트
+  if (foodType) {
+    html += '<div style="font-size:11px;color:#0369a1;margin-bottom:4px">';
+    html += '🍽 ' + escH(foodType);
+    if (foodTypeCount > 1) {
+      html += ' <span style="font-size:10px;color:#fff;background:#0ea5e9;padding:0 5px;border-radius:8px;font-weight:600">+' + (foodTypeCount - 1) + '</span>';
+    }
+    html += '</div>';
+  }
+
+  // 5행: 표준물질 + 표준용액 + 판정기준
+  var detailParts = [];
+  if (stdInfo) detailParts.push('⚗ ' + stdInfo);
+  if (stdConc) detailParts.push('🧪 ' + stdConc);
+  if (judgmentText) detailParts.push('⚖ ' + judgmentText);
+  if (detailParts.length) {
+    html += '<div style="font-size:10px;color:#64748b;display:flex;gap:8px;flex-wrap:wrap">';
+    detailParts.forEach(function(p) {
+      html += '<span style="white-space:nowrap">' + escH(p) + '</span>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/* formTemplates에서 식품유형 추출 */
+function getFoodTypeFromForm(ft) {
+  var a = ft.analyzed || {};
+  if (a.sections) {
+    for (var si = 0; si < a.sections.length; si++) {
+      var sec = a.sections[si];
+      if (sec.fields) {
+        for (var fi = 0; fi < sec.fields.length; fi++) {
+          var f = sec.fields[fi];
+          if (f.id === 'sampleType' && f.exampleValue) return f.exampleValue;
+        }
+      }
+    }
+  }
+  return ft.sampleType || '';
+}
+
+/* 표준물질정보 요약 */
+function getStdInfoSummary(a) {
+  if (!a.sections) return '';
+  for (var i = 0; i < a.sections.length; i++) {
+    if (a.sections[i].title === '표준물질정보') {
+      var fields = a.sections[i].fields || [];
+      var parts = [];
+      fields.forEach(function(f) {
+        if (f.exampleValue && f.label) {
+          parts.push(f.exampleValue + (f.unit ? ' ' + f.unit : ''));
+        }
+      });
+      return parts.join(', ');
+    }
+  }
+  return '';
+}
+
+/* 표준용액농도 요약 */
+function getStdConcSummary(a) {
+  if (!a.sections) return '';
+  for (var i = 0; i < a.sections.length; i++) {
+    if (a.sections[i].title === '표준용액농도') {
+      var fields = a.sections[i].fields || [];
+      return fields.length + '포인트';
+    }
+  }
+  return '';
 }
 
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -437,10 +628,18 @@ function selectDiaryItem(idx) {
   var t = _filteredDiaryTemplates[idx];
   if (!t) return;
 
+  if (t._isFormTemplate) {
+    renderFormTemplateDetail(t);
+  } else {
+    renderDiaryTemplateDetail(t);
+  }
+}
+
+/* diaryTemplates 상세 (기존) */
+function renderDiaryTemplateDetail(t) {
   var panel = document.getElementById('diary-panel');
   var html = '<div class="diary-section">';
 
-  // 기본 정보
   html += '<h4><span class="icon">📋</span>양식 정보</h4>';
   html += '<div class="form-row"><div class="form-group"><label>시험항목명</label><input type="text" id="dtmpl-ed-name" value="' + escA(t.itemName) + '" readonly></div>';
   html += '<div class="form-group"><label>항목코드</label><input type="text" id="dtmpl-ed-code" value="' + escA(t.itemCode) + '" readonly style="font-family:monospace"></div></div>';
@@ -448,15 +647,12 @@ function selectDiaryItem(idx) {
   html += '<div class="form-group"><label>검사목적</label><input type="text" value="' + escA(t.purpose) + '" readonly></div>';
   html += '<div class="form-group"><label>카테고리</label><input type="text" value="' + escA(t.category) + '" readonly></div></div>';
 
-  // 기준규격/단위
   html += '<div class="form-row"><div class="form-group"><label>기준규격</label><input type="text" id="dtmpl-ed-std" value="' + escA(t.standard) + '"></div>';
   html += '<div class="form-group"><label>단위</label><input type="text" id="dtmpl-ed-unit" value="' + escA(t.unit) + '"></div></div>';
 
-  // 일지 내용
   html += '<div class="form-group"><label>일지 내용</label>';
   html += '<div id="dtmpl-ed-content" contenteditable="true" style="min-height:120px;max-height:250px;overflow-y:auto;padding:10px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap;background:white">' + (t.diaryCn || '') + '</div></div>';
 
-  // 계산식
   if (t.calcFormula) {
     html += '<div style="background:var(--gray-50);border-radius:8px;padding:12px;margin-bottom:14px">';
     html += '<label style="font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:6px;display:block">계산식</label>';
@@ -476,6 +672,155 @@ function selectDiaryItem(idx) {
 
   html += '</div>';
   panel.innerHTML = html;
+}
+
+/* formTemplates 상세 */
+function renderFormTemplateDetail(ft) {
+  var panel = document.getElementById('diary-panel');
+  var a = ft.analyzed || {};
+  var foodType = getFoodTypeFromForm(ft);
+  var foodTypeCount = ft._foodTypeCount || 0;
+
+  var html = '<div class="diary-section">';
+
+  // 헤더: 기록서 뱃지
+  html += '<h4><span class="icon">📄</span>시험검사기록서 — ' + escH(ft.representativeItem || '') + '</h4>';
+
+  // 기본 정보
+  html += '<div class="form-row"><div class="form-group"><label>검사항목</label><input type="text" value="' + escA(ft.representativeItem) + '" readonly></div>';
+  html += '<div class="form-group"><label>항목코드</label><input type="text" value="' + escA(ft.representativeItemCode) + '" readonly style="font-family:monospace"></div></div>';
+  html += '<div class="form-row"><div class="form-group"><label>분야</label><input type="text" value="' + escA(ft.fieldName) + '" readonly></div>';
+  html += '<div class="form-group"><label>검사목적</label><input type="text" value="' + escA(ft.purposeName) + '" readonly></div>';
+  html += '<div class="form-group"><label>시험유형</label><input type="text" value="' + escA(a.testType) + '" readonly></div></div>';
+
+  // 시험법근거
+  html += '<div class="form-group"><label>시험법근거</label><input type="text" value="' + escA(ft.testBasis) + '" readonly style="color:#4338ca;font-weight:600"></div>';
+
+  // 식품유형 + 적용 식품유형 목록
+  html += '<div class="form-group"><label>식품유형</label>';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  html += '<input type="text" value="' + escA(foodType) + '" readonly style="flex:1">';
+  if (foodTypeCount > 1) {
+    html += '<span style="background:#0ea5e9;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer" onclick="showAppliedFoodTypes(\'' + escA(ft.representativeItemCode) + '\',\'' + escA(foodType) + '\')" title="적용 식품유형 목록 보기">+' + (foodTypeCount - 1) + '</span>';
+  }
+  html += '</div></div>';
+
+  // SOP + 장비
+  html += '<div class="form-row"><div class="form-group"><label>SOP</label><input type="text" value="' + escA(a.sop) + '" readonly></div>';
+  html += '<div class="form-group"><label>장비</label><input type="text" value="' + escA((a.equipment || []).join(', ')) + '" readonly></div></div>';
+
+  // 표준물질정보
+  var stdSection = getSectionByTitle(a, '표준물질정보');
+  if (stdSection && stdSection.fields && stdSection.fields.length) {
+    html += '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:14px">';
+    html += '<label style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;display:block">⚗ 표준물질정보</label>';
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    html += '<tr>';
+    stdSection.fields.forEach(function(f) {
+      html += '<th style="text-align:left;padding:3px 6px;color:#78716c;font-weight:600">' + escH(f.label) + '</th>';
+    });
+    html += '</tr><tr>';
+    stdSection.fields.forEach(function(f) {
+      html += '<td style="padding:3px 6px;font-weight:500">' + escH(f.exampleValue || '-') + (f.unit ? ' <span style="color:#a8a29e">' + escH(f.unit) + '</span>' : '') + '</td>';
+    });
+    html += '</tr></table></div>';
+  }
+
+  // 표준용액농도
+  var concSection = getSectionByTitle(a, '표준용액농도');
+  if (concSection && concSection.fields && concSection.fields.length) {
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:14px">';
+    html += '<label style="font-size:12px;font-weight:700;color:#166534;margin-bottom:8px;display:block">🧪 표준용액농도</label>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    concSection.fields.forEach(function(f) {
+      html += '<div style="text-align:center;background:white;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;min-width:70px">';
+      html += '<div style="font-size:10px;color:#6b7280">' + escH(f.label) + '</div>';
+      html += '<div style="font-size:13px;font-weight:600">' + escH(f.exampleValue || '-') + '</div>';
+      if (f.unit) html += '<div style="font-size:9px;color:#9ca3af">' + escH(f.unit) + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // 판정기준
+  if (a.judgmentRule) {
+    var jr = a.judgmentRule;
+    html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px">';
+    html += '<label style="font-size:12px;font-weight:700;color:#991b1b;margin-bottom:4px;display:block">⚖ 판정기준</label>';
+    html += '<div style="font-size:14px;font-weight:600;color:#dc2626">' + escH(jr.standardText || '') + (jr.unit ? ' ' + escH(jr.unit) : '') + '</div>';
+    html += '</div>';
+  }
+
+  // 계산식
+  if (a.calculations && a.calculations.length) {
+    html += '<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px;margin-bottom:14px">';
+    html += '<label style="font-size:12px;font-weight:700;color:#6b21a8;margin-bottom:8px;display:block">fx 계산식</label>';
+    a.calculations.forEach(function(calc) {
+      html += '<div style="margin-bottom:8px">';
+      html += '<div style="font-size:12px;font-weight:600;color:#7c3aed;margin-bottom:4px">' + escH(calc.label || '') + ' (' + escH(calc.unit || '') + ')</div>';
+      html += '<div style="font-family:monospace;font-size:11px;color:#4c1d95;background:white;padding:6px 10px;border-radius:6px;border:1px solid #e9d5ff;word-break:break-all">' + escH(calc.formulaText || calc.formula || '') + '</div>';
+      if (calc.decimalPlaces !== undefined) html += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">소수점 ' + calc.decimalPlaces + '자리</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // 측정값 필드 (입력 가능)
+  var measureSection = getSectionByTitle(a, '측정값');
+  if (measureSection && measureSection.fields && measureSection.fields.length) {
+    html += '<div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:12px;margin-bottom:14px">';
+    html += '<label style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;display:block">📊 측정값 필드</label>';
+    html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">';
+    measureSection.fields.forEach(function(f) {
+      html += '<div class="form-group" style="margin-bottom:4px"><label>' + escH(f.label) + (f.unit ? ' (' + escH(f.unit) + ')' : '') + '</label>';
+      html += '<input type="text" value="' + escA(f.exampleValue || '') + '" readonly style="font-size:12px;padding:5px 8px"></div>';
+    });
+    html += '</div></div>';
+  }
+
+  // 등록일
+  html += '<div style="text-align:right;font-size:11px;color:#9ca3af;margin-top:8px">등록: ' + escH(ft.createdAtStr || '') + '</div>';
+
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+/* 섹션명으로 analyzed.sections 검색 */
+function getSectionByTitle(a, title) {
+  if (!a.sections) return null;
+  for (var i = 0; i < a.sections.length; i++) {
+    if (a.sections[i].title === title) return a.sections[i];
+  }
+  return null;
+}
+
+/* 적용 식품유형 목록 팝업 */
+function showAppliedFoodTypes(itemCode, currentFoodType) {
+  if (!window._mfdsTemplatesCache) return;
+  var list = [];
+  window._mfdsTemplatesCache.forEach(function(tmpl) {
+    if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === itemCode; })) {
+      list.push(tmpl.foodTypeName || tmpl.templateName || '-');
+    }
+  });
+  if (!list.length) { showToast('적용 식품유형 없음', 'info'); return; }
+
+  var modal = document.getElementById('spec-modal');
+  document.querySelector('#spec-modal .modal-header h3').textContent = '적용 식품유형 (' + list.length + '개)';
+  var body = document.getElementById('spec-modal-body');
+  var html = '<div style="max-height:400px;overflow-y:auto">';
+  list.sort();
+  list.forEach(function(name, idx) {
+    var isCurrent = (name === currentFoodType);
+    html += '<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px;display:flex;align-items:center;gap:8px' + (isCurrent ? ';background:#dbeafe;font-weight:600' : '') + '">';
+    html += '<span style="color:#9ca3af;font-size:11px;width:24px">' + (idx + 1) + '</span>';
+    html += '<span>' + escH(name) + '</span>';
+    if (isCurrent) html += '<span style="font-size:10px;color:#2563eb;background:#bfdbfe;padding:1px 6px;border-radius:8px">현재</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  body.innerHTML = html;
+  modal.classList.add('active');
 }
 
 function escA(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
