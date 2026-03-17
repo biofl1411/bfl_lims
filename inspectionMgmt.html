@@ -30328,13 +30328,20 @@ async function loadInspectionConfig() {
     if (pd && pd.purposes && pd.purposes.length > 0) {
       P = pd.purposes;
       // itemSource 기본값 보정 + 레거시 마이그레이션
+      var prefixFixed = false;
       P.forEach(function(p) {
         if (!p.itemSource) {
           p.itemSource = (p.n === '자가품질위탁검사용') ? 'mfdsTemplates' : 'mfdsTestItems';
         }
         if (p.itemSource === 'foodTypesMapping') p.itemSource = 'itemGroups';
         if (p.itemSource === 'refFeeMapping') p.itemSource = 'mfdsTestItems';
+        // prefix 동기화: segments의 고정문자와 prefix 불일치 시 보정
+        if (p.segments && p.segments.length > 0) {
+          var fs = p.segments.find(function(s){ return s.t === 'fixed'; });
+          if (fs && fs.v && fs.v !== p.prefix) { p.prefix = fs.v; prefixFixed = true; }
+        }
       });
+      if (prefixFixed) { console.log('[보정] prefix 동기화 완료'); savePurposesToFirestore(); }
     }
     else await savePurposesToFirestore();
 
@@ -35757,6 +35764,9 @@ function saveDetail(){
   p.segments=JSON.parse(JSON.stringify(dSg));
   p.segSep=document.getElementById('d-seg-sep')?document.getElementById('d-seg-sep').value:'-';
   p.segCnt=dSg.length;
+  // prefix 동기화: 세그먼트의 첫 번째 고정문자(목적코드)를 prefix에 반영
+  var fixedSeg=dSg.find(function(s){return s.t==='fixed'});
+  if(fixedSeg&&fixedSeg.v) p.prefix=fixedSeg.v;
   // 항목 소스 저장
   var srcRadio = document.querySelector('input[name="d-item-source"]:checked');
   p.itemSource = srcRadio ? srcRadio.value : 'mfdsTestItems';
