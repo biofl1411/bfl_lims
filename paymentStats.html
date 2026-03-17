@@ -139,12 +139,13 @@ tr:hover{background:#f8f9fb}
                                     <th class="text-right">입금액</th>
                                     <th class="text-right">미수금</th>
                                     <th class="text-center">최종입금일</th>
+                                    <th class="text-center">최초접수일</th>
                                     <th class="text-center">경과일수</th>
                                     <th class="text-center">신호등</th>
                                 </tr>
                             </thead>
                             <tbody id="aging-body">
-                                <tr><td colspan="7" class="empty-msg" style="padding:30px">로딩 중...</td></tr>
+                                <tr><td colspan="8" class="empty-msg" style="padding:30px">로딩 중...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -356,7 +357,7 @@ function renderAgingStats() {
         var d = r.data;
         var company = d.companyName || d.company || '(미상)';
         if (!companyMap[company]) companyMap[company] = {
-            total: 0, paid: 0, lastPay: '', receipts: [],
+            total: 0, paid: 0, lastPay: '', oldestReceipt: '', receipts: [],
             bizNo: '', tel: '', manager: '', email: '', companyId: '', address: ''
         };
         var fee = _getTotalFee(d);
@@ -378,6 +379,14 @@ function renderAgingStats() {
         var lp = _getLastPayDate(d);
         if (lp > companyMap[company].lastPay) companyMap[company].lastPay = lp;
 
+        // 미수금이 있는 접수 중 가장 오래된 접수일 추적
+        var rd = d.receiptDate || '';
+        if (remain > 0 && rd) {
+            if (!companyMap[company].oldestReceipt || rd < companyMap[company].oldestReceipt) {
+                companyMap[company].oldestReceipt = rd;
+            }
+        }
+
         companyMap[company].receipts.push({
             id: r.id,
             receiptNo: d.receiptNo || r.id,
@@ -398,14 +407,23 @@ function renderAgingStats() {
         var c = companyMap[name];
         var unpaid = Math.max(0, c.total - c.paid);
         var days = 0;
+        var daysBase = ''; // 경과일수 기준: 'pay' = 최종입금일, 'receipt' = 최초접수일
         if (c.lastPay) {
+            // 입금 이력이 있으면 최종입금일 기준
             days = Math.floor((today - new Date(c.lastPay)) / 86400000);
+            daysBase = 'pay';
+        } else if (unpaid > 0 && c.oldestReceipt) {
+            // 입금 없으면 가장 오래된 미수 접수일 기준
+            days = Math.floor((today - new Date(c.oldestReceipt)) / 86400000);
+            daysBase = 'receipt';
         } else if (unpaid > 0) {
             days = 999;
+            daysBase = 'unknown';
         }
         return {
             name: name, total: c.total, paid: c.paid, unpaid: unpaid,
-            lastPay: c.lastPay, days: days, receipts: c.receipts,
+            lastPay: c.lastPay, days: days, daysBase: daysBase,
+            oldestReceipt: c.oldestReceipt, receipts: c.receipts,
             bizNo: c.bizNo, tel: c.tel, manager: c.manager, email: c.email, companyId: c.companyId, address: c.address
         };
     }).filter(function(r) { return r.unpaid > 0; })
@@ -443,6 +461,18 @@ function renderAgingStats() {
         var unpaidReceipts = r.receipts.filter(function(rc) { return rc.remain > 0; });
         var receiptCount = unpaidReceipts.length;
 
+        // 경과일수 표시
+        var daysText = r.days + '일';
+        var daysTitle = '';
+        if (r.daysBase === 'pay') {
+            daysTitle = '최종입금일(' + r.lastPay + ') 기준';
+        } else if (r.daysBase === 'receipt') {
+            daysTitle = '최초접수일(' + r.oldestReceipt + ') 기준 (입금 없음)';
+            daysText = r.days + '일 <span style="font-size:9px;color:#9ca3af">(접수)</span>';
+        } else {
+            daysText = '-';
+        }
+
         // 업체 요약 행
         html += '<tr class="aging-parent" onclick="toggleAgingDetail(' + idx + ')" id="aging-row-' + idx + '">' +
             '<td style="font-weight:600">' + r.name +
@@ -451,14 +481,15 @@ function renderAgingStats() {
             '<td class="text-right">' + fmtMoney(r.total) + '</td>' +
             '<td class="text-right" style="color:#2563eb">' + fmtMoney(r.paid) + '</td>' +
             '<td class="text-right" style="color:#ef4444;font-weight:600">' + fmtMoney(r.unpaid) + '</td>' +
-            '<td class="text-center">' + (r.lastPay || '-') + '</td>' +
-            '<td class="text-center" style="font-weight:600">' + (r.days === 999 ? '-' : r.days + '일') + '</td>' +
+            '<td class="text-center">' + (r.lastPay || '<span style="color:#9ca3af">없음</span>') + '</td>' +
+            '<td class="text-center">' + (r.oldestReceipt || '-') + '</td>' +
+            '<td class="text-center" style="font-weight:600" title="' + daysTitle + '">' + daysText + '</td>' +
             '<td class="text-center">' + light + '</td>' +
             '</tr>';
 
         // 상세 펼치기 행
         html += '<tr class="aging-detail" id="aging-detail-' + idx + '">' +
-            '<td colspan="7">' +
+            '<td colspan="8">' +
             '<div class="aging-detail-inner">';
 
         // 업체 정보
