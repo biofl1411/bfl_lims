@@ -639,6 +639,48 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
   </div>
 </div>
 
+<!-- 다른 식품유형 적용 모달 -->
+<div class="mbg" id="m-apply-others">
+  <div class="modal" style="max-width:700px">
+    <div class="mhd">
+      <div class="mtitle">📋 다른 식품유형에도 동일 양식 적용</div>
+      <button class="mclose" onclick="closeM('m-apply-others')">✕</button>
+    </div>
+    <div class="mbody">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px 14px;font-size:12px;color:#1e40af;margin-bottom:12px">
+        현재 저장된 <b id="ao-item-name"></b> 양식을 동일한 검사항목을 가진 다른 식품유형에도 적용합니다.
+      </div>
+      <div style="margin-bottom:8px;font-size:12px;font-weight:600">해당 식품유형 목록:</div>
+      <div id="ao-type-list" style="max-height:320px;overflow-y:auto"></div>
+      <div style="margin-top:8px;font-size:11px;color:#64748b" id="ao-summary"></div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-out" onclick="skipApplyOthers()">건너뛰기</button>
+      <button class="btn btn-ok" id="btn-ao-apply" onclick="doApplyOthers()">✅ 선택한 유형에 적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- 시험일지 변환 문의 모달 -->
+<div class="mbg" id="m-diary-convert">
+  <div class="modal" style="max-width:480px">
+    <div class="mhd">
+      <div class="mtitle">📝 시험일지 변환</div>
+      <button class="mclose" onclick="closeM('m-diary-convert')">✕</button>
+    </div>
+    <div class="mbody">
+      <div style="font-size:13px;line-height:1.7;color:#334155">
+        저장된 양식을 <b>시험일지 템플릿</b>으로 변환하시겠습니까?<br>
+        <span style="color:#64748b;font-size:11px">변환하면 시험일지 작성 시 이 양식이 자동으로 사용됩니다.</span>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-out" onclick="closeM('m-diary-convert');toast('저장 완료','ok')">아니요</button>
+      <button class="btn btn-ok" onclick="doDiaryConvert()">예, 변환</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1666,15 +1708,141 @@ async function doConfirmSave() {
 
     await db.collection('formTemplates').doc(docId).set(row);
     pi(3,'done','저장 완료');
-    toast('저장 완료! 리뷰 메모 포함.','ok');
+    _lastSavedRow = row;
     renderPreview(_lastAnalyzed, row);
     document.getElementById('review-panel').style.display='none';
     loadList();
+
+    // 다른 식품유형 적용 문의
+    showApplyOthersModal(row);
   } catch(e) {
     pi(3,'err','실패: '+e.message);
     toast('저장 실패: '+e.message,'err');
   }
   btn.disabled=false; btn.textContent='✅ 검증 완료 — 저장';
+}
+
+var _lastSavedRow = null;
+var _aoSelectedTypes = new Set();
+
+/* ── 다른 식품유형 적용 모달 표시 ── */
+async function showApplyOthersModal(row) {
+  var itemName = row.representativeItem || '';
+  var itemCode = row.representativeItemCode || '';
+  document.getElementById('ao-item-name').textContent = itemName + (itemCode ? ' (' + itemCode + ')' : '');
+
+  // mfdsTemplates에서 동일 검사항목을 가진 식품유형 검색
+  var typeList = document.getElementById('ao-type-list');
+  typeList.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">⏳ 식품유형 로드 중...</div>';
+  document.getElementById('m-apply-others').classList.add('on');
+
+  try {
+    if (!_mfdsTemplatesCache) {
+      var snap = await db.collection('mfdsTemplates').get();
+      _mfdsTemplatesCache = snap.docs.map(function(d) { return d.data(); });
+    }
+
+    // 동일 검사항목을 가진 식품유형 찾기
+    var matchingTypes = [];
+    _mfdsTemplatesCache.forEach(function(t) {
+      var hasItem = (t.testItems || []).some(function(ti) {
+        var tiName = ti.testItemName || ti['한글명'] || '';
+        var tiCode = ti.testItemCode || ti['시험항목코드'] || '';
+        return (itemName && tiName === itemName) || (itemCode && tiCode === itemCode);
+      });
+      if (hasItem) {
+        var typeName = t.templateName || t.foodTypeName || '';
+        var typeCode = t.foodTypeCode || '';
+        // 현재 저장한 시료유형과 동일하면 제외
+        if (typeName !== (row.sampleType || '')) {
+          matchingTypes.push({ name: typeName, code: typeCode, itemCount: (t.testItems || []).length });
+        }
+      }
+    });
+
+    _aoSelectedTypes = new Set();
+
+    if (matchingTypes.length === 0) {
+      typeList.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">동일 검사항목을 가진 다른 식품유형이 없습니다.</div>';
+      document.getElementById('ao-summary').textContent = '';
+      document.getElementById('btn-ao-apply').style.display = 'none';
+    } else {
+      var html = '';
+      matchingTypes.forEach(function(mt, i) {
+        _aoSelectedTypes.add(i);
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;border:1px solid #e2e8f0;margin-bottom:4px;font-size:12px;transition:background .1s" ' +
+          'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">' +
+          '<input type="checkbox" checked class="ao-chk" data-idx="'+i+'" onchange="toggleAoType('+i+',this.checked)" style="accent-color:#4361ee">' +
+          '<span style="flex:1"><b>' + mt.name + '</b>' +
+          (mt.code ? ' <span style="color:#64748b;font-size:10px">(' + mt.code + ')</span>' : '') +
+          '</span>' +
+          '<span style="color:#94a3b8;font-size:10px">' + mt.itemCount + '개 항목</span>' +
+          '</label>';
+      });
+      typeList.innerHTML = html;
+      document.getElementById('ao-summary').textContent = matchingTypes.length + '개 식품유형에 동일 항목 존재';
+      document.getElementById('btn-ao-apply').style.display = '';
+    }
+    window._aoMatchingTypes = matchingTypes;
+  } catch(e) {
+    typeList.innerHTML = '<div style="color:var(--err);padding:10px">로드 실패: ' + e.message + '</div>';
+  }
+}
+
+function toggleAoType(idx, checked) {
+  if (checked) _aoSelectedTypes.add(idx); else _aoSelectedTypes.delete(idx);
+}
+
+/* ── 선택한 식품유형에 동일 양식 적용 ── */
+async function doApplyOthers() {
+  if (!_lastSavedRow || !window._aoMatchingTypes) return;
+  var types = window._aoMatchingTypes;
+  var selected = [];
+  _aoSelectedTypes.forEach(function(idx) { if (types[idx]) selected.push(types[idx]); });
+
+  if (selected.length === 0) {
+    toast('선택된 식품유형이 없습니다','err');
+    return;
+  }
+
+  var btn = document.getElementById('btn-ao-apply');
+  btn.disabled = true; btn.textContent = '⏳ 적용 중...';
+
+  try {
+    for (var i = 0; i < selected.length; i++) {
+      var mt = selected[i];
+      var newRow = JSON.parse(JSON.stringify(_lastSavedRow));
+      newRow.sampleType = mt.name;
+      newRow.docId = newRow.savedFileName.replace(/[^a-zA-Z0-9가-힣_·]/g,'_') + '_' + mt.code + '_' + Date.now();
+      newRow.savedFileName = newRow.savedFileName.split('_').slice(0,-1).join('_') + '_' + mt.name;
+      newRow.createdAtStr = new Date().toLocaleString('ko-KR');
+      newRow.appliedFrom = _lastSavedRow.docId;
+      await db.collection('formTemplates').doc(newRow.docId).set(newRow);
+    }
+    toast(selected.length + '개 식품유형에 적용 완료','ok');
+    loadList();
+  } catch(e) {
+    toast('적용 실패: ' + e.message, 'err');
+  }
+
+  btn.disabled = false; btn.textContent = '✅ 선택한 유형에 적용';
+  closeM('m-apply-others');
+
+  // 시험일지 변환 문의
+  document.getElementById('m-diary-convert').classList.add('on');
+}
+
+/* ── 건너뛰기 → 시험일지 변환 문의 ── */
+function skipApplyOthers() {
+  closeM('m-apply-others');
+  document.getElementById('m-diary-convert').classList.add('on');
+}
+
+/* ── 시험일지 변환 (placeholder) ── */
+function doDiaryConvert() {
+  closeM('m-diary-convert');
+  toast('시험일지 변환 기능은 준비 중입니다','ok');
+  // TODO: 시험일지 템플릿 변환 로직 구현
 }
 
 function collectReviewData() {
