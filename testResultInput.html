@@ -1782,10 +1782,21 @@ function getReceiptAutoValues(item) {
   var today = new Date().toISOString().slice(0, 10);
   var sampleFoodType = sample.foodType || '';
 
-  // 시험일지 오버라이드 값 (표준물질정보, 표준용액농도, 적용 기간)
+  // 시험일지 수정값 + 기록서 양식 원본값
   var ov = findFormTemplateOverrides(item.testItemName, sampleFoodType);
   var stdInfo = ov.stdInfo || {};
   var stdConc = ov.stdConc || {};
+
+  // 기록서 양식 원본값에서 기본값 추출
+  var tmpl = findFormTemplate(item.testItemName, sampleFoodType);
+  var tmplDefaults = {};
+  if (tmpl && tmpl.sections) {
+    tmpl.sections.forEach(function(sec) {
+      (sec.fields || []).forEach(function(f) {
+        if (f.exampleValue) tmplDefaults[f.id] = String(f.exampleValue);
+      });
+    });
+  }
 
   var vals = {
     testItem: item.testItemName || '',
@@ -1794,23 +1805,23 @@ function getReceiptAutoValues(item) {
     specimenNumber: r.receiptNo || '',
     receiptDate: r.receiptDate || '',
     testDate: today,
-    testBasisField: '',
+    testBasisField: tmplDefaults.testBasisField || '',
     manufacturingDate: sample.manufactureDate || '',
     expiryDate: sample.expiryDate || '',
     sampleType: sampleFoodType,
     testStartDate: today,
     inspector: '',
-    // 표준물질정보 (시험일지 오버라이드)
-    standardName: stdInfo.standardName || '',
-    standardConcentration: stdInfo.standardConcentration || '',
-    manufacturer: stdInfo.manufacturer || '',
-    // 표준용액농도 (시험일지 오버라이드)
-    stdBlank: stdConc.stdBlank || '',
-    std1: stdConc.std1 || '',
-    std2: stdConc.std2 || '',
-    std3: stdConc.std3 || '',
-    std4: stdConc.std4 || '',
-    std5: stdConc.std5 || ''
+    // 표준물질정보: 시험일지 수정값 우선, 없으면 기록서 양식 원본값
+    standardName: stdInfo.standardName || tmplDefaults.standardName || '',
+    standardConcentration: stdInfo.standardConcentration || tmplDefaults.standardConcentration || '',
+    manufacturer: stdInfo.manufacturer || tmplDefaults.manufacturer || '',
+    // 표준용액농도: 시험일지 수정값 우선, 없으면 기록서 양식 원본값
+    stdBlank: stdConc.stdBlank || tmplDefaults.stdBlank || '',
+    std1: stdConc.std1 || tmplDefaults.std1 || '',
+    std2: stdConc.std2 || tmplDefaults.std2 || '',
+    std3: stdConc.std3 || tmplDefaults.std3 || '',
+    std4: stdConc.std4 || tmplDefaults.std4 || '',
+    std5: stdConc.std5 || tmplDefaults.std5 || ''
   };
 
   // 표준용액농도 적용 기간 경과 경고
