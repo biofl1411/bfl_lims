@@ -1718,15 +1718,17 @@ async function loadFormTemplates() {
         });
       }
       if (!foodType) foodType = (data.sampleType || '').trim();
+      // 오버라이드 값 + 적용 기간
+      var overrides = data._overrides || {};
       // 대표항목
       var itemName = (data.representativeItem || '').trim();
       if (itemName) {
-        _formTemplatesList.push({ foodType: foodType, itemName: itemName, analyzed: data.analyzed });
+        _formTemplatesList.push({ foodType: foodType, itemName: itemName, analyzed: data.analyzed, overrides: overrides });
       }
       // 공통항목
       (data.sharedItems || []).forEach(function(si) {
         var sk = (si.name || '').trim();
-        if (sk) _formTemplatesList.push({ foodType: foodType, itemName: sk, analyzed: data.analyzed });
+        if (sk) _formTemplatesList.push({ foodType: foodType, itemName: sk, analyzed: data.analyzed, overrides: overrides });
       });
     });
     _formTemplatesLoaded = true;
@@ -1741,13 +1743,23 @@ function findFormTemplate(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return null;
   var name = itemName.trim();
   var ft = (sampleFoodType || '').trim();
-  // 식품유형 + 항목명 정확히 일치
   for (var i = 0; i < _formTemplatesList.length; i++) {
     var t = _formTemplatesList[i];
     if (t.itemName === name && t.foodType === ft) return t.analyzed;
   }
-  // 일치하는 식품유형 없으면 null (다른 식품유형의 기록서를 보여주지 않음)
   return null;
+}
+
+// 항목명 + 식품유형으로 오버라이드(시험일지 수정값) 찾기
+function findFormTemplateOverrides(itemName, sampleFoodType) {
+  if (!itemName || !_formTemplatesLoaded) return {};
+  var name = itemName.trim();
+  var ft = (sampleFoodType || '').trim();
+  for (var i = 0; i < _formTemplatesList.length; i++) {
+    var t = _formTemplatesList[i];
+    if (t.itemName === name && t.foodType === ft) return t.overrides || {};
+  }
+  return {};
 }
 
 function toggleItemDetail(idx, btn) {
@@ -1762,13 +1774,20 @@ function toggleItemDetail(idx, btn) {
   });
 }
 
-// 접수 데이터 → 기록서 필드 자동 매칭
+// 접수 데이터 + 시험일지 오버라이드 → 기록서 필드 자동 매칭
 function getReceiptAutoValues(item) {
   var samples = currentReceipt ? (currentReceipt.samples || [currentReceipt]) : [];
   var sample = samples[currentSampleIdx] || {};
   var r = currentReceipt || {};
   var today = new Date().toISOString().slice(0, 10);
-  return {
+  var sampleFoodType = sample.foodType || '';
+
+  // 시험일지 오버라이드 값 (표준물질정보, 표준용액농도, 적용 기간)
+  var ov = findFormTemplateOverrides(item.testItemName, sampleFoodType);
+  var stdInfo = ov.stdInfo || {};
+  var stdConc = ov.stdConc || {};
+
+  var vals = {
     testItem: item.testItemName || '',
     sampleName: sample.productName || '',
     testPurpose: r.testPurpose || '',
@@ -1778,10 +1797,34 @@ function getReceiptAutoValues(item) {
     testBasisField: '',
     manufacturingDate: sample.manufactureDate || '',
     expiryDate: sample.expiryDate || '',
-    sampleType: sample.foodType || '',
+    sampleType: sampleFoodType,
     testStartDate: today,
-    inspector: ''
+    inspector: '',
+    // 표준물질정보 (시험일지 오버라이드)
+    standardName: stdInfo.standardName || '',
+    standardConcentration: stdInfo.standardConcentration || '',
+    manufacturer: stdInfo.manufacturer || '',
+    // 표준용액농도 (시험일지 오버라이드)
+    stdBlank: stdConc.stdBlank || '',
+    std1: stdConc.std1 || '',
+    std2: stdConc.std2 || '',
+    std3: stdConc.std3 || '',
+    std4: stdConc.std4 || '',
+    std5: stdConc.std5 || ''
   };
+
+  // 표준용액농도 적용 기간 경과 경고
+  vals._stdConcExpired = false;
+  vals._stdConcExpiredMsg = '';
+  if (ov.applyTo) {
+    var applyTo = new Date(ov.applyTo);
+    if (today > ov.applyTo) {
+      vals._stdConcExpired = true;
+      vals._stdConcExpiredMsg = '표준용액 적용 기간 만료 (' + ov.applyFrom + ' ~ ' + ov.applyTo + ')';
+    }
+  }
+
+  return vals;
 }
 
 // formTemplates analyzed 데이터 기반 동적 폼 렌더링
@@ -1802,6 +1845,11 @@ function renderCalcForm(idx, item, tmpl, saved) {
     h += '<span class="idf-badge">' + tmpl.sop + '</span>';
   }
   h += '</div>';
+
+  // 적용 기간 만료 경고
+  if (autoVals._stdConcExpired) {
+    h += '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;margin:6px 0;font-size:12px;color:#dc2626;font-weight:600">⚠️ ' + autoVals._stdConcExpiredMsg + ' — 시험일지에서 갱신해 주세요</div>';
+  }
 
   // 섹션별 입력 필드
   sections.forEach(function(sec) {
