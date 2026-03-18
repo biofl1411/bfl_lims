@@ -1722,15 +1722,14 @@ async function loadFormTemplates() {
       var overrides = data._overrides || {};
       // 대표항목
       var itemName = (data.representativeItem || '').trim();
-      var decimalPlaces = overrides._decimalPlaces || 2;
-      var roundingMode = overrides._roundingMode || 'round';
+      var roundingRules = overrides._roundingRules || [{ decimal: overrides._decimalPlaces || 2, mode: overrides._roundingMode || 'round' }];
       if (itemName) {
-        _formTemplatesList.push({ foodType: foodType, itemName: itemName, analyzed: data.analyzed, overrides: overrides, decimalPlaces: decimalPlaces, roundingMode: roundingMode });
+        _formTemplatesList.push({ foodType: foodType, itemName: itemName, analyzed: data.analyzed, overrides: overrides, roundingRules: roundingRules });
       }
       // 공통항목
       (data.sharedItems || []).forEach(function(si) {
         var sk = (si.name || '').trim();
-        if (sk) _formTemplatesList.push({ foodType: foodType, itemName: sk, analyzed: data.analyzed, overrides: overrides, decimalPlaces: decimalPlaces, roundingMode: roundingMode });
+        if (sk) _formTemplatesList.push({ foodType: foodType, itemName: sk, analyzed: data.analyzed, overrides: overrides, roundingRules: roundingRules });
       });
     });
     _formTemplatesLoaded = true;
@@ -1749,8 +1748,7 @@ function findFormTemplate(itemName, sampleFoodType) {
     var t = _formTemplatesList[i];
     if (t.itemName === name && t.foodType === ft) {
       var res = Object.assign({}, t.analyzed);
-      res._decimalPlaces = t.decimalPlaces || 2;
-      res._roundingMode = t.roundingMode || 'round';
+      res._roundingRules = t.roundingRules || [{ decimal: 2, mode: 'round' }];
       return res;
     }
   }
@@ -2112,8 +2110,7 @@ function calcItemResult(idx) {
   var sections = tmpl.sections || [];
   var calculations = tmpl.calculations || [];
   var judgment = tmpl.judgmentRule || {};
-  var _dp = tmpl._decimalPlaces || 2;
-  var _rm = tmpl._roundingMode || 'round';
+  var _roundingRules = tmpl._roundingRules || [{ decimal: 2, mode: 'round' }];
 
   // 1) 모든 필드 값 수집
   var key = currentSampleIdx + '_' + idx;
@@ -2143,7 +2140,13 @@ function calcItemResult(idx) {
       });
       var result = Function('"use strict"; return (' + expr + ')')();
       result = Math.max(0, result);
-      var resultStr = applyRounding(result, _dp, _rm);
+      // 다중 규칙: 순서대로 적용
+      for (var ri = 0; ri < _roundingRules.length; ri++) {
+        var rule = _roundingRules[ri];
+        result = parseFloat(applyRounding(result, rule.decimal, rule.mode));
+      }
+      var lastRule = _roundingRules[_roundingRules.length - 1] || { decimal: 2, mode: 'round' };
+      var resultStr = applyRounding(result, lastRule.decimal, lastRule.mode);
       calcResults[c.id] = result;
 
       var el = document.getElementById('idf-calc-' + ci + '-' + idx);
@@ -2166,7 +2169,7 @@ function calcItemResult(idx) {
           expr = expr.replace(new RegExp(k, 'g'), vals[k]);
         }
       });
-      var rval = calcResults[c.id] != null ? applyRounding(calcResults[c.id], _dp, _rm) : '-';
+      var rval = calcResults[c.id] != null ? applyRounding(calcResults[c.id], lastRule.decimal, lastRule.mode) : '-';
       return (c.label || c.id) + ': ' + expr + ' = ' + rval + ' ' + (c.unit || '');
     }).join('\n');
     formulaEl.textContent = preview;
@@ -2198,7 +2201,8 @@ function calcItemResult(idx) {
 
   // 5) 메인 테이블 측정값에 반영
   if (finalResult != null) {
-    var resultStr2 = applyRounding(finalResult, _dp, _rm);
+    var lastRule2 = _roundingRules[_roundingRules.length - 1] || { decimal: 2, mode: 'round' };
+    var resultStr2 = applyRounding(finalResult, lastRule2.decimal, lastRule2.mode);
     var mainInput = document.querySelector('.result-input[data-idx="' + idx + '"]');
     if (mainInput) {
       mainInput.value = resultStr2;

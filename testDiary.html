@@ -813,23 +813,11 @@ function renderFormTemplateDetail(ft) {
       html += '<div style="font-family:monospace;font-size:11px;color:#4c1d95;background:white;padding:6px 10px;border-radius:6px;border:1px solid #e9d5ff;word-break:break-all">' + escH(calc.formulaText || calc.formula || '') + '</div>';
       html += '</div>';
     });
-    // 소수점 자릿수 선택
-    var curDecimal = overrides._decimalPlaces || (a.calculations[0] && a.calculations[0].decimalPlaces) || 2;
-    var curRounding = overrides._roundingMode || 'round';
-    html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #e9d5ff">';
-    html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
-    html += '<span style="font-size:11px;font-weight:600;color:#6b21a8">소수점</span>';
-    [1,2,3,4].forEach(function(n) {
-      var sel = (curDecimal == n);
-      html += '<button class="btn btn-sm' + (sel ? ' btn-primary' : ' btn-outline') + '" onclick="setDecimalPlaces(' + n + ')" style="min-width:50px;font-size:11px">' + n + '자리</button>';
-    });
-    html += '<span style="margin-left:8px;font-size:11px;font-weight:600;color:#6b21a8">처리</span>';
-    var modes = [{k:'floor',l:'버림'},{k:'round',l:'반올림'},{k:'ceil',l:'내림'}];
-    modes.forEach(function(m) {
-      var sel = (curRounding === m.k);
-      html += '<button class="btn btn-sm' + (sel ? ' btn-primary' : ' btn-outline') + '" onclick="setRoundingMode(\'' + m.k + '\')" style="min-width:50px;font-size:11px">' + m.l + '</button>';
-    });
-    html += '</div></div>';
+    // 소수점/처리방식 다중 규칙
+    var rules = overrides._roundingRules || [{ decimal: 2, mode: 'round' }];
+    html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #e9d5ff" id="rounding-rules-area">';
+    html += renderRoundingRules(rules);
+    html += '</div>';
     html += '</div>';
   }
 
@@ -866,22 +854,81 @@ function renderFormTemplateDetail(ft) {
   panel.innerHTML = html;
 }
 
-/* 소수점 자릿수 설정 */
-function setDecimalPlaces(n) {
-  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
-  if (!ft || !ft._isFormTemplate) return;
-  if (!ft._overrides) ft._overrides = {};
-  ft._overrides._decimalPlaces = n;
-  renderFormTemplateDetail(ft);
+/* 소수점/처리방식 다중 규칙 렌더링 */
+function renderRoundingRules(rules) {
+  var html = '';
+  rules.forEach(function(rule, idx) {
+    var ruleNum = idx + 1;
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:8px;background:' + (idx % 2 === 0 ? '#faf5ff' : '#f5f3ff') + ';border-radius:6px">';
+    html += '<span style="font-size:11px;font-weight:700;color:#6b21a8;min-width:45px">' + ruleNum + '규칙</span>';
+    html += '<span style="font-size:10px;color:#7c3aed">소수점</span>';
+    [1,2,3,4].forEach(function(n) {
+      var sel = (rule.decimal == n);
+      html += '<button class="btn btn-sm' + (sel ? ' btn-primary' : ' btn-outline') + '" onclick="setRuleDecimal(' + idx + ',' + n + ')" style="min-width:40px;font-size:10px;padding:2px 6px">' + n + '자리</button>';
+    });
+    html += '<span style="font-size:10px;color:#7c3aed;margin-left:4px">처리</span>';
+    var modes = [{k:'floor',l:'버림'},{k:'round',l:'반올림'},{k:'ceil',l:'내림'}];
+    modes.forEach(function(m) {
+      var sel = (rule.mode === m.k);
+      html += '<button class="btn btn-sm' + (sel ? ' btn-primary' : ' btn-outline') + '" onclick="setRuleMode(' + idx + ',\'' + m.k + '\')" style="min-width:44px;font-size:10px;padding:2px 6px">' + m.l + '</button>';
+    });
+    if (rules.length > 1) {
+      html += '<button class="btn btn-sm btn-outline" onclick="removeRoundingRule(' + idx + ')" style="font-size:10px;padding:2px 6px;color:#ef4444;border-color:#fca5a5" title="삭제">✕</button>';
+    }
+    html += '</div>';
+  });
+  html += '<button class="btn btn-sm btn-outline" onclick="addRoundingRule()" style="font-size:10px;margin-top:4px">+ 규칙 추가</button>';
+  return html;
 }
 
-/* 반올림 처리방식 설정 */
-function setRoundingMode(mode) {
+function getRoundingRules() {
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._overrides) return [{ decimal: 2, mode: 'round' }];
+  return ft._overrides._roundingRules || [{ decimal: 2, mode: 'round' }];
+}
+
+function setRuleDecimal(idx, n) {
   var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
   if (!ft || !ft._isFormTemplate) return;
   if (!ft._overrides) ft._overrides = {};
-  ft._overrides._roundingMode = mode;
-  renderFormTemplateDetail(ft);
+  var rules = ft._overrides._roundingRules || [{ decimal: 2, mode: 'round' }];
+  if (rules[idx]) rules[idx].decimal = n;
+  ft._overrides._roundingRules = rules;
+  var area = document.getElementById('rounding-rules-area');
+  if (area) area.innerHTML = renderRoundingRules(rules);
+}
+
+function setRuleMode(idx, mode) {
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  if (!ft._overrides) ft._overrides = {};
+  var rules = ft._overrides._roundingRules || [{ decimal: 2, mode: 'round' }];
+  if (rules[idx]) rules[idx].mode = mode;
+  ft._overrides._roundingRules = rules;
+  var area = document.getElementById('rounding-rules-area');
+  if (area) area.innerHTML = renderRoundingRules(rules);
+}
+
+function addRoundingRule() {
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  if (!ft._overrides) ft._overrides = {};
+  var rules = ft._overrides._roundingRules || [{ decimal: 2, mode: 'round' }];
+  rules.push({ decimal: 2, mode: 'round' });
+  ft._overrides._roundingRules = rules;
+  var area = document.getElementById('rounding-rules-area');
+  if (area) area.innerHTML = renderRoundingRules(rules);
+}
+
+function removeRoundingRule(idx) {
+  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var rules = ft._overrides._roundingRules || [];
+  if (rules.length <= 1) return;
+  rules.splice(idx, 1);
+  ft._overrides._roundingRules = rules;
+  var area = document.getElementById('rounding-rules-area');
+  if (area) area.innerHTML = renderRoundingRules(rules);
 }
 
 /* formTemplates 오버라이드 값 저장 */
@@ -898,8 +945,7 @@ async function saveFormTemplateOverrides() {
     applyTo: (document.getElementById('ft-apply-to') || {}).value || '',
     stdInfo: {},
     stdConc: {},
-    _decimalPlaces: curOverrides._decimalPlaces || 2,
-    _roundingMode: curOverrides._roundingMode || 'round',
+    _roundingRules: curOverrides._roundingRules || [{ decimal: 2, mode: 'round' }],
     updatedAt: new Date().toISOString()
   };
 
