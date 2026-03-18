@@ -995,7 +995,8 @@ function loadAndRenderItems() {
       savedMarkValue = (typeof MFDS_RULES !== 'undefined') ? MFDS_RULES.generateMarkValue(mv, item) : mv;
     }
 
-    var tmpl = findFormTemplate(item.testItemName);
+    var sampleFoodType = sample.foodType || '';
+    var tmpl = findFormTemplate(item.testItemName, sampleFoodType);
     var toggleBtn = tmpl ? '<button class="idf-toggle active" onclick="toggleItemDetail(' + idx + ',this)" title="측정값 입력폼">▼ 접기</button>' : '';
     var inputReadonly = tmpl ? ' readonly style="background:#f0fdf4;cursor:pointer" onclick="toggleItemDetail(' + idx + ')"' : '';
     var inputPlaceholder = tmpl ? '상세 입력 클릭' : '입력';
@@ -1693,8 +1694,8 @@ function closeDiaryPreview() {
 /* ============================================================
    formTemplates 기반 동적 계산폼
    ============================================================ */
-// formTemplates 캐시: { itemCode_or_name: analyzed }
-var _formTemplatesCache = {};
+// formTemplates 캐시: [ { foodType, itemName, analyzed } ]
+var _formTemplatesList = [];
 var _formTemplatesLoaded = false;
 // 항목별 원시 입력 데이터 캐시
 var _rawInputs = {};  // { sampleIdx_itemIdx: { fieldId: value, ... } }
@@ -1703,15 +1704,28 @@ var _rawInputs = {};  // { sampleIdx_itemIdx: { fieldId: value, ... } }
 async function loadFormTemplates() {
   try {
     var snap = await db.collection('formTemplates').where('appliedToLims', '==', true).get();
+    _formTemplatesList = [];
     snap.docs.forEach(function(d) {
       var data = d.data();
       if (!data.analyzed) return;
-      // 대표항목 + 공통항목 모두 캐시
-      var key = (data.representativeItem || '').trim();
-      if (key) _formTemplatesCache[key] = data.analyzed;
+      // 식품유형 추출
+      var foodType = (data.sampleType || '').trim();
+      if (!foodType && data.analyzed && data.analyzed.sections) {
+        data.analyzed.sections.forEach(function(sec) {
+          (sec.fields || []).forEach(function(f) {
+            if (f.id === 'sampleType' && f.exampleValue) foodType = f.exampleValue.trim();
+          });
+        });
+      }
+      // 대표항목
+      var itemName = (data.representativeItem || '').trim();
+      if (itemName) {
+        _formTemplatesList.push({ foodType: foodType, itemName: itemName, analyzed: data.analyzed });
+      }
+      // 공통항목
       (data.sharedItems || []).forEach(function(si) {
         var sk = (si.name || '').trim();
-        if (sk && !_formTemplatesCache[sk]) _formTemplatesCache[sk] = data.analyzed;
+        if (sk) _formTemplatesList.push({ foodType: foodType, itemName: sk, analyzed: data.analyzed });
       });
     });
     _formTemplatesLoaded = true;
@@ -1721,10 +1735,18 @@ async function loadFormTemplates() {
   }
 }
 
-// 항목명으로 양식 찾기
-function findFormTemplate(itemName) {
+// 항목명 + 식품유형으로 양식 찾기 (식품유형 일치 우선, 없으면 null)
+function findFormTemplate(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return null;
-  return _formTemplatesCache[itemName.trim()] || null;
+  var name = itemName.trim();
+  var ft = (sampleFoodType || '').trim();
+  // 식품유형 + 항목명 정확히 일치
+  for (var i = 0; i < _formTemplatesList.length; i++) {
+    var t = _formTemplatesList[i];
+    if (t.itemName === name && t.foodType === ft) return t.analyzed;
+  }
+  // 일치하는 식품유형 없으면 null (다른 식품유형의 기록서를 보여주지 않음)
+  return null;
 }
 
 function toggleItemDetail(idx, btn) {
@@ -1808,7 +1830,9 @@ function renderCalcForm(idx, item, tmpl, saved) {
 function calcItemResult(idx) {
   var item = currentTestItems[idx];
   if (!item) return;
-  var tmpl = findFormTemplate(item.testItemName);
+  var samples = currentReceipt ? (currentReceipt.samples || [currentReceipt]) : [];
+  var sampleFoodType = (samples[currentSampleIdx] || {}).foodType || '';
+  var tmpl = findFormTemplate(item.testItemName, sampleFoodType);
   if (!tmpl) return;
   markModified();
 
