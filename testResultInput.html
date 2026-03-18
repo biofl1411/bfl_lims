@@ -1918,14 +1918,23 @@ function renderCalcForm(idx, item, tmpl, saved) {
     h += '</div>';
   }
 
-  // 결과 영역
+  // 결과 영역: 전체 자릿수 + 규칙 적용
   h += '<div class="idf-result">';
   calculations.forEach(function(c, ci) {
     h += '<span class="idf-result-label">' + (c.label || '결과') + ' (' + (c.unit || '') + '):</span>';
-    h += '<span class="idf-result-value" id="idf-calc-' + ci + '-' + idx + '">-</span>';
+    h += '<span class="idf-result-value" id="idf-calc-raw-' + ci + '-' + idx + '" style="color:#6b7280;font-size:12px">-</span>';
   });
   h += '<span class="idf-result-label" style="margin-left:auto">판정:</span>';
   h += '<span class="idf-result-judge" id="idf-judge-' + idx + '" style="color:#999">-</span>';
+  h += '</div>';
+  // 규칙 적용 결과
+  h += '<div class="idf-result" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:6px 12px;margin-top:4px">';
+  calculations.forEach(function(c, ci) {
+    h += '<span class="idf-result-label" style="color:#059669;font-weight:700">규칙적용 ' + (c.label || '결과') + ' (' + (c.unit || '') + '):</span>';
+    h += '<span class="idf-result-value" id="idf-calc-' + ci + '-' + idx + '" style="color:#059669;font-weight:700;font-size:16px">-</span>';
+  });
+  h += '<span class="idf-result-label" style="margin-left:auto;color:#059669;font-weight:700">판정:</span>';
+  h += '<span class="idf-result-judge" id="idf-judge-rule-' + idx + '" style="color:#999;font-weight:700">-</span>';
   h += '</div>';
 
   h += '</div>';
@@ -2140,6 +2149,10 @@ function calcItemResult(idx) {
       });
       var result = Function('"use strict"; return (' + expr + ')')();
       result = Math.max(0, result);
+      var rawResult = result;
+      // 전체 자릿수 결과 표시
+      var rawEl = document.getElementById('idf-calc-raw-' + ci + '-' + idx);
+      if (rawEl) rawEl.textContent = result;
       // 다중 규칙: 순서대로 적용
       for (var ri = 0; ri < _roundingRules.length; ri++) {
         var rule = _roundingRules[ri];
@@ -2193,6 +2206,12 @@ function calcItemResult(idx) {
       var pass = finalResult <= maxVal;
       judgeEl.textContent = pass ? '적합' : '부적합';
       judgeEl.style.color = pass ? '#10b981' : '#ef4444';
+      // 규칙 적용 판정도 표시
+      var judgeRuleEl = document.getElementById('idf-judge-rule-' + idx);
+      if (judgeRuleEl) {
+        judgeRuleEl.textContent = pass ? '적합' : '부적합';
+        judgeRuleEl.style.color = pass ? '#059669' : '#ef4444';
+      }
     } else {
       judgeEl.textContent = '-';
       judgeEl.style.color = '#999';
