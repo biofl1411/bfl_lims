@@ -390,37 +390,39 @@ async function loadFormTemplates() {
       d._isFormTemplate = true;
       _allFormTemplates.push(d);
     });
-    // 식품유형 카운트: sharedItems에 동일 코드를 가진 다른 formTemplate 수 + mfdsTemplates에서 해당 항목 보유 식품유형 수
+    // 식품유형 카운트
     _allFormTemplates.forEach(function(ft) {
-      ft._foodTypeCount = countAppliedFoodTypes(ft);
+      var counts = countAppliedFoodTypes(ft);
+      ft._appliedCount = counts.applied;
+      ft._totalCount = counts.total;
     });
   } catch(e) {
     console.error('formTemplates 로드 실패:', e);
   }
 }
 
-/* 적용 식품유형 카운트: _appliedFoodTypes 우선, 없으면 mfdsTemplates에서 동적 검색 */
+/* 적용 식품유형 카운트: 실제 생성된 기록서 문서 수 (동일 항목코드) */
 function countAppliedFoodTypes(ft) {
-  // 사용자가 선택 저장한 목록이 있으면 그 수 사용
-  if (ft._appliedFoodTypes && ft._appliedFoodTypes.length) {
-    return ft._appliedFoodTypes.length;
-  }
-  // 없으면 mfdsTemplates에서 해당 시험항목코드 보유 식품유형 수 동적 계산 (중복명 제거)
   var code = ft.representativeItemCode || '';
-  if (!code) return 0;
+  if (!code) return { applied: 0, total: 0 };
+  // 실제 적용된 수: _allFormTemplates에서 동일 항목코드 문서 수
+  var applied = _allFormTemplates.filter(function(f) {
+    return f.representativeItemCode === code;
+  }).length;
+  // 적용 가능한 전체 수: mfdsTemplates에서 해당 항목 보유 식품유형 수 (중복명 제거)
+  var total = 0;
   var seen = {};
-  var count = 0;
   if (window._mfdsTemplatesCache) {
     window._mfdsTemplatesCache.forEach(function(tmpl) {
       var name = tmpl.foodTypeName || tmpl.templateName || '';
       if (seen[name]) return;
       if (tmpl.testItems && tmpl.testItems.some(function(ti) { return ti.testItemCode === code; })) {
         seen[name] = true;
-        count++;
+        total++;
       }
     });
   }
-  return count;
+  return { applied: applied, total: total };
 }
 
 /* 필터링 */
@@ -512,7 +514,8 @@ function renderFormTemplateRow(ft, idx, cls, catColors) {
 
   // 식품유형 (analyzed.sections에서 시료유형 exampleValue)
   var foodType = getFoodTypeFromForm(ft);
-  var foodTypeCount = ft._foodTypeCount || 0;
+  var appliedCount = ft._appliedCount || 0;
+  var totalCount = ft._totalCount || 0;
 
   // 표준물질정보
   var stdInfo = getStdInfoSummary(a);
@@ -555,8 +558,8 @@ function renderFormTemplateRow(ft, idx, cls, catColors) {
   if (foodType) {
     html += '<div style="font-size:11px;color:#0369a1;margin-bottom:4px">';
     html += '🍽 ' + escH(foodType);
-    if (foodTypeCount > 0) {
-      html += ' <span style="font-size:10px;color:#0ea5e9;background:#e0f2fe;padding:0 5px;border-radius:8px;font-weight:600">1/' + foodTypeCount + '</span>';
+    if (totalCount > 0) {
+      html += ' <span style="font-size:10px;color:#0ea5e9;background:#e0f2fe;padding:0 5px;border-radius:8px;font-weight:600">' + appliedCount + '/' + totalCount + '</span>';
     }
     html += '</div>';
   }
@@ -687,7 +690,8 @@ function renderFormTemplateDetail(ft) {
   var panel = document.getElementById('diary-panel');
   var a = ft.analyzed || {};
   var foodType = getFoodTypeFromForm(ft);
-  var foodTypeCount = ft._foodTypeCount || 0;
+  var appliedCount = ft._appliedCount || 0;
+  var totalCount = ft._totalCount || 0;
   // Firestore에 저장된 오버라이드 값 로드
   var overrides = ft._overrides || {};
 
@@ -710,8 +714,8 @@ function renderFormTemplateDetail(ft) {
   html += '<div class="form-group"><label>식품유형</label>';
   html += '<div style="display:flex;align-items:center;gap:8px">';
   html += '<input type="text" value="' + escA(foodType) + '" readonly style="flex:1">';
-  if (foodTypeCount > 0) {
-    html += '<span style="background:#e0f2fe;color:#0369a1;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer" onclick="showAppliedFoodTypes(\'' + escA(ft.representativeItemCode) + '\',\'' + escA(foodType) + '\')" title="적용 식품유형 목록 보기">1/' + foodTypeCount + '</span>';
+  if (totalCount > 0) {
+    html += '<span style="background:#e0f2fe;color:#0369a1;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer" onclick="showAppliedFoodTypes(\'' + escA(ft.representativeItemCode) + '\',\'' + escA(foodType) + '\')" title="적용 식품유형 목록 보기">' + appliedCount + '/' + totalCount + '</span>';
   }
   html += '</div></div>';
 
@@ -939,9 +943,14 @@ function showAppliedFoodTypes(itemCode, currentFoodType) {
   _ftModalItemCode = itemCode;
   _ftModalCurrentFoodType = currentFoodType;
 
-  // 현재 formTemplate의 적용된 식품유형 목록 (Firestore 저장값)
-  var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
-  var appliedList = (ft && ft._appliedFoodTypes) || [];
+  // 이미 적용된 식품유형 목록: 동일 항목코드로 생성된 기록서 양식 문서의 sampleType
+  var appliedNames = {};
+  _allFormTemplates.forEach(function(f) {
+    if (f.representativeItemCode === itemCode) {
+      var ft = getFoodTypeFromForm(f);
+      if (ft) appliedNames[ft] = true;
+    }
+  });
 
   var list = [];
   var seen = {};
@@ -952,7 +961,7 @@ function showAppliedFoodTypes(itemCode, currentFoodType) {
       seen[name] = true;
       var code = tmpl.foodTypeCode || '';
       var isCurrent = (name === currentFoodType);
-      var isApplied = isCurrent || appliedList.indexOf(name) >= 0;
+      var isApplied = !!appliedNames[name];
       list.push({ name: name, code: code, isCurrent: isCurrent, isApplied: isApplied });
     }
   });
@@ -965,29 +974,27 @@ function showAppliedFoodTypes(itemCode, currentFoodType) {
   var body = document.getElementById('spec-modal-body');
   var html = '';
 
-  // 상단 버튼
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">';
   html += '<button class="btn btn-sm btn-outline" onclick="ftFoodTypeSelectAll(true)">전체 선택</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="ftFoodTypeSelectAll(false)">전체 해제</button>';
   html += '<span style="margin-left:auto;font-size:12px;color:#64748b" id="ft-food-sel-count"></span>';
   html += '</div>';
 
-  // 목록 (체크박스)
   html += '<div style="max-height:380px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px" id="ft-food-list">';
   list.forEach(function(item, idx) {
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:13px' + (item.isCurrent ? ';background:#dbeafe' : '') + '">';
-    html += '<input type="checkbox" data-ft-food-name="' + escA(item.name) + '"' + (item.isApplied ? ' checked' : '') + (item.isCurrent ? ' disabled' : '') + ' onchange="ftFoodTypeUpdateCount()" style="width:16px;height:16px;accent-color:#2563eb">';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:13px' + (item.isCurrent ? ';background:#dbeafe' : item.isApplied ? ';background:#f0fdf4' : '') + '">';
+    html += '<input type="checkbox" data-ft-food-name="' + escA(item.name) + '" data-ft-food-code="' + escA(item.code) + '"' + (item.isApplied ? ' checked' : '') + (item.isCurrent ? ' disabled' : '') + ' onchange="ftFoodTypeUpdateCount()" style="width:16px;height:16px;accent-color:#2563eb">';
     html += '<span style="color:#9ca3af;font-size:11px;width:24px">' + (idx + 1) + '</span>';
     html += '<span style="flex:1">' + escH(item.name) + '</span>';
     if (item.isCurrent) html += '<span style="font-size:10px;color:#2563eb;background:#bfdbfe;padding:1px 6px;border-radius:8px">현재</span>';
+    else if (item.isApplied) html += '<span style="font-size:10px;color:#059669;background:#d1fae5;padding:1px 6px;border-radius:8px">적용됨</span>';
     html += '</label>';
   });
   html += '</div>';
 
-  // 하단 적용 버튼
   html += '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">';
   html += '<button class="btn btn-outline" onclick="closeSpecModal()">취소</button>';
-  html += '<button class="btn btn-primary" onclick="saveFtAppliedFoodTypes()">선택 적용</button>';
+  html += '<button class="btn btn-primary" id="btn-ft-apply" onclick="saveFtAppliedFoodTypes()">선택 적용</button>';
   html += '</div>';
 
   body.innerHTML = html;
@@ -1009,30 +1016,86 @@ function ftFoodTypeUpdateCount() {
   if (el) el.textContent = sel + '/' + total + '개 선택';
 }
 
+/* 식품유형 적용: 기록서 양식 수집기와 동일 방식 — 식품유형별 개별 문서 복사 생성 */
 async function saveFtAppliedFoodTypes() {
   var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
   if (!ft || !ft._isFormTemplate) return;
 
-  var selected = [];
+  var itemCode = ft.representativeItemCode || '';
+
+  // 선택된 식품유형 수집
+  var selectedNames = [];
   document.querySelectorAll('#ft-food-list input[type="checkbox"]:checked').forEach(function(cb) {
     var name = cb.getAttribute('data-ft-food-name');
-    if (name) selected.push(name);
+    if (name) selectedNames.push({ name: name, code: cb.getAttribute('data-ft-food-code') || '' });
   });
 
+  // 이미 적용된 식품유형 (기존 문서)
+  var existingByName = {};
+  _allFormTemplates.forEach(function(f) {
+    if (f.representativeItemCode === itemCode) {
+      var fName = getFoodTypeFromForm(f);
+      if (fName) existingByName[fName] = f._id;
+    }
+  });
+
+  var btn = document.getElementById('btn-ft-apply');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 적용 중...'; }
+
   try {
-    await db.collection('formTemplates').doc(ft._id).update({
-      _appliedFoodTypes: selected
-    });
-    ft._appliedFoodTypes = selected;
-    ft._foodTypeCount = selected.length;
-    showToast(selected.length + '개 식품유형 적용 완료', 'success');
+    var created = 0, removed = 0;
+
+    // 새로 추가할 식품유형: 선택됨 + 기존 문서 없음
+    for (var i = 0; i < selectedNames.length; i++) {
+      var sn = selectedNames[i];
+      if (!existingByName[sn.name]) {
+        // 원본 문서 복사하여 새 문서 생성 (기록서 양식 수집기와 동일)
+        var newRow = JSON.parse(JSON.stringify(ft));
+        delete newRow._id; delete newRow._isFormTemplate; delete newRow._appliedCount; delete newRow._totalCount;
+        newRow.sampleType = sn.name;
+        newRow.docId = (ft.savedFileName || ft._id).replace(/[^a-zA-Z0-9가-힣_·]/g, '_') + '_' + sn.code + '_' + Date.now();
+        newRow.createdAtStr = new Date().toLocaleString('ko-KR');
+        newRow.appliedFrom = ft._id;
+        // analyzed 내 sampleType exampleValue도 변경
+        if (newRow.analyzed && newRow.analyzed.sections) {
+          newRow.analyzed.sections.forEach(function(sec) {
+            (sec.fields || []).forEach(function(f) {
+              if (f.id === 'sampleType') f.exampleValue = sn.name;
+            });
+          });
+        }
+        await db.collection('formTemplates').doc(newRow.docId).set(newRow);
+        created++;
+      }
+    }
+
+    // 해제된 식품유형: 기존 문서 있음 + 선택 해제됨 + 현재 문서 아님
+    var selectedSet = {};
+    selectedNames.forEach(function(sn) { selectedSet[sn.name] = true; });
+    var currentFoodType = getFoodTypeFromForm(ft);
+    for (var name in existingByName) {
+      if (!selectedSet[name] && name !== currentFoodType) {
+        await db.collection('formTemplates').doc(existingByName[name]).delete();
+        removed++;
+      }
+    }
+
+    // 목록 새로고침
+    await loadFormTemplates();
+    filterDiaryItems();
+
+    showToast((created ? created + '개 추가' : '') + (created && removed ? ', ' : '') + (removed ? removed + '개 해제' : '') + (!created && !removed ? '변경 없음' : ''), 'success');
     closeSpecModal();
-    // 목록 + 상세 갱신
-    renderDiaryItemList();
-    renderFormTemplateDetail(ft);
+
+    // 상세 패널 갱신
+    var updatedFt = _allFormTemplates.find(function(f) { return f._id === ft._id; });
+    if (updatedFt) renderFormTemplateDetail(updatedFt);
+
   } catch(e) {
-    showToast('저장 실패: ' + e.message, 'error');
+    showToast('적용 실패: ' + e.message, 'error');
   }
+
+  if (btn) { btn.disabled = false; btn.textContent = '선택 적용'; }
 }
 
 function escA(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
