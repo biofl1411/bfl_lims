@@ -68,6 +68,12 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 .radio-mini label:hover{border-color:#667eea;background:#f0f4ff}
 .radio-mini label:has(input:checked){border-color:#667eea;background:#ede9fe;color:#5b21b6;font-weight:600}
 .radio-mini input{display:none}
+.urgent-btn{padding:5px 10px;border:1.5px solid #d0d5dd;border-radius:6px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:#475569}
+.urgent-btn:hover{border-color:#f59e0b;background:#fffbeb}
+.urgent-btn.active[data-val="일반"]{border-color:#10b981;background:#d1fae5;color:#065f46}
+.urgent-btn.active[data-val="긴급"]{border-color:#ef4444;background:#fee2e2;color:#991b1b}
+.urgent-btn.active[data-val="시간긴급"]{border-color:#f59e0b;background:#fef3c7;color:#92400e}
+.urgent-btn.active[data-val="미생물긴급"]{border-color:#8b5cf6;background:#ede9fe;color:#5b21b6}
 
 /* ─── 버튼 미니 ─── */
 .btn-mini{height:26px;padding:0 10px;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;transition:all .15s}
@@ -386,6 +392,13 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     <input type="date" id="receipt-date" class="cp-inp date" required onchange="calculateProcessingDeadline()">
   </div>
 
+  <!-- 시료수 (접수번호 할당 전에 입력) -->
+  <div class="cp-field">
+    <span class="cp-lbl">시료수</span>
+    <input type="number" id="sample-total-count" class="cp-inp w50" value="1" min="1"
+      onchange="updateSampleCount(this.value)" oninput="updateSampleCount(this.value)">
+  </div>
+
   <!-- 접수번호 할당 버튼 -->
   <button type="button" class="btn-mini primary" onclick="allocateReceiptNo()" style="margin-top:10px">🔢 접수번호 할당</button>
 
@@ -413,22 +426,6 @@ body.sidebar-collapsed .main-container{margin-left:64px}
   <div class="cp-field">
     <span class="cp-lbl">상태</span>
     <input type="text" id="status" class="cp-inp w60 ro" value="대기중" readonly>
-  </div>
-
-  <!-- 긴급여부 -->
-  <div class="cp-field">
-    <span class="cp-lbl">긴급</span>
-    <div class="radio-mini">
-      <label><input type="radio" name="urgent" value="일반" checked>일반</label>
-      <label><input type="radio" name="urgent" value="긴급">⚡긴급</label>
-    </div>
-  </div>
-
-  <!-- 시료수 -->
-  <div class="cp-field">
-    <span class="cp-lbl">시료수</span>
-    <input type="number" id="sample-total-count" class="cp-inp w50" value="1" min="1"
-      onchange="updateSampleCount(this.value)" oninput="updateSampleCount(this.value)">
   </div>
 
   <div style="flex:1"></div>
@@ -670,6 +667,14 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <div class="autocomplete-list" id="food-type-list"></div>
     </div>
 
+    <!-- 담당자 -->
+    <div class="f-grp">
+      <label>담당자</label>
+      <select id="assigned-manager" style="width:100%">
+        <option value="">업체 선택 시 자동 로드</option>
+      </select>
+    </div>
+
     <!-- 날짜 정보 -->
     <div class="f-row c2">
       <div class="f-grp"><label>제조일자</label><input type="date" id="manufacture-date" onchange="calcExpiryDate()"></div>
@@ -738,6 +743,22 @@ body.sidebar-collapsed .main-container{margin-left:64px}
         <select id="notice-required">
           <option value="">선택</option><option value="예">예</option><option value="아니오">아니오</option>
         </select>
+      </div>
+    </div>
+
+    <!-- 긴급여부 -->
+    <div class="f-grp" style="margin-top:4px">
+      <label>긴급여부</label>
+      <div style="display:flex;gap:4px;flex-wrap:wrap" id="urgent-btns">
+        <button type="button" class="urgent-btn active" data-val="일반" onclick="selectUrgent(this)">일반</button>
+        <button type="button" class="urgent-btn" data-val="긴급" onclick="selectUrgent(this)">⚡긴급</button>
+        <button type="button" class="urgent-btn" data-val="시간긴급" onclick="selectUrgent(this)">⏰시간긴급</button>
+        <button type="button" class="urgent-btn" data-val="미생물긴급" onclick="selectUrgent(this)">🧫미생물긴급</button>
+      </div>
+      <input type="hidden" id="urgent-value" value="일반">
+      <div id="urgent-time-area" style="display:none;margin-top:6px">
+        <label style="font-size:11px;color:#64748b">긴급 시간</label>
+        <input type="time" id="urgent-time" style="padding:5px 8px;border:1px solid #fca5a5;border-radius:6px;font-size:12px;background:#fff5f5">
       </div>
     </div>
 
@@ -2101,9 +2122,26 @@ async function loadReceiptForEdit(docId) {
             }
         }
         // 긴급여부
-        if (data.urgent === '긴급' || data.urgent === 'Y') {
-            var urgRadio = document.querySelector('input[name="urgency"][value="긴급"]');
-            if (urgRadio) urgRadio.checked = true;
+        if (data.urgent) {
+            var urgVal = data.urgent;
+            document.getElementById('urgent-value').value = urgVal;
+            document.querySelectorAll('.urgent-btn').forEach(function(b) {
+                b.classList.toggle('active', b.getAttribute('data-val') === urgVal);
+            });
+            if (urgVal === '시간긴급') {
+                document.getElementById('urgent-time-area').style.display = 'block';
+                if (data.urgentTime) document.getElementById('urgent-time').value = data.urgentTime;
+            }
+        }
+        // 담당자
+        if (data.assignedManager) {
+            var amEl = document.getElementById('assigned-manager');
+            if (amEl) {
+                // 옵션이 없으면 추가
+                var hasOpt = Array.from(amEl.options).some(function(o) { return o.value === data.assignedManager; });
+                if (!hasOpt) amEl.innerHTML += '<option value="' + data.assignedManager + '">' + data.assignedManager + '</option>';
+                amEl.value = data.assignedManager;
+            }
         }
         // 처리기한
         var dlEl = document.getElementById('processing-deadline');
@@ -4678,6 +4716,48 @@ var _sampleFieldIds = [
     'remarks'
 ];
 
+function loadManagerDropdown(company) {
+    var sel = document.getElementById('assigned-manager');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">선택</option>';
+    var contacts = company.contacts || [];
+    if (!contacts.length) {
+        // flat 필드에서 단일 담당자 추출
+        var name = company.contactName || company.cName || '';
+        if (name) {
+            var dept = company.contactDept || '';
+            var label = name + (dept ? ' (' + dept + ')' : '');
+            sel.innerHTML += '<option value="' + name + '">' + label + '</option>';
+            sel.value = name;
+        }
+        return;
+    }
+    contacts.forEach(function(ct, i) {
+        var name = ct.name || ct.cName || '';
+        if (!name) return;
+        var dept = ct.dept || ct.cDept || '';
+        var team = ct.team || ct.cTeam || '';
+        var salesRep = ct.salesRep || ct.cRep || '';
+        var parts = [name];
+        if (dept) parts.push(dept);
+        if (team) parts.push(team);
+        if (salesRep) parts.push('영업: ' + salesRep);
+        sel.innerHTML += '<option value="' + name + '">' + parts.join(' / ') + '</option>';
+    });
+    // 첫 번째 담당자 자동 선택
+    if (contacts.length === 1 && contacts[0].name) {
+        sel.value = contacts[0].name || contacts[0].cName || '';
+    }
+}
+
+function selectUrgent(btn) {
+    document.querySelectorAll('.urgent-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var val = btn.getAttribute('data-val');
+    document.getElementById('urgent-value').value = val;
+    document.getElementById('urgent-time-area').style.display = (val === '시간긴급') ? 'block' : 'none';
+}
+
 function updateSampleCount(val) {
     var count = parseInt(val) || 1;
     if (count < 1) count = 1;
@@ -5537,10 +5617,13 @@ function selectCompany(elOrObj) {
     var licAddr2 = lic.licAddr2 || lic.licAddrDetail || '';
     document.getElementById('company-address').value = licAddr + (licAddr2 ? ' ' + licAddr2 : '');
 
-    // 담당자
+    // 영업담당자
     var rep = c.salesRep || '';
     if (!rep && c.contacts && c.contacts[0]) rep = c.contacts[0].salesRep || '';
     document.getElementById('sales-rep').value = rep;
+
+    // 담당자 드롭다운 로드 (contacts 배열에서)
+    loadManagerDropdown(c);
 
     // 계산서 정보 자동 채움 (hidden + 팝업 표시용 동기화)
     var _bn = c.bizNo || c.businessNo || '';
@@ -5807,7 +5890,9 @@ function collectReceiptData() {
         receiptDate: document.getElementById('receipt-date').value,
         testField: document.querySelector('input[name="test-field"]:checked')?.value || '',
         testPurpose: document.getElementById('test-purpose')?.value || '',
-        urgent: document.querySelector('input[name="urgency"]:checked')?.value || '일반',
+        urgent: document.getElementById('urgent-value').value || '일반',
+        urgentTime: (document.getElementById('urgent-value').value === '시간긴급') ? (document.getElementById('urgent-time').value || '') : '',
+        assignedManager: document.getElementById('assigned-manager').value || '',
         status: document.getElementById('status').value,
         sampleTotalCount: parseInt(document.getElementById('sample-total-count').value) || 1,
         // 업체정보
