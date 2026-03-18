@@ -469,6 +469,20 @@ MFDS_CODES.loadTestItems = function() {
 };
 
 /**
+ * 시험항목 사용여부 확인 (전역 함수)
+ * @param {string} code - 시험항목코드
+ * @returns {boolean} 활성(true) / 비활성(false)
+ */
+MFDS_CODES.isActive = function(code) {
+  if (!code || !_mc_testItemCache || !_mc_testItemCache.length) return true;
+  var item = _mc_testItemCache.find(function(t) { return (t['시험항목코드'] || '').toUpperCase() === code.toUpperCase(); });
+  return item ? (item['사용여부'] || 'Y') === 'Y' : true;
+};
+
+// 전역 함수로도 제공 (다른 페이지에서 간편 사용)
+window.isTestItemActiveGlobal = MFDS_CODES.isActive;
+
+/**
  * 시험항목 검색 (코드, 한글명, 영문명, 별칭)
  * @param {string} query - 검색어
  * @param {Array} allItems - 전체 시험항목 배열
