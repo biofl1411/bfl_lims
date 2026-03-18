@@ -4698,10 +4698,14 @@ function getSampleNo(idx) {
     var rno = document.getElementById('receipt-no').value || '';
     var sno = String(idx + 1).padStart(3, '0');
     if (!rno) return '시료 ' + sno;
-    // 접수번호 끝이 -숫자 패턴이면 교체, 아니면 -순번 추가
-    if (/-\d+$/.test(rno)) {
-        return rno.replace(/-\d+$/, '-' + sno);
+
+    var mode = window._currentSampleNoMode || 'suffix';
+
+    if (mode === 'serial' && window._allocatedSampleNos && window._allocatedSampleNos[idx]) {
+        // 연번 할당: 시료마다 독립 접수번호
+        return window._allocatedSampleNos[idx];
     }
+    // 접미사 방식: 접수번호-001, -002
     return rno + '-' + sno;
 }
 
@@ -5247,79 +5251,83 @@ async function allocateReceiptNo() {
         return;
     }
 
-    // Firestore에서 해당 분야+목적의 최신 접수번호 직접 조회
-    let prevReceiptNo = '';
-    try {
-        const snap = await db.collection('receipts')
-            .where('testPurpose', '==', testPurpose)
-            .limit(200)
-            .get();
-        if (!snap.empty) {
-            const matched = snap.docs
-                .map(d => d.data())
-                .filter(r => r.testField === testField && r.receiptNo)
-                .sort((a, b) => (b.receiptNo || '').localeCompare(a.receiptNo || ''));
-            if (matched.length > 0) {
-                prevReceiptNo = matched[0].receiptNo;
-            }
-        }
-    } catch(e) {
-        console.warn('[Firestore] 이전 접수번호 조회 실패:', e.message);
-    }
-    // UI 수동 입력값이 있으면 우선
-    const manualPrev = document.getElementById('prev-receipt-no').value.trim();
-    if (manualPrev) prevReceiptNo = manualPrev;
-
-    let receiptNo = '';
-
     // 선택된 검사목적의 P 객체 찾기 (시험분야 매칭 우선)
     const fieldCode = getFieldCode(testField);
     const purposeObj = firestorePurposes.find(p => p.n === testPurpose && p.fields && p.fields.includes(fieldCode))
         || firestorePurposes.find(p => p.n === testPurpose);
 
-    // 1순위: 세그먼트 기반 생성 (검사목적관리에서 설정한 접수번호 형식)
-    if (purposeObj && purposeObj.segments && purposeObj.segments.length > 0) {
-        receiptNo = buildReceiptNoFromSegments(purposeObj, testField, prevReceiptNo);
-        console.log(`[세그먼트] 접수번호 생성: ${receiptNo} (${testPurpose}, 분야: ${testField}, 이전: ${prevReceiptNo || '없음'})`);
+    if (!purposeObj || !purposeObj.segments || !purposeObj.segments.length) {
+        showToast('검사목적의 접수번호 세그먼트가 설정되지 않았습니다', 'error');
+        return;
     }
 
-    // 2순위: API 호출 (세그먼트 미설정 시)
-    if (!receiptNo && apiOnline) {
-        try {
-            const res = await fetch(`${API_BASE}/api/receipt-no/allocate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ testField, testPurpose, prevReceiptNo })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                receiptNo = data.receiptNo;
-                console.log(`[API] 접수번호 할당: ${receiptNo}`);
-            }
-        } catch (e) {
-            console.warn('[API] 접수번호 할당 실패, 폴백 사용:', e.message);
-        }
-    }
+    // 시료 수 확인 (연번 할당 시 시료 수만큼 카운터 증가)
+    const sampleCount = parseInt(document.getElementById('sample-cnt')?.value) || _sampleData.length || 1;
+    const sampleNoMode = purposeObj.sampleNoMode || 'suffix';
+    // 연번 할당이면 시료 수만큼, 접미사면 1개만 카운터 증가
+    const counterIncrement = (sampleNoMode === 'serial') ? sampleCount : 1;
 
-    // 3순위: 기존 폴백 (세그먼트 없고 API도 실패 시)
-    if (!receiptNo) {
+    let receiptNo = '';
+
+    try {
+        // Firestore 트랜잭션으로 카운터 atomic 증가
+        const counterDocId = (purposeObj.prefix || 'default') + '_' + fieldCode;
+        const counterRef = db.collection('receiptCounters').doc(counterDocId);
+
+        // 세그먼트에서 초기화 주기 결정
+        const resetMode = purposeObj.reset || 'year';
         const today = new Date();
-        const yy = today.getFullYear().toString().slice(2);
-        const mm = (today.getMonth() + 1).toString().padStart(2, '0');
-        const dd = today.getDate().toString().padStart(2, '0');
+        const resetKey = resetMode === 'month'
+            ? today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0')
+            : String(today.getFullYear());
 
-        const purposeCode = FALLBACK_TEST_PURPOSE_CODES[testPurpose] || 'XX';
-        const fieldCode = getFieldCode(testField);
+        const result = await db.runTransaction(async function(tx) {
+            const doc = await tx.get(counterRef);
+            let current = 0;
+            if (doc.exists) {
+                const data = doc.data();
+                // 초기화 주기가 바뀌었으면 카운터 리셋
+                if (data.resetKey === resetKey) {
+                    current = data.current || 0;
+                }
+            }
+            const nextStart = current + 1;
+            const nextEnd = current + counterIncrement;
+            tx.set(counterRef, {
+                current: nextEnd,
+                resetKey: resetKey,
+                purposeName: testPurpose,
+                fieldCode: fieldCode,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            return { start: nextStart, end: nextEnd };
+        });
 
-        let seq = '001';
-        if (prevReceiptNo) {
-            const match = prevReceiptNo.match(/(\d+)-\d+$/);
-            if (match) seq = (parseInt(match[1]) + 1).toString().padStart(3, '0');
+        // 세그먼트 기반 접수번호 생성 (카운터 값 사용)
+        receiptNo = buildReceiptNoFromCounter(purposeObj, testField, result.start);
+
+        // 연번 할당이면 시료별 번호 배열도 생성
+        if (sampleNoMode === 'serial' && sampleCount > 1) {
+            window._allocatedSampleNos = [];
+            for (let i = 0; i < sampleCount; i++) {
+                window._allocatedSampleNos.push(
+                    buildReceiptNoFromCounter(purposeObj, testField, result.start + i)
+                );
+            }
+        } else {
+            window._allocatedSampleNos = null;
         }
 
-        receiptNo = `${yy}${mm}${dd}${fieldCode}${purposeCode}${seq}-001`;
-        console.log(`[폴백] 접수번호 생성: ${receiptNo}`);
+        console.log('[트랜잭션] 접수번호 할당: ' + receiptNo + ' (카운터: ' + result.start + '~' + result.end + ', 시료: ' + sampleCount + '개, 모드: ' + sampleNoMode + ')');
+
+    } catch(e) {
+        console.error('접수번호 할당 실패:', e);
+        showToast('접수번호 할당 실패: ' + e.message, 'error');
+        return;
     }
+
+    // 현재 검사목적의 시료 번호 방식 저장
+    window._currentSampleNoMode = sampleNoMode;
 
     document.getElementById('receipt-no').value = receiptNo;
     document.getElementById('receipt-no').classList.add('receipt-no-allocated');
@@ -5329,7 +5337,56 @@ async function allocateReceiptNo() {
     document.getElementById('receipt-no-warning').style.display = 'none';
 
     isReceiptNoAllocated = true;
-    showToast(`접수번호 할당 완료: ${receiptNo}`);
+    showToast('접수번호 할당 완료: ' + receiptNo);
+
+    // 시료 탭 번호 갱신
+    renderSampleNav();
+}
+
+// 카운터 값 기반 접수번호 생성 (트랜잭션에서 받은 serial 번호 사용)
+function buildReceiptNoFromCounter(purposeObj, testField, serialNum) {
+    const segments = purposeObj.segments;
+    const sep = (purposeObj.segSep === 'none' || purposeObj.segSep === '') ? '' : (purposeObj.segSep !== undefined && purposeObj.segSep !== null ? purposeObj.segSep : '-');
+    const fieldId = getFieldCode(testField);
+    const today = new Date();
+    const y4 = today.getFullYear().toString();
+    const y2 = y4.slice(2);
+    const m = (today.getMonth() + 1).toString().padStart(2, '0');
+    const d = today.getDate().toString().padStart(2, '0');
+
+    const parts = [];
+    segments.forEach(function(s) {
+        switch(s.t) {
+            case 'fixed':
+                if (purposeObj.fieldUse && purposeObj.fieldCodes && purposeObj.fieldCodes[fieldId]) {
+                    parts.push(purposeObj.fieldCodes[fieldId]);
+                } else {
+                    parts.push(s.v || '??');
+                }
+                break;
+            case 'field':
+                parts.push(fieldId);
+                break;
+            case 'year':
+                parts.push(s.v === '4' ? y4 : y2);
+                break;
+            case 'month':
+                parts.push(m);
+                break;
+            case 'day':
+                parts.push(d);
+                break;
+            case 'serial':
+                var digits = parseInt(s.v) || 4;
+                parts.push(String(serialNum).padStart(digits, '0'));
+                break;
+            case 'purpose':
+                var pDigits = parseInt(s.digits) || 2;
+                parts.push((s.v || '01').padStart(pDigits, '0'));
+                break;
+        }
+    });
+    return parts.join(sep);
 }
 
 // ============================================================================
