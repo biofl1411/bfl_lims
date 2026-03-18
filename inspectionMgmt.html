@@ -610,6 +610,14 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
             <select id="d-reset" onchange="updateResetDesc()"><option value="year">매년 초기화</option><option value="month">매월 초기화</option><option value="none">초기화 안함</option></select>
           </div>
           <div id="reset-desc" style="font-size:12px;font-weight:600;padding:10px 14px;border-radius:10px;margin-top:6px;background:var(--pri-l);color:var(--pri)">📅 매년 1월 1일에 일련번호가 <b>0001</b>부터 다시 시작됩니다</div>
+
+          <div class="fg" style="margin-top:14px"><label>시료 번호 방식</label>
+            <select id="d-sample-no-mode" onchange="updateSampleNoModeDesc()" style="width:100%">
+              <option value="suffix">접미사 — 접수번호 뒤에 -001, -002 (식약처 규칙)</option>
+              <option value="serial">연번 할당 — 시료마다 일련번호 연속 사용</option>
+            </select>
+          </div>
+          <div id="sample-no-mode-desc" style="font-size:12px;font-weight:600;padding:10px 14px;border-radius:10px;margin-top:6px;background:#dbeafe;color:#1e40af"></div>
         </div>
 
         <!-- 항목 로드 소스 -->
@@ -35501,6 +35509,10 @@ function openDetail(idx){
   } else {
     dInitSeg();
   }
+  // 시료 번호 방식
+  var snmEl=document.getElementById('d-sample-no-mode');
+  if(snmEl){snmEl.value=p.sampleNoMode||'suffix';updateSampleNoModeDesc();}
+
   renderFieldChips(p);
   document.getElementById('d-field-use').checked=p.fieldUse||false;
   toggleFieldMode();
@@ -35736,6 +35748,9 @@ function saveDetail(){
   p.segments=JSON.parse(JSON.stringify(dSg));
   p.segSep=document.getElementById('d-seg-sep')?document.getElementById('d-seg-sep').value:'-';
   p.segCnt=dSg.length;
+  // 시료 번호 방식 저장
+  var snmEl=document.getElementById('d-sample-no-mode');
+  if(snmEl) p.sampleNoMode=snmEl.value;
   // prefix 동기화: 세그먼트의 첫 번째 고정문자(목적코드)를 prefix에 반영
   var fixedSeg=dSg.find(function(s){return s.t==='fixed'});
   if(fixedSeg&&fixedSeg.v) p.prefix=fixedSeg.v;
@@ -35771,7 +35786,7 @@ function confirmDelete(){
 function copyPurpose(){
   const src=P[curIdx];
   const maxC=Math.max(...P.map(p=>p.c))+1;
-  const copy={c:maxC,n:src.n+' (복사)',i:src.i,o:0,rcpt:src.rcpt,rcptDesc:src.rcptDesc,prefix:src.prefix,fields:[...(src.fields||[])],fieldUse:src.fieldUse,fieldMode:src.fieldMode,fieldCodes:{...(src.fieldCodes||{})},segments:src.segments?JSON.parse(JSON.stringify(src.segments)):null,segSep:src.segSep,segCnt:src.segCnt,itemSource:src.itemSource||'mfdsTestItems',testItemCats:(src.testItemCats||[]).slice(),testItemSubs:JSON.parse(JSON.stringify(src.testItemSubs||{})),itemGroupNames:(src.itemGroupNames||[]).slice()};
+  const copy={c:maxC,n:src.n+' (복사)',i:src.i,o:0,rcpt:src.rcpt,rcptDesc:src.rcptDesc,prefix:src.prefix,fields:[...(src.fields||[])],fieldUse:src.fieldUse,fieldMode:src.fieldMode,fieldCodes:{...(src.fieldCodes||{})},segments:src.segments?JSON.parse(JSON.stringify(src.segments)):null,segSep:src.segSep,segCnt:src.segCnt,sampleNoMode:src.sampleNoMode||'suffix',itemSource:src.itemSource||'mfdsTestItems',testItemCats:(src.testItemCats||[]).slice(),testItemSubs:JSON.parse(JSON.stringify(src.testItemSubs||{})),itemGroupNames:(src.itemGroupNames||[]).slice()};
   P.push(copy);
   rp(cf,document.getElementById('sp')?document.getElementById('sp').value:'');
   closeDetail();
@@ -35849,6 +35864,8 @@ function dUpdatePrev(){
   }else{if(prevArea)prevArea.style.display='block';if(fieldPrevArea)fieldPrevArea.style.display='none';}
   if(p){p.rcpt=base.parts.join(sep);p.rcptDesc=base.descs.join('-');}
 }
+
+function updateSampleNoModeDesc(){var el=document.getElementById('sample-no-mode-desc');if(!el)return;var v=(document.getElementById('d-sample-no-mode')||{}).value||'suffix';if(v==='suffix'){el.innerHTML='📋 시료 여러 개 시 접수번호 뒤에 <b>-001, -002, -003</b> 접미사 추가 (식약처 규칙)';el.style.background='#dbeafe';el.style.color='#1e40af'}else{el.innerHTML='📋 시료 여러 개 시 일련번호를 시료 수만큼 <b>연속 할당</b> (예: 0001, 0002, 0003)';el.style.background='#d1fae5';el.style.color='#065f46'}}
 
 function updateResetDesc(){const v=document.getElementById('d-reset').value;const el=document.getElementById('reset-desc');
   // 현재 세그먼트에서 일련번호 구분들의 초기값 생성
