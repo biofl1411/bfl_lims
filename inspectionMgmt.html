@@ -1103,6 +1103,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
               <th style="padding:8px 10px;text-align:left;">시험항목명</th>
               <th style="padding:8px 10px;text-align:right;width:120px">수수료(원)</th>
               <th style="padding:8px 10px;text-align:center;width:80px">매칭유형</th>
+              <th style="padding:8px 10px;text-align:center;width:60px">사용</th>
             </tr>
           </thead>
           <tbody id="mfds-fee-tbody"></tbody>
@@ -33057,23 +33058,50 @@ function renderMfdsFeeTable() {
   var total = 0;
   filtered.forEach(function(m, idx) {
     var fee = m.fee || 0;
+    var active = isTestItemActive(m.mfdsCode);
     total += fee;
-    html += '<tr style="border-bottom:1px solid var(--bdr);">';
+    html += '<tr style="border-bottom:1px solid var(--bdr);' + (active ? '' : 'opacity:.45;') + '">';
     html += '<td style="padding:7px 10px;color:var(--sub)">' + (idx + 1) + '</td>';
     html += '<td style="padding:7px 10px;font-family:monospace;color:var(--primary);font-weight:600">' + (m.mfdsCode || '') + '</td>';
     html += '<td style="padding:7px 10px;color:var(--txt)">' + (m.itemName || '') + '</td>';
     html += '<td style="padding:7px 10px;text-align:right">';
     html += '<input type="number" value="' + fee + '" data-code="' + (m.mfdsCode || '') + '" ';
     html += 'onchange="updateMfdsFee(this)" ';
+    html += (active ? '' : 'disabled ');
     html += 'style="width:100px;text-align:right;padding:4px 8px;border:1px solid var(--bdr);border-radius:4px;font-size:13px;">';
     html += '</td>';
     html += '<td style="padding:7px 10px;text-align:center;font-size:11px;color:var(--sub)">' + (m.matchType || '') + '</td>';
+    html += '<td style="padding:7px 10px;text-align:center">';
+    html += '<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer">';
+    html += '<input type="checkbox" ' + (active ? 'checked' : '') + ' data-code="' + (m.mfdsCode || '') + '" onchange="toggleMfdsFeeActive(this)" style="opacity:0;width:0;height:0">';
+    html += '<span style="position:absolute;top:0;left:0;right:0;bottom:0;background:' + (active ? 'var(--primary)' : '#d1d5db') + ';border-radius:10px;transition:.2s"></span>';
+    html += '<span style="position:absolute;top:2px;left:' + (active ? '18px' : '2px') + ';width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s"></span>';
+    html += '</label>';
+    html += '</td>';
     html += '</tr>';
   });
 
   tbody.innerHTML = html;
   countEl.textContent = filtered.length + '개 / ' + _mfdsFeeData.length + '개';
   totalEl.textContent = total.toLocaleString() + '원';
+}
+
+/* 수수료 매핑 페이지 사용여부 토글 — 시험항목 탭과 동일 원본(mfds_test_items) 사용 */
+function toggleMfdsFeeActive(cb) {
+  toggleTestItemActive(cb);
+  // 행 스타일 즉시 갱신
+  var row = cb.closest('tr');
+  var active = cb.checked;
+  if (row) {
+    row.style.opacity = active ? '1' : '.45';
+    var numInput = row.querySelector('input[type="number"]');
+    if (numInput) numInput.disabled = !active;
+    // 스위치 색상 갱신
+    var track = cb.nextElementSibling;
+    var thumb = track ? track.nextElementSibling : null;
+    if (track) track.style.background = active ? 'var(--primary)' : '#d1d5db';
+    if (thumb) thumb.style.left = active ? '18px' : '2px';
+  }
 }
 
 function updateMfdsFee(input) {
