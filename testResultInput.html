@@ -1762,10 +1762,33 @@ function toggleItemDetail(idx, btn) {
   });
 }
 
+// 접수 데이터 → 기록서 필드 자동 매칭
+function getReceiptAutoValues(item) {
+  var samples = currentReceipt ? (currentReceipt.samples || [currentReceipt]) : [];
+  var sample = samples[currentSampleIdx] || {};
+  var r = currentReceipt || {};
+  var today = new Date().toISOString().slice(0, 10);
+  return {
+    testItem: item.testItemName || '',
+    sampleName: sample.productName || '',
+    testPurpose: r.purposeName || r.inspectionPurpose || '',
+    specimenNumber: r.receiptNo || '',
+    receiptDate: r.receiptDate || '',
+    testDate: today,
+    testBasisField: '',
+    manufacturingDate: sample.manufactureDate || '',
+    expiryDate: sample.expiryDate || '',
+    sampleType: sample.foodType || '',
+    testStartDate: today,
+    inspector: ''
+  };
+}
+
 // formTemplates analyzed 데이터 기반 동적 폼 렌더링
 function renderCalcForm(idx, item, tmpl, saved) {
   var key = currentSampleIdx + '_' + idx;
   var raw = _rawInputs[key] || (saved && saved.rawInputs) || {};
+  var autoVals = getReceiptAutoValues(item);
   var sections = tmpl.sections || [];
   var calculations = tmpl.calculations || [];
   var judgment = tmpl.judgmentRule || {};
@@ -1786,7 +1809,7 @@ function renderCalcForm(idx, item, tmpl, saved) {
     h += '<div class="idf-grid">';
     (sec.fields || []).forEach(function(f) {
       var fid = 'idf-' + f.id + '-' + idx;
-      var val = raw[f.id] || '';
+      var val = raw[f.id] || autoVals[f.id] || '';
       var lbl = f.label + (f.unit ? ' (' + f.unit + ')' : '');
       if (f.type === 'readonly') {
         h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + (val || f.exampleValue || '') + '" readonly style="background:#f1f5f9;color:#64748b"></div>';
