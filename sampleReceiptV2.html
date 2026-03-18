@@ -400,7 +400,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
   </div>
 
   <!-- 접수번호 할당 버튼 -->
-  <button type="button" class="btn-mini primary" onclick="allocateReceiptNo()" style="margin-top:10px">🔢 접수번호 할당</button>
+  <button type="button" id="btn-allocate-rcpt" class="btn-mini primary" onclick="allocateReceiptNo()" style="margin-top:10px">🔢 접수번호 할당</button>
 
   <!-- 이전 접수번호 -->
   <div class="cp-field">
@@ -5271,7 +5271,13 @@ function buildReceiptNoFromSegments(purposeObj, testField, prevReceiptNo) {
 // ============================================================================
 // 접수번호 할당 (세그먼트 기반 + API + 폴백)
 // ============================================================================
+var _allocating = false; // 더블클릭 방지 플래그
+
 async function allocateReceiptNo() {
+    // ① 더블클릭 방지
+    if (_allocating) return;
+    var allocBtn = document.getElementById('btn-allocate-rcpt');
+
     const testField = document.querySelector('input[name="test-field"]:checked')?.value;
     const testPurpose = document.getElementById('test-purpose').value;
 
@@ -5280,7 +5286,6 @@ async function allocateReceiptNo() {
         return;
     }
 
-    // 선택된 검사목적의 P 객체 찾기 (시험분야 매칭 우선)
     const fieldCode = getFieldCode(testField);
     const purposeObj = firestorePurposes.find(p => p.n === testPurpose && p.fields && p.fields.includes(fieldCode))
         || firestorePurposes.find(p => p.n === testPurpose);
@@ -5290,20 +5295,20 @@ async function allocateReceiptNo() {
         return;
     }
 
-    // 시료 수 확인 (연번 할당 시 시료 수만큼 카운터 증가)
-    const sampleCount = parseInt(document.getElementById('sample-cnt')?.value) || _sampleData.length || 1;
+    // 할당 시작 — 버튼 비활성화
+    _allocating = true;
+    if (allocBtn) { allocBtn.disabled = true; allocBtn.textContent = '⏳ 할당 중...'; }
+
+    const sampleCount = parseInt(document.getElementById('sample-total-count')?.value) || _sampleData.length || 1;
     const sampleNoMode = purposeObj.sampleNoMode || 'suffix';
-    // 연번 할당이면 시료 수만큼, 접미사면 1개만 카운터 증가
     const counterIncrement = (sampleNoMode === 'serial') ? sampleCount : 1;
 
     let receiptNo = '';
 
     try {
-        // Firestore 트랜잭션으로 카운터 atomic 증가
         const counterDocId = (purposeObj.prefix || 'default') + '_' + fieldCode;
         const counterRef = db.collection('receiptCounters').doc(counterDocId);
 
-        // 세그먼트에서 초기화 주기 결정
         const resetMode = purposeObj.reset || 'year';
         const today = new Date();
         const resetKey = resetMode === 'month'
@@ -5315,7 +5320,6 @@ async function allocateReceiptNo() {
             let current = 0;
             if (doc.exists) {
                 const data = doc.data();
-                // 초기화 주기가 바뀌었으면 카운터 리셋
                 if (data.resetKey === resetKey) {
                     current = data.current || 0;
                 }
@@ -5332,8 +5336,31 @@ async function allocateReceiptNo() {
             return { start: nextStart, end: nextEnd };
         });
 
-        // 세그먼트 기반 접수번호 생성 (카운터 값 사용)
         receiptNo = buildReceiptNoFromCounter(purposeObj, testField, result.start);
+
+        // ② 중복 체크 — 혹시 동일 번호가 이미 존재하는지 확인
+        var dupSnap = await db.collection('receipts')
+            .where('receiptNo', '==', receiptNo)
+            .limit(1)
+            .get();
+        if (!dupSnap.empty) {
+            // 중복 발견 — 카운터를 한번 더 증가시켜 다음 번호 사용
+            console.warn('중복 접수번호 발견: ' + receiptNo + ', 다음 번호로 재할당');
+            var retryResult = await db.runTransaction(async function(tx) {
+                var doc = await tx.get(counterRef);
+                var cur = (doc.exists && doc.data().resetKey === resetKey) ? (doc.data().current || 0) : 0;
+                var ns = cur + 1;
+                var ne = cur + counterIncrement;
+                tx.set(counterRef, {
+                    current: ne, resetKey: resetKey,
+                    purposeName: testPurpose, fieldCode: fieldCode,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                return { start: ns, end: ne };
+            });
+            receiptNo = buildReceiptNoFromCounter(purposeObj, testField, retryResult.start);
+            showToast('중복 감지 → 다음 번호로 재할당: ' + receiptNo, 'info');
+        }
 
         // 연번 할당이면 시료별 번호 배열도 생성
         if (sampleNoMode === 'serial' && sampleCount > 1) {
@@ -5347,15 +5374,27 @@ async function allocateReceiptNo() {
             window._allocatedSampleNos = null;
         }
 
-        console.log('[트랜잭션] 접수번호 할당: ' + receiptNo + ' (카운터: ' + result.start + '~' + result.end + ', 시료: ' + sampleCount + '개, 모드: ' + sampleNoMode + ')');
+        // ③ 연번 건너뜀 감지 — 이전 접수번호와 비교
+        var prevNo = document.getElementById('prev-receipt-no').value.trim();
+        if (prevNo && receiptNo) {
+            var prevSerial = extractSerialFromReceiptNo(prevNo, purposeObj, fieldCode);
+            var curSerial = extractSerialFromReceiptNo(receiptNo, purposeObj, fieldCode);
+            if (prevSerial > 0 && curSerial > 0 && curSerial > prevSerial + counterIncrement) {
+                var skipped = curSerial - prevSerial - counterIncrement;
+                showToast('연번 ' + skipped + '건 건너뜀 (다른 접수에서 할당됨)', 'info');
+            }
+        }
+
+        console.log('[트랜잭션] 접수번호 할당: ' + receiptNo + ' (카운터: ' + result.start + '~' + result.end + ')');
 
     } catch(e) {
         console.error('접수번호 할당 실패:', e);
         showToast('접수번호 할당 실패: ' + e.message, 'error');
+        _allocating = false;
+        if (allocBtn) { allocBtn.disabled = false; allocBtn.textContent = '🔢 접수번호 할당'; }
         return;
     }
 
-    // 현재 검사목적의 시료 번호 방식 저장
     window._currentSampleNoMode = sampleNoMode;
 
     document.getElementById('receipt-no').value = receiptNo;
@@ -5367,9 +5406,42 @@ async function allocateReceiptNo() {
 
     isReceiptNoAllocated = true;
     showToast('접수번호 할당 완료: ' + receiptNo);
-
-    // 시료 탭 번호 갱신
     renderSampleNav();
+
+    // 버튼 복원 (할당 완료 후 재할당 가능)
+    _allocating = false;
+    if (allocBtn) { allocBtn.disabled = false; allocBtn.textContent = '🔢 접수번호 할당'; }
+}
+
+// 접수번호에서 일련번호 추출 (연번 건너뜀 감지용)
+function extractSerialFromReceiptNo(rcptNo, purposeObj, fieldId) {
+    if (!rcptNo || !purposeObj || !purposeObj.segments) return 0;
+    var segments = purposeObj.segments;
+    var sep = (purposeObj.segSep === 'none' || purposeObj.segSep === '') ? '' : (purposeObj.segSep || '-');
+    var serialPos = -1;
+    segments.forEach(function(s, i) { if (s.t === 'serial') serialPos = i; });
+    if (serialPos < 0) return 0;
+
+    var parts;
+    if (sep) {
+        parts = rcptNo.split(sep);
+    } else {
+        parts = [];
+        var offset = 0;
+        segments.forEach(function(s) {
+            var len = 0;
+            if (s.t === 'fixed') len = (purposeObj.fieldUse && purposeObj.fieldCodes && purposeObj.fieldCodes[fieldId]) ? purposeObj.fieldCodes[fieldId].length : (s.v || '??').length;
+            else if (s.t === 'field') len = fieldId.length;
+            else if (s.t === 'year') len = s.v === '4' ? 4 : 2;
+            else if (s.t === 'month' || s.t === 'day') len = 2;
+            else if (s.t === 'serial') len = parseInt(s.v) || 4;
+            else if (s.t === 'purpose') len = parseInt(s.digits) || 2;
+            parts.push(rcptNo.substring(offset, offset + len));
+            offset += len;
+        });
+    }
+    var serialStr = parts[serialPos] || '';
+    return parseInt(serialStr, 10) || 0;
 }
 
 // 카운터 값 기반 접수번호 생성 (트랜잭션에서 받은 serial 번호 사용)
