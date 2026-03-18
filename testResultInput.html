@@ -1869,14 +1869,27 @@ function renderCalcForm(idx, item, tmpl, saved) {
 
   // 섹션별 입력 필드
   sections.forEach(function(sec) {
-    if (sec.title) h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px">' + sec.title + '</div>';
+    var isStdSection = (sec.title === '표준물질정보' || sec.title === '표준용액농도');
+    if (sec.title) {
+      h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px;display:flex;justify-content:space-between;align-items:center">';
+      h += '<span>' + sec.title + '</span>';
+      if (isStdSection) {
+        h += '<button type="button" style="font-size:10px;padding:2px 8px;border:1px solid #f59e0b;background:#fffbeb;color:#b45309;border-radius:4px;cursor:pointer" onclick="openStdChangeModal(' + idx + ')">값 변경</button>';
+      }
+      h += '</div>';
+    }
     h += '<div class="idf-grid">';
+    // 표준물질/표준용액 필드 ID 목록 (읽기전용으로 표시, 수정은 모달)
+    var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
     (sec.fields || []).forEach(function(f) {
       var fid = 'idf-' + f.id + '-' + idx;
       var val = raw[f.id] || autoVals[f.id] || '';
       var lbl = f.label + (f.unit ? ' (' + f.unit + ')' : '');
-      if (f.type === 'readonly') {
-        h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + (val || f.exampleValue || '') + '" readonly style="background:#f1f5f9;color:#64748b"></div>';
+      var isStdField = stdFieldIds.indexOf(f.id) >= 0;
+      if (f.type === 'readonly' || isStdField) {
+        // 표준물질/표준용액 필드: 시험일지 값으로 읽기전용 표시
+        var displayVal = val || f.exampleValue || '';
+        h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + displayVal + '" readonly style="background:#f0fdf4;color:#166534;font-weight:500"></div>';
       } else if (f.type === 'textarea') {
         h += '<div class="idf-field" style="grid-column:1/-1"><label>' + lbl + '</label><textarea id="' + fid + '" rows="2" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" oninput="calcItemResult(' + idx + ')">' + val + '</textarea></div>';
       } else {
@@ -1910,6 +1923,169 @@ function renderCalcForm(idx, item, tmpl, saved) {
 
   h += '</div>';
   return h;
+}
+
+/* 표준물질/표준용액 값 변경 모달 */
+var _stdChangeIdx = -1;
+
+function openStdChangeModal(idx) {
+  _stdChangeIdx = idx;
+  var item = currentTestItems[idx];
+  if (!item) return;
+  var samples = currentReceipt ? (currentReceipt.samples || [currentReceipt]) : [];
+  var sampleFoodType = (samples[currentSampleIdx] || {}).foodType || '';
+  var tmpl = findFormTemplate(item.testItemName, sampleFoodType);
+  if (!tmpl) return;
+
+  var ov = findFormTemplateOverrides(item.testItemName, sampleFoodType);
+  var stdInfo = ov.stdInfo || {};
+  var stdConc = ov.stdConc || {};
+  var today = new Date().toISOString().slice(0, 10);
+  var threeMonths = new Date();
+  threeMonths.setMonth(threeMonths.getMonth() + 3);
+  var defaultEnd = threeMonths.toISOString().slice(0, 10);
+
+  // 현재 표시값 가져오기
+  var getVal = function(fid) {
+    var el = document.getElementById('idf-' + fid + '-' + idx);
+    return el ? el.value : '';
+  };
+
+  var html = '<div style="padding:8px">';
+  html += '<div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:12px">표준물질/표준용액 값 변경</div>';
+  html += '<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:8px 12px;font-size:11px;color:#92400e;margin-bottom:12px">⚠️ 변경된 값은 시험일지에 저장되며, 이후 동일 항목 결과 입력에 모두 적용됩니다.</div>';
+
+  // 표준물질정보
+  html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">표준물질정보</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">';
+  html += '<div><label style="font-size:11px;color:#64748b">표준품명</label><input type="text" id="std-chg-standardName" value="' + (getVal('standardName') || '') + '" style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>';
+  html += '<div><label style="font-size:11px;color:#64748b">농도 (mg/L)</label><input type="number" step="any" id="std-chg-standardConcentration" value="' + (getVal('standardConcentration') || '') + '" style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>';
+  html += '<div><label style="font-size:11px;color:#64748b">제조사</label><input type="text" id="std-chg-manufacturer" value="' + (getVal('manufacturer') || '') + '" style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>';
+  html += '</div>';
+
+  // 표준용액농도
+  html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">표준용액농도</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px">';
+  ['stdBlank','std1','std2','std3','std4','std5'].forEach(function(id, i) {
+    var label = i === 0 ? 'STD Blank' : 'STD ' + i;
+    html += '<div><label style="font-size:11px;color:#64748b">' + label + '</label><input type="number" step="any" id="std-chg-' + id + '" value="' + (getVal(id) || '') + '" style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>';
+  });
+  html += '</div>';
+
+  // 적용 기간
+  html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">적용 기간</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
+  html += '<div><label style="font-size:11px;color:#64748b">시작일</label><input type="date" id="std-chg-applyFrom" value="' + (ov.applyFrom || today) + '" onchange="stdChgAutoEndDate()" style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>';
+  html += '<div><label style="font-size:11px;color:#64748b">종료일</label><input type="date" id="std-chg-applyTo" value="' + (ov.applyTo || defaultEnd) + '" style="width:100%;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>';
+  html += '</div>';
+
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end">';
+  html += '<button class="btn btn-outline" onclick="closeStdChangeModal()">취소</button>';
+  html += '<button class="btn btn-primary" onclick="saveStdChangeModal()">변경 저장</button>';
+  html += '</div></div>';
+
+  // 모달 표시 (기존 모달 재사용 또는 동적 생성)
+  var modal = document.getElementById('std-change-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'std-change-modal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;padding:20px;width:640px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">' + html + '</div>';
+  modal.style.display = 'flex';
+}
+
+function stdChgAutoEndDate() {
+  var fromEl = document.getElementById('std-chg-applyFrom');
+  var toEl = document.getElementById('std-chg-applyTo');
+  if (!fromEl || !toEl || !fromEl.value) return;
+  var d = new Date(fromEl.value);
+  d.setMonth(d.getMonth() + 3);
+  toEl.value = d.toISOString().slice(0, 10);
+}
+
+function closeStdChangeModal() {
+  var modal = document.getElementById('std-change-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function saveStdChangeModal() {
+  var idx = _stdChangeIdx;
+  var item = currentTestItems[idx];
+  if (!item) return;
+  var samples = currentReceipt ? (currentReceipt.samples || [currentReceipt]) : [];
+  var sampleFoodType = (samples[currentSampleIdx] || {}).foodType || '';
+
+  // 변경할 값 수집
+  var newOverrides = {
+    stdInfo: {
+      standardName: document.getElementById('std-chg-standardName').value,
+      standardConcentration: document.getElementById('std-chg-standardConcentration').value,
+      manufacturer: document.getElementById('std-chg-manufacturer').value
+    },
+    stdConc: {
+      stdBlank: document.getElementById('std-chg-stdBlank').value,
+      std1: document.getElementById('std-chg-std1').value,
+      std2: document.getElementById('std-chg-std2').value,
+      std3: document.getElementById('std-chg-std3').value,
+      std4: document.getElementById('std-chg-std4').value,
+      std5: document.getElementById('std-chg-std5').value
+    },
+    applyFrom: document.getElementById('std-chg-applyFrom').value,
+    applyTo: document.getElementById('std-chg-applyTo').value
+  };
+
+  // 시험일지에 저장
+  var ftEntry = null;
+  for (var i = 0; i < _formTemplatesList.length; i++) {
+    var t = _formTemplatesList[i];
+    if (t.itemName === item.testItemName && t.foodType === sampleFoodType) { ftEntry = t; break; }
+  }
+  if (!ftEntry) { showToast('해당 시험일지를 찾을 수 없습니다', 'error'); return; }
+
+  try {
+    // 시험일지 문서 ID 찾기
+    var snap = await db.collection('formTemplates').where('appliedToLims', '==', true).get();
+    var docId = null;
+    snap.docs.forEach(function(d) {
+      var data = d.data();
+      var ft = '';
+      if (data.analyzed && data.analyzed.sections) {
+        data.analyzed.sections.forEach(function(sec) {
+          (sec.fields || []).forEach(function(f) {
+            if (f.id === 'sampleType' && f.exampleValue) ft = f.exampleValue.trim();
+          });
+        });
+      }
+      if (!ft) ft = (data.sampleType || '').trim();
+      var iName = (data.representativeItem || '').trim();
+      if (iName === item.testItemName && ft === sampleFoodType) docId = d.id;
+    });
+
+    if (!docId) { showToast('시험일지 문서를 찾을 수 없습니다', 'error'); return; }
+
+    await db.collection('formTemplates').doc(docId).update({
+      _overrides: newOverrides
+    });
+
+    // 캐시 갱신
+    ftEntry.overrides = newOverrides;
+
+    closeStdChangeModal();
+    showToast('값 변경 및 적용 기간 저장 완료', 'success');
+
+    // 기록서 폼 새로고침
+    var saved = {};
+    var tmpl = findFormTemplate(item.testItemName, sampleFoodType);
+    var detailRow = document.getElementById('item-detail-' + idx);
+    if (detailRow && tmpl) {
+      detailRow.querySelector('td').innerHTML = renderCalcForm(idx, item, tmpl, saved);
+      calcItemResult(idx);
+    }
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+  }
 }
 
 /* ============================================================
