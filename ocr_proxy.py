@@ -29,9 +29,17 @@ import time
 import os
 import ssl
 import re
+import base64
+import io
 import anthropic
 import firebase_admin
 from firebase_admin import credentials, firestore
+
+try:
+    from PIL import Image as PILImage
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 app = Flask(__name__)
 CORS(app)
@@ -516,6 +524,384 @@ def ocr_inspection_form():
         return jsonify({'error': 'Clova OCR 타임아웃'}), 504
     except Exception as e:
         return jsonify({'error': f'서버 오류: {str(e)}'}), 500
+
+
+# ============================================================
+# 템플릿 기반 특화 OCR (좌표 크롭 → Clova OCR → 직접 매핑)
+# ============================================================
+@app.route('/api/ocr/template-ocr', methods=['POST'])
+def ocr_template():
+    """
+    템플릿 기반 의뢰서 OCR:
+    1. Firestore에서 해당 양식의 활성 템플릿 로드
+    2. 이미지를 필드별 좌표로 크롭
+    3. 각 크롭 이미지를 Clova OCR에 개별 전송
+    4. 결과를 직접 필드에 매핑
+    5. 확신도 낮은 필드만 Claude에 보정 요청
+
+    요청 JSON:
+    {
+      "images": [{ "format": "jpg", "name": "file.jpg", "data": "<base64>" }],
+      "formType": "food" (선택 — 없으면 자동 판별),
+      "requester": "담당자명" (선택)
+    }
+    """
+    try:
+        if not HAS_PIL:
+            return jsonify({'error': 'Pillow 라이브러리가 설치되지 않았습니다 (pip install Pillow)'}), 500
+
+        payload = request.get_json()
+        if not payload or 'images' not in payload or not payload['images']:
+            return jsonify({'error': 'images 배열이 필요합니다'}), 400
+
+        image_info = payload['images'][0]
+        image_base64 = image_info.get('data', '')
+        image_format = image_info.get('format', 'jpeg').lower()
+
+        if not image_base64:
+            return jsonify({'error': '이미지 데이터(base64)가 비어있습니다'}), 400
+
+        # ── 1. Firestore에서 템플릿 로드 ──
+        form_type = payload.get('formType', '')
+        template = _load_ocr_template(form_type)
+
+        if not template:
+            # 템플릿 없으면 기존 방식으로 폴백
+            return _fallback_to_claude_ocr(payload)
+
+        regions = template.get('regions', {})
+        if not regions:
+            return _fallback_to_claude_ocr(payload)
+
+        # ── 2. PIL로 이미지 디코딩 ──
+        img_bytes = base64.b64decode(image_base64)
+        pil_img = PILImage.open(io.BytesIO(img_bytes))
+        img_w, img_h = pil_img.size
+
+        # ── 3. 필드별 크롭 → Clova OCR ──
+        result = {}
+        uncertain_fields = []  # Claude 보정이 필요한 필드
+        sample_fields = {}     # 시료 테이블 관련 필드
+
+        for field_key, region in regions.items():
+            # 비율 좌표 → 실제 픽셀 좌표
+            crop_x = int(region['x'] * img_w)
+            crop_y = int(region['y'] * img_h)
+            crop_w = int(region['w'] * img_w)
+            crop_h = int(region['h'] * img_h)
+
+            # 범위 보정
+            crop_x = max(0, crop_x)
+            crop_y = max(0, crop_y)
+            crop_r = min(img_w, crop_x + crop_w)
+            crop_b = min(img_h, crop_y + crop_h)
+
+            if crop_r <= crop_x or crop_b <= crop_y:
+                continue
+
+            # 크롭
+            cropped = pil_img.crop((crop_x, crop_y, crop_r, crop_b))
+
+            # 크롭 이미지 → base64
+            buf = io.BytesIO()
+            save_fmt = 'JPEG' if image_format in ('jpg', 'jpeg') else 'PNG'
+            cropped.save(buf, format=save_fmt, quality=95)
+            crop_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+            # Clova General OCR 호출
+            ocr_text = _clova_ocr_single(crop_b64, image_format)
+
+            # 시료 테이블 필드는 별도 처리
+            if field_key.startswith('sample_') or field_key == 'sampleTable':
+                sample_fields[field_key] = ocr_text
+            else:
+                result[field_key] = ocr_text.strip()
+
+            # 빈 결과이거나 신뢰도 낮은 것은 Claude 보정 대상
+            if not ocr_text.strip() or len(ocr_text.strip()) < 2:
+                uncertain_fields.append(field_key)
+
+        # ── 4. 시료 테이블 처리 ──
+        if 'sampleTable' in sample_fields and sample_fields['sampleTable']:
+            # 시료 테이블 전체 텍스트를 Claude로 구조화
+            samples = _parse_sample_table_with_claude(
+                sample_fields, image_base64, image_format, regions,
+                img_w, img_h, payload.get('requester', '')
+            )
+            if samples:
+                result['samples'] = samples
+        elif any(k.startswith('sample_') for k in sample_fields):
+            # 개별 열 크롭이 있는 경우 행 단위로 조합
+            result['samples'] = _assemble_sample_rows(sample_fields)
+
+        # ── 5. 불확실한 필드 Claude 보정 (선택적) ──
+        if uncertain_fields and CLAUDE_API_KEY:
+            corrections = _claude_correct_fields(
+                uncertain_fields, image_base64, image_format,
+                regions, img_w, img_h, payload.get('requester', '')
+            )
+            for k, v in corrections.items():
+                if v:
+                    result[k] = v
+
+        # 양식 유형 추가
+        result['formType'] = template.get('formType', form_type)
+        result['_ocrMethod'] = 'template-crop+clova'
+        result['_templateId'] = template.get('_id', '')
+        result['_mappedFields'] = len(regions)
+        result['_uncertainFields'] = uncertain_fields
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f'[OCR] 템플릿 OCR 오류: {e}')
+        import traceback
+        traceback.print_exc()
+        # 오류 시 기존 방식 폴백
+        try:
+            return _fallback_to_claude_ocr(payload)
+        except Exception:
+            return jsonify({'error': f'서버 오류: {str(e)}'}), 500
+
+
+def _load_ocr_template(form_type=''):
+    """Firestore에서 활성 OCR 템플릿 로드"""
+    if not _firebase_db:
+        return None
+    try:
+        if form_type:
+            docs = _firebase_db.collection('ocrTemplates').where(
+                'formType', '==', form_type
+            ).where('active', '==', True).limit(1).stream()
+        else:
+            # formType 미지정 시 food 기본
+            docs = _firebase_db.collection('ocrTemplates').where(
+                'active', '==', True
+            ).limit(1).stream()
+
+        for doc in docs:
+            data = doc.to_dict()
+            data['_id'] = doc.id
+            return data
+        return None
+    except Exception as e:
+        print(f'[OCR] 템플릿 로드 실패: {e}')
+        return None
+
+
+def _clova_ocr_single(crop_base64, fmt='jpeg'):
+    """단일 크롭 이미지에 대해 Clova General OCR 호출 → 텍스트 반환"""
+    try:
+        clova_payload = {
+            'version': 'V2',
+            'requestId': f'crop-{int(time.time() * 1000)}',
+            'timestamp': int(time.time() * 1000),
+            'lang': 'ko',
+            'images': [{
+                'format': fmt if fmt in ('jpg', 'jpeg', 'png') else 'jpg',
+                'name': 'crop.jpg',
+                'data': crop_base64
+            }]
+        }
+
+        resp = requests.post(
+            CLOVA_GENERAL_URL,
+            headers={'Content-Type': 'application/json', 'X-OCR-SECRET': CLOVA_GENERAL_SECRET},
+            json=clova_payload,
+            timeout=15
+        )
+
+        if resp.status_code != 200:
+            return ''
+
+        result = resp.json()
+        texts = []
+        if 'images' in result:
+            for img in result['images']:
+                for field in img.get('fields', []):
+                    t = field.get('inferText', '').strip()
+                    if t:
+                        texts.append(t)
+        return ' '.join(texts)
+    except Exception as e:
+        print(f'[OCR] Clova 크롭 OCR 실패: {e}')
+        return ''
+
+
+def _parse_sample_table_with_claude(sample_fields, image_base64, image_format, regions, img_w, img_h, requester=''):
+    """시료 테이블 영역을 Claude로 구조화"""
+    if not CLAUDE_API_KEY:
+        return []
+
+    try:
+        # 시료 테이블 영역 크롭
+        region = regions.get('sampleTable')
+        if not region:
+            return []
+
+        img_bytes = base64.b64decode(image_base64)
+        pil_img = PILImage.open(io.BytesIO(img_bytes))
+
+        crop_x = int(region['x'] * img_w)
+        crop_y = int(region['y'] * img_h)
+        crop_r = min(img_w, crop_x + int(region['w'] * img_w))
+        crop_b = min(img_h, crop_y + int(region['h'] * img_h))
+        cropped = pil_img.crop((crop_x, crop_y, crop_r, crop_b))
+
+        buf = io.BytesIO()
+        cropped.save(buf, format='JPEG', quality=95)
+        table_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+        # OCR 텍스트도 전달
+        table_text = sample_fields.get('sampleTable', '')
+
+        correction_hint = load_ocr_corrections(requester if requester else None)
+
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        message = client.messages.create(
+            model='claude-sonnet-4-20250514',
+            max_tokens=2000,
+            messages=[{
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'image',
+                        'source': {'type': 'base64', 'media_type': 'image/jpeg', 'data': table_b64}
+                    },
+                    {
+                        'type': 'text',
+                        'text': f"""이 이미지는 시험·검사 의뢰서의 시료 테이블 부분입니다.
+
+OCR 텍스트: {table_text}
+
+데이터가 기입된 행만 JSON 배열로 추출하세요. 빈 행은 무시.
+각 행의 형식:
+{{"productName":"제품명","foodType":"식품유형","inspectionItems":"시험항목(쉼표구분)","inspectionStandard":"단서조항","manufactureNo":"제조번호","manufactureDate":"YYYY-MM-DD","expiryDate":"YYYY-MM-DD","expiryDays":"일수","sampleAmount":"숫자","sampleAmountUnit":"g/kg/ml/L","sampleCount":"1","packageUnit":"포장단위","transportStatus":"냉장/냉동/실온/상온"}}
+
+손글씨를 정밀하게 판독하세요. 날짜는 YYYY-MM-DD 형식.{correction_hint}
+
+JSON 배열만 반환하세요."""
+                    }
+                ]
+            }]
+        )
+
+        text = message.content[0].text.strip()
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
+        return json.loads(text)
+    except Exception as e:
+        print(f'[OCR] 시료 테이블 Claude 파싱 실패: {e}')
+        return []
+
+
+def _assemble_sample_rows(sample_fields):
+    """개별 열 OCR 결과를 행 단위로 조합"""
+    # 각 열의 텍스트를 줄바꿈으로 분리하여 행 매칭
+    col_map = {
+        'sample_productName': 'productName',
+        'sample_foodType': 'foodType',
+        'sample_inspItems': 'inspectionItems',
+        'sample_standard': 'inspectionStandard',
+        'sample_pkgUnit': 'packageUnit',
+        'sample_amount': 'sampleAmount',
+        'sample_transport': 'transportStatus',
+        'sample_mfgDate': 'manufactureDate',
+        'sample_expDate': 'expiryDate'
+    }
+
+    # 각 열을 줄 단위로 분리
+    col_lines = {}
+    max_rows = 0
+    for src_key, dest_key in col_map.items():
+        text = sample_fields.get(src_key, '')
+        lines = [l.strip() for l in text.split('\n') if l.strip()] if text else []
+        col_lines[dest_key] = lines
+        max_rows = max(max_rows, len(lines))
+
+    if max_rows == 0:
+        return []
+
+    samples = []
+    for i in range(max_rows):
+        row = {}
+        for dest_key, lines in col_lines.items():
+            row[dest_key] = lines[i] if i < len(lines) else ''
+        # 최소 제품명이 있는 행만 포함
+        if row.get('productName', '').strip():
+            samples.append(row)
+
+    return samples
+
+
+def _claude_correct_fields(uncertain_fields, image_base64, image_format, regions, img_w, img_h, requester=''):
+    """불확실한 필드를 Claude로 보정"""
+    if not CLAUDE_API_KEY or not uncertain_fields:
+        return {}
+
+    try:
+        # 불확실한 필드 영역만 크롭하여 하나의 이미지로 전달
+        media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png'}
+        media_type = media_types.get(image_format, 'image/jpeg')
+
+        field_descriptions = []
+        for key in uncertain_fields:
+            region = regions.get(key)
+            if region:
+                field_descriptions.append(f'- {key}: 이미지 좌표 ({int(region["x"]*100)}%, {int(region["y"]*100)}%) 크기 ({int(region["w"]*100)}%x{int(region["h"]*100)}%)')
+
+        if not field_descriptions:
+            return {}
+
+        correction_hint = load_ocr_corrections(requester if requester else None)
+
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        message = client.messages.create(
+            model='claude-sonnet-4-20250514',
+            max_tokens=1000,
+            messages=[{
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'image',
+                        'source': {'type': 'base64', 'media_type': media_type, 'data': image_base64}
+                    },
+                    {
+                        'type': 'text',
+                        'text': f"""이 의뢰서에서 다음 필드의 값을 읽어주세요:
+{chr(10).join(field_descriptions)}
+
+JSON 객체로 반환. 값이 없으면 빈 문자열.{correction_hint}
+
+예: {{"companyName": "바이오푸드랩", "phone": "031-123-4567"}}
+JSON만 반환하세요."""
+                    }
+                ]
+            }]
+        )
+
+        text = message.content[0].text.strip()
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
+        return json.loads(text)
+    except Exception as e:
+        print(f'[OCR] Claude 보정 실패: {e}')
+        return {}
+
+
+def _fallback_to_claude_ocr(payload):
+    """템플릿 OCR 실패 시 기존 Clova+Claude 방식으로 폴백"""
+    # 기존 inspection-form 엔드포인트 로직 재사용
+    from flask import make_response
+    with app.test_request_context(
+        '/api/ocr/inspection-form',
+        method='POST',
+        json=payload,
+        content_type='application/json'
+    ):
+        return ocr_inspection_form()
 
 
 # ============================================================

@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab - OCR 템플릿 관리</title>
+<style>
+:root {
+  --primary: #2563eb;
+  --primary-light: #dbeafe;
+  --success: #10b981;
+  --success-light: #d1fae5;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-light: #fee2e2;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-900: #111827;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+
+.main-content {
+  margin-left: 250px;
+  padding: 24px 32px;
+  min-height: 100vh;
+}
+
+body.sidebar-collapsed .main-content { margin-left: 64px; }
+
+.top-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.top-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── 상단 컨트롤 ── */
+.ctrl-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.ctrl-row select, .ctrl-row input[type="text"] {
+  padding: 8px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #059669; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-outline { background: #fff; color: var(--gray-700); border: 1px solid var(--gray-300); }
+.btn-outline:hover { background: var(--gray-50); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── 2패널 레이아웃 ── */
+.editor-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ── 캔버스 영역 ── */
+.canvas-wrap {
+  position: relative;
+  background: #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-wrap.empty {
+  border: 2px dashed var(--gray-300);
+  cursor: pointer;
+}
+
+.canvas-wrap.empty::after {
+  content: '의뢰서 이미지를 드래그하거나 클릭하여 업로드';
+  color: var(--gray-600);
+  font-size: 15px;
+}
+
+#templateCanvas {
+  display: block;
+  cursor: crosshair;
+}
+
+/* ── 필드 목록 패널 ── */
+.field-panel {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--gray-50);
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.field-item:hover { background: var(--primary-light); }
+.field-item.active { border-color: var(--primary); background: var(--primary-light); }
+.field-item.mapped { background: var(--success-light); border-color: var(--success); }
+
+.field-item .field-name { flex: 1; font-weight: 500; }
+.field-item .field-label { font-size: 11px; color: var(--gray-600); }
+.field-item .field-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--gray-200);
+  color: var(--gray-600);
+}
+.field-item.mapped .field-status {
+  background: var(--success);
+  color: #fff;
+}
+
+.field-item .btn-del {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  display: none;
+}
+.field-item.mapped .btn-del { display: block; }
+.field-item .btn-del:hover { background: var(--danger-light); }
+
+/* ── 영역 표시 색상 ── */
+.region-overlay {
+  position: absolute;
+  border: 2px solid var(--primary);
+  background: rgba(37, 99, 235, 0.12);
+  pointer-events: none;
+  font-size: 10px;
+  color: var(--primary);
+  font-weight: 700;
+  padding: 1px 4px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ── 템플릿 목록 ── */
+.tpl-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tpl-list-table th {
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--gray-200);
+}
+.tpl-list-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.tpl-list-table tr:hover td { background: var(--gray-50); }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-blue { background: var(--primary-light); color: var(--primary); }
+.badge-green { background: var(--success-light); color: var(--success); }
+
+/* ── 토스트 ── */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+
+/* ── 탭 ── */
+.page-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--gray-200);
+  margin-bottom: 20px;
+}
+.page-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-600);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+}
+.page-tab:hover { color: var(--gray-900); }
+.page-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── embed 모드 (iframe 내부) ── */
+body.embed-mode .sidebar { display: none !important; }
+body.embed-mode .main-content { margin-left: 0; padding: 16px 20px; }
+
+@media(max-width:768px) {
+  .main-content { margin-left: 0; padding: 16px; }
+  .editor-layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar"></aside>
+
+<div class="main-content">
+  <div class="top-header">
+    <h2>OCR 템플릿 관리</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="switchTab('editor')">템플릿 편집</button>
+      <button class="btn btn-outline" onclick="switchTab('list')">저장된 템플릿</button>
+    </div>
+  </div>
+
+  <!-- ── 탭1: 템플릿 편집기 ── -->
+  <div id="tab-editor" class="tab-content active">
+    <div class="card">
+      <div class="ctrl-row">
+        <select id="selFormType" onchange="onFormTypeChange()">
+          <option value="">-- 양식 유형 선택 --</option>
+          <option value="food">식품 의뢰서</option>
+          <option value="livestock">축산 의뢰서</option>
+          <option value="allergen-pcr">RT-PCR Allergen</option>
+          <option value="allergen-elisa">ELISA Allergen</option>
+          <option value="radiation">방사능 (HPGe)</option>
+          <option value="material">물질검사</option>
+          <option value="halal-vegan">할랄/비건</option>
+          <option value="shelf-life">소비기한 설정</option>
+        </select>
+        <input type="text" id="txtTplName" placeholder="템플릿 이름 (예: 식품 의뢰서 v3)" style="width:200px">
+        <button class="btn btn-outline" onclick="loadTemplateImage()">이미지 업로드</button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="onFileSelected(event)">
+        <div style="flex:1"></div>
+        <button class="btn btn-success" id="btnSave" onclick="saveTemplate()" disabled>Firestore 저장</button>
+      </div>
+    </div>
+
+    <div class="editor-layout">
+      <!-- 왼쪽: 캔버스 -->
+      <div class="card" style="padding:12px">
+        <div class="canvas-wrap empty" id="canvasWrap" onclick="if(this.classList.contains('empty'))loadTemplateImage()" ondrop="onCanvasDrop(event)" ondragover="event.preventDefault()">
+          <canvas id="templateCanvas" width="800" height="600" style="display:none"></canvas>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--gray-600)">
+          <span id="canvasInfo">이미지를 업로드하세요</span>
+          <div style="flex:1"></div>
+          <button class="btn btn-sm btn-outline" onclick="undoLastRegion()" title="마지막 영역 취소">↩ 실행취소</button>
+          <button class="btn btn-sm btn-danger" onclick="clearAllRegions()" title="모든 영역 삭제">전체 초기화</button>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 필드 목록 -->
+      <div class="card field-panel">
+        <div class="card-title">필드 매핑</div>
+        <div style="margin-bottom:10px;font-size:12px;color:var(--gray-600)">
+          필드를 선택한 후 이미지에서 드래그하여 영역 지정
+        </div>
+        <div class="field-list" id="fieldList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 탭2: 저장된 템플릿 목록 ── -->
+  <div id="tab-list" class="tab-content">
+    <div class="card">
+      <div class="card-title">저장된 OCR 템플릿</div>
+      <table class="tpl-list-table">
+        <thead>
+          <tr>
+            <th>양식 유형</th>
+            <th>템플릿 이름</th>
+            <th>매핑된 필드</th>
+            <th>수정일</th>
+            <th>상태</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tplListBody">
+          <tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:40px">로딩 중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 -->
+<div class="toast" id="toast"></div>
+
+<script src="js/firebase-init.js"></script>
+<script src="js/sidebar.js"></script>
+<script>
+// ============================================================
+// 36개 필드 정의 (의뢰서 OCR 출력 필드)
+// ============================================================
+const OCR_FIELDS = [
+  // ── 의뢰인 정보 ──
+  { key: 'companyName',        label: '상호(회사명)',     group: '의뢰인' },
+  { key: 'representativeName', label: '대표자명',         group: '의뢰인' },
+  { key: 'bizNo',              label: '사업자등록번호',   group: '의뢰인' },
+  { key: 'bizType',            label: '업종',             group: '의뢰인' },
+  { key: 'licNo',              label: '인허가번호',       group: '의뢰인' },
+  { key: 'phone',              label: '전화번호',         group: '의뢰인' },
+  { key: 'fax',                label: '팩스번호',         group: '의뢰인' },
+  { key: 'mobile',             label: '휴대전화',         group: '의뢰인' },
+  { key: 'address',            label: '소재지',           group: '의뢰인' },
+  // ── 검사 정보 ──
+  { key: 'testPurpose',        label: '검사목적',         group: '검사' },
+  { key: 'testField',          label: '검사분야',         group: '검사' },
+  // ── 성적서 ──
+  { key: 'reportSend',         label: '성적서수령방법',   group: '성적서' },
+  { key: 'reportSendFax',      label: '팩스수령번호',     group: '성적서' },
+  { key: 'reportSendEmail',    label: '이메일수령주소',   group: '성적서' },
+  { key: 'reportCopiesKor',    label: '국문 부수',        group: '성적서' },
+  { key: 'reportCopiesEng',    label: '영문 부수',        group: '성적서' },
+  // ── 시료 테이블 (반복 영역) ──
+  { key: 'sampleTable',        label: '시료 테이블 전체', group: '시료', isTable: true },
+  { key: 'sample_productName', label: '제품명 열',        group: '시료' },
+  { key: 'sample_foodType',    label: '식품유형 열',      group: '시료' },
+  { key: 'sample_inspItems',   label: '시험의뢰항목 열',  group: '시료' },
+  { key: 'sample_standard',    label: '단서조항 열',      group: '시료' },
+  { key: 'sample_pkgUnit',     label: '포장단위 열',      group: '시료' },
+  { key: 'sample_amount',      label: '검체량 열',        group: '시료' },
+  { key: 'sample_transport',   label: '운반상태 열',      group: '시료' },
+  { key: 'sample_mfgDate',     label: '제조일자 열',      group: '시료' },
+  { key: 'sample_expDate',     label: '소비기한 열',      group: '시료' },
+  // ── 하단 결제 ──
+  { key: 'urgentDate',         label: '긴급협의일',       group: '하단' },
+  { key: 'sampleReturn',       label: '시료반환여부',     group: '하단' },
+  { key: 'memo',               label: '메모',             group: '하단' },
+  { key: 'totalFee',           label: '수수료',           group: '결제' },
+  { key: 'paymentType',        label: '납부구분',         group: '결제' },
+  { key: 'taxInvoice',         label: '세금계산서',       group: '결제' },
+  { key: 'billingDate',        label: '발행요청일',       group: '결제' },
+  { key: 'depositDate',        label: '입금예정일',       group: '결제' },
+  { key: 'depositorName',      label: '입금자명',         group: '결제' },
+  { key: 'billingCompany',     label: '회사명/사번',      group: '결제' },
+  { key: 'billingEmail',       label: '계산서메일',       group: '결제' },
+  { key: 'signDate',           label: '서명일자',         group: '하단' },
+  { key: 'receptionist',       label: '접수자',           group: '하단' },
+  { key: 'requester',          label: '의뢰인',           group: '하단' },
+];
+
+const FORM_TYPE_LABELS = {
+  'food': '식품 의뢰서',
+  'livestock': '축산 의뢰서',
+  'allergen-pcr': 'RT-PCR Allergen',
+  'allergen-elisa': 'ELISA Allergen',
+  'radiation': '방사능 (HPGe)',
+  'material': '물질검사',
+  'halal-vegan': '할랄/비건',
+  'shelf-life': '소비기한 설정'
+};
+
+// 그룹별 색상
+const GROUP_COLORS = {
+  '의뢰인': '#2563eb',
+  '검사':   '#7c3aed',
+  '성적서': '#0891b2',
+  '시료':   '#059669',
+  '하단':   '#d97706',
+  '결제':   '#dc2626'
+};
+
+// ============================================================
+// 상태 관리
+// ============================================================
+let _templateImage = null;      // Image 객체
+let _imageBase64 = '';          // 원본 base64
+let _regions = {};              // { fieldKey: { x, y, w, h } } (비율 0~1)
+let _activeField = null;        // 현재 선택된 필드 key
+let _drawing = false;
+let _drawStart = null;
+let _canvasScale = 1;           // 이미지→캔버스 스케일
+let _editingTplId = null;       // 수정 중인 템플릿 ID
+
+// ============================================================
+// 탭 전환
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'list') loadTemplateList();
+}
+
+// ============================================================
+// 필드 목록 렌더링
+// ============================================================
+function renderFieldList() {
+  const list = document.getElementById('fieldList');
+  let html = '';
+  let lastGroup = '';
+
+  OCR_FIELDS.forEach(f => {
+    if (f.group !== lastGroup) {
+      const color = GROUP_COLORS[f.group] || '#666';
+      html += `<div style="font-size:11px;font-weight:700;color:${color};margin-top:${lastGroup ? '12px' : '0'};margin-bottom:4px;padding-left:4px">${f.group}</div>`;
+      lastGroup = f.group;
+    }
+    const isMapped = !!_regions[f.key];
+    const isActive = _activeField === f.key;
+    html += `<div class="field-item${isMapped ? ' mapped' : ''}${isActive ? ' active' : ''}" onclick="selectField('${f.key}')">
+      <span class="field-name">${f.label}</span>
+      <span class="field-status">${isMapped ? '매핑됨' : '미지정'}</span>
+      <button class="btn-del" onclick="event.stopPropagation();removeRegion('${f.key}')" title="영역 삭제">&times;</button>
+    </div>`;
+  });
+
+  list.innerHTML = html;
+  updateSaveBtn();
+}
+
+function selectField(key) {
+  _activeField = key;
+  renderFieldList();
+  // 해당 영역 강조
+  redrawCanvas();
+}
+
+function removeRegion(key) {
+  delete _regions[key];
+  renderFieldList();
+  redrawCanvas();
+}
+
+function undoLastRegion() {
+  const keys = Object.keys(_regions);
+  if (!keys.length) return;
+  delete _regions[keys[keys.length - 1]];
+  renderFieldList();
+  redrawCanvas();
+}
+
+function clearAllRegions() {
+  if (Object.keys(_regions).length && !confirm('모든 영역을 삭제하시겠습니까?')) return;
+  _regions = {};
+  renderFieldList();
+  redrawCanvas();
+}
+
+function updateSaveBtn() {
+  const btn = document.getElementById('btnSave');
+  const hasMappings = Object.keys(_regions).length > 0;
+  const hasFormType = document.getElementById('selFormType').value;
+  btn.disabled = !hasMappings || !hasFormType || !_templateImage;
+}
+
+// ============================================================
+// 이미지 업로드
+// ============================================================
+function loadTemplateImage() {
+  document.getElementById('fileInput').click();
+}
+
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  processImageFile(file);
+}
+
+function onCanvasDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) processImageFile(file);
+}
+
+function processImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    _imageBase64 = ev.target.result.split(',')[1];
+    const img = new Image();
+    img.onload = function() {
+      _templateImage = img;
+      initCanvas();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============================================================
+// 캔버스 초기화 & 렌더링
+// ============================================================
+function initCanvas() {
+  const wrap = document.getElementById('canvasWrap');
+  const canvas = document.getElementById('templateCanvas');
+  wrap.classList.remove('empty');
+  canvas.style.display = 'block';
+
+  // 캔버스 크기 = wrap 너비 기준
+  const maxW = wrap.clientWidth || 800;
+  _canvasScale = maxW / _templateImage.width;
+  const displayH = _templateImage.height * _canvasScale;
+
+  canvas.width = maxW;
+  canvas.height = displayH;
+  canvas.style.width = maxW + 'px';
+  canvas.style.height = displayH + 'px';
+
+  document.getElementById('canvasInfo').textContent =
+    `원본: ${_templateImage.width}x${_templateImage.height}px | 표시: ${maxW}x${Math.round(displayH)}px | 매핑: ${Object.keys(_regions).length}개`;
+
+  redrawCanvas();
+  updateSaveBtn();
+}
+
+function redrawCanvas() {
+  const canvas = document.getElementById('templateCanvas');
+  if (!_templateImage || canvas.style.display === 'none') return;
+  const ctx = canvas.getContext('2d');
+
+  // 배경 이미지
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(_templateImage, 0, 0, canvas.width, canvas.height);
+
+  // 영역 그리기
+  Object.entries(_regions).forEach(([key, r]) => {
+    const field = OCR_FIELDS.find(f => f.key === key);
+    const color = GROUP_COLORS[field?.group] || '#2563eb';
+    const isActive = key === _activeField;
+
+    const x = r.x * canvas.width;
+    const y = r.y * canvas.height;
+    const w = r.w * canvas.width;
+    const h = r.h * canvas.height;
+
+    // 배경
+    ctx.fillStyle = isActive ? `${color}33` : `${color}1a`;
+    ctx.fillRect(x, y, w, h);
+
+    // 테두리
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isActive ? 3 : 2;
+    if (isActive) ctx.setLineDash([6, 3]);
+    else ctx.setLineDash([]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+
+    // 라벨
+    const label = field?.label || key;
+    ctx.font = 'bold 11px "Noto Sans KR", sans-serif';
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y - 16, tw + 8, 16);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, x + 4, y - 4);
+  });
+}
+
+// ============================================================
+// 마우스 드래그로 영역 지정
+// ============================================================
+(function setupCanvasEvents() {
+  const canvas = document.getElementById('templateCanvas');
+
+  canvas.addEventListener('mousedown', function(e) {
+    if (!_activeField || !_templateImage) return;
+    const rect = canvas.getBoundingClientRect();
+    _drawing = true;
+    _drawStart = {
+      x: (e.clientX - rect.left) / canvas.width,
+      y: (e.clientY - rect.top) / canvas.height
+    };
+  });
+
+  canvas.addEventListener('mousemove', function(e) {
+    if (!_drawing || !_drawStart) return;
+    const rect = canvas.getBoundingClientRect();
+    const curX = (e.clientX - rect.left) / canvas.width;
+    const curY = (e.clientY - rect.top) / canvas.height;
+
+    // 임시 영역 표시
+    const tempRegion = {
+      x: Math.min(_drawStart.x, curX),
+      y: Math.min(_drawStart.y, curY),
+      w: Math.abs(curX - _drawStart.x),
+      h: Math.abs(curY - _drawStart.y)
+    };
+    _regions[_activeField] = tempRegion;
+    redrawCanvas();
+  });
+
+  canvas.addEventListener('mouseup', function(e) {
+    if (!_drawing || !_drawStart || !_activeField) { _drawing = false; return; }
+    const rect = canvas.getBoundingClientRect();
+    const endX = (e.clientX - rect.left) / canvas.width;
+    const endY = (e.clientY - rect.top) / canvas.height;
+
+    const region = {
+      x: Math.max(0, Math.min(_drawStart.x, endX)),
+      y: Math.max(0, Math.min(_drawStart.y, endY)),
+      w: Math.min(1, Math.abs(endX - _drawStart.x)),
+      h: Math.min(1, Math.abs(endY - _drawStart.y))
+    };
+
+    // 너무 작은 영역 무시 (클릭 실수 방지)
+    if (region.w < 0.01 || region.h < 0.005) {
+      delete _regions[_activeField];
+    } else {
+      _regions[_activeField] = region;
+    }
+
+    _drawing = false;
+    _drawStart = null;
+
+    // 다음 미지정 필드로 자동 이동
+    autoAdvanceField();
+    renderFieldList();
+    redrawCanvas();
+    updateCanvasInfo();
+  });
+
+  canvas.addEventListener('mouseleave', function() {
+    if (_drawing) {
+      _drawing = false;
+      _drawStart = null;
+    }
+  });
+})();
+
+function autoAdvanceField() {
+  // 현재 필드 다음의 미지정 필드로 이동
+  const curIdx = OCR_FIELDS.findIndex(f => f.key === _activeField);
+  for (let i = 1; i < OCR_FIELDS.length; i++) {
+    const nextIdx = (curIdx + i) % OCR_FIELDS.length;
+    const nextKey = OCR_FIELDS[nextIdx].key;
+    if (!_regions[nextKey]) {
+      _activeField = nextKey;
+      return;
+    }
+  }
+}
+
+function updateCanvasInfo() {
+  document.getElementById('canvasInfo').textContent =
+    `원본: ${_templateImage.width}x${_templateImage.height}px | 매핑: ${Object.keys(_regions).length}개 / ${OCR_FIELDS.length}개`;
+}
+
+// ============================================================
+// Firestore 저장/로드
+// ============================================================
+async function saveTemplate() {
+  const formType = document.getElementById('selFormType').value;
+  const name = document.getElementById('txtTplName').value.trim() || FORM_TYPE_LABELS[formType] || formType;
+
+  if (!formType) return showToast('양식 유형을 선택하세요', 'error');
+  if (!Object.keys(_regions).length) return showToast('최소 1개 이상 필드를 매핑하세요', 'error');
+  if (!_templateImage) return showToast('이미지를 업로드하세요', 'error');
+
+  try {
+    await waitForFirebase();
+    const db = firebase.firestore();
+
+    const docData = {
+      formType: formType,
+      name: name,
+      regions: _regions,
+      imageWidth: _templateImage.width,
+      imageHeight: _templateImage.height,
+      fieldCount: Object.keys(_regions).length,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      active: true
+    };
+
+    // 이미지 base64도 저장 (미리보기용, 최대 500KB까지만)
+    if (_imageBase64 && _imageBase64.length < 500000) {
+      docData.imagePreview = _imageBase64.substring(0, 500000);
+    }
+
+    if (_editingTplId) {
+      await db.collection('ocrTemplates').doc(_editingTplId).update(docData);
+      showToast(`템플릿 "${name}" 업데이트 완료`, 'success');
+    } else {
+      // 같은 formType의 기존 템플릿이 있으면 비활성화
+      const existing = await db.collection('ocrTemplates').where('formType', '==', formType).where('active', '==', true).get();
+      const batch = db.batch();
+      existing.forEach(doc => batch.update(doc.ref, { active: false }));
+
+      const newRef = db.collection('ocrTemplates').doc();
+      docData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      batch.set(newRef, docData);
+      await batch.commit();
+
+      _editingTplId = newRef.id;
+      showToast(`템플릿 "${name}" 저장 완료`, 'success');
+    }
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+async function loadTemplateList() {
+  const tbody = document.getElementById('tplListBody');
+  try {
+    await waitForFirebase();
+    const db = firebase.firestore();
+    const snap = await db.collection('ocrTemplates').orderBy('updatedAt', 'desc').get();
+
+    if (snap.empty) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-600);padding:40px">저장된 템플릿이 없습니다</td></tr>';
+      return;
+    }
+
+    let html = '';
+    snap.forEach(doc => {
+      const d = doc.data();
+      const date = d.updatedAt?.toDate ? d.updatedAt.toDate().toLocaleDateString('ko-KR') : '-';
+      html += `<tr>
+        <td><span class="badge badge-blue">${FORM_TYPE_LABELS[d.formType] || d.formType}</span></td>
+        <td>${d.name || '-'}</td>
+        <td>${d.fieldCount || 0}개</td>
+        <td>${date}</td>
+        <td>${d.active ? '<span class="badge badge-green">활성</span>' : '<span class="badge" style="background:#eee;color:#888">비활성</span>'}</td>
+        <td>
+          <button class="btn btn-sm btn-outline" onclick="editTemplate('${doc.id}')">편집</button>
+          <button class="btn btn-sm ${d.active ? 'btn-danger' : 'btn-success'}" onclick="toggleTemplateActive('${doc.id}', ${!d.active})">${d.active ? '비활성화' : '활성화'}</button>
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">${e.message}</td></tr>`;
+  }
+}
+
+async function editTemplate(docId) {
+  try {
+    await waitForFirebase();
+    const db = firebase.firestore();
+    const doc = await db.collection('ocrTemplates').doc(docId).get();
+    if (!doc.exists) return showToast('템플릿을 찾을 수 없습니다', 'error');
+
+    const d = doc.data();
+    _editingTplId = docId;
+    _regions = d.regions || {};
+
+    document.getElementById('selFormType').value = d.formType || '';
+    document.getElementById('txtTplName').value = d.name || '';
+
+    // 이미지 미리보기가 있으면 로드
+    if (d.imagePreview) {
+      const img = new Image();
+      img.onload = function() {
+        _templateImage = img;
+        _imageBase64 = d.imagePreview;
+        initCanvas();
+        renderFieldList();
+      };
+      img.src = 'data:image/jpeg;base64,' + d.imagePreview;
+    } else {
+      renderFieldList();
+    }
+
+    switchTab('editor');
+    showToast('템플릿 로드 완료 — 이미지를 다시 업로드하세요', 'success');
+  } catch(e) {
+    showToast('로드 실패: ' + e.message, 'error');
+  }
+}
+
+async function toggleTemplateActive(docId, active) {
+  try {
+    await waitForFirebase();
+    const db = firebase.firestore();
+
+    if (active) {
+      // 같은 formType의 다른 활성 템플릿 비활성화
+      const doc = await db.collection('ocrTemplates').doc(docId).get();
+      const formType = doc.data().formType;
+      const existing = await db.collection('ocrTemplates').where('formType', '==', formType).where('active', '==', true).get();
+      const batch = db.batch();
+      existing.forEach(d => batch.update(d.ref, { active: false }));
+      batch.update(db.collection('ocrTemplates').doc(docId), { active: true });
+      await batch.commit();
+    } else {
+      await db.collection('ocrTemplates').doc(docId).update({ active: active });
+    }
+    loadTemplateList();
+    showToast(active ? '활성화 완료' : '비활성화 완료', 'success');
+  } catch(e) {
+    showToast('변경 실패: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
+// 양식 유형 변경
+// ============================================================
+function onFormTypeChange() {
+  updateSaveBtn();
+  const formType = document.getElementById('selFormType').value;
+  if (formType && !document.getElementById('txtTplName').value) {
+    document.getElementById('txtTplName').value = FORM_TYPE_LABELS[formType] || formType;
+  }
+}
+
+// ============================================================
+// 유틸
+// ============================================================
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (type || 'success') + ' show';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ============================================================
+// embed 모드 감지 (iframe 내부)
+// ============================================================
+(function checkEmbed() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('embed') === '1' || window !== window.top) {
+    document.body.classList.add('embed-mode');
+  }
+})();
+
+// ============================================================
+// 초기화
+// ============================================================
+renderFieldList();
+</script>
+</body>
+</html>

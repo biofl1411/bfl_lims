@@ -1383,6 +1383,39 @@ async function runReceiptOCR() {
             images: [{ format: imgData.format, name: _receiptOcrFile.name, data: imgData.base64 }]
         };
 
+        // 템플릿 OCR 먼저 시도 → 실패 시 기존 방식 폴백
+        var ocrEndpoint = '/api/ocr/inspection-form';
+        try {
+            var tplCheck = await fetch(OCR_PROXY_BASE + '/api/ocr/template-ocr', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (tplCheck.ok) {
+                var tplResult = await tplCheck.json();
+                if (tplResult && !tplResult.error && tplResult._ocrMethod === 'template-crop+clova') {
+                    status.textContent = '🎯 특화 OCR 성공 — 폼 자동입력 중...';
+                    try { fillFormFromOcrResult(tplResult); } catch(fe) {
+                        console.error('[OCR] 특화 OCR 폼 입력 오류:', fe);
+                    }
+                    status.textContent = '✅ 특화 OCR 인식 완료!';
+                    status.style.color = '#2e7d32';
+                    btn.textContent = '실행';
+                    btn.disabled = false;
+                    var zone = document.getElementById('ocr-drop-zone');
+                    var hint = document.getElementById('ocr-drop-hint');
+                    if (zone) { zone.style.borderColor = '#10b981'; zone.style.background = '#ecfdf5'; }
+                    if (hint) hint.textContent = '✅ 특화 OCR 완료 — 새 파일 드롭 가능';
+                    showToast('🎯 특화 OCR 완료 — 자동입력된 내용을 확인하세요');
+                    return;
+                }
+            }
+        } catch(tplErr) {
+            console.log('[OCR] 템플릿 OCR 불가 — 기존 방식으로 진행:', tplErr.message);
+        }
+
+        status.textContent = 'Claude Vision으로 의뢰서 분석 중... (5~10초 소요)';
+
         var resp = await fetch(OCR_PROXY_BASE + '/api/ocr/inspection-form', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
