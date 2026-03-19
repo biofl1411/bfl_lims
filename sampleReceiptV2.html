@@ -337,16 +337,23 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 ══════════════════════════════════════════ -->
 <div class="cp-bar cp-header-bar">
 
-  <!-- OCR 미니 -->
-  <div style="position:relative;flex-shrink:0">
-    <button type="button" class="btn-mini gray" title="의뢰서 OCR 자동입력"
-      onclick="document.getElementById('receiptOcrFileInput').click()">🤖 OCR</button>
+  <!-- OCR 드래그 앤 드롭 영역 -->
+  <div id="ocr-drop-zone" style="position:relative;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:4px 12px;border:2px dashed #c4b5fd;border-radius:10px;background:#faf5ff;cursor:pointer;transition:all .2s;min-width:180px;"
+    onclick="document.getElementById('receiptOcrFileInput').click()"
+    ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='#ede9fe'"
+    ondragleave="this.style.borderColor='#c4b5fd';this.style.background='#faf5ff'"
+    ondrop="event.preventDefault();this.style.borderColor='#c4b5fd';this.style.background='#faf5ff';if(event.dataTransfer.files.length)handleReceiptOcrFile(event.dataTransfer.files[0])">
+    <span style="font-size:22px">🤖</span>
+    <div style="display:flex;flex-direction:column;line-height:1.2">
+      <span style="font-size:12px;font-weight:700;color:#7c3aed">의뢰서 OCR</span>
+      <span style="font-size:9px;color:#a78bfa" id="ocr-drop-hint">클릭 또는 파일 드롭</span>
+    </div>
     <input type="file" id="receiptOcrFileInput" accept="image/*,.pdf" style="display:none"
       onchange="handleReceiptOcrFile(this.files[0])">
     <button type="button" class="btn-mini secondary" id="receiptOcrBtn"
-      onclick="runReceiptOCR()" disabled style="margin-left:2px">실행</button>
+      onclick="event.stopPropagation();runReceiptOCR()" disabled style="margin-left:4px;padding:4px 10px;font-size:11px;font-weight:700;border-radius:6px">실행</button>
   </div>
-  <div id="receiptOcrStatus" style="font-size:10px;color:#667085;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+  <div id="receiptOcrStatus" style="font-size:10px;color:#667085;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
 
   <div class="cp-sep"></div>
 
@@ -1351,9 +1358,13 @@ function handleOcrFetchError(err, statusEl, btnEl) {
 function handleReceiptOcrFile(file) {
     if (!file) return;
     _receiptOcrFile = file;
-    document.getElementById('receiptOcrFileName').textContent = '📋 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + 'KB)';
+    var hint = document.getElementById('ocr-drop-hint');
+    if (hint) hint.textContent = '📋 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + 'KB)';
     document.getElementById('receiptOcrBtn').disabled = false;
     document.getElementById('receiptOcrStatus').textContent = '';
+    // 드롭존 스타일 변경
+    var zone = document.getElementById('ocr-drop-zone');
+    if (zone) { zone.style.borderColor = '#7c3aed'; zone.style.background = '#ede9fe'; }
 }
 
 // 의뢰서 OCR 실행
@@ -1397,10 +1408,15 @@ async function runReceiptOCR() {
             return;
         }
 
-        status.textContent = '✅ 의뢰서 인식 완료! 초록색 표시된 필드를 확인하세요.';
+        status.textContent = '✅ 의뢰서 인식 완료!';
         status.style.color = '#2e7d32';
-        btn.textContent = '🤖 의뢰서 OCR';
+        btn.textContent = '실행';
         btn.disabled = false;
+        // 드롭존 초기화
+        var zone = document.getElementById('ocr-drop-zone');
+        var hint = document.getElementById('ocr-drop-hint');
+        if (zone) { zone.style.borderColor = '#10b981'; zone.style.background = '#ecfdf5'; }
+        if (hint) hint.textContent = '✅ 인식 완료 — 새 파일 드롭 가능';
         showToast('✅ 의뢰서 OCR 완료 — 자동입력된 내용을 확인하세요');
     } catch (err) {
         handleOcrFetchError(err, status, btn);
