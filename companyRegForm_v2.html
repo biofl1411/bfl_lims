@@ -376,8 +376,7 @@
                 <label>분야 <span class="req">*</span></label>
                 <select id="licField_1" onchange="updateBizTypeOptions(this)">
                   <option value="">선택</option>
-                  <option value="식품">식품</option>
-                  <option value="축산">축산</option>
+                  <!-- 동적 로드: Firestore settings/inspectionFields -->
                 </select>
               </div>
               <div class="form-group">
@@ -997,7 +996,7 @@ function addLicense() {
         <button class="btn-remove" onclick="removeLicense(${idx})" title="삭제">×</button>
       </div>
       <div class="form-grid">
-        <div class="form-group"><label>분야 <span class="req">*</span></label><select id="licField_${idx}" onchange="updateBizTypeOptions(this)"><option value="">선택</option><option value="식품">식품</option><option value="축산">축산</option></select></div>
+        <div class="form-group"><label>분야 <span class="req">*</span></label><select id="licField_${idx}" onchange="updateBizTypeOptions(this)"><option value="">선택</option></select></div>
         <div class="form-group"><label>영업의 형태 <span class="req">*</span></label><div class="combo-input"><select id="licBizForm_${idx}" onchange="toggleCustomInput(this)"><option value="">선택</option><optgroup label="식품"><option>식품제조가공업</option><option>즉석판매제조가공업</option><option>식품소분업</option><option>유통전문판매업</option><option>식품운반업</option><option>식품냉동냉장업</option></optgroup><optgroup label="축산"><option>축산물가공업</option><option>식육포장처리업</option><option>축산물유통전문판매업</option><option>축산물운반업</option><option>축산물보관업</option></optgroup><option value="직접입력">✏️ 직접 입력</option></select><input type="text" class="hidden" placeholder="영업의 형태 직접 입력" /></div></div>
         <div class="form-group"><label>대표자 <span class="req">*</span></label><input type="text" id="licRepName_${idx}" placeholder="인허가 대표자" /></div>
         <div class="form-group"><label>인허가번호 <span class="req">*</span></label><input type="text" id="licNo_${idx}" placeholder="인허가번호 입력" /></div>
@@ -1008,8 +1007,49 @@ function addLicense() {
       <div id="licLawBadge_${idx}" class="law-badge" style="display:none"></div>
     </div>`;
   document.getElementById('licenseList').insertAdjacentHTML('beforeend', html);
+  // 분야 select 동적 옵션 채우기
+  populateLicFieldSelect(idx);
 }
 function removeLicense(id) { if(confirm('삭제하시겠습니까?')) document.getElementById('license-'+id).remove(); }
+
+// 분야 select에 Firestore 기반 옵션 동적 생성
+var _companyFieldsCache = null;
+async function populateLicFieldSelect(idx) {
+  var sel = document.getElementById('licField_' + idx);
+  if (!sel) return;
+  // 기존 옵션("선택" 제외) 제거 후 재생성
+  while (sel.options.length > 1) sel.remove(1);
+  try {
+    if (!_companyFieldsCache) {
+      var doc = await db.collection('settings').doc('inspectionFields').get();
+      if (doc.exists && doc.data().fields) {
+        _companyFieldsCache = doc.data().fields;
+      } else {
+        _companyFieldsCache = [{name:'식품'},{name:'축산'}]; // 폴백
+      }
+    }
+    _companyFieldsCache.forEach(function(f) {
+      var opt = document.createElement('option');
+      opt.value = f.name;
+      opt.textContent = f.name;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    console.warn('분야 옵션 로드 실패:', e);
+    // 폴백
+    ['식품','축산'].forEach(function(n) {
+      var opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+  }
+}
+// 모든 licField select 동적 채우기
+async function populateAllLicFieldSelects() {
+  for (var i = 1; i <= licenseCount; i++) {
+    await populateLicFieldSelect(i);
+  }
+}
 
 /* ===== HTML 이스케이프 유틸 ===== */
 function escHtml(str) {
@@ -1101,6 +1141,8 @@ window.addEventListener('firebase-ready', async function() {
       console.log('[companyRegForm] Firestore 사용자 ' + _allUsers.length + '명 로드');
     }
   } catch(e) { console.warn('Firestore 사용자 로드 실패:', e.message); }
+  // 인허가 분야 select 동적 채우기
+  populateAllLicFieldSelects();
 });
 /* 부서 <option> HTML 생성 유틸 */
 function buildTeamOptions() {

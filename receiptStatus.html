@@ -159,8 +159,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <input type="date" id="filter-to" onchange="applyFilter()">
             <select id="filter-field" onchange="applyFilter()">
                 <option value="">전체 분야</option>
-                <option value="식품">식품</option>
-                <option value="축산">축산</option>
+                <!-- 동적 로드: Firestore settings/inspectionFields -->
             </select>
             <button class="btn btn-secondary btn-sm" onclick="var t=new Date().toISOString().slice(0,10);document.getElementById('filter-from').value=t;document.getElementById('filter-to').value=t;applyFilter()">오늘</button>
             <button class="btn btn-secondary btn-sm" onclick="var n=new Date();document.getElementById('filter-from').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-01';document.getElementById('filter-to').value=n.toISOString().slice(0,10);applyFilter()">이번달</button>
@@ -1980,7 +1979,26 @@ window.onload = function() {
     from.setDate(from.getDate() - 30);
     document.getElementById('filter-to').value = now.toISOString().split('T')[0];
     document.getElementById('filter-from').value = from.toISOString().split('T')[0];
+    // 분야 필터 동적 로드
+    loadFieldFilterOptions();
 };
+
+async function loadFieldFilterOptions() {
+  try {
+    var doc = await db.collection('settings').doc('inspectionFields').get();
+    if (doc.exists && doc.data().fields) {
+      var sel = document.getElementById('filter-field');
+      if (!sel) return;
+      var fields = doc.data().fields;
+      fields.forEach(function(f) {
+        var opt = document.createElement('option');
+        opt.value = f.name;
+        opt.textContent = f.name;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) { console.warn('분야 필터 로드 실패:', e); }
+}
 </script>
 </body>
 </html>

@@ -1270,8 +1270,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <div class="batch-field">
         <label><input type="checkbox" id="batch-chk-division" onchange="document.getElementById('batch-val-division').disabled=!this.checked"> 분야</label>
         <select id="batch-val-division" disabled>
-          <option value="식품">식품</option>
-          <option value="축산">축산</option>
+          <!-- 동적 로드: Firestore settings/inspectionFields -->
         </select>
       </div>
       <div class="batch-field">
@@ -1526,9 +1525,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <div class="form-group">
           <label>검사 분야</label>
           <select id="input-분야" style="padding:8px 12px;border:1px solid var(--bdr);border-radius:8px;font-size:14px;background:#fff;">
-            <option value="식품">식품</option>
-            <option value="축산">축산</option>
-            <option value="기타">기타</option>
+            <!-- 동적 로드: Firestore settings/inspectionFields -->
           </select>
         </div>
       </div>
@@ -1595,20 +1592,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <div class="form-group">
           <label>분류</label>
           <select id="input-분류">
-            <option value="자가품질위탁검사용">자가품질위탁검사용</option>
-            <option value="잔류농약(참고용)">잔류농약(참고용)</option>
-            <option value="항생물질(참고용)">항생물질(참고용)</option>
-            <option value="참고용(소비기한설정)">참고용(소비기한설정)</option>
-            <option value="연구용역">연구용역</option>
-            <option value="Allergen(RT-PCR)">Allergen(RT-PCR)</option>
-            <option value="방사능(HPGe)">방사능(HPGe)</option>
-            <option value="Allergen(ELISA)">Allergen(ELISA)</option>
-            <option value="Vegan food(RT-PCR)">Vegan food(RT-PCR)</option>
-            <option value="물질검사">물질검사</option>
-            <option value="표시기준">표시기준</option>
-            <option value="참고용(외부의뢰)">참고용(외부의뢰)</option>
-            <option value="Halal food(RT_PCR)">Halal food(RT_PCR)</option>
-            <option value="접수취소">접수취소</option>
+            <!-- 동적 로드: Firestore settings/inspectionPurposes -->
           </select>
         </div>
 
@@ -37313,11 +37297,40 @@ function exportMfdsMappings() {
   XLSX.writeFile(wb, 'BFL_MFDS_매핑_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
 
+// ══ 동적 select 옵션 생성 (Firestore 기반) ══
+function populateDynamicSelects() {
+  // 검사 분야 select (input-분야, batch-val-division)
+  var fieldSelIds = ['input-분야', 'batch-val-division'];
+  fieldSelIds.forEach(function(selId) {
+    var sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = '';
+    FIELDS.forEach(function(f) {
+      var opt = document.createElement('option');
+      opt.value = f.name;
+      opt.textContent = f.name;
+      sel.appendChild(opt);
+    });
+  });
+  // 검사목적(분류) select (input-분류)
+  var purposeSel = document.getElementById('input-분류');
+  if (purposeSel) {
+    purposeSel.innerHTML = '';
+    P.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.n;
+      opt.textContent = p.n;
+      purposeSel.appendChild(opt);
+    });
+  }
+}
+
 // ══ 초기화 ══
 // Firebase 인증 대기 후 초기화
 window.addEventListener('firebase-ready', async function() {
   await loadInspectionConfig();
   init();
+  populateDynamicSelects();
   if (!_inspectionDataLoaded.foodType && foodTypeData.length > 0) saveFoodTypesToFirestore();
   if (!_inspectionDataLoaded.itemGroup && itemGroupData.length > 0) saveItemGroupsToFirestore();
   if (!_inspectionDataLoaded.fee && feeData.length > 0) saveFeesToFirestore();
@@ -37328,6 +37341,7 @@ if (window._firebaseInitDone) {
   (async function() {
     await loadInspectionConfig();
     init();
+    populateDynamicSelects();
     if (!_inspectionDataLoaded.foodType && foodTypeData.length > 0) saveFoodTypesToFirestore();
     if (!_inspectionDataLoaded.itemGroup && itemGroupData.length > 0) saveItemGroupsToFirestore();
     if (!_inspectionDataLoaded.fee && feeData.length > 0) saveFeesToFirestore();

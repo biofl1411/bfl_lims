@@ -216,8 +216,7 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
         <div class="toolbar-row" style="gap:8px;flex-wrap:wrap;align-items:center;">
           <select class="form-select" id="diary-filter-field" style="width:90px" onchange="onDiaryFieldChange()">
             <option value="">분야 전체</option>
-            <option value="식품">식품</option>
-            <option value="축산">축산</option>
+            <!-- 동적 로드: Firestore settings/inspectionFields -->
           </select>
           <select class="form-select" id="diary-filter-purpose" style="width:200px" onchange="onDiaryPurposeChange()">
             <option value="">검사목적 전체</option>
@@ -301,6 +300,7 @@ var _selectedSpecIdx = -1;     // 선택된 기준규격 인덱스
 
 // 마스터 데이터
 var masterPurposes = [];           // settings/inspectionPurposes
+var masterFields = [];             // settings/inspectionFields
 var masterItemsByPurpose = {};     // { purposeName: [item1, item2, ...] }
 
 /* ============================================================
@@ -327,6 +327,27 @@ async function initDiary() {
 
 /* 마스터 데이터 로드 (검사목적, 검사항목 연동) */
 async function loadMasterData() {
+  // 0. 검사 분야
+  try {
+    var fieldsDoc = await db.collection('settings').doc('inspectionFields').get();
+    if (fieldsDoc.exists && fieldsDoc.data().fields) {
+      masterFields = fieldsDoc.data().fields;
+      // 분야 필터 select 동적 생성
+      var fieldSel = document.getElementById('diary-filter-field');
+      if (fieldSel) {
+        var prevVal = fieldSel.value;
+        fieldSel.innerHTML = '<option value="">분야 전체</option>';
+        masterFields.forEach(function(f) {
+          var opt = document.createElement('option');
+          opt.value = f.name;
+          opt.textContent = f.name;
+          if (f.name === prevVal) opt.selected = true;
+          fieldSel.appendChild(opt);
+        });
+      }
+    }
+  } catch(e) { console.warn('검사분야 로드 실패:', e); }
+
   // 1. 검사목적
   try {
     var doc = await db.collection('settings').doc('inspectionPurposes').get();
@@ -1445,6 +1466,13 @@ function filterDiarySamples() {
 }
 
 function getFieldCode(name) {
+  if (!name) return '';
+  // masterFields가 로드되었으면 동적으로 매핑
+  if (masterFields.length > 0) {
+    var f = masterFields.find(function(field) { return field.name === name; });
+    return f ? (f.code || f.id || '') : '';
+  }
+  // 폴백
   if (name === '식품') return 'F';
   if (name === '축산') return 'L';
   if (name === '기타') return 'E';
@@ -1703,12 +1731,7 @@ function renderDiaryPanel() {
   html += '<div class="rec-form-row" style="grid-template-columns:1fr 1fr">';
   html += '<div><label>검사목적</label>';
   html += '<select id="rec-purpose" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" onchange="onRecPurposeChange()">';
-  html += '<option value="자가품질위탁검사용">자가품질위탁검사용</option>';
-  html += '<option value="참고용(기준규격외)">참고용(기준규격외)</option>';
-  html += '<option value="참고용(영양성분)">참고용(영양성분)</option>';
-  html += '<option value="참고용(소비기한설정)">참고용(소비기한설정)</option>';
-  html += '<option value="연구용역">연구용역</option>';
-  html += '<option value="잔류농약(참고용)">잔류농약(참고용)</option>';
+  html += '<!-- 동적 로드: masterPurposes -->';
   html += '</select></div>';
   html += '<div><label>검사항목</label>';
   html += '<select id="rec-test-item" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" onchange="onRecItemChange()">';
@@ -1796,6 +1819,18 @@ function renderDiaryPanel() {
 
   html += '</div>'; // diary-section
   document.getElementById('diary-panel').innerHTML = html;
+
+  // rec-purpose select 동적 로드 (masterPurposes 기반)
+  var recPurposeSel = document.getElementById('rec-purpose');
+  if (recPurposeSel && masterPurposes.length > 0) {
+    recPurposeSel.innerHTML = '';
+    masterPurposes.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.n;
+      opt.textContent = p.n;
+      recPurposeSel.appendChild(opt);
+    });
+  }
 }
 
 /* ============================================================
