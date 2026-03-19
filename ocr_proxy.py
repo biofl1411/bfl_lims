@@ -287,17 +287,66 @@ def ocr_inspection_form():
             'X-OCR-SECRET': CLOVA_SECRET
         }
 
-        clova_resp = requests.post(
-            CLOVA_GENERAL_URL,
-            headers=clova_headers,
-            json=clova_payload,
-            timeout=30
-        )
+        ocr_text = ''
+        use_clova = True
+        try:
+            clova_resp = requests.post(
+                CLOVA_GENERAL_URL,
+                headers=clova_headers,
+                json=clova_payload,
+                timeout=30
+            )
+            if clova_resp.status_code != 200:
+                print(f'[OCR] Clova 실패({clova_resp.status_code}), Claude Vision 폴백')
+                use_clova = False
+            else:
+                clova_result = clova_resp.json()
+        except Exception as clova_err:
+            print(f'[OCR] Clova 오류: {clova_err}, Claude Vision 폴백')
+            use_clova = False
 
-        if clova_resp.status_code != 200:
-            return jsonify({'error': f'Clova OCR 실패: {clova_resp.status_code}'}), 502
+        # Clova 실패 시 Claude Vision 직접 사용
+        if not use_clova:
+            if image_format in ('jpg', 'jpeg'):
+                media_type = 'image/jpeg'
+            elif image_format == 'png':
+                media_type = 'image/png'
+            elif image_format == 'webp':
+                media_type = 'image/webp'
+            else:
+                media_type = 'image/jpeg'
 
-        clova_result = clova_resp.json()
+            client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+            message = client.messages.create(
+                model='claude-sonnet-4-20250514',
+                max_tokens=3000,
+                messages=[{
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'image',
+                            'source': {
+                                'type': 'base64',
+                                'media_type': media_type,
+                                'data': image_base64
+                            }
+                        },
+                        {
+                            'type': 'text',
+                            'text': INSPECTION_FORM_PROMPT
+                        }
+                    ]
+                }]
+            )
+            result_text = message.content[0].text.strip()
+            if result_text.startswith('```'):
+                result_text = re.sub(r'^```(?:json)?\s*', '', result_text)
+                result_text = re.sub(r'\s*```$', '', result_text)
+            result_json = json.loads(result_text)
+            result_json['_ocrMethod'] = 'claude-vision-fallback'
+            return jsonify(result_json)
+
+        clova_result = clova_result  # Clova 성공 시 계속
 
         # Clova OCR 결과에서 텍스트 추출 (위치 정보 포함)
         extracted_lines = []
