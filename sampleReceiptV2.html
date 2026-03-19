@@ -1713,8 +1713,27 @@ function fillFormFromOcrResult(result) {
             if (faxInput) { faxInput.value = result.reportSendFax; filledFields.push('report-fax-no'); }
         }
         if (result.reportSendEmail) {
+            var rawEmail = result.reportSendEmail.trim();
+            // 여러 이메일 분리 (구분자: , / ; 공백 등)
+            var emails = rawEmail.split(/[,\/;|\s]+/).filter(function(e) { return e.includes('@'); });
             var emailInput = document.getElementById('report-email');
-            if (emailInput) { emailInput.value = result.reportSendEmail; filledFields.push('report-email'); }
+            if (emailInput && emails.length > 0) {
+                emailInput.value = emails[0];
+                filledFields.push('report-email');
+                // 2개 이상이면 CC로 자동 추가
+                if (emails.length > 1) {
+                    var ccToggle = document.getElementById('email-cc-toggle');
+                    if (ccToggle && !ccToggle.checked) { ccToggle.checked = true; toggleMailCc(); }
+                    for (var ei = 1; ei < emails.length; ei++) {
+                        var ccFields = document.querySelectorAll('.cc-email-field');
+                        var lastCc = ccFields[ccFields.length - 1];
+                        if (lastCc && lastCc.value) addCcField();
+                        ccFields = document.querySelectorAll('.cc-email-field');
+                        lastCc = ccFields[ccFields.length - 1];
+                        if (lastCc) lastCc.value = emails[ei];
+                    }
+                }
+            }
         }
     } catch(e) { console.warn('[OCR] 팩스/이메일 설정 오류:', e.message); }
 
