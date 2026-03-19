@@ -746,6 +746,9 @@ body.sidebar-collapsed .main-container{margin-left:64px}
         <button type="button" class="urgent-btn" data-val="긴급" onclick="selectUrgent(this)">⚡긴급</button>
         <button type="button" class="urgent-btn" data-val="시간긴급" onclick="selectUrgent(this)">⏰시간긴급</button>
         <input type="number" id="urgent-time" min="1" max="72" placeholder="h" style="display:none;width:50px;padding:4px 4px;border:1.5px solid #f59e0b;border-radius:6px;font-size:11px;text-align:center;background:#fffbeb;font-weight:600" title="긴급 시간(h)">
+        <select id="urgent-ampm" style="display:none;padding:4px;border:1.5px solid #f59e0b;border-radius:6px;font-size:11px;background:#fffbeb;font-weight:600">
+          <option value="">-</option><option value="오전">오전</option><option value="오후">오후</option>
+        </select>
         <button type="button" class="urgent-btn" data-val="미생물긴급" onclick="selectUrgent(this)">🧫미생물긴급</button>
       </div>
       <input type="hidden" id="urgent-value" value="일반">
@@ -1328,6 +1331,17 @@ function convertPdfToJpegBase64(file) {
 }
 
 // OCR fetch 에러 처리 (SSL 인증서 문제 등)
+// OCR 의뢰서 파일을 "기타" 첨부에 자동 등록
+function _attachOcrFileToEtc() {
+    if (!_receiptOcrFile) return;
+    // 이미 등록된 파일인지 확인 (파일명 기준)
+    var already = _attachedFiles.etc.some(function(f) { return f.name === _receiptOcrFile.name; });
+    if (already) return;
+    _attachedFiles.etc.push({ file: _receiptOcrFile, name: _receiptOcrFile.name, size: _receiptOcrFile.size });
+    if (typeof renderFileList === 'function') renderFileList('etc');
+    console.log('[OCR] 의뢰서 파일 "기타" 첨부에 자동 등록:', _receiptOcrFile.name);
+}
+
 function handleOcrFetchError(err, statusEl, btnEl) {
     if (btnEl) { btnEl.textContent = '🤖 의뢰서 OCR'; btnEl.disabled = false; }
     if (err.message === 'Failed to fetch') {
@@ -1371,6 +1385,18 @@ async function runReceiptOCR() {
     status.style.color = '#1565c0';
 
     try {
+        // OCR 시작 전 발송옵션/CC 초기화
+        document.querySelectorAll('input[name="report-send"]').forEach(function(cb){ cb.checked = false; });
+        document.getElementById('mail-option-panel').style.display = 'none';
+        document.getElementById('fax-option-panel').style.display = 'none';
+        document.getElementById('email-option-panel').style.display = 'none';
+        document.getElementById('report-fax-no').value = '';
+        document.getElementById('report-email').value = '';
+        var ccToggleEl = document.getElementById('email-cc-toggle');
+        if (ccToggleEl) { ccToggleEl.checked = false; }
+        document.getElementById('email-cc-panel').style.display = 'none';
+        document.getElementById('email-cc-fields').innerHTML = '<input type="email" class="cc-email-field cp-inp" placeholder="CC 이메일" style="width:100%;margin-bottom:3px">';
+
         var imgData = await convertPdfToJpegBase64(_receiptOcrFile);
         var payload = {
             images: [{ format: imgData.format, name: _receiptOcrFile.name, data: imgData.base64 }]
@@ -1399,6 +1425,8 @@ async function runReceiptOCR() {
                     var hint = document.getElementById('ocr-drop-hint');
                     if (zone) { zone.style.borderColor = '#10b981'; zone.style.background = '#ecfdf5'; }
                     if (hint) hint.textContent = '✅ 특화 OCR 완료 — 새 파일 드롭 가능';
+                    // 의뢰서 파일을 "기타" 첨부에 자동 등록
+                    _attachOcrFileToEtc();
                     showToast('🎯 특화 OCR 완료 — 자동입력된 내용을 확인하세요');
                     return;
                 }
@@ -1443,6 +1471,8 @@ async function runReceiptOCR() {
         var hint = document.getElementById('ocr-drop-hint');
         if (zone) { zone.style.borderColor = '#10b981'; zone.style.background = '#ecfdf5'; }
         if (hint) hint.textContent = '✅ 인식 완료 — 새 파일 드롭 가능';
+        // 의뢰서 파일을 "기타" 첨부에 자동 등록
+        _attachOcrFileToEtc();
         showToast('✅ 의뢰서 OCR 완료 — 자동입력된 내용을 확인하세요');
     } catch (err) {
         handleOcrFetchError(err, status, btn);
@@ -1925,6 +1955,118 @@ function fillFormFromOcrResult(result) {
         }
     } catch(e) { console.warn('[OCR] 시료정보 설정 오류:', e.message); }
 
+    // ⑦-1. 접수일자 — OCR 서명일을 접수일로 설정
+    try {
+        if (result.signDate) {
+            var receiptDateEl = document.getElementById('receipt-date');
+            var pinReceiptDate = document.getElementById('pin-receipt-date');
+            var isReceiptDateLocked = pinReceiptDate && pinReceiptDate.checked;
+            if (receiptDateEl && !isReceiptDateLocked) {
+                receiptDateEl.value = result.signDate;
+                filledFields.push('receipt-date');
+                // 처리기한 자동 재계산
+                if (typeof calculateProcessingDeadline === 'function') calculateProcessingDeadline();
+            }
+        }
+    } catch(e) { console.warn('[OCR] 접수일 설정 오류:', e.message); }
+
+    // ⑦-2. 긴급 — urgentDate 파싱하여 긴급 버튼 + 처리기한 설정
+    try {
+        if (result.urgentDate) {
+            var urgRaw = (result.urgentDate || '').trim();
+            // "3일차 오전", "2일 차", "3차", "2026-03-19" 등 파싱
+            var dayMatch = urgRaw.match(/(\d+)\s*(일\s*차|차)/);
+            var timeMatch = urgRaw.match(/(오전|오후|AM|PM)/i);
+            var dateMatch = urgRaw.match(/(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})/);
+
+            if (dayMatch || dateMatch) {
+                // 긴급 버튼 활성화
+                var urgBtns = document.querySelectorAll('.urgent-btn');
+                if (timeMatch) {
+                    // 시간긴급 + 오전/오후
+                    urgBtns.forEach(function(b) {
+                        b.classList.remove('active');
+                        if (b.getAttribute('data-val') === '시간긴급') b.classList.add('active');
+                    });
+                    document.getElementById('urgent-value').value = '시간긴급';
+                    var urgTimeEl = document.getElementById('urgent-time');
+                    if (urgTimeEl) {
+                        urgTimeEl.style.display = 'inline-block';
+                        if (dayMatch) urgTimeEl.value = dayMatch[1];
+                    }
+                    var urgAmpmEl = document.getElementById('urgent-ampm');
+                    if (urgAmpmEl) {
+                        urgAmpmEl.style.display = 'inline-block';
+                        var ampmVal = timeMatch[1].toUpperCase();
+                        urgAmpmEl.value = (ampmVal === '오전' || ampmVal === 'AM') ? '오전' : '오후';
+                    }
+                } else {
+                    urgBtns.forEach(function(b) {
+                        b.classList.remove('active');
+                        if (b.getAttribute('data-val') === '긴급') b.classList.add('active');
+                    });
+                    document.getElementById('urgent-value').value = '긴급';
+                }
+                filledFields.push('urgent-value');
+
+                // 처리기한 계산
+                var receiptDateVal = document.getElementById('receipt-date').value;
+                if (receiptDateVal) {
+                    var deadlineDate = null;
+                    if (dateMatch) {
+                        deadlineDate = dateMatch[1] + '-' + dateMatch[2].padStart(2, '0') + '-' + dateMatch[3].padStart(2, '0');
+                    } else if (dayMatch) {
+                        // N일차 = 접수일 포함 N일째 (접수일 + N-1 캘린더일)
+                        var daysToAdd = parseInt(dayMatch[1]) - 1;
+                        var base = new Date(receiptDateVal);
+                        base.setDate(base.getDate() + daysToAdd);
+                        deadlineDate = base.toISOString().split('T')[0];
+                    }
+                    if (deadlineDate) {
+                        document.getElementById('processing-deadline').value = deadlineDate;
+                        filledFields.push('processing-deadline');
+                    }
+                }
+            }
+        }
+    } catch(e) { console.warn('[OCR] 긴급 설정 오류:', e.message); }
+
+    // ⑦-3. 성적서 수령지 — "의뢰인 소재지와 동일" 체크 또는 기타 수령지 주소 설정
+    try {
+        if (result.reportAddress) {
+            var rAddr = result.reportAddress;
+            if (typeof rAddr === 'string') {
+                var isSame = rAddr.indexOf('동일') !== -1 || rAddr.indexOf('소재지') !== -1;
+                if (isSame) {
+                    // 우편 체크 확인 후 "사업자등록증 주소" 선택
+                    var mailCb = document.querySelector('input[name="report-send"][value="우편"]');
+                    if (mailCb && mailCb.checked) {
+                        var bizCb = document.querySelector('input[name="mail-addr-type"][value="biz"]');
+                        if (bizCb) { bizCb.checked = true; if (typeof toggleMailAddrType === 'function') toggleMailAddrType(); }
+                    }
+                    filledFields.push('report-address-same');
+                }
+            }
+        }
+    } catch(e) { console.warn('[OCR] 성적서 수령지 설정 오류:', e.message); }
+
+    // ⑦-4. 수수료 비교 안내 (OCR 수수료와 시스템 수수료 차이)
+    try {
+        if (result.totalFee) {
+            var ocrFee = parseInt(String(result.totalFee).replace(/[^0-9]/g, '')) || 0;
+            if (ocrFee > 0) {
+                window._ocrTotalFee = ocrFee;
+                // 검사항목이 로드된 후 비교하기 위해 지연 실행
+                setTimeout(function() {
+                    var sysFee = window._feeGrandTotal || window._feeTotal || 0;
+                    if (sysFee > 0 && ocrFee !== sysFee) {
+                        showToast('⚠️ 수수료가 다릅니다 — 의뢰서: ' + ocrFee.toLocaleString() + '원 / 시스템: ' + sysFee.toLocaleString() + '원', 'warn');
+                    }
+                }, 3000);
+            }
+        }
+    } catch(e) { console.warn('[OCR] 수수료 비교 오류:', e.message); }
+
     // ⑧ 성적서 발행 부수 (특수 의뢰서)
     try {
         if (result.reportCopies) {
@@ -2252,6 +2394,8 @@ async function loadReceiptForEdit(docId) {
             if (urgVal === '시간긴급') {
                 var utEl = document.getElementById('urgent-time');
                 if (utEl) { utEl.style.display = 'inline-block'; if (data.urgentTime) utEl.value = data.urgentTime; }
+                var ampmEl = document.getElementById('urgent-ampm');
+                if (ampmEl) { ampmEl.style.display = 'inline-block'; if (data.urgentAmpm) ampmEl.value = data.urgentAmpm; }
             }
         }
         // 처리기한
@@ -4762,6 +4906,26 @@ function applyCompanyReportSendPrefs(company) {
     if (prefs.email) {
         document.getElementById('report-email').value = prefs.email;
     }
+    // CC 이메일 복원
+    if (prefs.emailCc && prefs.emailCc.length > 0) {
+        var ccToggle = document.getElementById('email-cc-toggle');
+        if (ccToggle) { ccToggle.checked = true; toggleMailCc(); }
+        prefs.emailCc.forEach(function(ccEmail, idx) {
+            var ccFields = document.querySelectorAll('.cc-email-field');
+            if (idx > 0 || (ccFields[0] && ccFields[0].value)) addCcField();
+            ccFields = document.querySelectorAll('.cc-email-field');
+            var target = ccFields[ccFields.length - 1];
+            if (target) target.value = ccEmail;
+        });
+    }
+    // 기타 우편 주소 복원
+    if (prefs.mailOtherAddr && prefs.mailOtherAddr.addr1) {
+        var otherCb = document.querySelector('input[name="mail-addr-type"][value="other"]');
+        if (otherCb) { otherCb.checked = true; if (typeof toggleMailAddrType === 'function') toggleMailAddrType(); }
+        document.getElementById('mail-zipcode').value = prefs.mailOtherAddr.zipcode || '';
+        document.getElementById('mail-addr1').value = prefs.mailOtherAddr.addr1 || '';
+        document.getElementById('mail-addr2').value = prefs.mailOtherAddr.addr2 || '';
+    }
 
     console.log('[발송방법] 업체 저장된 발송방법 자동 적용:', prefs.methods.join(', '));
 }
@@ -4782,12 +4946,28 @@ async function saveCompanyReportSendPrefs() {
     var faxTypes = [];
     document.querySelectorAll('input[name="fax-type"]:checked').forEach(function(cb) { faxTypes.push(cb.value); });
 
+    // CC 이메일 수집
+    var ccEmails = [];
+    document.querySelectorAll('.cc-email-field').forEach(function(el) { if (el.value) ccEmails.push(el.value); });
+
+    // 기타 우편 주소
+    var mailOtherAddr = {};
+    if (mailAddrTypes.indexOf('other') !== -1) {
+        mailOtherAddr = {
+            zipcode: document.getElementById('mail-zipcode').value || '',
+            addr1: document.getElementById('mail-addr1').value || '',
+            addr2: document.getElementById('mail-addr2').value || ''
+        };
+    }
+
     var prefs = {
         methods: methods,
         mailAddrTypes: mailAddrTypes,
+        mailOtherAddr: mailOtherAddr,
         faxTypes: faxTypes,
         faxNo: document.getElementById('report-fax-no').value || '',
         email: document.getElementById('report-email').value || '',
+        emailCc: ccEmails,
         updatedAt: new Date().toISOString()
     };
 
@@ -4852,9 +5032,14 @@ function selectUrgent(btn) {
     var val = btn.getAttribute('data-val');
     document.getElementById('urgent-value').value = val;
     var timeEl = document.getElementById('urgent-time');
+    var ampmEl = document.getElementById('urgent-ampm');
+    var isTimeUrgent = (val === '시간긴급');
     if (timeEl) {
-        timeEl.style.display = (val === '시간긴급') ? 'inline-block' : 'none';
-        if (val === '시간긴급') timeEl.focus();
+        timeEl.style.display = isTimeUrgent ? 'inline-block' : 'none';
+        if (isTimeUrgent) timeEl.focus();
+    }
+    if (ampmEl) {
+        ampmEl.style.display = isTimeUrgent ? 'inline-block' : 'none';
     }
 }
 
@@ -6062,6 +6247,7 @@ function collectReceiptData() {
         testPurpose: document.getElementById('test-purpose')?.value || '',
         urgent: document.getElementById('urgent-value').value || '일반',
         urgentTime: (document.getElementById('urgent-value').value === '시간긴급') ? (document.getElementById('urgent-time').value || '') : '',
+        urgentAmpm: (document.getElementById('urgent-value').value === '시간긴급') ? (document.getElementById('urgent-ampm').value || '') : '',
         status: document.getElementById('status').value,
         sampleTotalCount: parseInt(document.getElementById('sample-total-count').value) || 1,
         // 업체정보
