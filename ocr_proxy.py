@@ -242,12 +242,14 @@ def ocr_name_card():
 
 
 # ============================================================
-# 시험·검사 의뢰서 OCR (Claude Vision API)
+# 시험·검사 의뢰서 OCR (Clova OCR + Claude 구조화)
+# 1단계: Naver Clova General OCR → 정확한 텍스트 추출
+# 2단계: Claude → 추출 텍스트를 JSON 구조화
 # ============================================================
 @app.route('/api/ocr/inspection-form', methods=['POST'])
 def ocr_inspection_form():
     """
-    시험·검사 의뢰서 이미지를 Claude Vision으로 분석하여 구조화된 JSON 반환.
+    시험·검사 의뢰서 이미지를 Clova OCR로 텍스트 추출 후 Claude로 구조화.
     프론트에서 보내는 JSON:
     {
       "images": [{ "format": "jpg", "name": "file.jpg", "data": "<base64>" }]
@@ -268,39 +270,92 @@ def ocr_inspection_form():
         if not image_base64:
             return jsonify({'error': '이미지 데이터(base64)가 비어있습니다'}), 400
 
-        # 미디어 타입 결정
-        if image_format in ('jpg', 'jpeg'):
-            media_type = 'image/jpeg'
-        elif image_format == 'png':
-            media_type = 'image/png'
-        elif image_format == 'webp':
-            media_type = 'image/webp'
-        elif image_format == 'gif':
-            media_type = 'image/gif'
-        else:
-            media_type = 'image/jpeg'
+        # ── 1단계: Clova General OCR로 텍스트 추출 ──
+        clova_payload = {
+            'version': 'V2',
+            'requestId': f'insp-{int(time.time())}',
+            'timestamp': int(time.time() * 1000),
+            'images': [{
+                'format': image_format if image_format in ('jpg', 'jpeg', 'png') else 'jpg',
+                'name': image_info.get('name', 'file.jpg'),
+                'data': image_base64
+            }]
+        }
 
-        # Claude Vision API 호출
+        clova_headers = {
+            'Content-Type': 'application/json',
+            'X-OCR-SECRET': CLOVA_SECRET
+        }
+
+        clova_resp = requests.post(
+            CLOVA_GENERAL_URL,
+            headers=clova_headers,
+            json=clova_payload,
+            timeout=30
+        )
+
+        if clova_resp.status_code != 200:
+            return jsonify({'error': f'Clova OCR 실패: {clova_resp.status_code}'}), 502
+
+        clova_result = clova_resp.json()
+
+        # Clova OCR 결과에서 텍스트 추출 (위치 정보 포함)
+        extracted_lines = []
+        if 'images' in clova_result:
+            for img in clova_result['images']:
+                for field in img.get('fields', []):
+                    text = field.get('inferText', '').strip()
+                    if text:
+                        # 위치 정보 (y좌표 기준 행 그룹핑용)
+                        vertices = field.get('boundingPoly', {}).get('vertices', [])
+                        y = vertices[0].get('y', 0) if vertices else 0
+                        x = vertices[0].get('x', 0) if vertices else 0
+                        extracted_lines.append({
+                            'text': text,
+                            'x': x,
+                            'y': y,
+                            'lineBreak': field.get('lineBreak', False)
+                        })
+
+        # 행 단위로 그룹핑 (y좌표 차이 15px 이내면 같은 행)
+        if extracted_lines:
+            extracted_lines.sort(key=lambda f: (f['y'], f['x']))
+            lines = []
+            current_line = []
+            last_y = -999
+            for f in extracted_lines:
+                if abs(f['y'] - last_y) > 15 and current_line:
+                    lines.append(' '.join([w['text'] for w in current_line]))
+                    current_line = []
+                current_line.append(f)
+                last_y = f['y']
+                if f.get('lineBreak'):
+                    lines.append(' '.join([w['text'] for w in current_line]))
+                    current_line = []
+                    last_y = -999
+            if current_line:
+                lines.append(' '.join([w['text'] for w in current_line]))
+            ocr_text = '\n'.join(lines)
+        else:
+            ocr_text = ''
+
+        if not ocr_text.strip():
+            return jsonify({'error': 'OCR 텍스트 추출 실패 — 이미지를 확인하세요'}), 400
+
+        # ── 2단계: Claude로 텍스트 구조화 ──
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         message = client.messages.create(
             model='claude-sonnet-4-20250514',
             max_tokens=3000,
             messages=[{
                 'role': 'user',
-                'content': [
-                    {
-                        'type': 'image',
-                        'source': {
-                            'type': 'base64',
-                            'media_type': media_type,
-                            'data': image_base64
-                        }
-                    },
-                    {
-                        'type': 'text',
-                        'text': INSPECTION_FORM_PROMPT
-                    }
-                ]
+                'content': f"""아래는 한국 식품 시험·검사 의뢰서를 OCR로 읽은 텍스트입니다.
+
+=== OCR 추출 텍스트 ===
+{ocr_text}
+=== 끝 ===
+
+{INSPECTION_FORM_PROMPT}"""
             }]
         )
 
@@ -313,15 +368,21 @@ def ocr_inspection_form():
             result_text = re.sub(r'\s*```$', '', result_text)
 
         result_json = json.loads(result_text)
+
+        # OCR 원문 텍스트도 결과에 포함 (디버깅용)
+        result_json['_ocrRawText'] = ocr_text[:2000]
+
         return jsonify(result_json)
 
     except json.JSONDecodeError as e:
         return jsonify({
             'error': f'Claude 응답 JSON 파싱 실패: {str(e)}',
-            'raw': result_text[:500] if 'result_text' in dir() else ''
+            'raw': result_text[:500] if 'result_text' in locals() else ''
         }), 500
     except anthropic.APIError as e:
         return jsonify({'error': f'Claude API 오류: {str(e)}'}), 502
+    except requests.Timeout:
+        return jsonify({'error': 'Clova OCR 타임아웃 (30초)'}), 504
     except Exception as e:
         return jsonify({'error': f'서버 오류: {str(e)}'}), 500
 
