@@ -30,6 +30,9 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 
 /* TABS */
 .tabs{display:flex;gap:6px;margin-bottom:24px;flex-wrap:wrap}
+.sortable-ghost{background:#dbeafe!important;opacity:.7}
+.drag-handle:hover{cursor:grab}
+.drag-handle:active{cursor:grabbing}
 .tab{padding:8px 14px;font-size:12px;font-weight:600;border-radius:50px;cursor:pointer;transition:all .3s;border:2px solid transparent;background:var(--card);color:var(--sub);box-shadow:var(--sh);white-space:nowrap}
 .tab:hover{transform:translateY(-2px);box-shadow:var(--shl);color:var(--txt)}
 .tab.active{color:#fff;transform:translateY(-2px);box-shadow:var(--shl)}
@@ -458,6 +461,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 <script src="js/mfds-fee-mapping.js"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script src="js/sidebar.js?v=3"></script>
 
 <div class="main">
@@ -30149,6 +30153,46 @@ function reorderItemByNumber(globalIdx, type, purpose, newPosStr) {
   showToast('순서 변경: ' + (currentLocalPos+1) + ' → ' + (targetLocalPos+1), 'info');
 }
 
+/** 드래그 앤 드롭 순서 변경 — SortableJS 초기화 */
+function initSortableTbodies() {
+  document.querySelectorAll('.ig-sortable-tbody').forEach(function(tbody) {
+    if (tbody._sortable) tbody._sortable.destroy();
+    tbody._sortable = new Sortable(tbody, {
+      handle: '.drag-handle',
+      animation: 200,
+      ghostClass: 'sortable-ghost',
+      onEnd: function(evt) {
+        var purpose = tbody.getAttribute('data-purpose');
+        var type = tbody.getAttribute('data-type');
+        // 새 순서대로 전역 인덱스 수집
+        var rows = tbody.querySelectorAll('tr[data-idx]');
+        var newOrder = [];
+        rows.forEach(function(tr) { newOrder.push(parseInt(tr.getAttribute('data-idx'))); });
+
+        // 같은 검체유형+검사목적의 전역 위치
+        var globalPositions = [];
+        itemGroupData.forEach(function(it, i) {
+          if (it.검체유형 === type && it.검사목적 === purpose) globalPositions.push(i);
+        });
+
+        // 새 순서 반영
+        var reordered = newOrder.map(function(gIdx) { return itemGroupData[gIdx]; });
+        for (var i = 0; i < reordered.length && i < globalPositions.length; i++) {
+          itemGroupData[globalPositions[i]] = reordered[i];
+        }
+
+        // 아코디언 상태 유지 + 리렌더
+        _openAccordionTypes = new Set();
+        document.querySelectorAll('#item-group-accordion .accordion-header-level1.active .accordion-name').forEach(function(el) {
+          _openAccordionTypes.add(el.textContent.trim());
+        });
+        renderItemGroups();
+        showToast('순서 변경 완료', 'info');
+      }
+    });
+  });
+}
+
 // ============================================================================
 // 패키지 수수료 설정 (검체유형 단위)
 // ============================================================================
@@ -31721,7 +31765,7 @@ async function renderItemGroups() {
       // ── 시험항목 테이블 형식 렌더링 ──
       let itemsHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
       itemsHtml += '<thead><tr style="background:#f8f9fa;border-bottom:2px solid #e0e0e0;">'
-        + '<th style="padding:6px 4px;text-align:center;font-weight:600;width:45px;">순서</th>'
+        + '<th style="padding:6px 4px;text-align:center;font-weight:600;width:36px;"></th>'
         + '<th style="padding:6px 8px;text-align:left;font-weight:600;width:100px;">시험항목코드</th>'
         + '<th style="padding:6px 8px;text-align:left;font-weight:600;">한글명</th>'
         + '<th style="padding:6px 8px;text-align:left;font-weight:600;">영문명</th>'
@@ -31731,7 +31775,7 @@ async function renderItemGroups() {
         + '<th style="padding:6px 8px;text-align:center;font-weight:600;width:80px;">BFL매핑</th>'
         + '<th style="padding:6px 8px;text-align:right;font-weight:600;width:80px;">수수료</th>'
         + '<th style="padding:6px 8px;text-align:center;font-weight:600;width:90px;">작업</th>'
-        + '</tr></thead><tbody>';
+        + '</tr></thead><tbody class="ig-sortable-tbody" data-purpose="' + escAcc(purpose) + '" data-type="' + escAcc(type) + '">';
 
       typeItems.forEach(item => {
         const idx = itemGroupData.indexOf(item);
@@ -31779,15 +31823,11 @@ async function renderItemGroups() {
         const isUsed = tCode ? isTestItemActive(tCode) : ((item.사용여부 || 'Y') === 'Y');
         const rowOp = isUsed ? '' : 'opacity:.45;';
 
-        const localOrder = typeItems.indexOf(item) + 1;
-        itemsHtml += `<tr style="border-bottom:1px solid #f0f0f0;${rowOp}cursor:pointer;"
+        itemsHtml += `<tr data-idx="${idx}" style="border-bottom:1px solid #f0f0f0;${rowOp}cursor:pointer;"
             onclick="openDetailItem('참고용', ${idx})"
             onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
-          <td style="padding:4px 2px;text-align:center;" onclick="event.stopPropagation()">
-            <input type="number" value="${localOrder}" min="1" max="${typeItems.length}"
-              onchange="event.stopPropagation();reorderItemByNumber(${idx},'${escAcc(type)}','${escAcc(purpose)}',this.value)"
-              onclick="event.stopPropagation();this.select()"
-              style="width:38px;padding:3px 2px;text-align:center;border:1px solid #d0d5dd;border-radius:4px;font-size:12px;font-weight:600;color:#5b67f5;">
+          <td style="padding:4px 2px;text-align:center;cursor:grab;" class="drag-handle" onclick="event.stopPropagation()">
+            <span style="font-size:14px;color:#9ca3af;">☰</span>
           </td>
           <td style="padding:6px 8px;font-family:monospace;font-size:12px;color:#1565c0;">${tCode || '<span style="color:#ccc;">-</span>'}</td>
           <td style="padding:6px 8px;font-weight:500;">${dispName}</td>
@@ -31824,6 +31864,8 @@ async function renderItemGroups() {
         }
       });
     }
+    // 드래그 앤 드롭 초기화
+    setTimeout(initSortableTbodies, 100);
   }
 }
 
