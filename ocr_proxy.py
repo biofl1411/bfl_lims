@@ -582,6 +582,7 @@ def ocr_template():
         result = {}
         uncertain_fields = []  # Claude 보정이 필요한 필드
         sample_fields = {}     # 시료 테이블 관련 필드
+        checkbox_crops = {}    # 체크박스 필드 크롭 (Claude Vision용)
 
         for field_key, region in regions.items():
             # 비율 좌표 → 실제 픽셀 좌표
@@ -607,6 +608,13 @@ def ocr_template():
             save_fmt = 'JPEG' if image_format in ('jpg', 'jpeg') else 'PNG'
             cropped.save(buf, format=save_fmt, quality=95)
             crop_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+            # 체크박스 필드는 Claude Vision으로 처리
+            CHECKBOX_FIELDS = {'bizType', 'testPurpose', 'reportSend', 'reportAddress',
+                               'reportCopies', 'sampleReturn', 'taxInvoice', 'paymentType'}
+            if field_key in CHECKBOX_FIELDS:
+                checkbox_crops[field_key] = crop_b64
+                continue
 
             # Clova General OCR 호출
             ocr_text = _clova_ocr_single(crop_b64, image_format)
@@ -634,7 +642,14 @@ def ocr_template():
             # 개별 열 크롭이 있는 경우 행 단위로 조합
             result['samples'] = _assemble_sample_rows(sample_fields)
 
-        # ── 4-1. 메모란에서 팩스/이메일 자동 추출 ──
+        # ── 4-1. 체크박스 필드 일괄 Claude Vision 처리 ──
+        if checkbox_crops and CLAUDE_API_KEY:
+            checkbox_results = _claude_read_checkboxes(checkbox_crops)
+            for k, v in checkbox_results.items():
+                if v:
+                    result[k] = v
+
+        # ── 4-2. 메모란에서 팩스/이메일 자동 추출 ──
         _extract_contact_from_memo(result)
 
         # ── 5. 불확실한 필드 Claude 보정 (선택적) ──
@@ -665,6 +680,70 @@ def ocr_template():
             return _fallback_to_claude_ocr(payload)
         except Exception:
             return jsonify({'error': f'서버 오류: {str(e)}'}), 500
+
+
+def _claude_read_checkboxes(checkbox_crops):
+    """체크박스 크롭 이미지들을 Claude Vision으로 일괄 판독"""
+    if not CLAUDE_API_KEY or not checkbox_crops:
+        return {}
+
+    try:
+        # 모든 체크박스 크롭을 하나의 요청으로 전송
+        content_blocks = []
+        field_list = []
+
+        for field_key, crop_b64 in checkbox_crops.items():
+            content_blocks.append({
+                'type': 'image',
+                'source': {'type': 'base64', 'media_type': 'image/jpeg', 'data': crop_b64}
+            })
+            content_blocks.append({
+                'type': 'text',
+                'text': f'↑ 위 이미지는 "{field_key}" 필드입니다.'
+            })
+            field_list.append(field_key)
+
+        field_instructions = {
+            'bizType': '업종 — 체크된 항목 반환 (식품제조가공업/즉석판매제조가공업/유통판매업/식품소분업/기타)',
+            'testPurpose': '검사목적 — 체크된 항목 반환 (자가품질검사/자가품질검사(일부항목)/참고용/참고용(영양성분))',
+            'reportSend': '성적서수령방법 — 체크된 항목을 배열로 반환 (우편/선발송/팩스선송부/메일선송부)',
+            'reportAddress': '수령주소 — 체크된 항목 반환 (의뢰인소재지와동일/기타수령지) + 기타 시 괄호 안 주소',
+            'reportCopies': '성적서 부수 — {"korean": 숫자, "english": 숫자} 형식',
+            'sampleReturn': '시료반환여부 — 체크된 항목 반환 (시료반환/시료폐기)',
+            'taxInvoice': '세금계산서 — 체크된 항목 반환 (발행/미발행/현금영수증)',
+            'paymentType': '납부구분 — 체크된 항목 반환 (현금/카드/계좌이체)'
+        }
+
+        instructions = '\n'.join([f'- {k}: {field_instructions.get(k, "체크된 항목 반환")}' for k in field_list])
+
+        content_blocks.append({
+            'type': 'text',
+            'text': f"""위 이미지들은 의뢰서의 체크박스 영역입니다.
+각 이미지에서 체크(✓, V, ○, ●, ■, 색칠된 박스)된 항목을 읽어주세요.
+
+필드별 반환 형식:
+{instructions}
+
+JSON 객체로 반환하세요. 체크가 없으면 빈 문자열.
+reportSend는 배열, reportCopies는 객체, 나머지는 문자열.
+JSON만 반환하세요."""
+        })
+
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        message = client.messages.create(
+            model='claude-sonnet-4-20250514',
+            max_tokens=1000,
+            messages=[{'role': 'user', 'content': content_blocks}]
+        )
+
+        text = message.content[0].text.strip()
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
+        return json.loads(text)
+    except Exception as e:
+        print(f'[OCR] 체크박스 Claude 판독 실패: {e}')
+        return {}
 
 
 def _extract_contact_from_memo(result):
