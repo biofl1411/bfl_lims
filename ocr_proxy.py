@@ -74,64 +74,99 @@ if not CLAUDE_API_KEY:
         with open(_key_file_path, 'r') as f:
             CLAUDE_API_KEY = f.read().strip()
 
-INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰서입니다.
+INSPECTION_FORM_PROMPT = """이 이미지는 (주)바이오푸드랩(BFL)의 시험·검사 의뢰서입니다.
 
-★ 양식 자동 판별 — 제목/헤더를 읽고 아래 8종 중 해당하는 양식을 판별하세요:
-1. "식품유형" 헤더가 있으면 → formType="food" (식품 의뢰서, testField="식품", testPurpose="자가품질위탁검사용")
-2. "축산물유형" 헤더가 있으면 → formType="livestock" (축산 의뢰서, testField="축산", testPurpose="자가품질위탁검사용")
-3. "RT-PCR(Allergen)" 또는 "RT-PCR (Allergen)" 제목 → formType="allergen-pcr" (testField="식품", testPurpose="Allergen(RT-PCR)")
+★★★ 핵심 지시사항 ★★★
+1. 이미지를 확대해서 한 글자씩 정밀하게 읽으세요.
+2. 손글씨는 획의 모양을 분석하여 가장 가까운 한글/숫자로 판독하세요.
+3. 인쇄된 텍스트와 손글씨를 구분하세요 — 인쇄된 것은 양식 레이블, 손글씨/타이핑된 것이 실제 데이터입니다.
+4. 체크표시(✓, V, ○, ●, ■, 색칠된 박스)는 해당 항목이 선택된 것입니다.
+5. 빈 칸은 빈 문자열("")로 반환하세요.
+
+★ 양식 자동 판별 — 제목/헤더로 8종 판별:
+1. 시료 테이블에 "식품유형" 헤더 → formType="food" (testField="식품", testPurpose="자가품질위탁검사용")
+2. "축산물유형" 헤더 → formType="livestock" (testField="축산", testPurpose="자가품질위탁검사용")
+3. "RT-PCR(Allergen)" 제목 → formType="allergen-pcr" (testField="식품", testPurpose="Allergen(RT-PCR)")
 4. "Elisa" 제목 → formType="allergen-elisa" (testField="축산", testPurpose="Allergen(ELISA)")
 5. "HPGe" 제목 → formType="radiation" (testField="식품", testPurpose="방사능(HPGe)")
 6. "물질" 제목 → formType="material" (testField="식품", testPurpose="물질검사")
-7. "RT-PCR" 제목 + "할랄" 또는 "Halal" 또는 "Vegan" → formType="halal-vegan" (testField="식품", testPurpose="Halal food(RT_PCR)" 또는 "Vegan food(RT-PCR)")
-8. "소비기한" 제목 → formType="shelf-life" (testField="식품", testPurpose="참고용(소비기한설정)")
+7. "RT-PCR" + "할랄/Halal/Vegan" → formType="halal-vegan"
+8. "소비기한" 제목 → formType="shelf-life" (testPurpose="참고용(소비기한설정)")
 
-★ 격자(테이블) 인식 규칙:
-- 표의 가로줄(행)과 세로줄(열)을 정확히 구분하세요.
-- 각 셀의 값은 해당 열의 헤더에 정확히 매칭하세요.
-- 병합된 셀(2행에 걸친 시료 정보)은 하나의 시료로 합치세요.
-- 빈 행은 건너뛰세요. 데이터가 있는 행만 samples에 포함하세요.
-- 손글씨는 글자 모양을 최대한 정확히 판독하세요. 불확실하면 가장 가까운 글자로.
-- 체크표시(✓, V, ○, ●)는 해당 항목이 선택된 것입니다.
-- 운반상태 체크란은 보통 오른쪽에 실온/상온/냉장/냉동 중 체크된 것을 읽으세요.
+★ 의뢰서 레이아웃 (위에서 아래 순서):
+[상단] "시험·검사의뢰서" 제목 + BFL 로고
+[의뢰인 정보]
+  - "상 호" 오른쪽 → companyName (회사명. "(주)" 포함)
+  - "대표자명" 오른쪽 → representativeName
+  - "소 재 지" 오른쪽 → address (우편번호 포함)
+  - "전 화" 오른쪽 → phone
+  - "팩 스" 오른쪽 → fax
+[업종] "업 종" 행 — 체크된 항목: 식품제조가공업/즉석판매제조가공업/유통판매업/식품소분업/기타
+[검사목적] "검 사 목 적" 행 — 체크된 항목: 자가품질검사/자가품질검사(일부항목)/참고용/참고용(영양성분)
+[성적서 구분] "성적서구분" — 국문 ( )부 / 영문 ( )부 — 괄호 안 숫자 읽기
+[성적서수령방법] 체크된 항목: 우편/선발송/팩스선송부/메일선송부 + 이메일주소(@포함)
+[성적서수령주소] 의뢰인소재지와동일 체크 또는 기타수령지 주소
 
-★ 양식별 시료 테이블 컬럼 차이:
-- food/livestock: 순번, 제품명, 식품유형(축산물유형), 포장단위, 운반상태, 제조일자, 접수번호, 단서조항, 검체량, 소비기한
-- allergen-pcr/allergen-elisa/halal-vegan: 순번, 접수번호, 샘플명, 유형(품번), 검사항목, 비고
-- radiation: 순번, 접수번호, 샘플명, 유형(품번), 검사항목, 비고
-- material: 순번, 접수번호, 분석장비, 시료상태, 실험방법, 샘플명칭
-- shelf-life: 식품 의뢰서와 유사하되 소비기한 설정 관련 추가 필드
+[시료 테이블] — 행 수는 5~10행 가변. 데이터가 기입된 행만 추출:
+  컬럼 헤더(2줄): 순번/접수번호 | 제품명 | 식품유형/단서조항 | 포장단위/검체량 | 운반상태 | 제조일자/소비기한(또는 품질유지기한) | 시험의뢰항목
+  ※ "식품유형"과 "단서조항"은 같은 열의 위/아래 칸 (2행 병합)
+  ※ "포장단위"와 "검체량"도 같은 열의 위/아래 칸
+  ※ "제조일자"와 "소비기한"도 같은 열의 위/아래 칸
+  ※ 운반상태는 드롭다운 또는 체크: 실온/상온/냉장/냉동
 
-★ 텍스트 읽기 규칙:
-- 한 글자씩 정확하게 읽으세요. 추측하지 마세요.
-- 한글 제품명은 붙어있는 글자를 정확히 읽으세요.
-- 날짜 "2026. 02. 10" 또는 "2026.02.10" → "2026-02-10"
-- 성적서 발행 수량(국문/영문 부수)은 reportCopies에 기재하세요.
+[하단]
+  - 긴급협의일
+  - 시료반환여부: 시료반환/시료폐기
+  - 메모
+  - 수수료(VAT포함): 금액
+  - 납부구분: 카드/계좌이체(3일 이내 입금) 체크
+  - 세금계산서: 발행/미발행/현금영수증 체크
+  - 발행요청일, 입금예정일, 입금자명
+  - 회사명/사업자번호, 계산서메일주소
+  - 첨가물 제외 문구, 미생물 제외 문구
+  - 개인정보 동의/비동의
+  - 서명일자 (20__년 __월 __일)
+  - 접수자, 의뢰인
 
-아래 JSON 형식으로 추출하세요. 값이 없으면 빈 문자열. 날짜는 YYYY-MM-DD.
+★ 손글씨 판독 강화 규칙:
+- 한글 자모 분리: ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ + 모음 조합을 정확히
+- 숫자: 0과 O, 1과 l, 6과 b, 8과 B 구분 주의
+- 회사명에 자주 나오는 패턴: (주), 주식회사, 영농조합법인, 농업회사법인
+- 전화번호: 0으로 시작, 지역번호-국번-번호 또는 010-XXXX-XXXX
+- 날짜: 20XX. XX. XX 또는 20XX-XX-XX 또는 20XX년 XX월 XX일
+- 금액: 숫자+쉼표 (예: 81,400)
+
+★ 검사목적 판별 보강:
+- "자가품질검사"에 체크 → testPurpose="자가품질위탁검사용"
+- "참고용"에 체크 → testPurpose="참고용(기준규격외)"
+- "참고용(영양성분)"에 체크 → testPurpose="참고용(영양성분)"
+- 검사목적 체크란이 없거나 판독 불가 시 → testPurpose="" (빈 문자열)
+
+아래 JSON 형식으로 추출. 값이 없으면 빈 문자열. 날짜는 YYYY-MM-DD.
 
 {
   "formType": "food/livestock/allergen-pcr/allergen-elisa/radiation/material/halal-vegan/shelf-life",
-  "testPurpose": "자동 판별된 검사목적",
+  "testPurpose": "검사목적",
   "testField": "식품 또는 축산",
-  "companyName": "상호명",
+  "companyName": "상호 (회사명)",
   "representativeName": "대표자명",
   "bizNo": "사업자등록번호",
+  "bizType": "체크된 업종 (식품제조가공업 등)",
   "licNo": "인허가번호",
   "phone": "전화번호",
   "fax": "팩스번호",
   "mobile": "휴대전화",
-  "address": "소재지",
-  "reportSend": ["체크된 수령방법만 (우편/선발송/팩스/메일 중)"],
-  "reportSendFax": "팩스번호",
-  "reportSendEmail": "이메일",
-  "reportCopies": {"korean": 0, "english": 0},
+  "address": "소재지 (우편번호 포함)",
+  "reportSend": ["체크된 수령방법 (우편/선발송/팩스/메일)"],
+  "reportSendFax": "팩스 수령번호",
+  "reportSendEmail": "이메일 수령주소 (@포함)",
+  "reportCopies": {"korean": 1, "english": 0},
   "samples": [
     {
-      "productName": "제품명/샘플명",
-      "foodType": "식품유형/축산물유형/유형",
-      "inspectionItems": "검사항목 (쉼표 구분)",
-      "inspectionStandard": "단서조항/시험법",
+      "productName": "제품명 (손글씨 정밀 판독)",
+      "foodType": "식품유형",
+      "inspectionItems": "시험의뢰항목 (쉼표 구분)",
+      "inspectionStandard": "단서조항",
       "manufactureNo": "제조번호/LOT",
       "manufactureDate": "YYYY-MM-DD",
       "expiryDate": "YYYY-MM-DD",
@@ -139,17 +174,27 @@ INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰
       "sampleAmount": "검체량 (숫자만)",
       "sampleAmountUnit": "g/kg/ml/L",
       "sampleCount": "검체수 (기본 1)",
-      "packageUnit": "포장단위",
-      "transportStatus": "냉장/냉동/실온/상온",
-      "analysisEquipment": "분석장비 (물질검사만: XRF/FTIR/현미경)",
-      "sampleCondition": "시료상태 (물질검사만)",
-      "experimentMethod": "실험방법 (물질검사만: 단일실험/비교실험)"
+      "packageUnit": "포장단위 (예: 200g, 1ea, 500ml)",
+      "transportStatus": "냉장/냉동/실온/상온"
     }
   ],
-  "billingInfo": {
-    "billingDateType": "접수일/월말/특정날짜",
-    "billingDate": "YYYY-MM-DD"
-  },
+  "urgentDate": "긴급협의일 (YYYY-MM-DD)",
+  "sampleReturn": "시료반환 또는 시료폐기",
+  "memo": "메모 내용",
+  "totalFee": "수수료 금액 (숫자만)",
+  "paymentType": "납부구분 (카드/계좌이체)",
+  "taxInvoice": "발행/미발행/현금영수증",
+  "billingDate": "발행요청일 (YYYY-MM-DD)",
+  "depositDate": "입금예정일 (YYYY-MM-DD)",
+  "depositorName": "입금자명",
+  "billingCompany": "회사명/사업자번호",
+  "billingEmail": "계산서메일주소",
+  "excludeAdditive": "첨가물 제외 관련 기재 내용",
+  "excludeMicrobe": "미생물 제외 관련 기재 내용",
+  "privacyConsent": "동의 또는 비동의",
+  "signDate": "서명일자 (YYYY-MM-DD)",
+  "receptionist": "접수자",
+  "requester": "의뢰인",
   "remarks": "비고"
 }
 
@@ -242,22 +287,16 @@ def ocr_name_card():
 
 
 # ============================================================
-# 시험·검사 의뢰서 OCR (Clova OCR + Claude 구조화)
-# 1단계: Naver Clova General OCR → 정확한 텍스트 추출
-# 2단계: Claude → 추출 텍스트를 JSON 구조화
+# 시험·검사 의뢰서 OCR (Claude Vision API)
 # ============================================================
 @app.route('/api/ocr/inspection-form', methods=['POST'])
 def ocr_inspection_form():
     """
-    시험·검사 의뢰서 이미지를 Clova OCR로 텍스트 추출 후 Claude로 구조화.
-    프론트에서 보내는 JSON:
-    {
-      "images": [{ "format": "jpg", "name": "file.jpg", "data": "<base64>" }]
-    }
+    시험·검사 의뢰서 이미지를 Claude Vision으로 분석하여 구조화된 JSON 반환.
     """
     try:
         if not CLAUDE_API_KEY:
-            return jsonify({'error': 'CLAUDE_API_KEY 환경변수가 설정되지 않았습니다'}), 500
+            return jsonify({'error': 'CLAUDE_API_KEY가 설정되지 않았습니다'}), 500
 
         payload = request.get_json()
         if not payload or 'images' not in payload or not payload['images']:
@@ -270,157 +309,43 @@ def ocr_inspection_form():
         if not image_base64:
             return jsonify({'error': '이미지 데이터(base64)가 비어있습니다'}), 400
 
-        # ── 1단계: Clova General OCR로 텍스트 추출 ──
-        clova_payload = {
-            'version': 'V2',
-            'requestId': f'insp-{int(time.time())}',
-            'timestamp': int(time.time() * 1000),
-            'images': [{
-                'format': image_format if image_format in ('jpg', 'jpeg', 'png') else 'jpg',
-                'name': image_info.get('name', 'file.jpg'),
-                'data': image_base64
-            }]
-        }
+        # 미디어 타입 결정
+        media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}
+        media_type = media_types.get(image_format, 'image/jpeg')
 
-        clova_headers = {
-            'Content-Type': 'application/json',
-            'X-OCR-SECRET': CLOVA_SECRET
-        }
-
-        ocr_text = ''
-        use_clova = True
-        try:
-            clova_resp = requests.post(
-                CLOVA_GENERAL_URL,
-                headers=clova_headers,
-                json=clova_payload,
-                timeout=30
-            )
-            if clova_resp.status_code != 200:
-                print(f'[OCR] Clova 실패({clova_resp.status_code}), Claude Vision 폴백')
-                use_clova = False
-            else:
-                clova_result = clova_resp.json()
-        except Exception as clova_err:
-            print(f'[OCR] Clova 오류: {clova_err}, Claude Vision 폴백')
-            use_clova = False
-
-        # Clova 실패 시 Claude Vision 직접 사용
-        if not use_clova:
-            if image_format in ('jpg', 'jpeg'):
-                media_type = 'image/jpeg'
-            elif image_format == 'png':
-                media_type = 'image/png'
-            elif image_format == 'webp':
-                media_type = 'image/webp'
-            else:
-                media_type = 'image/jpeg'
-
-            client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-            message = client.messages.create(
-                model='claude-sonnet-4-20250514',
-                max_tokens=3000,
-                messages=[{
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'image',
-                            'source': {
-                                'type': 'base64',
-                                'media_type': media_type,
-                                'data': image_base64
-                            }
-                        },
-                        {
-                            'type': 'text',
-                            'text': INSPECTION_FORM_PROMPT
-                        }
-                    ]
-                }]
-            )
-            result_text = message.content[0].text.strip()
-            if result_text.startswith('```'):
-                result_text = re.sub(r'^```(?:json)?\s*', '', result_text)
-                result_text = re.sub(r'\s*```$', '', result_text)
-            result_json = json.loads(result_text)
-            result_json['_ocrMethod'] = 'claude-vision-fallback'
-            return jsonify(result_json)
-
-        clova_result = clova_result  # Clova 성공 시 계속
-
-        # Clova OCR 결과에서 텍스트 추출 (위치 정보 포함)
-        extracted_lines = []
-        if 'images' in clova_result:
-            for img in clova_result['images']:
-                for field in img.get('fields', []):
-                    text = field.get('inferText', '').strip()
-                    if text:
-                        # 위치 정보 (y좌표 기준 행 그룹핑용)
-                        vertices = field.get('boundingPoly', {}).get('vertices', [])
-                        y = vertices[0].get('y', 0) if vertices else 0
-                        x = vertices[0].get('x', 0) if vertices else 0
-                        extracted_lines.append({
-                            'text': text,
-                            'x': x,
-                            'y': y,
-                            'lineBreak': field.get('lineBreak', False)
-                        })
-
-        # 행 단위로 그룹핑 (y좌표 차이 15px 이내면 같은 행)
-        if extracted_lines:
-            extracted_lines.sort(key=lambda f: (f['y'], f['x']))
-            lines = []
-            current_line = []
-            last_y = -999
-            for f in extracted_lines:
-                if abs(f['y'] - last_y) > 15 and current_line:
-                    lines.append(' '.join([w['text'] for w in current_line]))
-                    current_line = []
-                current_line.append(f)
-                last_y = f['y']
-                if f.get('lineBreak'):
-                    lines.append(' '.join([w['text'] for w in current_line]))
-                    current_line = []
-                    last_y = -999
-            if current_line:
-                lines.append(' '.join([w['text'] for w in current_line]))
-            ocr_text = '\n'.join(lines)
-        else:
-            ocr_text = ''
-
-        if not ocr_text.strip():
-            return jsonify({'error': 'OCR 텍스트 추출 실패 — 이미지를 확인하세요'}), 400
-
-        # ── 2단계: Claude로 텍스트 구조화 ──
+        # Claude Vision API 호출
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         message = client.messages.create(
             model='claude-sonnet-4-20250514',
-            max_tokens=3000,
+            max_tokens=4000,
             messages=[{
                 'role': 'user',
-                'content': f"""아래는 한국 식품 시험·검사 의뢰서를 OCR로 읽은 텍스트입니다.
-
-=== OCR 추출 텍스트 ===
-{ocr_text}
-=== 끝 ===
-
-{INSPECTION_FORM_PROMPT}"""
+                'content': [
+                    {
+                        'type': 'image',
+                        'source': {
+                            'type': 'base64',
+                            'media_type': media_type,
+                            'data': image_base64
+                        }
+                    },
+                    {
+                        'type': 'text',
+                        'text': INSPECTION_FORM_PROMPT
+                    }
+                ]
             }]
         )
 
-        # Claude 응답에서 JSON 추출
         result_text = message.content[0].text.strip()
 
-        # 마크다운 코드블록 제거 (```json ... ```)
+        # 마크다운 코드블록 제거
         if result_text.startswith('```'):
             result_text = re.sub(r'^```(?:json)?\s*', '', result_text)
             result_text = re.sub(r'\s*```$', '', result_text)
 
         result_json = json.loads(result_text)
-
-        # OCR 원문 텍스트도 결과에 포함 (디버깅용)
-        result_json['_ocrRawText'] = ocr_text[:2000]
-
+        result_json['_ocrMethod'] = 'claude-vision'
         return jsonify(result_json)
 
     except json.JSONDecodeError as e:
@@ -430,8 +355,6 @@ def ocr_inspection_form():
         }), 500
     except anthropic.APIError as e:
         return jsonify({'error': f'Claude API 오류: {str(e)}'}), 502
-    except requests.Timeout:
-        return jsonify({'error': 'Clova OCR 타임아웃 (30초)'}), 504
     except Exception as e:
         return jsonify({'error': f'서버 오류: {str(e)}'}), 500
 
