@@ -71,7 +71,15 @@
      */
     window.showToast = function(msg, type, duration) {
         if (!msg) return;
-        type = type || 'success';
+        // type 별칭 매핑
+        if (type === 'warning') type = 'warn';
+        // type 미지정 시 메시지 내용으로 자동 판별
+        if (!type) {
+            if (/^[❌🚫⛔]|실패|오류|에러/.test(msg)) type = 'error';
+            else if (/^[⚠️🔒]|경고|주의|다릅니다|없음|불가/.test(msg)) type = 'warn';
+            else if (/^[📋📢🎯ℹ️🔍]|감지|선택됨|안내|참고/.test(msg)) type = 'info';
+            else type = 'success';
+        }
         duration = duration || 10000;
 
         var c = ensureContainer();
