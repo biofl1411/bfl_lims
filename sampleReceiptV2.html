@@ -510,8 +510,8 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     </div>
   </div>
 
-  <!-- 발송 옵션 패널들 — position:fixed + z-index:9999 -->
-  <div id="mail-option-panel" style="display:none;position:fixed;top:100px;right:20px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:300px">
+  <!-- 발송 옵션 패널들 -->
+  <div id="mail-option-panel" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:300px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span style="font-size:12px;font-weight:600">📮 우편 발송 옵션</span>
       <button type="button" onclick="document.getElementById('mail-option-panel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8">✕</button>
@@ -536,7 +536,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <input type="text" id="mail-addr2" placeholder="상세주소" class="cp-inp" style="width:100%">
     </div>
   </div>
-  <div id="fax-option-panel" style="display:none;position:fixed;top:100px;right:20px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:260px">
+  <div id="fax-option-panel" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:260px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span style="font-size:12px;font-weight:600">📠 팩스 발송 옵션</span>
       <button type="button" onclick="document.getElementById('fax-option-panel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8">✕</button>
@@ -553,7 +553,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <input type="tel" id="report-fax-no" class="cp-inp" placeholder="팩스번호" style="width:100%">
     </div>
   </div>
-  <div id="email-option-panel" style="display:none;position:fixed;top:100px;right:20px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:300px">
+  <div id="email-option-panel" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:300px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span style="font-size:12px;font-weight:600">📧 메일 발송 옵션</span>
       <button type="button" onclick="document.getElementById('email-option-panel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8">✕</button>
@@ -1145,16 +1145,21 @@ function positionSendPanel(panelId, triggerEl) {
   ['mail-option-panel','fax-option-panel','email-option-panel'].forEach(function(id){
     if(id!==panelId){var p=document.getElementById(id);if(p)p.style.display='none';}
   });
-  var rect = triggerEl.getBoundingClientRect();
-  // 왼쪽 패널 내에서 표시 (cp-left 440px 기준)
-  var cpLeft = triggerEl.closest('.cp-left');
-  var maxLeft = cpLeft ? cpLeft.getBoundingClientRect().right - 10 : 440;
-  var panelW = panel.offsetWidth || 300;
   panel.style.display = 'block';
-  panel.style.top  = (rect.bottom + 4) + 'px';
-  // 패널이 왼쪽 패널 밖으로 넘치지 않도록 제한
-  var left = Math.min(rect.left, maxLeft - panelW);
-  panel.style.left = Math.max(8, left) + 'px';
+  var rect = triggerEl.getBoundingClientRect();
+  var panelW = panel.offsetWidth || 300;
+  var vpW = window.innerWidth;
+  // 버튼 아래, 오른쪽 정렬 (화면 밖으로 안 넘치도록)
+  var top = rect.bottom + 6;
+  var left = rect.left;
+  // 오른쪽으로 넘치면 왼쪽으로 조정
+  if (left + panelW > vpW - 16) left = vpW - panelW - 16;
+  if (left < 8) left = 8;
+  // 아래로 넘치면 위로
+  var panelH = panel.offsetHeight || 200;
+  if (top + panelH > window.innerHeight - 16) top = rect.top - panelH - 6;
+  panel.style.top = top + 'px';
+  panel.style.left = left + 'px';
   panel.style.right = 'auto';
 }
 function closeSendPanel(panelId) {
@@ -4842,9 +4847,18 @@ function toggleReportSendOption() {
         if (cb.value === '팩스(선)') faxChecked = cb.checked;
         if (cb.value === '메일(사본)') emailChecked = cb.checked;
     });
-    mailPanel.style.display = mailChecked ? '' : 'none';
-    faxPanel.style.display = faxChecked ? '' : 'none';
-    emailPanel.style.display = emailChecked ? '' : 'none';
+    // 패널 표시 — 체크 안 된 패널은 닫기, 체크된 패널은 위치 설정
+    if (!mailChecked) mailPanel.style.display = 'none';
+    if (!faxChecked) faxPanel.style.display = 'none';
+    if (!emailChecked) emailPanel.style.display = 'none';
+    // 체크된 패널 중 마지막 하나만 자동 열기 (동시에 여러 개 안 열림)
+    var lastChecked = emailChecked ? ['email-option-panel', '메일(사본)'] :
+                      faxChecked ? ['fax-option-panel', '팩스(선)'] :
+                      mailChecked ? ['mail-option-panel', '우편'] : null;
+    if (lastChecked) {
+        var chip = document.querySelector('input[name="report-send"][value="' + lastChecked[1] + '"]');
+        if (chip) positionSendPanel(lastChecked[0], chip.closest('label'));
+    }
     // 우편 체크 시 주소 미리보기 업데이트
     if (mailChecked) updateMailAddrPreviews();
     // 팩스 체크 시 미리보기 업데이트
