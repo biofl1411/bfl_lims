@@ -333,7 +333,13 @@ body.embed-mode .main-content { margin-left: 0; padding: 16px 20px; }
           <option value="halal-vegan">할랄/비건</option>
           <option value="shelf-life">소비기한 설정</option>
         </select>
-        <input type="text" id="txtTplName" placeholder="템플릿 이름 (예: 식품 의뢰서 v3)" style="width:200px">
+        <select id="selTplVersion" style="min-width:140px" onchange="onVersionChange()">
+          <option value="홈페이지 양식">홈페이지 양식</option>
+          <option value="엑셀 양식">엑셀 양식</option>
+          <option value="인쇄물 양식">인쇄물 양식</option>
+          <option value="custom">직접 입력</option>
+        </select>
+        <input type="text" id="txtTplName" placeholder="템플릿 이름" style="width:240px">
         <button class="btn btn-outline" onclick="loadTemplateImage()">이미지 업로드</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="onFileSelected(event)">
         <div style="flex:1"></div>
@@ -782,6 +788,7 @@ async function saveTemplate() {
       await batch.commit();
 
       _editingTplId = newRef.id;
+      try { localStorage.removeItem('bfl_ocr_template_draft'); } catch(e) {}
       showToast(`템플릿 "${name}" 저장 완료`, 'success');
     }
   } catch(e) {
@@ -888,10 +895,27 @@ async function toggleTemplateActive(docId, active) {
 // ============================================================
 function onFormTypeChange() {
   updateSaveBtn();
-  const formType = document.getElementById('selFormType').value;
-  if (formType && !document.getElementById('txtTplName').value) {
-    document.getElementById('txtTplName').value = FORM_TYPE_LABELS[formType] || formType;
+  updateTplName();
+}
+
+function onVersionChange() {
+  var sel = document.getElementById('selTplVersion');
+  var txt = document.getElementById('txtTplName');
+  if (sel.value === 'custom') {
+    txt.value = '';
+    txt.focus();
+  } else {
+    updateTplName();
   }
+}
+
+function updateTplName() {
+  var formType = document.getElementById('selFormType').value;
+  var version = document.getElementById('selTplVersion').value;
+  var txt = document.getElementById('txtTplName');
+  if (version === 'custom') return; // 직접 입력 모드면 건드리지 않음
+  var label = FORM_TYPE_LABELS[formType] || formType || '';
+  txt.value = label ? label + ' - ' + version : version;
 }
 
 // ============================================================
@@ -904,6 +928,62 @@ function showToast(msg, type) {
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+// ============================================================
+// 자동 임시 저장 (localStorage) — 새로고침해도 매핑 유지
+// ============================================================
+function autoSaveToLocal() {
+  try {
+    var data = {
+      formType: document.getElementById('selFormType').value,
+      tplName: document.getElementById('txtTplName').value,
+      version: document.getElementById('selTplVersion').value,
+      regions: _regions,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('bfl_ocr_template_draft', JSON.stringify(data));
+  } catch(e) {}
+}
+
+function autoRestoreFromLocal() {
+  try {
+    var saved = localStorage.getItem('bfl_ocr_template_draft');
+    if (!saved) return;
+    var data = JSON.parse(saved);
+    // 1시간 이내 데이터만 복원
+    if (Date.now() - data.timestamp > 3600000) return;
+    if (!data.regions || !Object.keys(data.regions).length) return;
+
+    if (confirm('이전에 저장하지 못한 매핑 데이터가 있습니다. 복원하시겠습니까?\n(' + Object.keys(data.regions).length + '개 필드)')) {
+      _regions = data.regions;
+      if (data.formType) document.getElementById('selFormType').value = data.formType;
+      if (data.version) document.getElementById('selTplVersion').value = data.version;
+      if (data.tplName) document.getElementById('txtTplName').value = data.tplName;
+      renderFieldList();
+      showToast('매핑 데이터 복원 완료 — 이미지를 다시 업로드하세요', 'success');
+    }
+  } catch(e) {}
+}
+
+// 영역 변경 시마다 자동 임시 저장
+var _origSelectField = selectField;
+selectField = function(key) {
+  _origSelectField(key);
+  autoSaveToLocal();
+};
+
+var _origRemoveRegion = removeRegion;
+removeRegion = function(key) {
+  _origRemoveRegion(key);
+  autoSaveToLocal();
+};
+
+// 마우스 드래그 완료 후에도 자동 저장
+var _origAutoAdvance = autoAdvanceField;
+autoAdvanceField = function() {
+  _origAutoAdvance();
+  autoSaveToLocal();
+};
 
 // ============================================================
 // embed 모드 감지 (iframe 내부)
@@ -919,6 +999,7 @@ function showToast(msg, type) {
 // 초기화
 // ============================================================
 renderFieldList();
+autoRestoreFromLocal();
 </script>
 </body>
 </html>
