@@ -375,21 +375,38 @@ def ocr_inspection_form():
 
         ocr_text = '\n'.join(lines)
 
-        # ── 2단계: Claude 구조화 ──
+        # ── 2단계: Claude 구조화 (텍스트 + 이미지 동시 전달) ──
+        media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}
+        media_type = media_types.get(image_format, 'image/jpeg')
+
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         message = client.messages.create(
             model='claude-sonnet-4-20250514',
             max_tokens=4000,
             messages=[{
                 'role': 'user',
-                'content': f"""아래는 (주)바이오푸드랩(BFL)의 시험·검사 의뢰서를 Clova OCR로 읽은 텍스트입니다.
-텍스트를 정확히 분석하여 JSON으로 구조화하세요.
+                'content': [
+                    {
+                        'type': 'image',
+                        'source': {
+                            'type': 'base64',
+                            'media_type': media_type,
+                            'data': image_base64
+                        }
+                    },
+                    {
+                        'type': 'text',
+                        'text': f"""위 이미지는 (주)바이오푸드랩(BFL)의 시험·검사 의뢰서입니다.
+아래는 Clova OCR로 추출한 텍스트입니다. OCR 텍스트를 기본으로 사용하되,
+텍스트에서 누락되거나 불확실한 부분은 이미지를 직접 확인하여 보완하세요.
 
-=== OCR 텍스트 ===
+=== Clova OCR 텍스트 ===
 {ocr_text}
 === 끝 ===
 
 {INSPECTION_FORM_PROMPT}"""
+                    }
+                ]
             }]
         )
 
