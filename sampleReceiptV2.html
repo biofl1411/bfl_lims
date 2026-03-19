@@ -1518,8 +1518,40 @@ function _fillCompanyContactFromOcr(result) {
     } catch(e) { console.warn('[OCR] 연락처 직접 입력 오류:', e.message); }
 }
 
+// OCR 보정 사전용: 마지막 OCR 결과 저장
+var _lastOcrResult = null;
+
+// 한글 초성/중성/종성 분해 함수
+function decomposeHangul(ch) {
+    var code = ch.charCodeAt(0);
+    if (code < 0xAC00 || code > 0xD7A3) return null;
+    var offset = code - 0xAC00;
+    var cho = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    var jung = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
+    var jong = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    var choIdx = Math.floor(offset / (21 * 28));
+    var jungIdx = Math.floor((offset % (21 * 28)) / 28);
+    var jongIdx = offset % 28;
+    return { cho: cho[choIdx], jung: jung[jungIdx], jong: jong[jongIdx] };
+}
+
+// 두 글자의 자모 차이 생성
+function charDiffDetail(ocrChar, fixChar) {
+    var ocrD = decomposeHangul(ocrChar);
+    var fixD = decomposeHangul(fixChar);
+    if (!ocrD || !fixD) return ocrChar + '→' + fixChar;
+    var parts = [];
+    if (ocrD.cho !== fixD.cho) parts.push('초성 ' + ocrD.cho + '→' + fixD.cho);
+    if (ocrD.jung !== fixD.jung) parts.push('중성 ' + ocrD.jung + '→' + fixD.jung);
+    if (ocrD.jong !== fixD.jong) parts.push('종성 ' + (ocrD.jong || '없음') + '→' + (fixD.jong || '없음'));
+    return parts.join(', ') || ocrChar + '→' + fixChar;
+}
+
 // 핵심: OCR 결과 → 폼 자동입력
 function fillFormFromOcrResult(result) {
+    // OCR 원본 저장 (보정 사전 수집용)
+    _lastOcrResult = JSON.parse(JSON.stringify(result));
+
     var filledFields = [];
     var skippedFields = [];  // PIN 잠금으로 건너뛴 필드명
     var formType = result.formType || 'food';
@@ -6131,6 +6163,8 @@ async function saveReceipt() {
         await fsSaveReceipt(data);
         // 업체별 발송방법 저장
         saveCompanyReportSendPrefs();
+        // OCR 보정 사전 수집 (OCR 원본 vs 사용자 수정 비교)
+        try { await collectOcrCorrections(data); } catch(ocrErr) { console.warn('[OCR보정] 수집 오류:', ocrErr); }
         showToast('✅ 저장되었습니다!');
         isModified = false;
         var btn = document.getElementById('save-btn');
@@ -6141,6 +6175,88 @@ async function saveReceipt() {
         console.error('저장 실패:', err);
         showToast('저장 중 오류가 발생했습니다.', 'error');
     }
+}
+
+// ============================================================================
+// OCR 보정 사전 수집 — OCR 원본값과 사용자 수정값 비교 → Firestore 저장
+// ============================================================================
+async function collectOcrCorrections(savedData) {
+    if (!_lastOcrResult) return; // OCR 사용 안 한 접수
+    var ocr = _lastOcrResult;
+    var corrections = [];
+
+    // 비교할 필드 매핑: { field, ocrKey, savedKey }
+    var fieldMap = [
+        { field: 'companyName', ocrKey: 'companyName', savedVal: savedData.companyName },
+        { field: 'companyPhone', ocrKey: 'phone', savedVal: savedData.companyPhone },
+        { field: 'companyFax', ocrKey: 'fax', savedVal: savedData.companyFax },
+        { field: 'companyAddress', ocrKey: 'address', savedVal: savedData.companyAddress }
+    ];
+
+    // 시료 데이터 비교
+    if (ocr.samples && ocr.samples.length && savedData.samples && savedData.samples.length) {
+        var len = Math.min(ocr.samples.length, savedData.samples.length);
+        for (var si = 0; si < len; si++) {
+            var ocrS = ocr.samples[si];
+            var savS = savedData.samples[si];
+            var prefix = savedData.samples.length > 1 ? '[시료' + (si + 1) + '] ' : '';
+            fieldMap.push({ field: prefix + 'productName', ocrKey: null, ocrVal: ocrS.productName || '', savedVal: savS.productName || '' });
+            fieldMap.push({ field: prefix + 'foodType', ocrKey: null, ocrVal: ocrS.foodType || '', savedVal: savS.foodType || savS.foodTypeValue || '' });
+            fieldMap.push({ field: prefix + 'manufactureDate', ocrKey: null, ocrVal: ocrS.manufactureDate || '', savedVal: savS.manufactureDate || '' });
+            fieldMap.push({ field: prefix + 'expiryDate', ocrKey: null, ocrVal: ocrS.expiryDate || '', savedVal: savS.expiryDate || '' });
+            fieldMap.push({ field: prefix + 'packageUnit', ocrKey: null, ocrVal: ocrS.packageUnit || '', savedVal: savS.packageUnit || '' });
+        }
+    }
+
+    fieldMap.forEach(function(fm) {
+        var ocrVal = fm.ocrVal !== undefined ? fm.ocrVal : (ocr[fm.ocrKey] || '');
+        var savedVal = fm.savedVal || '';
+        ocrVal = String(ocrVal).trim();
+        savedVal = String(savedVal).trim();
+        if (!ocrVal || !savedVal) return; // 둘 다 값이 있어야 비교 의미 있음
+        if (ocrVal === savedVal) return; // 동일하면 보정 아님
+
+        // 글자 단위 차이 분석
+        var charDiff = [];
+        var maxLen = Math.max(ocrVal.length, savedVal.length);
+        for (var ci = 0; ci < maxLen; ci++) {
+            var oc = ocrVal[ci] || '';
+            var fc = savedVal[ci] || '';
+            if (oc !== fc) {
+                charDiff.push({
+                    pos: ci,
+                    ocr: oc,
+                    fix: fc,
+                    detail: (oc && fc) ? charDiffDetail(oc, fc) : (oc ? '삭제:' + oc : '추가:' + fc)
+                });
+            }
+        }
+
+        corrections.push({
+            field: fm.field,
+            original: ocrVal,
+            corrected: savedVal,
+            charDiff: charDiff
+        });
+    });
+
+    if (corrections.length === 0) {
+        console.log('[OCR보정] 보정 없음 — OCR 결과와 저장 데이터 동일');
+        _lastOcrResult = null;
+        return;
+    }
+
+    // Firestore에 보정 이력 저장
+    var correctionDoc = {
+        requester: ocr.requester || ocr.receptionist || '',
+        receiptNo: savedData.receiptNo || '',
+        timestamp: new Date().toISOString(),
+        corrections: corrections
+    };
+
+    await db.collection('ocrCorrections').add(correctionDoc);
+    console.log('[OCR보정] ' + corrections.length + '건 보정 저장 완료:', corrections.map(function(c) { return c.field + ': ' + c.original + ' → ' + c.corrected; }));
+    _lastOcrResult = null; // 수집 완료 후 초기화
 }
 
 // ============================================================================

@@ -30,6 +30,8 @@ import os
 import ssl
 import re
 import anthropic
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 app = Flask(__name__)
 CORS(app)
@@ -77,6 +79,85 @@ if not CLAUDE_API_KEY:
     if os.path.exists(_key_file_path):
         with open(_key_file_path, 'r') as f:
             CLAUDE_API_KEY = f.read().strip()
+
+# ============================================================
+# Firebase Admin 초기화 (OCR 보정 사전용)
+# ============================================================
+_firebase_db = None
+try:
+    _sa_key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'serviceAccountKey.json')
+    if not os.path.exists(_sa_key_path):
+        _sa_key_path = '/home/biofl/bfl_lims/serviceAccountKey.json'
+    if os.path.exists(_sa_key_path):
+        if not firebase_admin._apps:
+            _cred = credentials.Certificate(_sa_key_path)
+            firebase_admin.initialize_app(_cred)
+        _firebase_db = firestore.client()
+        print(f'[OCR] Firebase Admin 초기화 완료 (보정 사전 사용 가능)')
+    else:
+        print(f'[OCR] serviceAccountKey.json 없음 — 보정 사전 비활성')
+except Exception as _fb_err:
+    print(f'[OCR] Firebase Admin 초기화 실패: {_fb_err} — 보정 사전 비활성')
+
+
+# ============================================================
+# 한글 초성/중성/종성 분해 (보정 패턴 분석용)
+# ============================================================
+_CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ']
+_JUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ']
+
+def decompose_hangul(ch):
+    """한글 한 글자를 초성/중성/종성으로 분해"""
+    code = ord(ch)
+    if code < 0xAC00 or code > 0xD7A3:
+        return None
+    offset = code - 0xAC00
+    cho_idx = offset // (21 * 28)
+    jung_idx = (offset % (21 * 28)) // 28
+    return {'cho': _CHO[cho_idx], 'jung': _JUNG[jung_idx]}
+
+
+def load_ocr_corrections(requester=None, limit=50):
+    """Firestore에서 OCR 보정 이력 로드 → 손글씨 오인식 패턴 문자열 생성"""
+    if not _firebase_db:
+        return ''
+    try:
+        query = _firebase_db.collection('ocrCorrections').order_by(
+            'timestamp', direction=firestore.Query.DESCENDING
+        ).limit(limit)
+        if requester:
+            query = _firebase_db.collection('ocrCorrections').where(
+                'requester', '==', requester
+            ).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit)
+
+        docs = query.stream()
+        # 패턴 집계: (ocr글자 → fix글자) 빈도
+        patterns = {}
+        for doc in docs:
+            data = doc.to_dict()
+            for corr in data.get('corrections', []):
+                for cd in corr.get('charDiff', []):
+                    ocr_ch = cd.get('ocr', '')
+                    fix_ch = cd.get('fix', '')
+                    if ocr_ch and fix_ch and ocr_ch != fix_ch:
+                        key = f'{ocr_ch}→{fix_ch}'
+                        patterns[key] = patterns.get(key, 0) + 1
+
+        if not patterns:
+            return ''
+
+        # 빈도순 정렬
+        sorted_patterns = sorted(patterns.items(), key=lambda x: -x[1])
+        pattern_strs = [f'{k} ({v}회)' for k, v in sorted_patterns[:20]]
+
+        prefix = ''
+        if requester:
+            prefix = f'이 의뢰서 작성자({requester})의 '
+        return f'\n\n★ OCR 보정 사전 — {prefix}손글씨 오인식 패턴:\n' + ', '.join(pattern_strs) + '\n위 패턴을 참고하여 손글씨 판독 시 보정하세요.'
+    except Exception as e:
+        print(f'[OCR] 보정 사전 로드 실패: {e}')
+        return ''
+
 
 INSPECTION_FORM_PROMPT = """이 이미지는 (주)바이오푸드랩(BFL)의 시험·검사 의뢰서입니다.
 
@@ -379,6 +460,10 @@ def ocr_inspection_form():
         media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}
         media_type = media_types.get(image_format, 'image/jpeg')
 
+        # OCR 보정 사전 로드 (requester 파라미터가 있으면 해당 담당자 패턴만)
+        requester = payload.get('requester', '')
+        correction_hint = load_ocr_corrections(requester if requester else None)
+
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         message = client.messages.create(
             model='claude-sonnet-4-20250514',
@@ -404,7 +489,7 @@ def ocr_inspection_form():
 {ocr_text}
 === 끝 ===
 
-{INSPECTION_FORM_PROMPT}"""
+{INSPECTION_FORM_PROMPT}{correction_hint}"""
                     }
                 ]
             }]
