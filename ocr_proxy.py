@@ -74,54 +74,83 @@ if not CLAUDE_API_KEY:
         with open(_key_file_path, 'r') as f:
             CLAUDE_API_KEY = f.read().strip()
 
-INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰서(시험의뢰서)입니다.
+INSPECTION_FORM_PROMPT = """이 이미지는 한국 식품 시험·검사 의뢰서입니다.
 
-★ 중요 지시사항:
-- 이미지의 텍스트를 한 글자씩 정확하게 읽으세요. 추측하지 마세요.
-- 한글 제품명은 붙어있는 글자를 정확히 읽으세요 (예: "썬데이츠어니언맛"을 "썬데이 초 아이 인간"처럼 잘못 읽지 마세요).
-- 손글씨, 도장, 체크표시(✓,V,○)도 꼼꼼히 확인하세요.
-- 표(테이블) 안의 값은 열(컬럼) 헤더를 기준으로 정확히 매칭하세요.
-- 날짜 형식이 "2026. 02. 10" 또는 "2026.02.10"이면 "2026-02-10"으로 변환하세요.
+★ 양식 자동 판별 — 제목/헤더를 읽고 아래 8종 중 해당하는 양식을 판별하세요:
+1. "식품유형" 헤더가 있으면 → formType="food" (식품 의뢰서, testField="식품", testPurpose="자가품질위탁검사용")
+2. "축산물유형" 헤더가 있으면 → formType="livestock" (축산 의뢰서, testField="축산", testPurpose="자가품질위탁검사용")
+3. "RT-PCR(Allergen)" 또는 "RT-PCR (Allergen)" 제목 → formType="allergen-pcr" (testField="식품", testPurpose="Allergen(RT-PCR)")
+4. "Elisa" 제목 → formType="allergen-elisa" (testField="축산", testPurpose="Allergen(ELISA)")
+5. "HPGe" 제목 → formType="radiation" (testField="식품", testPurpose="방사능(HPGe)")
+6. "물질" 제목 → formType="material" (testField="식품", testPurpose="물질검사")
+7. "RT-PCR" 제목 + "할랄" 또는 "Halal" 또는 "Vegan" → formType="halal-vegan" (testField="식품", testPurpose="Halal food(RT_PCR)" 또는 "Vegan food(RT-PCR)")
+8. "소비기한" 제목 → formType="shelf-life" (testField="식품", testPurpose="참고용(소비기한설정)")
 
-아래 JSON 형식으로 추출하세요. 값이 없으면 빈 문자열("").
-배열이 비어있으면 빈 배열([]). 날짜는 YYYY-MM-DD 형식.
+★ 격자(테이블) 인식 규칙:
+- 표의 가로줄(행)과 세로줄(열)을 정확히 구분하세요.
+- 각 셀의 값은 해당 열의 헤더에 정확히 매칭하세요.
+- 병합된 셀(2행에 걸친 시료 정보)은 하나의 시료로 합치세요.
+- 빈 행은 건너뛰세요. 데이터가 있는 행만 samples에 포함하세요.
+- 손글씨는 글자 모양을 최대한 정확히 판독하세요. 불확실하면 가장 가까운 글자로.
+- 체크표시(✓, V, ○, ●)는 해당 항목이 선택된 것입니다.
+- 운반상태 체크란은 보통 오른쪽에 실온/상온/냉장/냉동 중 체크된 것을 읽으세요.
+
+★ 양식별 시료 테이블 컬럼 차이:
+- food/livestock: 순번, 제품명, 식품유형(축산물유형), 포장단위, 운반상태, 제조일자, 접수번호, 단서조항, 검체량, 소비기한
+- allergen-pcr/allergen-elisa/halal-vegan: 순번, 접수번호, 샘플명, 유형(품번), 검사항목, 비고
+- radiation: 순번, 접수번호, 샘플명, 유형(품번), 검사항목, 비고
+- material: 순번, 접수번호, 분석장비, 시료상태, 실험방법, 샘플명칭
+- shelf-life: 식품 의뢰서와 유사하되 소비기한 설정 관련 추가 필드
+
+★ 텍스트 읽기 규칙:
+- 한 글자씩 정확하게 읽으세요. 추측하지 마세요.
+- 한글 제품명은 붙어있는 글자를 정확히 읽으세요.
+- 날짜 "2026. 02. 10" 또는 "2026.02.10" → "2026-02-10"
+- 성적서 발행 수량(국문/영문 부수)은 reportCopies에 기재하세요.
+
+아래 JSON 형식으로 추출하세요. 값이 없으면 빈 문자열. 날짜는 YYYY-MM-DD.
 
 {
-  "testPurpose": "검사목적 (자가품질위탁검사용/품질검사(의뢰)/수입식품검사/위생검사/유통식품검사/수거검사/재검사/이의신청검사/Allergen(RT-PCR)/잔류농약(참고용)/참고용(영양성분)/참고용(소비기한설정)/참고용(기준규격외)/연구용역/항생물질(참고용) 중 가장 가까운 것)",
-  "testField": "시험분야 (식품/축산 중 하나. 없으면 식품)",
-  "companyName": "업체명 또는 영업소명 (정확한 상호명)",
-  "representativeName": "대표자 또는 성명",
-  "bizNo": "사업자등록번호 (000-00-00000 형식)",
-  "licNo": "인허가번호 또는 허가번호",
+  "formType": "food/livestock/allergen-pcr/allergen-elisa/radiation/material/halal-vegan/shelf-life",
+  "testPurpose": "자동 판별된 검사목적",
+  "testField": "식품 또는 축산",
+  "companyName": "상호명",
+  "representativeName": "대표자명",
+  "bizNo": "사업자등록번호",
+  "licNo": "인허가번호",
   "phone": "전화번호",
   "fax": "팩스번호",
   "mobile": "휴대전화",
-  "address": "소재지 또는 주소",
-  "reportSend": ["성적서 수령방법 배열. 체크(✓,V,○)된 항목만. 우편/선발송/팩스(선)/메일(사본) 중"],
-  "reportSendFax": "팩스 수령 번호",
-  "reportSendEmail": "이메일 수령 주소",
+  "address": "소재지",
+  "reportSend": ["체크된 수령방법만 (우편/선발송/팩스/메일 중)"],
+  "reportSendFax": "팩스번호",
+  "reportSendEmail": "이메일",
+  "reportCopies": {"korean": 0, "english": 0},
   "samples": [
     {
-      "productName": "제품명 또는 시료명 (정확한 글자 그대로. 붙어있는 한글은 띄어쓰기 없이)",
-      "foodType": "식품유형 컬럼의 값 (기타가공품, 과자, 빵류, 김치류, 소스류, 음료류, 건강기능식품 등 정확히 기재된 그대로)",
-      "inspectionItems": "시험의뢰항목 또는 검사항목 컬럼의 값 (쉼표 구분. 예: 대장균군(정량,n=5), 일반세균수)",
-      "inspectionStandard": "단시조항 또는 시험법 컬럼의 값 (비살균/그대로섭취 등 기재된 그대로)",
-      "manufactureNo": "접수번호 또는 제조번호 또는 LOT번호",
-      "manufactureDate": "제조일자 (YYYY-MM-DD)",
-      "expiryDate": "소비기한 또는 유통기한 (YYYY-MM-DD)",
-      "expiryDays": "소비기한이 일수로 기재된 경우만 (숫자만)",
-      "sampleAmount": "검체량 (숫자만. 예: 20)",
-      "sampleAmountUnit": "검체량 단위 (g/kg/ml/L 중 하나)",
-      "sampleCount": "검체수 (숫자. 없으면 1)",
-      "packageUnit": "포장단위 (예: 20gx10)",
-      "transportStatus": "운반상태 (냉장/냉동/실온/상온 중 하나)"
+      "productName": "제품명/샘플명",
+      "foodType": "식품유형/축산물유형/유형",
+      "inspectionItems": "검사항목 (쉼표 구분)",
+      "inspectionStandard": "단서조항/시험법",
+      "manufactureNo": "제조번호/LOT",
+      "manufactureDate": "YYYY-MM-DD",
+      "expiryDate": "YYYY-MM-DD",
+      "expiryDays": "소비기한 일수 (숫자만)",
+      "sampleAmount": "검체량 (숫자만)",
+      "sampleAmountUnit": "g/kg/ml/L",
+      "sampleCount": "검체수 (기본 1)",
+      "packageUnit": "포장단위",
+      "transportStatus": "냉장/냉동/실온/상온",
+      "analysisEquipment": "분석장비 (물질검사만: XRF/FTIR/현미경)",
+      "sampleCondition": "시료상태 (물질검사만)",
+      "experimentMethod": "실험방법 (물질검사만: 단일실험/비교실험)"
     }
   ],
   "billingInfo": {
-    "billingDateType": "계산서 발행일 관련 기재 내용 (접수일/월말/특정 날짜. 없으면 빈 문자열)",
-    "billingDate": "특정 날짜인 경우 YYYY-MM-DD (없으면 빈 문자열)"
+    "billingDateType": "접수일/월말/특정날짜",
+    "billingDate": "YYYY-MM-DD"
   },
-  "remarks": "비고 또는 특이사항"
+  "remarks": "비고"
 }
 
 JSON만 반환하세요. 설명이나 마크다운 없이 순수 JSON만."""

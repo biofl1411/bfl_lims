@@ -1506,7 +1506,17 @@ function _fillCompanyContactFromOcr(result) {
 function fillFormFromOcrResult(result) {
     var filledFields = [];
     var skippedFields = [];  // PIN 잠금으로 건너뛴 필드명
-    console.log('[OCR] 인식 결과:', JSON.stringify(result, null, 2));
+    var formType = result.formType || 'food';
+    console.log('[OCR] 양식유형:', formType, '인식 결과:', JSON.stringify(result, null, 2));
+
+    // 양식유형별 토스트
+    var formTypeLabels = {
+      'food': '식품 의뢰서', 'livestock': '축산 의뢰서',
+      'allergen-pcr': 'RT-PCR 알레르겐 의뢰서', 'allergen-elisa': 'ELISA 알레르기 의뢰서',
+      'radiation': '방사능 의뢰서', 'material': '물질검사 의뢰서',
+      'halal-vegan': '할랄/비건 의뢰서', 'shelf-life': '소비기한 의뢰서'
+    };
+    showToast('📋 ' + (formTypeLabels[formType] || formType) + ' 감지', 'info');
 
     // [0] PIN 잠금 체크 — 잠금 시 해제 여부를 사용자에게 확인
     var pinTestField = document.getElementById('pin-test-field');
@@ -1796,6 +1806,22 @@ function fillFormFromOcrResult(result) {
                     console.log('[OCR] 시료 ' + (idx+1) + ' 검사항목:', sample.inspectionItems);
                 }
 
+                // 물질검사 전용 필드 (formType=material)
+                if (formType === 'material') {
+                    if (sample.analysisEquipment) {
+                        var aeEl = document.getElementById('analysis-equipment');
+                        if (aeEl) { aeEl.value = sample.analysisEquipment; filledFields.push('analysis-equipment'); }
+                    }
+                    if (sample.sampleCondition) {
+                        var scondEl = document.getElementById('sample-condition');
+                        if (scondEl) { scondEl.value = sample.sampleCondition; filledFields.push('sample-condition'); }
+                    }
+                    if (sample.experimentMethod) {
+                        var emEl = document.getElementById('experiment-method');
+                        if (emEl) { emEl.value = sample.experimentMethod; filledFields.push('experiment-method'); }
+                    }
+                }
+
                 saveSampleToArray();
             });
 
@@ -1806,7 +1832,21 @@ function fillFormFromOcrResult(result) {
         }
     } catch(e) { console.warn('[OCR] 시료정보 설정 오류:', e.message); }
 
-    // ⑧ 비고 (의뢰서 비고 + 검사항목 참조용 추가)
+    // ⑧ 성적서 발행 부수 (특수 의뢰서)
+    try {
+        if (result.reportCopies) {
+            var copies = result.reportCopies;
+            var copyParts = [];
+            if (copies.korean > 0) copyParts.push('국문 ' + copies.korean + '부');
+            if (copies.english > 0) copyParts.push('영문 ' + copies.english + '부');
+            if (copyParts.length) {
+                var copyEl = document.getElementById('report-copies');
+                if (copyEl) { copyEl.value = copyParts.join(', '); filledFields.push('report-copies'); }
+            }
+        }
+    } catch(e) { console.warn('[OCR] 성적서 부수 설정 오류:', e.message); }
+
+    // ⑨ 비고 (의뢰서 비고 + 검사항목 참조용 추가)
     try {
         var remarksParts = [];
         if (result.remarks) remarksParts.push(result.remarks);
