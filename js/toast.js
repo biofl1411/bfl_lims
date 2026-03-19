@@ -80,7 +80,11 @@
             else if (/^[📋📢🎯ℹ️🔍]|감지|선택됨|안내|참고/.test(msg)) type = 'info';
             else type = 'success';
         }
-        duration = duration || 10000;
+        // 토스트 개수에 따라 기본 시간 조정 (5개 미만 10초, 이상 20초)
+        if (!duration) {
+            var existing = ensureContainer().querySelectorAll('.bfl-toast').length;
+            duration = (existing >= 4) ? 20000 : 10000;
+        }
 
         var c = ensureContainer();
         var t = document.createElement('div');
