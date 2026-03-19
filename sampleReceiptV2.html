@@ -4537,33 +4537,48 @@ function parseSampleAmountInfo(sample) {
     var rawUnit = sample.sampleAmountUnit || 'g';
     var rawPackage = sample.packageUnit || '';
     var rawCount = sample.sampleCount || '';
-    // 포장단위 = 단일 포장의 중량 (예: "20g"), 검체량 = 총 중량
-    // 패턴1: "20gx10" → 포장단위=20g, 검체량=200(총), 단위=g, 검체수=10
+
+    // 포장단위 = 단일 포장 중량 (곱하기 금지)
+    // "20gx10" → 포장단위=20g, 검체수=10, 검체량=20
+    // 검체량이 별도로 크면 (예: 포장 100g인데 검체량 2000g) → 검체수 = 2000/100
+
     var parseTarget = rawPackage || rawAmount;
+
+    // 패턴1: "20gx10" 또는 "20g*10" — 중량x수량
     var multiMatch = parseTarget.match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|mL|L)\s*[x*×]\s*(\d+)/i);
     if (multiMatch) {
         var single = parseFloat(multiMatch[1]);
         var unit = multiMatch[2].toLowerCase() === 'ml' ? 'ml' : multiMatch[2];
         var count = parseInt(multiMatch[3]);
-        return { amount: single * count, unit: unit, packageUnit: multiMatch[1] + unit, sampleCount: count };
+        return { amount: single, unit: unit, packageUnit: multiMatch[1] + unit, sampleCount: count };
     }
-    // 패턴2: sampleAmount에 "x" 포함 (예: "20*10") → 검체량=200(총), 검체수=10
+
+    // 패턴2: sampleAmount에 "x" 포함 (예: "20*10") — 중량x수량
     if (rawAmount.match(/[*x×]/i)) {
         var parts = rawAmount.split(/[*x×]/i);
         if (parts.length === 2) {
             var a = parseFloat(parts[0].replace(/[^0-9.]/g, ''));
             var b = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
             if (!isNaN(a) && !isNaN(b)) {
-                return { amount: a * b, unit: rawUnit, packageUnit: a + rawUnit, sampleCount: b };
+                return { amount: a, unit: rawUnit, packageUnit: a + rawUnit, sampleCount: b };
             }
         }
     }
-    // 패턴3: 일반 숫자
+
+    // 패턴3: 검체량과 포장단위 별도 — 검체량이 포장단위보다 크면 나눠서 검체수 산출
+    var amountNum = parseFloat(rawAmount.replace(/[^0-9.]/g, '')) || 0;
+    var pkgNum = parseFloat(rawPackage.replace(/[^0-9.]/g, '')) || 0;
+    if (pkgNum > 0 && amountNum > 0 && amountNum > pkgNum) {
+        var calcCount = Math.round(amountNum / pkgNum);
+        return { amount: pkgNum, unit: rawUnit, packageUnit: rawPackage, sampleCount: calcCount };
+    }
+
+    // 패턴4: 일반 숫자
     return {
         amount: rawAmount.replace(/[^0-9.]/g, '') || rawAmount,
         unit: rawUnit,
         packageUnit: rawPackage || (rawAmount ? rawAmount.replace(/[^0-9.]/g, '') + rawUnit : ''),
-        sampleCount: rawCount
+        sampleCount: rawCount || '1'
     };
 }
 
