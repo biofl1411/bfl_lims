@@ -634,6 +634,9 @@ def ocr_template():
             # 개별 열 크롭이 있는 경우 행 단위로 조합
             result['samples'] = _assemble_sample_rows(sample_fields)
 
+        # ── 4-1. 메모란에서 팩스/이메일 자동 추출 ──
+        _extract_contact_from_memo(result)
+
         # ── 5. 불확실한 필드 Claude 보정 (선택적) ──
         if uncertain_fields and CLAUDE_API_KEY:
             corrections = _claude_correct_fields(
@@ -662,6 +665,34 @@ def ocr_template():
             return _fallback_to_claude_ocr(payload)
         except Exception:
             return jsonify({'error': f'서버 오류: {str(e)}'}), 500
+
+
+def _extract_contact_from_memo(result):
+    """메모란 텍스트에서 팩스번호/이메일 패턴을 추출하여 해당 필드에 보충"""
+    memo = result.get('memo', '')
+    if not memo:
+        return
+
+    # 이메일 패턴 추출 (여러 개 가능)
+    emails = re.findall(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', memo)
+    if emails:
+        existing_email = result.get('reportSendEmail', '').strip()
+        if not existing_email:
+            result['reportSendEmail'] = emails[0]
+        # 추가 이메일이 있으면 billingEmail에도
+        if len(emails) > 1 and not result.get('billingEmail', '').strip():
+            result['billingEmail'] = emails[1]
+        elif len(emails) == 1 and not result.get('billingEmail', '').strip():
+            result['billingEmail'] = emails[0]
+
+    # 팩스번호 패턴 추출 (0으로 시작하는 전화번호 형태 + 팩스/fax/FAX 키워드 근처)
+    fax_patterns = re.findall(r'(?:팩스|fax|FAX|Fax)\s*[:\.]?\s*(0\d{1,2}[\-.\s]?\d{3,4}[\-.\s]?\d{4})', memo, re.IGNORECASE)
+    if fax_patterns:
+        existing_fax = result.get('reportSendFax', '').strip()
+        if not existing_fax:
+            result['reportSendFax'] = fax_patterns[0].strip()
+
+    # 메모에서 추출된 연락처 정보를 메모 원문에서 제거하지 않음 (원문 보존)
 
 
 def _load_ocr_template(form_type=''):
