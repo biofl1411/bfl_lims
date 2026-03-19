@@ -547,9 +547,6 @@ def ocr_template():
     }
     """
     try:
-        if not HAS_PIL:
-            return jsonify({'error': 'Pillow 라이브러리가 설치되지 않았습니다 (pip install Pillow)'}), 500
-
         payload = request.get_json()
         if not payload or 'images' not in payload or not payload['images']:
             return jsonify({'error': 'images 배열이 필요합니다'}), 400
@@ -566,111 +563,191 @@ def ocr_template():
         template = _load_ocr_template(form_type)
 
         if not template:
-            # 템플릿 없으면 기존 방식으로 폴백
             return _fallback_to_claude_ocr(payload)
 
         regions = template.get('regions', {})
         if not regions:
             return _fallback_to_claude_ocr(payload)
 
-        # ── 2. PIL로 이미지 디코딩 ──
-        img_bytes = base64.b64decode(image_base64)
-        pil_img = PILImage.open(io.BytesIO(img_bytes))
-        img_w, img_h = pil_img.size
+        print(f'[OCR] 템플릿 로드 성공: {template.get("_id")} (필드 {len(regions)}개)')
 
-        # ── 3. 필드별 크롭 → Clova OCR ──
-        result = {}
-        uncertain_fields = []  # Claude 보정이 필요한 필드
-        sample_fields = {}     # 시료 테이블 관련 필드
-        checkbox_crops = {}    # 체크박스 필드 크롭 (Claude Vision용)
+        # ── 2. Clova로 전체 이미지 OCR (기존과 동일) ──
+        clova_payload = {
+            'version': 'V2',
+            'requestId': f'tpl-{int(time.time() * 1000)}',
+            'timestamp': int(time.time() * 1000),
+            'lang': 'ko',
+            'images': [{
+                'format': image_format if image_format in ('jpg', 'jpeg', 'png') else 'jpg',
+                'name': image_info.get('name', 'image.jpg'),
+                'data': image_base64
+            }]
+        }
+        clova_resp = requests.post(
+            CLOVA_GENERAL_URL,
+            headers={'Content-Type': 'application/json', 'X-OCR-SECRET': CLOVA_GENERAL_SECRET},
+            json=clova_payload,
+            timeout=30
+        )
 
+        ocr_text = ''
+        if clova_resp.status_code == 200:
+            clova_result = clova_resp.json()
+            extracted = []
+            if 'images' in clova_result:
+                for img in clova_result['images']:
+                    for field in img.get('fields', []):
+                        text = field.get('inferText', '').strip()
+                        if text:
+                            vertices = field.get('boundingPoly', {}).get('vertices', [])
+                            y = vertices[0].get('y', 0) if vertices else 0
+                            x = vertices[0].get('x', 0) if vertices else 0
+                            extracted.append({'text': text, 'x': x, 'y': y, 'lb': field.get('lineBreak', False)})
+
+            if extracted:
+                extracted.sort(key=lambda f: (f['y'], f['x']))
+                lines = []
+                cur = []
+                last_y = -999
+                for f in extracted:
+                    if abs(f['y'] - last_y) > 12 and cur:
+                        lines.append(' '.join([w['text'] for w in cur]))
+                        cur = []
+                    cur.append(f)
+                    last_y = f['y']
+                    if f.get('lb'):
+                        lines.append(' '.join([w['text'] for w in cur]))
+                        cur = []
+                        last_y = -999
+                if cur:
+                    lines.append(' '.join([w['text'] for w in cur]))
+                ocr_text = '\n'.join(lines)
+
+        print(f'[OCR] Clova 전체 OCR 완료 ({len(ocr_text)}자)')
+
+        # ── 3. 체크박스 필드 크롭 (PIL 사용) ──
+        checkbox_crops_b64 = {}
+        CHECKBOX_FIELDS = {'bizType', 'testPurpose', 'reportSend', 'reportAddress',
+                           'reportCopies', 'sampleReturn', 'taxInvoice', 'paymentType'}
+
+        if HAS_PIL:
+            img_bytes = base64.b64decode(image_base64)
+            pil_img = PILImage.open(io.BytesIO(img_bytes))
+            img_w, img_h = pil_img.size
+
+            for field_key in CHECKBOX_FIELDS:
+                region = regions.get(field_key)
+                if not region:
+                    continue
+                crop_x = max(0, int(region['x'] * img_w))
+                crop_y = max(0, int(region['y'] * img_h))
+                crop_r = min(img_w, crop_x + int(region['w'] * img_w))
+                crop_b = min(img_h, crop_y + int(region['h'] * img_h))
+                if crop_r <= crop_x or crop_b <= crop_y:
+                    continue
+                cropped = pil_img.crop((crop_x, crop_y, crop_r, crop_b))
+                buf = io.BytesIO()
+                cropped.save(buf, format='JPEG', quality=95)
+                checkbox_crops_b64[field_key] = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+        # ── 4. Claude에 전체 이미지 + Clova 텍스트 + 좌표 힌트 전달 ──
+        media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp'}
+        media_type = media_types.get(image_format, 'image/jpeg')
+
+        requester = payload.get('requester', '')
+        correction_hint = load_ocr_corrections(requester if requester else None)
+
+        # 좌표 힌트 생성 — 템플릿 좌표를 Claude에 알려줌
+        coord_hints = []
         for field_key, region in regions.items():
-            # 비율 좌표 → 실제 픽셀 좌표
-            crop_x = int(region['x'] * img_w)
-            crop_y = int(region['y'] * img_h)
-            crop_w = int(region['w'] * img_w)
-            crop_h = int(region['h'] * img_h)
+            if field_key not in CHECKBOX_FIELDS:
+                pct_x = int(region['x'] * 100)
+                pct_y = int(region['y'] * 100)
+                pct_w = int(region['w'] * 100)
+                pct_h = int(region['h'] * 100)
+                coord_hints.append(f'  - {field_key}: 위치({pct_x}%,{pct_y}%) 크기({pct_w}%x{pct_h}%)')
+        coord_hint_text = '\n'.join(coord_hints)
 
-            # 범위 보정
-            crop_x = max(0, crop_x)
-            crop_y = max(0, crop_y)
-            crop_r = min(img_w, crop_x + crop_w)
-            crop_b = min(img_h, crop_y + crop_h)
+        # Claude 메시지 구성 — 전체 이미지 + 체크박스 크롭 이미지들
+        claude_content = [
+            {
+                'type': 'image',
+                'source': {'type': 'base64', 'media_type': media_type, 'data': image_base64}
+            }
+        ]
 
-            if crop_r <= crop_x or crop_b <= crop_y:
-                continue
+        # 체크박스 크롭 이미지도 추가
+        checkbox_image_desc = []
+        for idx, (ck_key, ck_b64) in enumerate(checkbox_crops_b64.items()):
+            claude_content.append({
+                'type': 'image',
+                'source': {'type': 'base64', 'media_type': 'image/jpeg', 'data': ck_b64}
+            })
+            checkbox_image_desc.append(f'  이미지{idx+2}: {ck_key} 체크박스 영역 크롭')
 
-            # 크롭
-            cropped = pil_img.crop((crop_x, crop_y, crop_r, crop_b))
+        checkbox_desc = '\n'.join(checkbox_image_desc) if checkbox_image_desc else ''
 
-            # 크롭 이미지 → base64
-            buf = io.BytesIO()
-            save_fmt = 'JPEG' if image_format in ('jpg', 'jpeg') else 'PNG'
-            cropped.save(buf, format=save_fmt, quality=95)
-            crop_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        claude_content.append({
+            'type': 'text',
+            'text': f"""위 이미지는 (주)바이오푸드랩(BFL)의 시험·검사 의뢰서입니다.
+이미지1: 전체 의뢰서 원본
+{checkbox_desc}
 
-            # 체크박스 필드는 Claude Vision으로 처리
-            CHECKBOX_FIELDS = {'bizType', 'testPurpose', 'reportSend', 'reportAddress',
-                               'reportCopies', 'sampleReturn', 'taxInvoice', 'paymentType'}
-            if field_key in CHECKBOX_FIELDS:
-                checkbox_crops[field_key] = crop_b64
-                continue
+아래는 Clova OCR로 추출한 텍스트입니다. OCR 텍스트를 기본으로 사용하되,
+텍스트에서 누락되거나 불확실한 부분은 이미지를 직접 확인하여 보완하세요.
 
-            # Clova General OCR 호출
-            ocr_text = _clova_ocr_single(crop_b64, image_format)
+=== Clova OCR 텍스트 ===
+{ocr_text}
+=== 끝 ===
 
-            # 시료 테이블 필드는 별도 처리
-            if field_key.startswith('sample_') or field_key == 'sampleTable':
-                sample_fields[field_key] = ocr_text
-            else:
-                result[field_key] = ocr_text.strip()
+★ 템플릿 좌표 힌트 (각 필드가 이미지의 어느 위치에 있는지):
+{coord_hint_text}
 
-            # 빈 결과이거나 신뢰도 낮은 것은 Claude 보정 대상
-            if not ocr_text.strip() or len(ocr_text.strip()) < 2:
-                uncertain_fields.append(field_key)
+★ 체크박스 필드는 크롭 이미지를 직접 보고 체크 상태를 판독하세요:
+  - bizType: 체크된 업종 (식품제조가공업/즉석판매제조가공업/유통판매업/식품소분업/기타)
+  - testPurpose: 체크된 검사목적 (자가품질검사/자가품질검사(일부항목)/참고용/참고용(영양성분))
+  - reportSend: 체크된 수령방법 배열 (우편/선발송/팩스선송부/메일선송부)
+  - reportCopies: 국문/영문 부수 {{"korean": 숫자, "english": 숫자}}
+  - sampleReturn: 시료반환 또는 시료폐기
+  - taxInvoice: 발행/미발행/현금영수증
+  - paymentType: 카드/계좌이체
 
-        # ── 4. 시료 테이블 처리 ──
-        if 'sampleTable' in sample_fields and sample_fields['sampleTable']:
-            # 시료 테이블 전체 텍스트를 Claude로 구조화
-            samples = _parse_sample_table_with_claude(
-                sample_fields, image_base64, image_format, regions,
-                img_w, img_h, payload.get('requester', '')
-            )
-            if samples:
-                result['samples'] = samples
-        elif any(k.startswith('sample_') for k in sample_fields):
-            # 개별 열 크롭이 있는 경우 행 단위로 조합
-            result['samples'] = _assemble_sample_rows(sample_fields)
+{INSPECTION_FORM_PROMPT}{correction_hint}"""
+        })
 
-        # ── 4-1. 체크박스 필드 일괄 Claude Vision 처리 ──
-        if checkbox_crops and CLAUDE_API_KEY:
-            checkbox_results = _claude_read_checkboxes(checkbox_crops)
-            for k, v in checkbox_results.items():
-                if v:
-                    result[k] = v
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        message = client.messages.create(
+            model='claude-sonnet-4-20250514',
+            max_tokens=4000,
+            messages=[{'role': 'user', 'content': claude_content}]
+        )
 
-        # ── 4-2. 메모란에서 팩스/이메일 자동 추출 ──
-        _extract_contact_from_memo(result)
+        result_text = message.content[0].text.strip()
+        if result_text.startswith('```'):
+            result_text = re.sub(r'^```(?:json)?\s*', '', result_text)
+            result_text = re.sub(r'\s*```$', '', result_text)
 
-        # ── 5. 불확실한 필드 Claude 보정 (선택적) ──
-        if uncertain_fields and CLAUDE_API_KEY:
-            corrections = _claude_correct_fields(
-                uncertain_fields, image_base64, image_format,
-                regions, img_w, img_h, payload.get('requester', '')
-            )
-            for k, v in corrections.items():
-                if v:
-                    result[k] = v
+        result_json = json.loads(result_text)
 
-        # 양식 유형 추가
-        result['formType'] = template.get('formType', form_type)
-        result['_ocrMethod'] = 'template-crop+clova'
-        result['_templateId'] = template.get('_id', '')
-        result['_mappedFields'] = len(regions)
-        result['_uncertainFields'] = uncertain_fields
+        # 메모란에서 팩스/이메일 자동 추출
+        _extract_contact_from_memo(result_json)
 
-        return jsonify(result)
+        # 메타정보 추가
+        result_json['formType'] = result_json.get('formType', template.get('formType', form_type))
+        result_json['_ocrMethod'] = 'template-crop+clova'
+        result_json['_templateId'] = template.get('_id', '')
+        result_json['_mappedFields'] = len(regions)
+        result_json['_ocrRawText'] = ocr_text[:3000]
 
+        print(f'[OCR] 템플릿+Claude 하이브리드 OCR 완료')
+        return jsonify(result_json)
+
+    except json.JSONDecodeError as je:
+        print(f'[OCR] 템플릿 OCR Claude JSON 파싱 실패: {je}')
+        try:
+            return _fallback_to_claude_ocr(payload)
+        except:
+            return jsonify({'error': f'JSON 파싱 실패: {str(je)}'}), 500
     except Exception as e:
         print(f'[OCR] 템플릿 OCR 오류: {e}')
         import traceback
