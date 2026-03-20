@@ -6492,11 +6492,17 @@ function collectReceiptData() {
 // ============================================================================
 // 저장
 // ============================================================================
+var _savingInProgress = false;
 async function saveReceipt() {
+    if (_savingInProgress) return;
     if (!isReceiptNoAllocated) {
         showToast('접수번호를 먼저 할당받으세요!', 'error');
         return;
     }
+    _savingInProgress = true;
+    var btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 저장중...';
     try {
         // 파일 업로드 (미업로드 파일이 있으면 먼저 처리)
         await uploadAllFiles();
@@ -6514,13 +6520,16 @@ async function saveReceipt() {
         try { await collectOcrCorrections(data); } catch(ocrErr) { console.warn('[OCR보정] 수집 오류:', ocrErr); }
         showToast('✅ 저장되었습니다!');
         isModified = false;
-        var btn = document.getElementById('save-btn');
         btn.classList.remove('modified');
         btn.textContent = '💾 저장';
         document.getElementById('status').value = '접수중';
     } catch(err) {
         console.error('저장 실패:', err);
         showToast('저장 중 오류가 발생했습니다.', 'error');
+        btn.textContent = '💾 저장';
+    } finally {
+        btn.disabled = false;
+        _savingInProgress = false;
     }
 }
 
