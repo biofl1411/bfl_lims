@@ -448,6 +448,21 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 .p-act-move:hover{background:#7c4dff;color:#fff}
 .p-act-sort{border:1px solid #7c4dff;color:#7c4dff;background:#fff}
 .p-act-sort:hover{background:#ede7f6}
+/* P참고용 묶음 카드 */
+.p-bundle-card{padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;margin-bottom:4px}
+.p-bundle-card:hover{border-color:#7c4dff;background:#faf5ff}
+.p-bundle-card.active{border-color:#7c4dff;background:#ede7f6;box-shadow:0 0 0 2px rgba(124,77,255,.2)}
+.p-bundle-card .bundle-name{font-size:12px;font-weight:600;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-bundle-card .bundle-meta{font-size:10px;color:#999;margin-top:2px;display:flex;justify-content:space-between}
+.p-bundle-card .bundle-fee{color:#2e7d32;font-weight:600}
+/* 묶음 항목 행 */
+.p-bundle-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #f0f0f0;border-radius:6px;background:#fff;margin-bottom:3px;font-size:12px;cursor:grab;transition:border-color .15s}
+.p-bundle-item:hover{border-color:#7c4dff}
+.p-bundle-item.sortable-ghost{opacity:.4;background:#ede7f6}
+.p-bundle-item .grip{color:#ccc;cursor:grab;font-size:14px;flex-shrink:0}
+.p-bundle-item .item-code{color:#7c4dff;font-weight:600;width:70px;flex-shrink:0;font-size:11px}
+.p-bundle-item .item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-bundle-item .item-check{flex-shrink:0}
 
 </style>
 </head>
@@ -781,8 +796,35 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <button onclick="sortPRefItems('code')" class="p-act-btn p-act-sort" title="코드순 정렬">코드↕</button>
       </div>
     </div>
-    <!-- P참고용 3단계 서브칩 -->
-    <div id="mfds-p-sub3-chips" style="display:none;padding:0 16px 8px;flex-wrap:wrap;gap:4px;align-items:center;"></div>
+    <!-- P참고용 묶음(세트) 관리 패널 — 소분류 선택 시 테이블 대신 표시 -->
+    <div id="p-bundle-panel" style="display:none;padding:0 16px 8px;">
+      <div style="display:flex;gap:12px;height:calc(100vh - 280px);min-height:400px;">
+        <!-- 좌측: 묶음 목록 (세로) -->
+        <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;border:1px solid var(--bdr);border-radius:10px;background:#fafafa;overflow:hidden;">
+          <div style="padding:10px 14px;background:#f3e8ff;border-bottom:1px solid #e0d4f5;display:flex;justify-content:space-between;align-items:center;">
+            <span id="p-bundle-title" style="font-size:13px;font-weight:700;color:#5b21b6;">묶음 목록</span>
+            <button onclick="createPBundle()" class="p-act-btn p-act-add" style="padding:2px 8px;font-size:10px;">＋ 묶음</button>
+          </div>
+          <div id="p-bundle-list" style="flex:1;overflow-y:auto;padding:6px;"></div>
+        </div>
+        <!-- 우측: 선택된 묶음의 항목 -->
+        <div style="flex:1;display:flex;flex-direction:column;border:1px solid var(--bdr);border-radius:10px;overflow:hidden;">
+          <div style="padding:10px 14px;background:#f0f7ff;border-bottom:1px solid #d0e3f7;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <div>
+              <span id="p-bundle-detail-title" style="font-size:13px;font-weight:700;color:#1565c0;">묶음을 선택하세요</span>
+              <span id="p-bundle-detail-count" style="font-size:11px;color:var(--sub);margin-left:8px;"></span>
+            </div>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button onclick="addItemToBundle()" class="p-act-btn p-act-add" style="padding:2px 8px;font-size:10px;">＋ 항목</button>
+              <button onclick="removeItemFromBundle()" class="p-act-btn p-act-del" style="padding:2px 8px;font-size:10px;">✕ 항목 삭제</button>
+            </div>
+          </div>
+          <div id="p-bundle-items" style="flex:1;overflow-y:auto;padding:6px;">
+            <div style="padding:40px;text-align:center;color:#999;font-size:13px;">← 좌측에서 묶음을 선택하세요</div>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- 시험항목 테이블 -->
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -36095,6 +36137,14 @@ function renderMfdsTestItems() {
     if (p3Doc.exists) {
       _pRefSub3Data = p3Doc.data();
     }
+    // P참고용 묶음 데이터 로드
+    firebase.firestore().collection('settings').doc('pRefBundles').get().then(function(bDoc) {
+      if (bDoc.exists) {
+        var bd = bDoc.data();
+        _pBundleItems = bd.items || {};
+        _pBundleFees = bd.fees || {};
+      }
+    }).catch(function() {});
     _mfdsTestFiltered = _mfdsTestItems;
     _mfdsTestPage = 0;
     _mfdsTestLoaded = true;
@@ -36236,14 +36286,40 @@ function setMfdsTestCategory(cat) {
   // P참고용 선택 시 액션 버튼 표시
   var pActions = document.getElementById('mfds-p-actions');
   if (pActions) pActions.style.display = (_mfdsTestCatFilter === 'P') ? 'flex' : 'none';
+  // P 해제 시 묶음 패널 숨기고 테이블 복원
+  var bundlePanel = document.getElementById('p-bundle-panel');
+  var tableArea = document.querySelector('#panel-test-items > div[style*="overflow-x"]');
+  var pagination = document.getElementById('mfds-test-item-pagination');
+  if (_mfdsTestCatFilter !== 'P' || !_mfdsTestSubFilter) {
+    if (bundlePanel) bundlePanel.style.display = 'none';
+    if (tableArea) tableArea.style.display = '';
+    if (pagination) pagination.style.display = '';
+  }
 }
 
 /** 소분류 필터 클릭 */
 function setMfdsTestSubCategory(sub) {
   _mfdsTestSubFilter = (_mfdsTestSubFilter === sub) ? null : sub;
   _pRefSub3Filter = null;
+  _pBundleSelected = null;
   renderMfdsTestSubChips();
   renderPRefSub3Chips();
+
+  // P참고용 소분류 선택 시 묶음 패널 표시
+  var bundlePanel = document.getElementById('p-bundle-panel');
+  var tableArea = document.querySelector('#panel-test-items > div[style*="overflow-x"]');
+  var pagination = document.getElementById('mfds-test-item-pagination');
+  if (_mfdsTestCatFilter === 'P' && _mfdsTestSubFilter) {
+    if (bundlePanel) bundlePanel.style.display = 'block';
+    if (tableArea) tableArea.style.display = 'none';
+    if (pagination) pagination.style.display = 'none';
+    renderPBundles();
+    return;
+  }
+  if (bundlePanel) bundlePanel.style.display = 'none';
+  if (tableArea) tableArea.style.display = '';
+  if (pagination) pagination.style.display = '';
+
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
@@ -36363,6 +36439,289 @@ function renamePRefSub3Chip(parentKey, chipKey) {
 function savePRefSubCategories() {
   var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
   firebase.firestore().collection('settings').doc('pRefSubCategories').set(saveData);
+}
+
+// ══════════════════════════════════════════════════════
+// P참고용 묶음(세트) 관리
+// 데이터 구조: _pRefSub3Data[소분류키] = { '01': '이름', '02': '이름', ... }
+// 묶음별 항목: _pBundleItems[소분류키_묶음키] = [코드배열]
+// 묶음별 세트수수료: _pBundleFees[소분류키_묶음키] = 금액
+// ══════════════════════════════════════════════════════
+var _pBundleSelected = null; // 현재 선택된 묶음 키 (예: '01')
+var _pBundleItems = {};     // { '1_01': ['P10001','P10003'], ... }
+var _pBundleFees = {};      // { '1_01': 429000, ... }
+var _pBundleSortable = null;
+
+function savePBundleData() {
+  firebase.firestore().collection('settings').doc('pRefBundles').set({
+    items: _pBundleItems,
+    fees: _pBundleFees
+  });
+}
+
+function getBundleKey(subKey, bundleKey) { return subKey + '_' + bundleKey; }
+
+// 묶음 목록 렌더링 (좌측 세로)
+function renderPBundles() {
+  var subKey = _mfdsTestSubFilter;
+  var subName = (REF_SUB_CATEGORIES['P'] || {})[subKey] || subKey;
+  var titleEl = document.getElementById('p-bundle-title');
+  if (titleEl) titleEl.textContent = 'P' + subKey + ' ' + subName + ' 묶음';
+
+  var container = document.getElementById('p-bundle-list');
+  if (!container) return;
+
+  var sub3 = _pRefSub3Data[subKey] || {};
+  var keys = Object.keys(sub3).sort();
+
+  if (keys.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px;">묶음이 없습니다<br><br>"＋ 묶음" 버튼으로<br>새 묶음을 추가하세요</div>';
+    renderPBundleDetail();
+    return;
+  }
+
+  var html = '';
+  keys.forEach(function(k) {
+    var bk = getBundleKey(subKey, k);
+    var itemCount = (_pBundleItems[bk] || []).length;
+    var fee = _pBundleFees[bk] || 0;
+    var isActive = _pBundleSelected === k;
+    html += '<div class="p-bundle-card' + (isActive ? ' active' : '') + '" onclick="selectPBundle(\'' + k + '\')" ondblclick="event.stopPropagation();renamePRefSub3Chip(\'' + subKey + '\',\'' + k + '\')">'
+      + '<div class="bundle-name">P' + subKey + '-' + k + '  ' + sub3[k] + '</div>'
+      + '<div class="bundle-meta">'
+      + '<span>' + itemCount + '개 항목</span>'
+      + '<span class="bundle-fee" onclick="event.stopPropagation();editBundleFee(\'' + k + '\')" title="세트 수수료 (클릭하여 수정)">'
+      + (fee > 0 ? '📦 ' + fee.toLocaleString() + '원' : '수수료 미설정') + '</span>'
+      + '</div></div>';
+  });
+  container.innerHTML = html;
+  renderPBundleDetail();
+}
+
+// 묶음 선택
+function selectPBundle(k) {
+  _pBundleSelected = (_pBundleSelected === k) ? null : k;
+  renderPBundles();
+}
+
+// 묶음 세트수수료 편집
+function editBundleFee(bundleKey) {
+  var subKey = _mfdsTestSubFilter;
+  var bk = getBundleKey(subKey, bundleKey);
+  var current = _pBundleFees[bk] || 0;
+  var sub3 = _pRefSub3Data[subKey] || {};
+  var bundleName = sub3[bundleKey] || bundleKey;
+  var input = prompt('P' + subKey + '-' + bundleKey + ' ' + bundleName + '\n\n세트 수수료 금액 (0 입력 시 해제):', current || '');
+  if (input === null) return;
+  var fee = parseInt(input) || 0;
+  if (fee > 0) {
+    _pBundleFees[bk] = fee;
+  } else {
+    delete _pBundleFees[bk];
+  }
+  savePBundleData();
+  renderPBundles();
+  showToast(fee > 0 ? '세트 수수료 ' + fee.toLocaleString() + '원 설정' : '세트 수수료 해제', 'success');
+}
+
+// 묶음 상세(항목 목록) 렌더링 (우측)
+function renderPBundleDetail() {
+  var titleEl = document.getElementById('p-bundle-detail-title');
+  var countEl = document.getElementById('p-bundle-detail-count');
+  var container = document.getElementById('p-bundle-items');
+  if (!container) return;
+
+  if (!_pBundleSelected || !_mfdsTestSubFilter) {
+    if (titleEl) titleEl.textContent = '묶음을 선택하세요';
+    if (countEl) countEl.textContent = '';
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:#999;font-size:13px;">← 좌측에서 묶음을 선택하세요</div>';
+    return;
+  }
+
+  var subKey = _mfdsTestSubFilter;
+  var sub3 = _pRefSub3Data[subKey] || {};
+  var bundleName = sub3[_pBundleSelected] || _pBundleSelected;
+  var bk = getBundleKey(subKey, _pBundleSelected);
+  var codes = _pBundleItems[bk] || [];
+  var fee = _pBundleFees[bk] || 0;
+
+  if (titleEl) titleEl.textContent = 'P' + subKey + '-' + _pBundleSelected + '  ' + bundleName;
+  if (countEl) countEl.textContent = codes.length + '개 항목' + (fee > 0 ? ' · 📦 ' + fee.toLocaleString() + '원' : '');
+
+  if (codes.length === 0) {
+    container.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:12px;">항목이 없습니다<br>"＋ 항목" 버튼으로 추가하세요</div>';
+    return;
+  }
+
+  var html = '';
+  codes.forEach(function(code, idx) {
+    var item = _mfdsTestItems.find(function(t) { return (t['시험항목코드'] || '') === code; });
+    var name = item ? (item['한글명'] || item['시험항목명'] || code) : code;
+    var unit = item ? (item['단위'] || '') : '';
+    html += '<div class="p-bundle-item" data-code="' + code + '">'
+      + '<span class="grip">⠿</span>'
+      + '<input type="checkbox" class="item-check" value="' + code + '" style="accent-color:#7c4dff;">'
+      + '<span class="item-code">' + code + '</span>'
+      + '<span class="item-name">' + name + '</span>'
+      + '<span style="color:#999;font-size:10px;flex-shrink:0;">' + unit + '</span>'
+      + '</div>';
+  });
+  container.innerHTML = html;
+
+  // SortableJS 드래그 정렬
+  if (_pBundleSortable) _pBundleSortable.destroy();
+  _pBundleSortable = new Sortable(container, {
+    animation: 150,
+    handle: '.grip',
+    ghostClass: 'sortable-ghost',
+    onEnd: function() {
+      // 순서 저장
+      var newOrder = [];
+      container.querySelectorAll('.p-bundle-item').forEach(function(el) {
+        newOrder.push(el.getAttribute('data-code'));
+      });
+      _pBundleItems[bk] = newOrder;
+      savePBundleData();
+    }
+  });
+}
+
+// 묶음 생성
+function createPBundle() {
+  // createPRefSub3Chip 호출 후 묶음 갱신
+  var subKey = _mfdsTestSubFilter;
+  if (!subKey) { showToast('P 소분류를 먼저 선택하세요', 'warning'); return; }
+  var parentName = (REF_SUB_CATEGORIES['P'] || {})[subKey] || subKey;
+  var name = prompt('P' + subKey + ' ' + parentName + ' 아래 새 묶음 이름:\n(예: 9대 영양성분_13일)');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+
+  var sub3 = _pRefSub3Data[subKey] || {};
+  var existNums = Object.keys(sub3).map(Number).filter(function(n) { return !isNaN(n); });
+  var nextNum = 1;
+  while (existNums.indexOf(nextNum) >= 0) nextNum++;
+  var padded = ('0' + nextNum).slice(-2);
+
+  if (Object.values(sub3).indexOf(name) >= 0) { showToast("'" + name + "' 이미 존재합니다", 'warning'); return; }
+
+  if (!_pRefSub3Data[subKey]) _pRefSub3Data[subKey] = {};
+  _pRefSub3Data[subKey][padded] = name;
+  savePRefSub3Data();
+
+  _pBundleSelected = padded;
+  renderPBundles();
+  showToast('P' + subKey + '-' + padded + " '" + name + "' 묶음 생성 완료", 'success');
+}
+
+// 묶음에 항목 추가 (식약처 시험항목에서 선택)
+function addItemToBundle() {
+  if (!_pBundleSelected || !_mfdsTestSubFilter) {
+    showToast('묶음을 먼저 선택하세요', 'warning'); return;
+  }
+  var subKey = _mfdsTestSubFilter;
+  var bk = getBundleKey(subKey, _pBundleSelected);
+  var existing = new Set(_pBundleItems[bk] || []);
+
+  // P 소분류 항목 중 이 묶음에 없는 것만 표시
+  var prefix = 'P' + subKey;
+  var available = _mfdsTestItems.filter(function(t) {
+    var code = (t['시험항목코드'] || '').toUpperCase();
+    return code.indexOf(prefix) === 0 && !existing.has(t['시험항목코드']);
+  });
+
+  var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mAddToBundle" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:520px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<h3 style="margin:0;font-size:14px;">항목 추가 → P' + subKey + '-' + _pBundleSelected + '</h3>'
+    + '<button onclick="document.getElementById(\'mAddToBundle\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<input id="bundle-add-search" placeholder="항목명/코드 검색..." oninput="filterBundleAddItems()" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px;">'
+    + '<label style="font-size:11px;display:flex;align-items:center;gap:4px;margin-bottom:6px;"><input type="checkbox" id="bundle-add-all" onchange="toggleBundleAddAll(this.checked)" style="accent-color:#7c4dff"> 전체선택 <span id="bundle-add-cnt" style="color:#7c4dff;font-weight:600;">0개</span></label>'
+    + '<div id="bundle-add-list" style="flex:1;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;max-height:350px"></div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">'
+    + '<button onclick="document.getElementById(\'mAddToBundle\').remove()" style="padding:7px 14px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">취소</button>'
+    + '<button onclick="executeBundleAdd()" style="padding:7px 14px;border:none;background:#7c4dff;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">추가</button></div>'
+    + '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  window._bundleAddAvailable = available;
+  window._bundleAddSelected = new Set();
+  filterBundleAddItems();
+}
+
+function filterBundleAddItems() {
+  var q = (document.getElementById('bundle-add-search') || {}).value || '';
+  q = q.toLowerCase();
+  var items = window._bundleAddAvailable || [];
+  var filtered = q ? items.filter(function(t) {
+    return (t['시험항목코드']||'').toLowerCase().indexOf(q) >= 0 || (t['한글명']||'').toLowerCase().indexOf(q) >= 0;
+  }) : items;
+
+  var html = '';
+  filtered.forEach(function(t) {
+    var code = t['시험항목코드'] || '';
+    var chk = (window._bundleAddSelected || new Set()).has(code) ? 'checked' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px">'
+      + '<input type="checkbox" ' + chk + ' onchange="toggleBundleAddItem(\'' + code + '\',this.checked)" style="accent-color:#7c4dff">'
+      + '<span style="color:#7c4dff;font-weight:600;width:70px;font-size:11px">' + code + '</span>'
+      + '<span style="flex:1">' + (t['한글명'] || t['시험항목명'] || '') + '</span>'
+      + '<span style="color:#999;font-size:10px">' + (t['단위'] || '') + '</span></label>';
+  });
+  if (!filtered.length) html = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">항목 없음</div>';
+  document.getElementById('bundle-add-list').innerHTML = html;
+  document.getElementById('bundle-add-cnt').textContent = (window._bundleAddSelected || new Set()).size + '개';
+}
+
+function toggleBundleAddItem(code, checked) {
+  if (checked) window._bundleAddSelected.add(code); else window._bundleAddSelected.delete(code);
+  document.getElementById('bundle-add-cnt').textContent = window._bundleAddSelected.size + '개';
+}
+
+function toggleBundleAddAll(checked) {
+  window._bundleAddSelected = new Set();
+  if (checked) {
+    var q = (document.getElementById('bundle-add-search') || {}).value || '';
+    q = q.toLowerCase();
+    (window._bundleAddAvailable || []).forEach(function(t) {
+      var code = t['시험항목코드'] || '';
+      if (!q || code.toLowerCase().indexOf(q) >= 0 || (t['한글명']||'').toLowerCase().indexOf(q) >= 0) {
+        window._bundleAddSelected.add(code);
+      }
+    });
+  }
+  filterBundleAddItems();
+}
+
+function executeBundleAdd() {
+  var sel = window._bundleAddSelected;
+  if (!sel || !sel.size) { showToast('항목을 선택하세요', 'warning'); return; }
+  var subKey = _mfdsTestSubFilter;
+  var bk = getBundleKey(subKey, _pBundleSelected);
+  if (!_pBundleItems[bk]) _pBundleItems[bk] = [];
+  sel.forEach(function(code) { _pBundleItems[bk].push(code); });
+  savePBundleData();
+  var modal = document.getElementById('mAddToBundle');
+  if (modal) modal.remove();
+  renderPBundleDetail();
+  renderPBundles();
+  showToast(sel.size + '개 항목 추가 완료', 'success');
+}
+
+// 묶음에서 선택된 항목 제거
+function removeItemFromBundle() {
+  if (!_pBundleSelected || !_mfdsTestSubFilter) return;
+  var container = document.getElementById('p-bundle-items');
+  var checked = container.querySelectorAll('.item-check:checked');
+  if (!checked.length) { showToast('삭제할 항목을 체크하세요', 'warning'); return; }
+  var toRemove = new Set();
+  checked.forEach(function(cb) { toRemove.add(cb.value); });
+
+  var subKey = _mfdsTestSubFilter;
+  var bk = getBundleKey(subKey, _pBundleSelected);
+  _pBundleItems[bk] = (_pBundleItems[bk] || []).filter(function(c) { return !toRemove.has(c); });
+  if (_pBundleItems[bk].length === 0) delete _pBundleItems[bk];
+  savePBundleData();
+  renderPBundleDetail();
+  renderPBundles();
+  showToast(toRemove.size + '개 항목 제거', 'success');
 }
 
 // ══ P참고용 3단계 서브칩 데이터 ══
