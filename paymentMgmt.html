@@ -1518,12 +1518,20 @@ function runReverseTrack(dep) {
         }
     });
 
-    // Stage 4: 담당자명 역추적
+    // Stage 4: 대표자명 + 담당자명 역추적
     unpaid.forEach(function(r) {
         var compId = r.data.companyId || r.data.companyCode || '';
         var compName = r.data.companyName || r.data.company || '';
         var comp = _companiesCache[compId] || _companiesCache[compName];
         if (!comp) return;
+        // 대표자명 매칭
+        var ceo = (comp.ceo || comp.repName || '').trim();
+        if (ceo.length >= 2 && dep.depositor.indexOf(ceo) !== -1) {
+            s4.push(r);
+            addScore(r, 35, '대표자명매칭(' + ceo + ')');
+            return;
+        }
+        // 담당자명 매칭
         var contacts = comp.contacts || comp.contactList || [];
         if (!Array.isArray(contacts)) return;
         var hit = contacts.some(function(c) {
@@ -1565,7 +1573,7 @@ function renderTrackModal(dep, stages) {
         {name:'1단계: 금액 역추적', items:stages.s1, desc:'잔액 = 입금액 일치'},
         {name:'2단계: 날짜 역추적', items:stages.s2, desc:'입금일 +-30일 이내'},
         {name:'3단계: 업체명 매칭', items:stages.s3, desc:'띄어쓰기 무시 + 부분매칭'},
-        {name:'4단계: 담당자명 역추적', items:stages.s4, desc:'업체 담당자명 비교'},
+        {name:'4단계: 대표자/담당자 역추적', items:stages.s4, desc:'대표자명 + 담당자명 비교'},
         {name:'5단계: 합산 매칭', items:stages.s5||[], desc:'동일업체 다건 합산 = 입금액', highlight:(stages.s5||[]).length>0}
     ];
 
