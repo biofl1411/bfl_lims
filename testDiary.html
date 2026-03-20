@@ -852,7 +852,8 @@ function renderFormTemplateDetail(ft) {
         _fm[f.id] = { label: f.label, unit: f.unit || '', example: f.exampleValue || '' };
       });
     });
-    window._simCalcData = { calcs: a.calculations, fieldMap: _fm, judgment: a.judgmentRule || null };
+    var _rr = (overrides._roundingRules && overrides._roundingRules.length) ? overrides._roundingRules : [{ decimal: 2, mode: 'round' }];
+    window._simCalcData = { calcs: a.calculations, fieldMap: _fm, judgment: a.judgmentRule || null, roundingRules: _rr };
 
     html += '<details style="border:1px solid #d8b4fe;border-radius:10px;overflow:hidden;margin-bottom:14px" ontoggle="if(this.open)simInit()">';
     html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);cursor:pointer;font-size:13px;font-weight:600;color:#6b21a8;display:flex;align-items:center;gap:8px;list-style:none">';
@@ -2655,17 +2656,45 @@ function simCalc(ci) {
     var result = Function('"use strict"; return (' + expr + ')')();
     if (typeof result !== 'number' || !isFinite(result)) throw new Error('계산 불가');
 
-    var dp = calc.decimalPlaces != null ? calc.decimalPlaces : 4;
-    var rd = result.toFixed(dp);
+    // 원시 결과 (전체 소수점)
+    var rawStr = result.toString();
+    var unit = calc.unit || '';
 
-    // 계산 과정 표시
+    // 규칙적용 결과 (반올림/버림/올림)
+    var rules = d.roundingRules || [{ decimal: 2, mode: 'round' }];
+    var ruleResult = result;
+    rules.forEach(function(rule) {
+      var dp = rule.decimal != null ? rule.decimal : 2;
+      var factor = Math.pow(10, dp);
+      if (rule.mode === 'floor') ruleResult = Math.floor(ruleResult * factor) / factor;
+      else if (rule.mode === 'ceil') ruleResult = Math.ceil(ruleResult * factor) / factor;
+      else ruleResult = Math.round(ruleResult * factor) / factor;
+    });
+    var lastRule = rules[rules.length - 1] || { decimal: 2 };
+    var ruleStr = ruleResult.toFixed(lastRule.decimal != null ? lastRule.decimal : 2);
+    var modeLabel = rules.map(function(r) {
+      var m = r.mode === 'floor' ? '버림' : r.mode === 'ceil' ? '올림' : '반올림';
+      return '소수점 ' + (r.decimal != null ? r.decimal : 2) + '자리 ' + m;
+    }).join(' → ');
+
+    // 대입 수식 표시
     var h = '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
     h += '<div style="font-size:10px;font-weight:600;color:#92400e;margin-bottom:4px">📐 대입 결과</div>';
     h += '<div style="font-family:monospace;font-size:10px;color:#78716c;word-break:break-all">' + expr + '</div>';
-    h += '<div style="font-family:monospace;font-size:12px;color:#0369a1;margin-top:4px;font-weight:600">= ' + rd + (calc.unit ? ' ' + calc.unit : '') + '</div>';
     h += '</div>';
 
-    // 판정 비교
+    // 원시값 (결과 입력 페이지와 동일한 스타일)
+    h += '<div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">';
+    h += '<span style="font-size:12px;font-weight:600;color:#0c4a6e">' + (calc.label || '결과') + ' (' + unit + '):</span>';
+    h += '<span style="font-family:monospace;font-size:13px;font-weight:700;color:#0369a1">' + rawStr + '</span></div>';
+
+    // 규칙적용값
+    h += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">';
+    h += '<span style="font-size:12px;font-weight:600;color:#166534">규칙적용 ' + (calc.label || '결과') + ' (' + unit + '):</span>';
+    h += '<span style="font-family:monospace;font-size:16px;font-weight:800;color:#059669">' + ruleStr + '</span></div>';
+    h += '<div style="font-size:10px;color:#94a3b8;margin-bottom:8px;text-align:right">' + modeLabel + '</div>';
+
+    // 판정 비교 (규칙적용값 기준)
     var jr = d.judgment;
     var limVal = null;
     if (jr && jr.standardText) {
@@ -2673,13 +2702,10 @@ function simCalc(ci) {
       if (limMatch) limVal = parseFloat(limMatch[1]);
     }
     if (limVal !== null && !isNaN(limVal)) {
-      var pass = result <= limVal;
+      var pass = ruleResult <= limVal;
       h += '<div style="background:' + (pass ? '#f0fdf4' : '#fef2f2') + ';border:2px solid ' + (pass ? '#22c55e' : '#ef4444') + ';border-radius:8px;padding:10px;text-align:center">';
-      h += '<div style="font-size:22px;font-weight:800;color:' + (pass ? '#059669' : '#dc2626') + '">' + rd + ' <span style="font-size:12px">' + (calc.unit || '') + '</span></div>';
+      h += '<div style="font-size:22px;font-weight:800;color:' + (pass ? '#059669' : '#dc2626') + '">' + ruleStr + ' <span style="font-size:12px">' + unit + '</span></div>';
       h += '<div style="font-size:12px;font-weight:700;color:' + (pass ? '#16a34a' : '#dc2626') + ';margin-top:4px">' + (pass ? '✅ 적합' : '❌ 부적합') + ' <span style="font-size:10px;font-weight:400;color:#64748b">(기준: ' + jr.standardText + ')</span></div></div>';
-    } else {
-      h += '<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:8px;padding:10px;text-align:center">';
-      h += '<div style="font-size:22px;font-weight:800;color:#059669">' + rd + ' <span style="font-size:12px">' + (calc.unit || '') + '</span></div></div>';
     }
     area.innerHTML = h;
   } catch(e) {
