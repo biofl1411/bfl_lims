@@ -36139,7 +36139,7 @@ function renderMfdsTestItems() {
     if (p3Doc.exists) {
       _pRefSub3Data = p3Doc.data();
     }
-    // P참고용 묶음 데이터 로드
+    // P참고용 묶음 데이터 로드 → 영양성분 묶음 자동 생성
     firebase.firestore().collection('settings').doc('pRefBundles').get().then(function(bDoc) {
       if (bDoc.exists) {
         var bd = bDoc.data();
@@ -36147,6 +36147,7 @@ function renderMfdsTestItems() {
         _pBundleItems = bd.items || {};
         _pBundleFees = bd.fees || {};
       }
+      autoPopulateNutritionBundles();
     }).catch(function() {});
     _mfdsTestFiltered = _mfdsTestItems;
     _mfdsTestPage = 0;
@@ -36457,6 +36458,68 @@ function savePBundleData() {
 }
 
 function getBundleKey(subKey, sub3Key, bundleKey) { return subKey + '_' + sub3Key + '_' + bundleKey; }
+
+// P2 영양성분 묶음 자동 생성 (14대/9대)
+function autoPopulateNutritionBundles() {
+  var sub3 = _pRefSub3Data['2'] || {};
+  // P2-01(14대), P2-02(9대) 칩이 없으면 스킵
+  if (!sub3['01'] && !sub3['02']) return;
+
+  // P2 시험항목 가져오기
+  var p2Items = (_mfdsTestItems || []).filter(function(t) {
+    return (t['시험항목코드'] || '').toUpperCase().indexOf('P2') === 0;
+  });
+  if (p2Items.length === 0) return;
+
+  // 이름→코드 매핑 (한글명 기준)
+  function findCode(name) {
+    var found = p2Items.find(function(t) {
+      var hn = (t['한글명'] || '').trim();
+      return hn === name;
+    });
+    return found ? found['시험항목코드'] : null;
+  }
+
+  // 14대 영양성분 전체 항목 (수분/회분 포함 16개)
+  var items14 = [
+    '수분(영양성분)', '회분(영양성분)', '열량', '나트륨', '탄수화물', '당류',
+    '조지방', '트랜스지방', '포화지방', '콜레스테롤', '조단백질',
+    '식이섬유', 'Vitamin D', '칼슘', '철', '칼륨'
+  ];
+  // 9대 영양성분 (수분/회분 포함 11개)
+  var items9 = [
+    '수분(영양성분)', '회분(영양성분)', '열량', '나트륨', '탄수화물', '당류',
+    '조지방', '트랜스지방', '포화지방', '콜레스테롤', '조단백질'
+  ];
+
+  var changed = false;
+
+  // P2-01 (14대 영양성분) — 묶음이 비어있을 때만
+  if (sub3['01'] && !(_pBundleNames['2_01'] && Object.keys(_pBundleNames['2_01']).length > 0)) {
+    var codes14 = items14.map(findCode).filter(Boolean);
+    if (codes14.length > 0) {
+      _pBundleNames['2_01'] = { '1': '14대 영양성분' };
+      _pBundleItems['2_01_1'] = codes14;
+      _pBundleFees['2_01_1'] = 429000;
+      changed = true;
+      console.log('[영양성분] P2-01 14대 묶음 자동 생성: ' + codes14.length + '개 항목');
+    }
+  }
+
+  // P2-02 (9대 영양성분) — 묶음이 비어있을 때만
+  if (sub3['02'] && !(_pBundleNames['2_02'] && Object.keys(_pBundleNames['2_02']).length > 0)) {
+    var codes9 = items9.map(findCode).filter(Boolean);
+    if (codes9.length > 0) {
+      _pBundleNames['2_02'] = { '1': '9대 영양성분' };
+      _pBundleItems['2_02_1'] = codes9;
+      _pBundleFees['2_02_1'] = 429000;
+      changed = true;
+      console.log('[영양성분] P2-02 9대 묶음 자동 생성: ' + codes9.length + '개 항목');
+    }
+  }
+
+  if (changed) savePBundleData();
+}
 
 // 묶음 목록 렌더링 (좌측 세로) — P1-01 아래 P1-01-1, P1-01-2...
 function renderPBundles() {
