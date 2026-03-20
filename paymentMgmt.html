@@ -1780,20 +1780,22 @@ function updateMultiBar() {
     var totalRemain = 0;
     chks.forEach(function(c) { totalRemain += parseInt(c.dataset.remain) || 0; });
 
-    // 입금액 - 선택 잔액 = 남은 금액 배지 표시
+    // 입금액 vs 선택 잔액 비교 배지
     if (badge && dep) {
         if (chks.length > 0) {
-            var left = dep.amount - totalRemain;
+            var diff = dep.amount - totalRemain;
             badge.style.display = '';
-            if (left === 0) {
+            if (diff === 0) {
                 badge.style.background = '#dcfce7'; badge.style.color = '#166534';
-                badge.textContent = '잔여 0원 (정확 일치)';
-            } else if (left > 0) {
-                badge.style.background = '#fef3c7'; badge.style.color = '#92400e';
-                badge.textContent = '잔여 ' + formatMoney(left);
-            } else {
+                badge.textContent = '정확 일치';
+            } else if (diff > 0) {
+                // 입금액 > 잔액 → 과입금
                 badge.style.background = '#fee2e2'; badge.style.color = '#991b1b';
-                badge.textContent = '초과 ' + formatMoney(Math.abs(left));
+                badge.textContent = '초과 ' + formatMoney(diff);
+            } else {
+                // 입금액 < 잔액 → 부족
+                badge.style.background = '#fef3c7'; badge.style.color = '#92400e';
+                badge.textContent = '부족 ' + formatMoney(Math.abs(diff));
             }
         } else {
             badge.style.display = 'none';
@@ -1993,22 +1995,36 @@ async function applySingleMatch(idx) {
         updateSummary();
         updateTabCounts();
 
-        // ★ 과입금 감지 → 담당자 알림
+        // ★ 과입금/부족 감지 → 담당자 알림
         var totalFee = getTotalFee(r.data);
         var totalPaid = getPaidAmount(r.data);
-        var overpay = totalPaid - totalFee;
-        if (overpay > 0) {
-            var salesRep = r.data.salesRep || '담당자 미지정';
-            var companyName = r.data.companyName || r.data.company || '';
-            showToast('⚠️ 과입금 감지: ' + dep.matchedReceiptNo + ' / ' + formatMoney(overpay) + ' 초과', 'warn');
-            if (confirm('과입금 ' + formatMoney(overpay) + ' 발생!\n\n' +
+        var diff = totalPaid - totalFee;
+        var salesRep = r.data.salesRep || '담당자 미지정';
+        var companyName = r.data.companyName || r.data.company || '';
+        if (diff > 0) {
+            // 과입금
+            showToast('⚠️ 과입금 감지: ' + dep.matchedReceiptNo + ' / ' + formatMoney(diff) + ' 초과', 'warn');
+            if (confirm('과입금 ' + formatMoney(diff) + ' 발생!\n\n' +
                 '접수번호: ' + dep.matchedReceiptNo + '\n' +
                 '업체: ' + companyName + '\n' +
                 '수수료: ' + formatMoney(totalFee) + '\n' +
                 '총 입금: ' + formatMoney(totalPaid) + '\n' +
-                '과입금: ' + formatMoney(overpay) + '\n\n' +
+                '과입금: ' + formatMoney(diff) + '\n\n' +
                 '담당자(' + salesRep + ')에게 알림을 보내시겠습니까?')) {
-                await sendOverpayNotification(dep.matchedReceiptId, r.data, overpay, dep);
+                await sendOverpayNotification(dep.matchedReceiptId, r.data, diff, dep);
+            }
+        } else if (diff < 0) {
+            // 부족 입금
+            var shortfall = Math.abs(diff);
+            showToast('⚠️ 부족 입금: ' + dep.matchedReceiptNo + ' / ' + formatMoney(shortfall) + ' 부족', 'warn');
+            if (confirm('부족 입금 ' + formatMoney(shortfall) + ' 발생!\n\n' +
+                '접수번호: ' + dep.matchedReceiptNo + '\n' +
+                '업체: ' + companyName + '\n' +
+                '수수료: ' + formatMoney(totalFee) + '\n' +
+                '총 입금: ' + formatMoney(totalPaid) + '\n' +
+                '부족액: ' + formatMoney(shortfall) + '\n\n' +
+                '담당자(' + salesRep + ')에게 알림을 보내시겠습니까?')) {
+                await sendShortfallNotification(dep.matchedReceiptId, r.data, shortfall, dep);
             }
         } else {
             showToast(dep.matchedReceiptNo + ' 입금처리 완료 (' + formatMoney(dep.amount) + ')');
@@ -2080,10 +2096,12 @@ async function applySingleMatchSilent(idx) {
     var totalPaid = getPaidAmount(r.data);
     if (totalPaid > totalFee) {
         await sendOverpayNotification(dep.matchedReceiptId, r.data, totalPaid - totalFee, dep);
+    } else if (totalPaid < totalFee) {
+        await sendShortfallNotification(dep.matchedReceiptId, r.data, totalFee - totalPaid, dep);
     }
 }
 
-// ======================== 과입금 알림 ========================
+// ======================== 과입금/부족 알림 ========================
 async function sendOverpayNotification(receiptId, receiptData, overpayAmount, dep) {
     var salesRep = receiptData.salesRep || '담당자 미지정';
     var companyName = receiptData.companyName || receiptData.company || '';
@@ -2118,6 +2136,42 @@ async function sendOverpayNotification(receiptId, receiptData, overpayAmount, de
     } catch(e) {
         console.error('과입금 알림 실패:', e);
         showToast('과입금 알림 저장 실패', 'error');
+    }
+}
+
+async function sendShortfallNotification(receiptId, receiptData, shortfallAmount, dep) {
+    var salesRep = receiptData.salesRep || '담당자 미지정';
+    var companyName = receiptData.companyName || receiptData.company || '';
+    var receiptNo = receiptData.receiptNo || receiptId;
+    var now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    var memoText = '[부족입금 알림] ' + now + '\n' +
+        '입금액: ' + formatMoney(dep.amount) + ' (입금자: ' + dep.depositor + ')\n' +
+        '수수료: ' + formatMoney(getTotalFee(receiptData)) + '\n' +
+        '부족액: ' + formatMoney(shortfallAmount) + '\n' +
+        '→ 추가 입금 확인 또는 업체 연락 필요';
+
+    try {
+        var existingMemo = receiptData.memoFinance || '';
+        var newMemo = existingMemo ? existingMemo + '\n\n' + memoText : memoText;
+        await db.collection('receipts').doc(receiptId).update({
+            memoFinance: newMemo,
+            shortfallAlert: {
+                amount: shortfallAmount,
+                depositor: dep.depositor,
+                depositAmount: dep.amount,
+                salesRep: salesRep,
+                date: dep.date,
+                createdAt: new Date().toISOString(),
+                resolved: false
+            },
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        receiptData.memoFinance = newMemo;
+        showToast('📨 부족입금 알림 전송: ' + receiptNo + ' / ' + salesRep + ' (' + formatMoney(shortfallAmount) + ')', 'info');
+    } catch(e) {
+        console.error('부족입금 알림 실패:', e);
+        showToast('부족입금 알림 저장 실패', 'error');
     }
 }
 
