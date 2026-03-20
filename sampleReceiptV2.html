@@ -4360,14 +4360,20 @@ async function loadInspectionItems(foodType) {
             return;
         }
 
-        var total = 0;
+        // ★ 패키지수수료 확인 — 세트 비용이 있으면 개별 합산 대신 패키지 금액 사용
+        var packageFee = 0;
+        items.forEach(function(item) {
+            if (!packageFee && item['패키지수수료']) packageFee = parseInt(item['패키지수수료']) || 0;
+        });
+
+        var individualTotal = 0;
         var html = '';
         items.forEach(function(item, idx) {
             var fee = item.항목수수료 || getFeeByCode(item.testItemCode || item['시험항목코드'] || '', item.항목명 || '') || 0;
-            total += fee;
+            individualTotal += fee;
             var itemKey = (item.항목명 || '') + '||' + (item.규격 || '');
             var code = item.testItemCode || '';
-            html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + itemKey + '" data-fee="' + fee + '" data-test-code="' + code + '" data-unit="' + (item.항목단위 || '') + '">';
+            html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + itemKey + '" data-fee="' + fee + '" data-test-code="' + code + '" data-unit="' + (item.항목단위 || '') + '" data-package-fee="' + packageFee + '">';
             html += '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionCheckChange()"></td>';
             html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
             html += '<td style="padding:8px 12px;color:#344054;font-weight:500">' + (item.항목명 || '') + '</td>';
@@ -4378,6 +4384,8 @@ async function loadInspectionItems(foodType) {
             html += '</tr>';
         });
 
+        var total = packageFee > 0 ? packageFee : individualTotal;
+
         tbody.innerHTML = html;
         tfoot.style.display = '';
         totalEl.textContent = total.toLocaleString() + '원';
@@ -4385,13 +4393,17 @@ async function loadInspectionItems(foodType) {
         var vat = total - supply;
         document.getElementById('inspection-items-supply').textContent = supply.toLocaleString() + '원';
         document.getElementById('inspection-items-vat').textContent = vat.toLocaleString() + '원';
-        summary.textContent = items.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
+        var feeLabel = packageFee > 0
+            ? items.length + '개 항목 / 패키지 수수료 ' + packageFee.toLocaleString() + '원'
+            : items.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
+        summary.textContent = feeLabel;
         var srcInfo = document.getElementById('inspection-source-info');
         if (srcInfo) {
             srcInfo.style.display = 'flex';
             srcInfo.innerHTML = '<span style="font-weight:700">📦 항목그룹</span>'
                 + '<span style="background:#fff;padding:2px 10px;border-radius:5px;border:1px solid #ede9fe">' + foodType + '</span>'
-                + '<span style="color:#667085">' + items.length + '개 항목</span>';
+                + '<span style="color:#667085">' + items.length + '개 항목</span>'
+                + (packageFee > 0 ? '<span style="color:#059669;font-weight:700">세트 ' + packageFee.toLocaleString() + '원</span>' : '');
         }
         section.style.display = 'block';
         saveSampleToArray();
@@ -4509,20 +4521,26 @@ function recalcInspectionTable() {
     var tbody = document.getElementById('inspection-items-tbody');
     if (!tbody) return;
     var rows = tbody.querySelectorAll('tr[data-item-key]');
-    var total = 0;
+    var individualTotal = 0;
+    var packageFee = 0;
     rows.forEach(function(row, idx) {
         var numCell = row.querySelector('td:nth-child(2)');
         if (numCell) numCell.textContent = idx + 1;
-        total += parseInt(row.getAttribute('data-fee')) || 0;
+        individualTotal += parseInt(row.getAttribute('data-fee')) || 0;
+        if (!packageFee) packageFee = parseInt(row.getAttribute('data-package-fee')) || 0;
         // 체크박스 value 업데이트
         var cb = row.querySelector('.inspection-item-check');
         if (cb) cb.value = idx;
     });
+    var total = packageFee > 0 ? packageFee : individualTotal;
     document.getElementById('inspection-items-total').textContent = total.toLocaleString() + '원';
     var supply = Math.round(total / 1.1);
     document.getElementById('inspection-items-supply').textContent = supply.toLocaleString() + '원';
     document.getElementById('inspection-items-vat').textContent = (total - supply).toLocaleString() + '원';
-    document.getElementById('inspection-items-summary').textContent = rows.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
+    var feeLabel = packageFee > 0
+        ? rows.length + '개 항목 / 패키지 수수료 ' + packageFee.toLocaleString() + '원'
+        : rows.length + '개 항목 / 합계 ' + total.toLocaleString() + '원';
+    document.getElementById('inspection-items-summary').textContent = feeLabel;
     document.getElementById('inspection-items-tfoot').style.display = rows.length > 0 ? '' : 'none';
 
     // 참고용(기준규격외) 모드: 항목 전부 삭제 시 빈 안내 행 표시
@@ -5191,7 +5209,8 @@ function saveSampleToArray() {
                 testCode: tr.getAttribute('data-test-code') || '',
                 itemName: tr.getAttribute('data-item-key') || '',
                 fee: parseInt(tr.getAttribute('data-fee') || '0', 10),
-                unit: tr.getAttribute('data-unit') || ''
+                unit: tr.getAttribute('data-unit') || '',
+                packageFee: parseInt(tr.getAttribute('data-package-fee') || '0', 10)
             });
         });
     }
@@ -5254,7 +5273,7 @@ function restoreRefTestItems(items) {
     section.style.display = 'block';
     var html = '';
     items.forEach(function(item, idx) {
-        html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + (item.itemName || '') + '" data-fee="' + (item.fee || 0) + '" data-test-code="' + (item.testCode || '') + '" data-unit="' + (item.unit || '') + '">';
+        html += '<tr style="border-bottom:1px solid #eee" data-item-key="' + (item.itemName || '') + '" data-fee="' + (item.fee || 0) + '" data-test-code="' + (item.testCode || '') + '" data-unit="' + (item.unit || '') + '" data-package-fee="' + (item.packageFee || 0) + '">';
         html += '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionCheckChange()"></td>';
         html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
         html += '<td style="padding:8px 12px;color:#344054;font-weight:500">' + (item.itemName || '') + '</td>';
@@ -5300,12 +5319,16 @@ async function updateFeeSummary() {
     var currentPurpose = document.getElementById('test-purpose').value || '';
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
 
-    // 모든 모드: 시험항목 테이블 data-fee 직접 합산
+    // 모든 모드: 시험항목 테이블 data-fee 합산 (패키지수수료 우선)
     var tbody = document.getElementById('inspection-items-tbody');
+    var packageFee = 0;
     if (tbody) {
-        tbody.querySelectorAll('tr[data-fee]').forEach(function(tr) {
+        var rows = tbody.querySelectorAll('tr[data-fee]');
+        rows.forEach(function(tr) {
             grandTotal += parseInt(tr.getAttribute('data-fee') || '0', 10);
+            if (!packageFee) packageFee = parseInt(tr.getAttribute('data-package-fee') || '0', 10);
         });
+        if (packageFee > 0) grandTotal = packageFee;
     }
     // MFDS 기준규격 수수료 합산 (공전규격 추가 항목)
     grandTotal += (window._mfdsFeeTotal || 0);
