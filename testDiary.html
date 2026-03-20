@@ -224,7 +224,6 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
           </select>
           <input type="text" id="diary-search-input" placeholder="항목명, 항목코드 검색..." style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;flex:1;min-width:160px" oninput="filterDiaryItems()">
           <span style="font-size:12px;color:#999;margin-left:auto" id="diary-filter-count"></span>
-          <button class="btn btn-sm" onclick="openSimCalc()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap" title="접수건 없이 가상 값으로 계산 검증">🧮 모의 계산</button>
         </div>
       </div>
 
@@ -1819,6 +1818,20 @@ function renderDiaryPanel() {
   }
   html += '</div>';
 
+  // ── 모의 계산기 (접이식) ──
+  html += '<details id="sim-calc-section" style="margin-top:16px;border:1px solid #d8b4fe;border-radius:10px;overflow:hidden">';
+  html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);cursor:pointer;font-size:13px;font-weight:600;color:#6b21a8;display:flex;align-items:center;gap:8px">🧮 모의 계산기 <span style="font-size:11px;font-weight:400;color:#8b5cf6">가상 값으로 계산 검증</span></summary>';
+  html += '<div style="padding:14px" id="sim-calc-container">';
+  // 유형 선택 탭
+  html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  html += '<button class="sim-type-btn active" onclick="switchSimType(\'metal\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #2563eb;background:#dbeafe;color:#1e40af;cursor:pointer;font-weight:600">중금속</button>';
+  html += '<button class="sim-type-btn" onclick="switchSimType(\'micro\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">미생물</button>';
+  html += '<button class="sim-type-btn" onclick="switchSimType(\'chem\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">이화학</button>';
+  html += '<button class="sim-type-btn" onclick="switchSimType(\'custom\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">사용자 정의</button>';
+  html += '</div>';
+  html += '<div id="sim-calc-body"></div>';
+  html += '</div></details>';
+
   html += '</div>'; // diary-section
   document.getElementById('diary-panel').innerHTML = html;
 
@@ -1831,6 +1844,16 @@ function renderDiaryPanel() {
       opt.value = p.n;
       opt.textContent = p.n;
       recPurposeSel.appendChild(opt);
+    });
+  }
+
+  // 모의 계산기 details 열릴 때 자동 초기화
+  var simSection = document.getElementById('sim-calc-section');
+  if (simSection) {
+    simSection.addEventListener('toggle', function() {
+      if (simSection.open && !document.getElementById('sim-calc-body').innerHTML) {
+        switchSimType('metal', simSection.querySelector('.sim-type-btn.active'));
+      }
     });
   }
 }
@@ -2532,29 +2555,15 @@ function generateDiaryCn() {
 // 모의 계산 (접수건 없이 가상 값으로 계산 검증)
 // ============================================================
 function openSimCalc() {
-  var panel = document.getElementById('diary-panel');
-  if (!panel) return;
-
-  var html = '<div style="padding:16px">';
-  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">';
-  html += '<span style="font-size:16px">🧮</span>';
-  html += '<h3 style="margin:0;font-size:16px;font-weight:700">모의 계산기</h3>';
-  html += '<span style="font-size:11px;color:#64748b;margin-left:auto">접수건 없이 가상 값으로 계산 검증</span>';
-  html += '</div>';
-
-  // 계산 유형 선택
-  html += '<div style="display:flex;gap:6px;margin-bottom:14px">';
-  html += '<button class="sim-type-btn active" onclick="switchSimType(\'metal\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #2563eb;background:#dbeafe;color:#1e40af;cursor:pointer;font-weight:600">중금속</button>';
-  html += '<button class="sim-type-btn" onclick="switchSimType(\'micro\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">미생물</button>';
-  html += '<button class="sim-type-btn" onclick="switchSimType(\'chem\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">이화학</button>';
-  html += '<button class="sim-type-btn" onclick="switchSimType(\'custom\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">사용자 정의</button>';
-  html += '</div>';
-
-  html += '<div id="sim-calc-body"></div>';
-  html += '</div>';
-
-  panel.innerHTML = html;
-  switchSimType('metal', document.querySelector('.sim-type-btn.active'));
+  var section = document.getElementById('sim-calc-section');
+  if (section) {
+    section.open = true;
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // 최초 열 때 중금속으로 초기화
+    if (!document.getElementById('sim-calc-body').innerHTML) {
+      switchSimType('metal', section.querySelector('.sim-type-btn.active'));
+    }
+  }
 }
 
 function switchSimType(type, btn) {
