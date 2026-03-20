@@ -76,6 +76,61 @@ body.sidebar-collapsed .main,
 body.sidebar-collapsed .main-container,
 body.sidebar-collapsed .main-wrapper{margin-left:64px}
 @media(max-width:768px){.sidebar{display:none}}
+/* ── Sidebar Widget Bar (날씨 위 아이콘 바) ── */
+.sidebar-widgets{flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);padding:8px 20px;display:flex;gap:8px;justify-content:center}
+.sidebar-widgets .sw-btn{width:40px;height:40px;border-radius:10px;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:rgba(255,255,255,0.06);color:#94a3b8}
+.sidebar-widgets .sw-btn:hover{background:rgba(255,255,255,0.12);color:#e2e8f0;transform:scale(1.08)}
+.sidebar-widgets .sw-btn.active{background:rgba(79,195,247,0.2);color:#4fc3f7;box-shadow:0 0 8px rgba(79,195,247,0.3)}
+.sidebar.collapsed .sidebar-widgets{padding:6px 4px;flex-wrap:wrap;gap:4px}
+.sidebar.collapsed .sidebar-widgets .sw-btn{width:32px;height:32px;font-size:14px;border-radius:8px}
+
+/* ── 계산기 (드래그 가능 팝업) ── */
+.calc-popup{position:fixed;z-index:99999;width:320px;background:#1e293b;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 1px rgba(255,255,255,0.1);color:#e2e8f0;display:none;overflow:hidden;resize:none;user-select:none}
+.calc-popup.visible{display:block}
+.calc-titlebar{padding:10px 14px;background:linear-gradient(135deg,#334155,#1e293b);cursor:move;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.08)}
+.calc-titlebar span{font-size:13px;font-weight:600}
+.calc-titlebar button{background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px}
+.calc-titlebar button:hover{color:#ef4444;background:rgba(239,68,68,0.15)}
+.calc-display{padding:12px 14px;background:#0f172a;font-family:'JetBrains Mono',monospace;text-align:right}
+.calc-display .calc-expr{font-size:11px;color:#64748b;min-height:16px;word-break:break-all}
+.calc-display .calc-val{font-size:28px;font-weight:700;color:#f1f5f9;overflow-x:auto;white-space:nowrap}
+.calc-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
+.calc-btns button{padding:14px 0;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:all .1s}
+.calc-btns .cb-num{background:#334155;color:#e2e8f0}
+.calc-btns .cb-num:hover{background:#475569}
+.calc-btns .cb-op{background:#1e40af;color:#93c5fd}
+.calc-btns .cb-op:hover{background:#2563eb}
+.calc-btns .cb-fn{background:rgba(255,255,255,0.05);color:#94a3b8}
+.calc-btns .cb-fn:hover{background:rgba(255,255,255,0.1)}
+.calc-btns .cb-eq{background:#059669;color:white}
+.calc-btns .cb-eq:hover{background:#10b981}
+.calc-btns .cb-eq.span2{grid-column:span 2}
+.calc-memory{display:flex;gap:2px;padding:0 6px 4px}
+.calc-memory button{flex:1;padding:4px 0;border:none;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;background:rgba(255,255,255,0.04);color:#64748b;transition:all .1s}
+.calc-memory button:hover{background:rgba(255,255,255,0.1);color:#94a3b8}
+
+/* ── 단위변환 팝업 ── */
+.unit-popup{position:fixed;z-index:99999;width:340px;background:#1e293b;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 1px rgba(255,255,255,0.1);color:#e2e8f0;display:none;overflow:hidden;user-select:none}
+.unit-popup.visible{display:block}
+.unit-titlebar{padding:10px 14px;background:linear-gradient(135deg,#334155,#1e293b);cursor:move;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.08)}
+.unit-titlebar span{font-size:13px;font-weight:600}
+.unit-titlebar button{background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px}
+.unit-titlebar button:hover{color:#ef4444;background:rgba(239,68,68,0.15)}
+.unit-tabs{display:flex;border-bottom:1px solid rgba(255,255,255,0.08);padding:0 6px}
+.unit-tabs button{flex:1;padding:8px 0;border:none;background:none;color:#64748b;font-size:11px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.unit-tabs button:hover{color:#94a3b8}
+.unit-tabs button.active{color:#4fc3f7;border-bottom-color:#4fc3f7}
+.unit-body{padding:14px}
+.unit-body label{font-size:11px;color:#94a3b8;display:block;margin-bottom:4px}
+.unit-body input,.unit-body select{width:100%;padding:8px 10px;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;font-size:14px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.unit-body input:focus{border-color:#4fc3f7}
+.unit-body .unit-result{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#4fc3f7;min-height:40px;display:flex;flex-direction:column;gap:4px}
+.unit-body .unit-result .ur-row{display:flex;justify-content:space-between;align-items:center}
+.unit-body .unit-result .ur-label{font-size:10px;color:#64748b}
+.unit-body .unit-result .ur-val{font-weight:700}
+.unit-body .unit-swap{display:flex;justify-content:center;margin:8px 0}
+.unit-body .unit-swap button{background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.2);border-radius:50%;width:32px;height:32px;font-size:14px;cursor:pointer;color:#4fc3f7;transition:all .15s}
+.unit-body .unit-swap button:hover{background:rgba(79,195,247,0.2);transform:rotate(180deg)}
 /* ── Sidebar Weather Widget ── */
 .sidebar-weather{flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);padding:14px 20px;background:rgba(0,0,0,0.15)}
 .sidebar-weather .weather-main{display:flex;align-items:center;gap:10px}
@@ -364,6 +419,12 @@ ${subHtmlArr.join('\n')}
 
   html += `
   </nav>
+  <div class="sidebar-widgets" id="sidebar-widgets">
+    <button class="sw-btn" onclick="toggleCalcPopup()" title="계산기">🧮</button>
+    <button class="sw-btn" onclick="toggleUnitPopup()" title="단위변환">📐</button>
+    <button class="sw-btn" onclick="window.open('https://192.168.0.96:8443/adminSettings.html','_blank')" title="설정">⚙️</button>
+    <button class="sw-btn" onclick="toggleSidebarCollapse()" title="사이드바 접기/펼치기">📌</button>
+  </div>
   <div class="sidebar-weather" id="sidebar-weather">
     <div class="weather-loading">🌤️ 날씨 로딩...</div>
   </div>`;
@@ -732,3 +793,358 @@ async function loadSidebarWeather() {
     _init();
   }
 })();
+
+// ============================================================
+// 6. 계산기 위젯 (드래그 가능)
+// ============================================================
+(function() {
+  var _calcMem = 0;
+  var _calcExpr = '';
+  var _calcVal = '0';
+  var _calcNewInput = true;
+  var _calcOp = '';
+  var _calcPrev = 0;
+
+  function _ensureCalcDOM() {
+    if (document.getElementById('calc-popup')) return;
+    var div = document.createElement('div');
+    div.id = 'calc-popup';
+    div.className = 'calc-popup';
+    div.innerHTML =
+      '<div class="calc-titlebar" id="calc-drag">' +
+        '<span>🧮 계산기</span>' +
+        '<button onclick="toggleCalcPopup()">✕</button>' +
+      '</div>' +
+      '<div class="calc-display">' +
+        '<div class="calc-expr" id="calc-expr"></div>' +
+        '<div class="calc-val" id="calc-val">0</div>' +
+      '</div>' +
+      '<div class="calc-memory">' +
+        '<button onclick="_calcMemFn(\'mc\')">MC</button>' +
+        '<button onclick="_calcMemFn(\'mr\')">MR</button>' +
+        '<button onclick="_calcMemFn(\'m+\')">M+</button>' +
+        '<button onclick="_calcMemFn(\'m-\')">M−</button>' +
+      '</div>' +
+      '<div class="calc-btns">' +
+        '<button class="cb-fn" onclick="_calcFn(\'C\')">C</button>' +
+        '<button class="cb-fn" onclick="_calcFn(\'±\')">±</button>' +
+        '<button class="cb-fn" onclick="_calcFn(\'%\')">%</button>' +
+        '<button class="cb-op" onclick="_calcOper(\'÷\')">÷</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'7\')">7</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'8\')">8</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'9\')">9</button>' +
+        '<button class="cb-op" onclick="_calcOper(\'×\')">×</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'4\')">4</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'5\')">5</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'6\')">6</button>' +
+        '<button class="cb-op" onclick="_calcOper(\'−\')">−</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'1\')">1</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'2\')">2</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'3\')">3</button>' +
+        '<button class="cb-op" onclick="_calcOper(\'+\')">+</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'0\')" style="grid-column:span 2">0</button>' +
+        '<button class="cb-num" onclick="_calcNum(\'.\')">.</button>' +
+        '<button class="cb-eq" onclick="_calcEqual()">=</button>' +
+      '</div>';
+    document.body.appendChild(div);
+    _makeDraggable(div, document.getElementById('calc-drag'));
+    // 키보드 입력
+    div.setAttribute('tabindex', '0');
+    div.addEventListener('keydown', function(e) {
+      if (e.key >= '0' && e.key <= '9') _calcNum(e.key);
+      else if (e.key === '.') _calcNum('.');
+      else if (e.key === '+') _calcOper('+');
+      else if (e.key === '-') _calcOper('−');
+      else if (e.key === '*') _calcOper('×');
+      else if (e.key === '/') { e.preventDefault(); _calcOper('÷'); }
+      else if (e.key === 'Enter' || e.key === '=') _calcEqual();
+      else if (e.key === 'Escape') _calcFn('C');
+      else if (e.key === 'Backspace') _calcFn('BS');
+    });
+  }
+
+  function _updDisp() {
+    var exprEl = document.getElementById('calc-expr');
+    var valEl = document.getElementById('calc-val');
+    if (exprEl) exprEl.textContent = _calcExpr;
+    if (valEl) valEl.textContent = _calcVal;
+  }
+
+  window._calcNum = function(n) {
+    if (_calcNewInput) { _calcVal = (n === '.') ? '0.' : n; _calcNewInput = false; }
+    else {
+      if (n === '.' && _calcVal.includes('.')) return;
+      if (_calcVal === '0' && n !== '.') _calcVal = n;
+      else _calcVal += n;
+    }
+    _updDisp();
+  };
+
+  window._calcOper = function(op) {
+    if (_calcOp && !_calcNewInput) _calcEqual();
+    _calcPrev = parseFloat(_calcVal);
+    _calcOp = op;
+    _calcExpr = _calcVal + ' ' + op;
+    _calcNewInput = true;
+    _updDisp();
+  };
+
+  window._calcEqual = function() {
+    if (!_calcOp) return;
+    var cur = parseFloat(_calcVal);
+    var r = 0;
+    if (_calcOp === '+') r = _calcPrev + cur;
+    else if (_calcOp === '−') r = _calcPrev - cur;
+    else if (_calcOp === '×') r = _calcPrev * cur;
+    else if (_calcOp === '÷') r = cur !== 0 ? _calcPrev / cur : NaN;
+    _calcExpr = _calcPrev + ' ' + _calcOp + ' ' + cur + ' =';
+    _calcVal = isNaN(r) || !isFinite(r) ? 'Error' : String(parseFloat(r.toPrecision(12)));
+    _calcOp = '';
+    _calcNewInput = true;
+    _updDisp();
+  };
+
+  window._calcFn = function(fn) {
+    if (fn === 'C') { _calcVal = '0'; _calcExpr = ''; _calcOp = ''; _calcPrev = 0; _calcNewInput = true; }
+    else if (fn === '±') { _calcVal = String(-parseFloat(_calcVal)); }
+    else if (fn === '%') { _calcVal = String(parseFloat(_calcVal) / 100); }
+    else if (fn === 'BS') { _calcVal = _calcVal.length > 1 ? _calcVal.slice(0, -1) : '0'; }
+    _updDisp();
+  };
+
+  window._calcMemFn = function(fn) {
+    var v = parseFloat(_calcVal) || 0;
+    if (fn === 'mc') _calcMem = 0;
+    else if (fn === 'mr') { _calcVal = String(_calcMem); _calcNewInput = true; }
+    else if (fn === 'm+') _calcMem += v;
+    else if (fn === 'm-') _calcMem -= v;
+    _updDisp();
+  };
+
+  window.toggleCalcPopup = function() {
+    _ensureCalcDOM();
+    var el = document.getElementById('calc-popup');
+    var isVisible = el.classList.contains('visible');
+    if (isVisible) {
+      el.classList.remove('visible');
+    } else {
+      // 사이드바 옆에 위치시키기
+      var sb = document.querySelector('.sidebar');
+      var sbW = sb ? sb.offsetWidth : 250;
+      el.style.top = '100px';
+      el.style.left = (sbW + 16) + 'px';
+      el.classList.add('visible');
+      el.focus();
+    }
+    // 아이콘 active 토글
+    var btns = document.querySelectorAll('.sidebar-widgets .sw-btn');
+    if (btns[0]) btns[0].classList.toggle('active', !isVisible);
+  };
+})();
+
+// ============================================================
+// 7. 단위변환 위젯
+// ============================================================
+(function() {
+  var _unitTab = 'ph';
+
+  function _ensureUnitDOM() {
+    if (document.getElementById('unit-popup')) return;
+    var div = document.createElement('div');
+    div.id = 'unit-popup';
+    div.className = 'unit-popup';
+    div.innerHTML =
+      '<div class="unit-titlebar" id="unit-drag">' +
+        '<span>📐 단위변환</span>' +
+        '<button onclick="toggleUnitPopup()">✕</button>' +
+      '</div>' +
+      '<div class="unit-tabs" id="unit-tabs">' +
+        '<button class="active" onclick="_unitSw(\'ph\',this)">pH</button>' +
+        '<button onclick="_unitSw(\'abs\',this)">흡광도</button>' +
+        '<button onclick="_unitSw(\'temp\',this)">온도</button>' +
+        '<button onclick="_unitSw(\'vol\',this)">부피</button>' +
+        '<button onclick="_unitSw(\'wt\',this)">무게</button>' +
+      '</div>' +
+      '<div class="unit-body" id="unit-body"></div>';
+    document.body.appendChild(div);
+    _makeDraggable(div, document.getElementById('unit-drag'));
+  }
+
+  function _renderUnit(type) {
+    var el = document.getElementById('unit-body');
+    if (!el) return;
+    var h = '';
+    if (type === 'ph') {
+      h += '<label>pH 값</label>';
+      h += '<input type="number" step="any" id="uv-ph" placeholder="7.0" oninput="_unitCalcPH()">';
+      h += '<div class="unit-swap"><button onclick="_unitSwapPH()">⇅</button></div>';
+      h += '<label>H⁺ 농도 (mol/L)</label>';
+      h += '<input type="text" id="uv-hplus" placeholder="1.0e-7" oninput="_unitCalcH()" style="font-size:13px">';
+      h += '<div class="unit-result" id="uv-ph-result"></div>';
+    } else if (type === 'abs') {
+      h += '<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:10px;color:#64748b;font-family:monospace">A = ε × c × l &nbsp;→&nbsp; c = A / (ε × l)</div>';
+      h += '<label>흡광도 (A)</label>';
+      h += '<input type="number" step="any" id="uv-abs" placeholder="0.542" oninput="_unitCalcBeer()">';
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">';
+      h += '<div><label>몰흡광계수 ε (L/mol·cm)</label><input type="number" step="any" id="uv-eps" placeholder="6420" value="6420" oninput="_unitCalcBeer()"></div>';
+      h += '<div><label>셀 길이 l (cm)</label><input type="number" step="any" id="uv-path" placeholder="1" value="1" oninput="_unitCalcBeer()"></div>';
+      h += '</div>';
+      h += '<div class="unit-result" id="uv-beer-result"></div>';
+    } else if (type === 'temp') {
+      h += '<label>입력 온도</label>';
+      h += '<div style="display:flex;gap:6px"><input type="number" step="any" id="uv-temp" placeholder="25" oninput="_unitCalcTemp()" style="flex:1">';
+      h += '<select id="uv-temp-unit" onchange="_unitCalcTemp()" style="width:70px"><option value="C">℃</option><option value="F">℉</option><option value="K">K</option></select></div>';
+      h += '<div class="unit-result" id="uv-temp-result"></div>';
+    } else if (type === 'vol') {
+      h += '<label>입력 부피</label>';
+      h += '<div style="display:flex;gap:6px"><input type="number" step="any" id="uv-vol" placeholder="500" oninput="_unitCalcVol()" style="flex:1">';
+      h += '<select id="uv-vol-unit" onchange="_unitCalcVol()" style="width:70px"><option value="mL">mL</option><option value="L">L</option><option value="uL">μL</option></select></div>';
+      h += '<div class="unit-result" id="uv-vol-result"></div>';
+    } else if (type === 'wt') {
+      h += '<label>입력 무게</label>';
+      h += '<div style="display:flex;gap:6px"><input type="number" step="any" id="uv-wt" placeholder="100" oninput="_unitCalcWt()" style="flex:1">';
+      h += '<select id="uv-wt-unit" onchange="_unitCalcWt()" style="width:80px"><option value="g">g</option><option value="mg">mg</option><option value="ug">μg</option><option value="ng">ng</option></select></div>';
+      h += '<div class="unit-result" id="uv-wt-result"></div>';
+    }
+    el.innerHTML = h;
+  }
+
+  function _rr(label, val, unit) {
+    return '<div class="ur-row"><span class="ur-label">' + label + '</span><span class="ur-val">' + val + ' <small style="color:#64748b">' + unit + '</small></span></div>';
+  }
+
+  // pH ↔ H⁺
+  window._unitCalcPH = function() {
+    var ph = parseFloat((document.getElementById('uv-ph') || {}).value);
+    var res = document.getElementById('uv-ph-result');
+    if (!res || isNaN(ph)) { if(res) res.innerHTML=''; return; }
+    var hplus = Math.pow(10, -ph);
+    var ohMinus = Math.pow(10, -(14 - ph));
+    document.getElementById('uv-hplus').value = hplus.toExponential(4);
+    res.innerHTML = _rr('H⁺ 농도', hplus.toExponential(4), 'mol/L') + _rr('OH⁻ 농도', ohMinus.toExponential(4), 'mol/L') + _rr('pOH', (14 - ph).toFixed(2), '') + _rr('성질', ph < 7 ? '🔴 산성' : ph > 7 ? '🔵 염기성' : '⚪ 중성', '');
+  };
+
+  window._unitCalcH = function() {
+    var val = (document.getElementById('uv-hplus') || {}).value;
+    var h = parseFloat(val);
+    var res = document.getElementById('uv-ph-result');
+    if (!res || isNaN(h) || h <= 0) { if(res) res.innerHTML=''; return; }
+    var ph = -Math.log10(h);
+    document.getElementById('uv-ph').value = ph.toFixed(4);
+    var ohMinus = Math.pow(10, -(14 - ph));
+    res.innerHTML = _rr('pH', ph.toFixed(4), '') + _rr('OH⁻ 농도', ohMinus.toExponential(4), 'mol/L') + _rr('pOH', (14 - ph).toFixed(2), '') + _rr('성질', ph < 7 ? '🔴 산성' : ph > 7 ? '🔵 염기성' : '⚪ 중성', '');
+  };
+
+  window._unitSwapPH = function() {
+    var phEl = document.getElementById('uv-ph');
+    var hEl = document.getElementById('uv-hplus');
+    if (!phEl || !hEl) return;
+    var tmp = phEl.value; phEl.value = hEl.value; hEl.value = tmp;
+  };
+
+  // Beer-Lambert
+  window._unitCalcBeer = function() {
+    var A = parseFloat((document.getElementById('uv-abs') || {}).value);
+    var eps = parseFloat((document.getElementById('uv-eps') || {}).value);
+    var l = parseFloat((document.getElementById('uv-path') || {}).value);
+    var res = document.getElementById('uv-beer-result');
+    if (!res) return;
+    if (isNaN(A) || isNaN(eps) || isNaN(l) || eps === 0 || l === 0) { res.innerHTML = ''; return; }
+    var c = A / (eps * l); // mol/L
+    var cMM = c * 1000; // mmol/L
+    var cUM = c * 1e6; // μmol/L
+    var T = Math.pow(10, -A) * 100; // 투과율 %
+    res.innerHTML = _rr('농도 c', c.toExponential(4), 'mol/L') + _rr('', cMM.toFixed(4), 'mmol/L') + _rr('', cUM.toFixed(2), 'μmol/L') + _rr('투과율 %T', T.toFixed(2), '%');
+  };
+
+  // 온도
+  window._unitCalcTemp = function() {
+    var v = parseFloat((document.getElementById('uv-temp') || {}).value);
+    var u = (document.getElementById('uv-temp-unit') || {}).value || 'C';
+    var res = document.getElementById('uv-temp-result');
+    if (!res || isNaN(v)) { if(res) res.innerHTML = ''; return; }
+    var c, f, k;
+    if (u === 'C') { c = v; f = v * 9/5 + 32; k = v + 273.15; }
+    else if (u === 'F') { c = (v - 32) * 5/9; f = v; k = c + 273.15; }
+    else { c = v - 273.15; f = c * 9/5 + 32; k = v; }
+    res.innerHTML = _rr('섭씨', c.toFixed(2), '℃') + _rr('화씨', f.toFixed(2), '℉') + _rr('켈빈', k.toFixed(2), 'K');
+  };
+
+  // 부피
+  window._unitCalcVol = function() {
+    var v = parseFloat((document.getElementById('uv-vol') || {}).value);
+    var u = (document.getElementById('uv-vol-unit') || {}).value || 'mL';
+    var res = document.getElementById('uv-vol-result');
+    if (!res || isNaN(v)) { if(res) res.innerHTML = ''; return; }
+    var ml;
+    if (u === 'mL') ml = v;
+    else if (u === 'L') ml = v * 1000;
+    else ml = v / 1000; // μL
+    res.innerHTML = _rr('', ml.toFixed(4), 'mL') + _rr('', (ml / 1000).toFixed(6), 'L') + _rr('', (ml * 1000).toFixed(2), 'μL');
+  };
+
+  // 무게
+  window._unitCalcWt = function() {
+    var v = parseFloat((document.getElementById('uv-wt') || {}).value);
+    var u = (document.getElementById('uv-wt-unit') || {}).value || 'g';
+    var res = document.getElementById('uv-wt-result');
+    if (!res || isNaN(v)) { if(res) res.innerHTML = ''; return; }
+    var mg;
+    if (u === 'g') mg = v * 1000;
+    else if (u === 'mg') mg = v;
+    else if (u === 'ug') mg = v / 1000;
+    else mg = v / 1e6; // ng
+    res.innerHTML = _rr('', (mg / 1000).toFixed(6), 'g') + _rr('', mg.toFixed(4), 'mg') + _rr('', (mg * 1000).toFixed(2), 'μg') + _rr('', (mg * 1e6).toFixed(0), 'ng');
+  };
+
+  window._unitSw = function(type, btn) {
+    _unitTab = type;
+    document.querySelectorAll('#unit-tabs button').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+    _renderUnit(type);
+  };
+
+  window.toggleUnitPopup = function() {
+    _ensureUnitDOM();
+    var el = document.getElementById('unit-popup');
+    var isVisible = el.classList.contains('visible');
+    if (isVisible) {
+      el.classList.remove('visible');
+    } else {
+      var sb = document.querySelector('.sidebar');
+      var sbW = sb ? sb.offsetWidth : 250;
+      el.style.top = '100px';
+      el.style.left = (sbW + 16) + 'px';
+      el.classList.add('visible');
+      _renderUnit(_unitTab);
+    }
+    var btns = document.querySelectorAll('.sidebar-widgets .sw-btn');
+    if (btns[1]) btns[1].classList.toggle('active', !isVisible);
+  };
+})();
+
+// ============================================================
+// 8. 드래그 유틸리티 (듀얼 모니터 지원)
+// ============================================================
+function _makeDraggable(el, handle) {
+  var isDrag = false, sx, sy, ox, oy;
+  handle.addEventListener('mousedown', function(e) {
+    isDrag = true;
+    sx = e.clientX; sy = e.clientY;
+    var r = el.getBoundingClientRect();
+    ox = r.left; oy = r.top;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!isDrag) return;
+    var dx = e.clientX - sx, dy = e.clientY - sy;
+    var nx = ox + dx, ny = oy + dy;
+    // 화면 밖으로 나가지 않도록 (듀얼 모니터: screenX 사용 가능 범위 확장)
+    ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
+    el.style.left = nx + 'px';
+    el.style.top = ny + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+  });
+  document.addEventListener('mouseup', function() { isDrag = false; });
+}
