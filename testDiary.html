@@ -224,6 +224,7 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
           </select>
           <input type="text" id="diary-search-input" placeholder="항목명, 항목코드 검색..." style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;flex:1;min-width:160px" oninput="filterDiaryItems()">
           <span style="font-size:12px;color:#999;margin-left:auto" id="diary-filter-count"></span>
+          <button class="btn btn-sm" onclick="openSimCalc()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap" title="접수건 없이 가상 값으로 계산 검증">🧮 모의 계산</button>
         </div>
       </div>
 
@@ -2525,6 +2526,376 @@ function generateDiaryCn() {
   html += '<p style="margin-top:8px;font-size:10px;color:#666">BFL-KQP-08-F02 (주)바이오푸드랩</p></div>';
 
   return html;
+}
+
+// ============================================================
+// 모의 계산 (접수건 없이 가상 값으로 계산 검증)
+// ============================================================
+function openSimCalc() {
+  var panel = document.getElementById('diary-panel');
+  if (!panel) return;
+
+  var html = '<div style="padding:16px">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">';
+  html += '<span style="font-size:16px">🧮</span>';
+  html += '<h3 style="margin:0;font-size:16px;font-weight:700">모의 계산기</h3>';
+  html += '<span style="font-size:11px;color:#64748b;margin-left:auto">접수건 없이 가상 값으로 계산 검증</span>';
+  html += '</div>';
+
+  // 계산 유형 선택
+  html += '<div style="display:flex;gap:6px;margin-bottom:14px">';
+  html += '<button class="sim-type-btn active" onclick="switchSimType(\'metal\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #2563eb;background:#dbeafe;color:#1e40af;cursor:pointer;font-weight:600">중금속</button>';
+  html += '<button class="sim-type-btn" onclick="switchSimType(\'micro\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">미생물</button>';
+  html += '<button class="sim-type-btn" onclick="switchSimType(\'chem\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">이화학</button>';
+  html += '<button class="sim-type-btn" onclick="switchSimType(\'custom\',this)" style="padding:6px 14px;border-radius:18px;font-size:12px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">사용자 정의</button>';
+  html += '</div>';
+
+  html += '<div id="sim-calc-body"></div>';
+  html += '</div>';
+
+  panel.innerHTML = html;
+  switchSimType('metal', document.querySelector('.sim-type-btn.active'));
+}
+
+function switchSimType(type, btn) {
+  // 버튼 active 토글
+  document.querySelectorAll('.sim-type-btn').forEach(function(b) {
+    b.style.border = '2px solid #e5e7eb';
+    b.style.background = '#f9fafb';
+    b.style.color = '#6b7280';
+    b.style.fontWeight = '400';
+    b.classList.remove('active');
+  });
+  if (btn) {
+    btn.style.border = '2px solid #2563eb';
+    btn.style.background = '#dbeafe';
+    btn.style.color = '#1e40af';
+    btn.style.fontWeight = '600';
+    btn.classList.add('active');
+  }
+
+  var body = document.getElementById('sim-calc-body');
+  if (!body) return;
+
+  if (type === 'metal') renderSimMetal(body);
+  else if (type === 'micro') renderSimMicro(body);
+  else if (type === 'chem') renderSimChem(body);
+  else if (type === 'custom') renderSimCustom(body);
+}
+
+// ── 중금속 모의 계산 ──
+function renderSimMetal(el) {
+  var html = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:12px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">계산식</div>';
+  html += '<div style="font-family:monospace;font-size:12px;color:#15803d;background:white;padding:8px 12px;border-radius:6px;border:1px solid #dcfce7">';
+  html += '결과(mg/kg) = (시료농도 - Blank농도) × 최종볼륨 × 희석배수 ÷ (검체채취량 × 1000) ÷ 음용희석배수</div></div>';
+
+  // 검사항목 선택
+  html += '<div style="margin-bottom:10px"><label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">검사항목</label>';
+  html += '<select id="sim-item" onchange="simCalcMetal()" style="width:100%;padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">';
+  html += '<option value="납" data-limit="0.3">납(Pb) - 기준: 0.3 mg/kg</option>';
+  html += '<option value="카드뮴" data-limit="0.05">카드뮴(Cd) - 기준: 0.05 mg/kg</option>';
+  html += '<option value="비소" data-limit="0.1">비소(As) - 기준: 0.1 mg/kg</option>';
+  html += '<option value="수은" data-limit="0.5">수은(Hg) - 기준: 0.5 mg/kg</option>';
+  html += '<option value="메틸수은" data-limit="1.0">메틸수은(MeHg) - 기준: 1.0 mg/kg</option>';
+  html += '</select></div>';
+
+  // 입력 필드
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+  html += _simInput('sim-sample-conc', '시료 측정농도 (µg/L)', '0.023', 'simCalcMetal()');
+  html += _simInput('sim-blank-conc', 'Blank 측정농도 (µg/L)', '0.000', 'simCalcMetal()');
+  html += _simInput('sim-final-vol', '최종볼륨 (mL)', '50', 'simCalcMetal()');
+  html += _simInput('sim-dilution', '희석배수', '1', 'simCalcMetal()');
+  html += _simInput('sim-sample-wt', '검체채취량 (g)', '1.0384', 'simCalcMetal()');
+  html += _simInput('sim-drink-dil', '음용희석배수', '1', 'simCalcMetal()');
+  html += '</div>';
+
+  // 표준용액 (선택사항)
+  html += '<details style="margin-bottom:12px"><summary style="font-size:11px;color:#64748b;cursor:pointer;margin-bottom:6px">📊 표준용액 농도 (선택)</summary>';
+  html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">';
+  var stdLabels = ['STD Blank','STD1','STD2','STD3','STD4','STD5'];
+  stdLabels.forEach(function(lbl, i) {
+    html += '<div><label style="font-size:9px;text-align:center;display:block;color:#94a3b8">' + lbl + '</label>';
+    html += '<input type="number" id="sim-std' + i + '" style="width:100%;padding:4px;border:1px solid #e2e8f0;border-radius:4px;font-size:11px;text-align:center" step="0.001"></div>';
+  });
+  html += '</div></details>';
+
+  // 결과 영역
+  html += '<div id="sim-result-area"></div>';
+  el.innerHTML = html;
+  simCalcMetal();
+}
+
+function _simInput(id, label, placeholder, oninput) {
+  return '<div><label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">' + label + '</label>' +
+    '<input type="number" step="any" id="' + id + '" placeholder="' + placeholder + '" oninput="' + oninput + '" ' +
+    'style="width:100%;padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px"></div>';
+}
+
+function simCalcMetal() {
+  var sc = parseFloat(document.getElementById('sim-sample-conc').value) || 0;
+  var bc = parseFloat(document.getElementById('sim-blank-conc').value) || 0;
+  var fv = parseFloat(document.getElementById('sim-final-vol').value) || 50;
+  var dl = parseFloat(document.getElementById('sim-dilution').value) || 1;
+  var sw = parseFloat(document.getElementById('sim-sample-wt').value) || 0;
+  var dd = parseFloat(document.getElementById('sim-drink-dil').value) || 1;
+
+  var area = document.getElementById('sim-result-area');
+  if (!area) return;
+
+  if (sw <= 0) {
+    area.innerHTML = '<div style="padding:12px;text-align:center;color:#94a3b8;font-size:12px">검체채취량을 입력하세요</div>';
+    return;
+  }
+
+  // 단계별 계산
+  var s1 = sc - bc;
+  var s2 = s1 * fv;
+  var s3 = s2 * dl;
+  var s4 = sw * 1000;
+  var s5 = s3 / s4;
+  var s6 = s5 / dd;
+  var result = Math.max(0, s6);
+  var resultStr = result < 0.001 ? result.toExponential(3) : result.toFixed(4);
+  var resultDisplay = result < 0.01 ? '0.0' : result.toFixed(2);
+
+  // 기준값
+  var itemSel = document.getElementById('sim-item');
+  var limit = parseFloat(itemSel.options[itemSel.selectedIndex].dataset.limit) || 0.3;
+  var itemName = itemSel.options[itemSel.selectedIndex].text.split(' -')[0];
+  var pass = (result <= limit || resultDisplay === '0.0');
+
+  // 역산 검증
+  var reverseConc = result * sw * 1000 * dd / (fv * dl) + bc;
+
+  var html = '';
+
+  // 단계별 검증 테이블
+  html += '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 12px;margin-bottom:10px">';
+  html += '<div style="font-weight:700;color:#92400e;font-size:12px;margin-bottom:8px">📐 단계별 계산 과정</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:monospace">';
+  html += '<tr style="background:#fef3c7"><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d">단계</td><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d">계산</td><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d;text-align:right">결과</td></tr>';
+  html += _simRow('①', '시료(' + sc + ') − Blank(' + bc + ')', s1.toFixed(6) + ' µg/L', '');
+  html += _simRow('②', '① × 최종볼륨(' + fv + 'mL)', s2.toFixed(6), '#fffbeb');
+  html += _simRow('③', '② × 희석배수(' + dl + ')', s3.toFixed(6), '');
+  html += _simRow('④', '검체채취량(' + sw + 'g) × 1000', s4.toFixed(4), '#fffbeb');
+  html += _simRow('⑤', '③ ÷ ④', s5.toFixed(6), '');
+  if (dd !== 1) {
+    html += _simRow('⑥', '⑤ ÷ 음용희석(' + dd + ')', s6.toFixed(6), '#fffbeb');
+  }
+  html += '</table></div>';
+
+  // 역산 검증
+  html += '<div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px">';
+  html += '<span style="font-weight:600;color:#0369a1">🔄 역산 검증</span> ';
+  html += '<span style="font-family:monospace;color:#0c4a6e">결과(' + resultStr + ') × 채취량(' + sw + ') × 1000';
+  if (dd !== 1) html += ' × 음용희석(' + dd + ')';
+  html += ' ÷ 볼륨(' + fv + ')';
+  if (dl !== 1) html += ' ÷ 희석(' + dl + ')';
+  html += ' + Blank(' + bc + ') = <strong>' + reverseConc.toFixed(6) + '</strong> µg/L</span>';
+  var matchOk = Math.abs(reverseConc - sc) < 0.0001;
+  html += ' <span style="font-size:13px">' + (matchOk ? '✅ 일치' : '⚠️ 불일치 (차이: ' + Math.abs(reverseConc - sc).toExponential(2) + ')') + '</span>';
+  html += '</div>';
+
+  // 최종 결과
+  html += '<div style="background:' + (pass ? '#f0fdf4' : '#fef2f2') + ';border:2px solid ' + (pass ? '#22c55e' : '#ef4444') + ';border-radius:10px;padding:14px;text-align:center">';
+  html += '<div style="font-size:12px;color:#64748b;margin-bottom:4px">' + itemName + ' 결과</div>';
+  html += '<div style="font-size:28px;font-weight:800;color:' + (pass ? '#059669' : '#dc2626') + '">' + resultDisplay + ' <span style="font-size:14px;font-weight:400">mg/kg</span></div>';
+  html += '<div style="font-size:11px;color:#64748b;margin-top:2px">(정밀값: ' + resultStr + ')</div>';
+  html += '<div style="margin-top:8px;font-size:14px;font-weight:700;color:' + (pass ? '#16a34a' : '#dc2626') + '">';
+  html += (pass ? '✅ 적합' : '❌ 부적합') + ' <span style="font-size:11px;font-weight:400;color:#64748b">(기준: ' + limit + ' mg/kg 이하)</span></div>';
+  html += '</div>';
+
+  area.innerHTML = html;
+}
+
+function _simRow(step, calc, result, bg) {
+  return '<tr style="background:' + bg + '"><td style="padding:3px 6px;color:#78716c">' + step + '</td><td style="padding:3px 6px">' + calc + '</td><td style="padding:3px 6px;text-align:right;font-weight:600;color:#0369a1">' + result + '</td></tr>';
+}
+
+// ── 미생물 모의 계산 ──
+function renderSimMicro(el) {
+  var html = '<div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:10px;padding:14px;margin-bottom:12px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#6b21a8;margin-bottom:6px">계산식</div>';
+  html += '<div style="font-family:monospace;font-size:12px;color:#7e22ce;background:white;padding:8px 12px;border-radius:6px;border:1px solid #e9d5ff">';
+  html += '결과(CFU/g) = 평균 집락수 × 희석배수</div></div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+  html += _simInput('sim-colony1', '1차 집락수', '15', 'simCalcMicro()');
+  html += _simInput('sim-colony2', '2차 집락수', '18', 'simCalcMicro()');
+  html += _simInput('sim-micro-dil', '희석배수', '10000', 'simCalcMicro()');
+  html += _simInput('sim-micro-limit', '기준값 (CFU/g)', '100000', 'simCalcMicro()');
+  html += '</div>';
+
+  html += '<div id="sim-result-area"></div>';
+  el.innerHTML = html;
+  simCalcMicro();
+}
+
+function simCalcMicro() {
+  var c1 = parseFloat(document.getElementById('sim-colony1').value) || 0;
+  var c2 = parseFloat(document.getElementById('sim-colony2').value) || 0;
+  var dil = parseFloat(document.getElementById('sim-micro-dil').value) || 1;
+  var limit = parseFloat(document.getElementById('sim-micro-limit').value) || 100000;
+
+  var avg = (c1 + c2) / 2;
+  var result = avg * dil;
+  var pass = result <= limit;
+
+  var area = document.getElementById('sim-result-area');
+  if (!area) return;
+
+  var html = '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 12px;margin-bottom:10px">';
+  html += '<div style="font-weight:700;color:#92400e;font-size:12px;margin-bottom:8px">📐 계산 과정</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:monospace">';
+  html += '<tr style="background:#fef3c7"><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d">단계</td><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d">계산</td><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d;text-align:right">결과</td></tr>';
+  html += _simRow('①', '평균 집락수 = (' + c1 + ' + ' + c2 + ') ÷ 2', avg.toFixed(1), '');
+  html += _simRow('②', '① × 희석배수(' + dil.toLocaleString() + ')', result.toLocaleString() + ' CFU/g', '#fffbeb');
+  html += '</table></div>';
+
+  html += '<div style="background:' + (pass ? '#f0fdf4' : '#fef2f2') + ';border:2px solid ' + (pass ? '#22c55e' : '#ef4444') + ';border-radius:10px;padding:14px;text-align:center">';
+  html += '<div style="font-size:12px;color:#64748b;margin-bottom:4px">미생물 결과</div>';
+  html += '<div style="font-size:28px;font-weight:800;color:' + (pass ? '#059669' : '#dc2626') + '">' + result.toLocaleString() + ' <span style="font-size:14px;font-weight:400">CFU/g</span></div>';
+  html += '<div style="margin-top:8px;font-size:14px;font-weight:700;color:' + (pass ? '#16a34a' : '#dc2626') + '">';
+  html += (pass ? '✅ 적합' : '❌ 부적합') + ' <span style="font-size:11px;font-weight:400;color:#64748b">(기준: ' + limit.toLocaleString() + ' CFU/g 이하)</span></div>';
+  html += '</div>';
+
+  area.innerHTML = html;
+}
+
+// ── 이화학 모의 계산 ──
+function renderSimChem(el) {
+  var html = '<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:14px;margin-bottom:12px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#1e40af;margin-bottom:6px">계산식</div>';
+  html += '<div style="font-family:monospace;font-size:12px;color:#1d4ed8;background:white;padding:8px 12px;border-radius:6px;border:1px solid #bfdbfe">';
+  html += '함량(%) = (시료 적정량 − 공시험 적정량) × Factor × 역가 ÷ 시료량 × 100</div></div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+  html += _simInput('sim-titration', '시료 적정량 (mL)', '12.5', 'simCalcChem()');
+  html += _simInput('sim-blank-titr', '공시험 적정량 (mL)', '0.1', 'simCalcChem()');
+  html += _simInput('sim-factor', 'Factor', '1.002', 'simCalcChem()');
+  html += _simInput('sim-potency', '역가', '0.014', 'simCalcChem()');
+  html += _simInput('sim-chem-sample', '시료량 (g)', '5.0', 'simCalcChem()');
+  html += _simInput('sim-chem-limit', '기준값 (%)', '', 'simCalcChem()');
+  html += '</div>';
+
+  html += '<div id="sim-result-area"></div>';
+  el.innerHTML = html;
+  simCalcChem();
+}
+
+function simCalcChem() {
+  var t = parseFloat(document.getElementById('sim-titration').value) || 0;
+  var bt = parseFloat(document.getElementById('sim-blank-titr').value) || 0;
+  var f = parseFloat(document.getElementById('sim-factor').value) || 1;
+  var p = parseFloat(document.getElementById('sim-potency').value) || 1;
+  var s = parseFloat(document.getElementById('sim-chem-sample').value) || 0;
+  var limit = parseFloat(document.getElementById('sim-chem-limit').value) || 0;
+
+  var area = document.getElementById('sim-result-area');
+  if (!area) return;
+
+  if (s <= 0) {
+    area.innerHTML = '<div style="padding:12px;text-align:center;color:#94a3b8;font-size:12px">시료량을 입력하세요</div>';
+    return;
+  }
+
+  var s1 = t - bt;
+  var s2 = s1 * f;
+  var s3 = s2 * p;
+  var result = (s3 / s) * 100;
+
+  var html = '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 12px;margin-bottom:10px">';
+  html += '<div style="font-weight:700;color:#92400e;font-size:12px;margin-bottom:8px">📐 계산 과정</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:monospace">';
+  html += '<tr style="background:#fef3c7"><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d">단계</td><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d">계산</td><td style="padding:4px 6px;font-weight:600;border-bottom:1px solid #fcd34d;text-align:right">결과</td></tr>';
+  html += _simRow('①', '시료(' + t + ') − 공시험(' + bt + ')', s1.toFixed(4) + ' mL', '');
+  html += _simRow('②', '① × Factor(' + f + ')', s2.toFixed(6), '#fffbeb');
+  html += _simRow('③', '② × 역가(' + p + ')', s3.toFixed(6), '');
+  html += _simRow('④', '③ ÷ 시료량(' + s + ') × 100', result.toFixed(4) + ' %', '#fffbeb');
+  html += '</table></div>';
+
+  var hasLimit = limit > 0;
+  var pass = hasLimit ? result <= limit : true;
+
+  html += '<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;padding:14px;text-align:center">';
+  html += '<div style="font-size:12px;color:#64748b;margin-bottom:4px">이화학 결과</div>';
+  html += '<div style="font-size:28px;font-weight:800;color:#059669">' + result.toFixed(4) + ' <span style="font-size:14px;font-weight:400">%</span></div>';
+  if (hasLimit) {
+    html += '<div style="margin-top:8px;font-size:14px;font-weight:700;color:' + (pass ? '#16a34a' : '#dc2626') + '">';
+    html += (pass ? '✅ 적합' : '❌ 부적합') + ' <span style="font-size:11px;font-weight:400;color:#64748b">(기준: ' + limit + '% 이하)</span></div>';
+  }
+  html += '</div>';
+
+  area.innerHTML = html;
+}
+
+// ── 사용자 정의 계산 ──
+function renderSimCustom(el) {
+  var html = '<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;padding:14px;margin-bottom:12px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#334155;margin-bottom:6px">사용자 정의 수식</div>';
+  html += '<div style="font-size:11px;color:#64748b;margin-bottom:8px">변수 A~F에 값을 넣고, 수식에 변수명을 사용하세요. 예: (A - B) * C / D</div>';
+  html += '<input type="text" id="sim-custom-formula" placeholder="(A - B) * C / (D * 1000)" value="(A - B) * C / (D * 1000)" oninput="simCalcCustom()" style="width:100%;padding:8px 12px;border:1px solid #94a3b8;border-radius:6px;font-size:13px;font-family:monospace;background:white">';
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">';
+  var vars = [
+    {v:'A', label:'A (시료농도)', val:'0.023'},
+    {v:'B', label:'B (Blank)', val:'0.000'},
+    {v:'C', label:'C (볼륨)', val:'50'},
+    {v:'D', label:'D (채취량)', val:'1.0384'},
+    {v:'E', label:'E', val:''},
+    {v:'F', label:'F', val:''}
+  ];
+  vars.forEach(function(v) {
+    html += '<div><label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">' + v.label + '</label>';
+    html += '<input type="number" step="any" id="sim-var-' + v.v + '" value="' + v.val + '" placeholder="' + v.v + '" oninput="simCalcCustom()" style="width:100%;padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px"></div>';
+  });
+  html += '</div>';
+
+  html += '<div id="sim-result-area"></div>';
+  el.innerHTML = html;
+  simCalcCustom();
+}
+
+function simCalcCustom() {
+  var formula = (document.getElementById('sim-custom-formula') || {}).value || '';
+  var area = document.getElementById('sim-result-area');
+  if (!area || !formula) return;
+
+  var vals = {};
+  ['A','B','C','D','E','F'].forEach(function(v) {
+    vals[v] = parseFloat((document.getElementById('sim-var-' + v) || {}).value) || 0;
+  });
+
+  try {
+    // 수식에서 변수 치환
+    var expr = formula;
+    ['A','B','C','D','E','F'].forEach(function(v) {
+      expr = expr.replace(new RegExp('\\b' + v + '\\b', 'g'), '(' + vals[v] + ')');
+    });
+    var result = Function('"use strict"; return (' + expr + ')')();
+
+    if (typeof result !== 'number' || !isFinite(result)) throw new Error('계산 불가');
+
+    // 치환된 수식 표시
+    var html = '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 12px;margin-bottom:10px">';
+    html += '<div style="font-weight:700;color:#92400e;font-size:12px;margin-bottom:6px">📐 수식 전개</div>';
+    html += '<div style="font-family:monospace;font-size:12px;background:white;padding:8px;border-radius:6px;border:1px solid #fde68a;word-break:break-all">';
+    html += formula + '</div>';
+    html += '<div style="font-family:monospace;font-size:11px;color:#78716c;margin-top:4px">= ' + expr + '</div>';
+    html += '</div>';
+
+    html += '<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;padding:14px;text-align:center">';
+    html += '<div style="font-size:12px;color:#64748b;margin-bottom:4px">계산 결과</div>';
+    html += '<div style="font-size:28px;font-weight:800;color:#059669">' + result.toFixed(6) + '</div>';
+    html += '<div style="font-size:11px;color:#64748b;margin-top:4px">(' + result.toExponential(4) + ')</div>';
+    html += '</div>';
+
+    area.innerHTML = html;
+  } catch(e) {
+    area.innerHTML = '<div style="padding:12px;text-align:center;color:#dc2626;font-size:12px;background:#fef2f2;border-radius:8px">⚠️ 수식 오류: ' + e.message + '</div>';
+  }
 }
 </script>
 </body>
