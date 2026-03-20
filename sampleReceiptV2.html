@@ -6082,6 +6082,18 @@ function selectCompany(elOrObj) {
         // 업체명 입력 옆에 이력 표시 인디케이터
         var inp = document.getElementById('company-search');
         if (inp) inp.title = '변경이력 ' + logs.length + '건 (마우스 올리면 표시)';
+        // 최근 30일 이내 변경이 있으면 토스트 알림
+        var now = new Date();
+        var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        var recentLogs = logs.filter(function(log) {
+            if (!log.date) return false;
+            var logDate = new Date(log.date);
+            return logDate >= thirtyDaysAgo;
+        });
+        if (recentLogs.length > 0) {
+            var latestLog = recentLogs.reduce(function(a, b) { return new Date(a.date) > new Date(b.date) ? a : b; });
+            showToast('📋 업체 정보 변경이력 ' + recentLogs.length + '건 (최근: ' + (latestLog.detail || '').slice(0, 30) + ')', 'info');
+        }
     } else if (clWrap) {
         clBody.innerHTML = '';
         if (clCount) clCount.textContent = '';
@@ -6201,6 +6213,11 @@ async function checkLicenseChanges(licNo, regDate) {
         html += '</table>';
         document.getElementById('lic-change-body').innerHTML = html;
         alertEl.style.display = 'block';
+        // 토스트 알림
+        var latestChange = changes[0];
+        var latestDt = (latestChange.chng_dt || '').replace(/-/g, '');
+        if (latestDt.length === 8) latestDt = latestDt.slice(0, 4) + '-' + latestDt.slice(4, 6) + '-' + latestDt.slice(6, 8);
+        showToast('⚠️ 식약처 인허가 변경 정보 ' + changes.length + '건이 있습니다 (최근: ' + latestDt + ')', 'warn');
 
         console.log('[I2859] 인허가 변경사항 ' + changes.length + '건 감지 (인허가: ' + licNo + ', 기준일: ' + sinceDate + ')');
     } catch(err) {
@@ -6243,6 +6260,11 @@ async function checkLicenseChanges(licNo, regDate) {
             html2 += '</table>';
             document.getElementById('lic-change-body').innerHTML = html2;
             alertEl.style.display = 'block';
+            // 토스트 알림 (폴백)
+            var latestChange2 = changes2[0];
+            var latestDt2 = (latestChange2.chng_dt || '').replace(/-/g, '');
+            if (latestDt2.length === 8) latestDt2 = latestDt2.slice(0, 4) + '-' + latestDt2.slice(4, 6) + '-' + latestDt2.slice(6, 8);
+            showToast('⚠️ 식약처 인허가 변경 정보 ' + changes2.length + '건이 있습니다 (최근: ' + latestDt2 + ')', 'warn');
             console.log('[I2859] 인허가 변경사항 ' + changes2.length + '건 감지 (폴백 쿼리)');
         } catch(err2) {
             console.warn('[I2859] 인허가 변경 조회 완전 실패:', err2.message);
