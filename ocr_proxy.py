@@ -41,6 +41,12 @@ try:
 except ImportError:
     HAS_PIL = False
 
+try:
+    from pdf2image import convert_from_bytes
+    HAS_PDF2IMAGE = True
+except ImportError:
+    HAS_PDF2IMAGE = False
+
 app = Flask(__name__)
 CORS(app)
 
@@ -407,6 +413,21 @@ def ocr_inspection_form():
         if not image_base64:
             return jsonify({'error': '이미지 데이터(base64)가 비어있습니다'}), 400
 
+        # PDF → 이미지 변환 (Claude API는 PDF를 직접 받지 못함)
+        claude_image_base64 = image_base64
+        claude_media_type = None
+        if image_format == 'pdf':
+            if not HAS_PDF2IMAGE:
+                return jsonify({'error': 'PDF 변환 라이브러리(pdf2image)가 설치되지 않았습니다'}), 500
+            pdf_bytes = base64.b64decode(image_base64)
+            pages = convert_from_bytes(pdf_bytes, dpi=200, first_page=1, last_page=1)
+            if pages:
+                buf = io.BytesIO()
+                pages[0].save(buf, format='JPEG', quality=92)
+                claude_image_base64 = base64.b64encode(buf.getvalue()).decode()
+                claude_media_type = 'image/jpeg'
+                app.logger.info(f'[OCR] PDF → JPEG 변환 완료 ({len(claude_image_base64)//1024}KB)')
+
         # ── 1단계: Clova General OCR ──
         clova_payload = {
             'version': 'V2',
@@ -468,8 +489,9 @@ def ocr_inspection_form():
         ocr_text = '\n'.join(lines)
 
         # ── 2단계: Claude 구조화 (텍스트 + 이미지 동시 전달) ──
-        media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}
-        media_type = media_types.get(image_format, 'image/jpeg')
+        if not claude_media_type:
+            media_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'}
+            claude_media_type = media_types.get(image_format, 'image/jpeg')
 
         # OCR 보정 사전 로드 (requester 파라미터가 있으면 해당 담당자 패턴만)
         requester = payload.get('requester', '')
@@ -486,8 +508,8 @@ def ocr_inspection_form():
                         'type': 'image',
                         'source': {
                             'type': 'base64',
-                            'media_type': media_type,
-                            'data': image_base64
+                            'media_type': claude_media_type,
+                            'data': claude_image_base64
                         }
                     },
                     {
