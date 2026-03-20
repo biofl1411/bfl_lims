@@ -4536,12 +4536,17 @@ function cleanInspectionItemName(name) {
     return name.replace(/\s*\([^)]*\)\s*/g, '').trim();
 }
 
-// 포장단위/검체량 파싱 (20gx10 → amount=200, unit=g)
+// 포장단위/검체량 파싱
 function parseSampleAmountInfo(sample) {
     var rawAmount = String(sample.sampleAmount || '');
     var rawUnit = sample.sampleAmountUnit || 'g';
     var rawPackage = sample.packageUnit || '';
     var rawCount = sample.sampleCount || '';
+
+    // 전처리: "개" 제거, 공백 정리
+    rawAmount = rawAmount.replace(/개/g, '').trim();
+    rawPackage = rawPackage.replace(/개/g, '').trim();
+    rawCount = rawCount.replace(/개/g, '').trim();
 
     // 포장단위 = 단일 포장 중량 (곱하기 금지)
     // "20gx10" → 포장단위=20g, 검체수=10, 검체량=20
@@ -4549,7 +4554,7 @@ function parseSampleAmountInfo(sample) {
 
     var parseTarget = rawPackage || rawAmount;
 
-    // 패턴1: "20gx10" 또는 "20g*10" — 중량x수량
+    // 패턴1: "200gx14" 또는 "200g*14" 또는 "200g X 14개" — 중량x수량
     var multiMatch = parseTarget.match(/(\d+(?:\.\d+)?)\s*(g|kg|ml|mL|L)\s*[x*×]\s*(\d+)/i);
     if (multiMatch) {
         var single = parseFloat(multiMatch[1]);
@@ -4558,14 +4563,26 @@ function parseSampleAmountInfo(sample) {
         return { amount: single, unit: unit, packageUnit: multiMatch[1] + unit, sampleCount: count };
     }
 
+    // 패턴1-1: 단위 없이 "숫자 x 숫자" (예: "4000 X 2", "2009 K 14")
+    // 손글씨 "g"가 9/0/6으로 오인식된 경우 보정: 끝자리가 9/0/6이고 x가 있으면 단위=g
+    var noUnitMulti = parseTarget.match(/(\d+(?:\.\d+)?)\s*[x*×kK]\s*(\d+)/i);
+    if (noUnitMulti) {
+        var numPart = noUnitMulti[1];
+        var countPart = parseInt(noUnitMulti[2]);
+        // 손글씨 g → 9 오인식 보정: 끝자리 9이고 나머지가 100단위면 g로 추정
+        var corrected = _correctHandwrittenG(numPart);
+        return { amount: corrected.num, unit: corrected.unit || rawUnit, packageUnit: corrected.num + (corrected.unit || rawUnit), sampleCount: countPart };
+    }
+
     // 패턴2: sampleAmount에 "x" 포함 (예: "20*10") — 중량x수량
-    if (rawAmount.match(/[*x×]/i)) {
-        var parts = rawAmount.split(/[*x×]/i);
+    if (rawAmount.match(/[*x×kK]/i)) {
+        var parts = rawAmount.split(/[*x×kK]/i);
         if (parts.length === 2) {
-            var a = parseFloat(parts[0].replace(/[^0-9.]/g, ''));
-            var b = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
-            if (!isNaN(a) && !isNaN(b)) {
-                return { amount: a, unit: rawUnit, packageUnit: a + rawUnit, sampleCount: b };
+            var a = parts[0].replace(/[^0-9.]/g, '');
+            var b = parts[1].replace(/[^0-9.]/g, '');
+            var corrA = _correctHandwrittenG(a);
+            if (!isNaN(corrA.num) && !isNaN(parseFloat(b))) {
+                return { amount: corrA.num, unit: corrA.unit || rawUnit, packageUnit: corrA.num + (corrA.unit || rawUnit), sampleCount: parseFloat(b) };
             }
         }
     }
@@ -4585,6 +4602,25 @@ function parseSampleAmountInfo(sample) {
         packageUnit: rawPackage || (rawAmount ? rawAmount.replace(/[^0-9.]/g, '') + rawUnit : ''),
         sampleCount: rawCount || '1'
     };
+}
+
+// 손글씨 "g" → "9"/"0"/"6" 오인식 보정
+// 예: "4009" → 400g, "2000" → 200g (문맥상 x가 있으면)
+function _correctHandwrittenG(numStr) {
+    numStr = String(numStr).trim();
+    var num = parseFloat(numStr);
+    if (isNaN(num)) return { num: 0, unit: '' };
+    // 끝자리가 9이고 앞부분이 100의 배수 → g 오인식 (4009→400g, 1009→100g)
+    if (/\d{2,}9$/.test(numStr)) {
+        var base = numStr.slice(0, -1);
+        if (parseInt(base) % 10 === 0) return { num: parseInt(base), unit: 'g' };
+    }
+    // 끝자리 0이 하나 더 많은 경우 (2000→200g, 1000→100g) — 4자리 이상이고 00으로 끝남
+    if (/\d{4,}$/.test(numStr) && numStr.endsWith('00') && !numStr.endsWith('000')) {
+        var base2 = numStr.slice(0, -1);
+        return { num: parseInt(base2), unit: 'g' };
+    }
+    return { num: num, unit: '' };
 }
 
 // ============================================================================
