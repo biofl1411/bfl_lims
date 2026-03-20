@@ -559,6 +559,7 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
         <!-- 추출 필드 목록 (스크롤 영역) -->
         <div id="rv-sections" class="rv-sections-scroll"></div>
         <div id="rv-calcs"></div>
+        <div id="rv-sim-calc" style="display:none"></div>
 
         <!-- PDF 텍스트 비교 그리드 -->
         <div class="text-compare" id="rv-text-compare" style="display:none">
@@ -1553,6 +1554,9 @@ function showReviewPanel(data) {
   }
   document.getElementById('rv-calcs').innerHTML = calcHtml;
 
+  // ── 모의 계산기 (저장 전 검증) ──
+  _renderSimCalc(data);
+
   // 요약 통계
   document.getElementById('rv-summary').innerHTML =
     '<div class="review-stat total">전체 필드: '+totalFields+'개</div>'+
@@ -1640,6 +1644,159 @@ function toggleFieldMemo(fid) {
   var el = document.getElementById(fid+'-memo');
   el.classList.toggle('show');
   if (el.classList.contains('show')) el.focus();
+}
+
+/* =============================================================
+   모의 계산기 — PDF 변환 후 저장 전 계산식 검증
+============================================================= */
+var _simReserved = /^(Math|PI|E|abs|pow|sqrt|log|log10|round|ceil|floor|min|max|parseFloat|parseInt|NaN|Infinity|true|false|undefined|null|return)$/;
+function _simParseVars(formula) {
+  var vars = [], seen = {}, re = /([a-zA-Z_]\w*)/g, m;
+  while ((m = re.exec(formula)) !== null) {
+    if (!seen[m[1]] && !_simReserved.test(m[1])) { seen[m[1]] = true; vars.push(m[1]); }
+  }
+  return vars;
+}
+
+function _renderSimCalc(data) {
+  var wrap = document.getElementById('rv-sim-calc');
+  if (!wrap) return;
+  var calcs = data.calculations || [];
+  if (!calcs.length) { wrap.style.display = 'none'; return; }
+
+  // 필드 라벨 맵 구성
+  var fm = {};
+  (data.sections || []).forEach(function(sec) {
+    (sec.fields || []).forEach(function(f) {
+      fm[f.id] = { label: f.label, unit: f.unit || '', example: f.exampleValue || '' };
+    });
+  });
+  window._fcSimData = { calcs: calcs, fieldMap: fm, judgment: data.judgmentRule || null };
+
+  var html = '<div style="border:2px solid #d8b4fe;border-radius:10px;overflow:hidden;margin-top:10px">';
+  html += '<div style="padding:10px 14px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);font-size:13px;font-weight:700;color:#6b21a8;display:flex;align-items:center;gap:8px">';
+  html += '<span>🧮 모의 계산기</span><span style="font-size:11px;font-weight:400;color:#8b5cf6">저장 전 계산식 검증</span></div>';
+  html += '<div style="padding:14px;background:white">';
+
+  calcs.forEach(function(calc, ci) {
+    var formula = calc.formula || '';
+    var formulaText = calc.formulaText || formula || '';
+    var vars = formula ? _simParseVars(formula) : [];
+
+    // 계산식 표시
+    html += '<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px;margin-bottom:10px">';
+    html += '<div style="font-size:12px;font-weight:600;color:#7c3aed;margin-bottom:4px">' + (calc.label || '결과') + (calc.unit ? ' (' + calc.unit + ')' : '') + '</div>';
+    html += '<div style="font-family:monospace;font-size:11px;color:#4c1d95;background:#faf5ff;padding:6px 10px;border-radius:6px;border:1px solid #e9d5ff;word-break:break-all">' + (formulaText) + '</div>';
+    html += '</div>';
+
+    if (vars.length > 0) {
+      var cols = vars.length <= 4 ? '1fr 1fr' : '1fr 1fr 1fr';
+      html += '<div style="display:grid;grid-template-columns:' + cols + ';gap:6px;margin-bottom:8px">';
+      vars.forEach(function(v) {
+        var fi = fm[v] || {};
+        var lb = fi.label || v;
+        var unitStr = fi.unit ? ' (' + fi.unit + ')' : '';
+        var ph = fi.example || '0';
+        html += '<div><label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">' + lb + unitStr + '</label>';
+        html += '<input type="number" step="any" id="fcsim-' + ci + '-' + v + '" placeholder="' + ph + '" value="' + (fi.example || '') + '" oninput="_fcSimCalc(' + ci + ')" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>';
+      });
+      html += '</div>';
+    } else if (!formula) {
+      // formula 없으면 수동 입력
+      html += '<div style="margin-bottom:8px">';
+      html += '<label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">수식 직접 입력 (변수: A~F)</label>';
+      html += '<input type="text" id="fcsim-' + ci + '-custom" placeholder="(A - B) * C / (D * 1000)" oninput="_fcSimCalc(' + ci + ')" style="width:100%;padding:6px 8px;border:1px solid #94a3b8;border-radius:6px;font-size:12px;font-family:monospace;margin-bottom:6px">';
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">';
+      ['A','B','C','D','E','F'].forEach(function(k) {
+        html += '<div><label style="font-size:10px;color:#475569">' + k + '</label>';
+        html += '<input type="number" step="any" id="fcsim-' + ci + '-' + k + '" placeholder="0" oninput="_fcSimCalc(' + ci + ')" style="width:100%;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>';
+      });
+      html += '</div></div>';
+    }
+
+    html += '<div id="fcsim-result-' + ci + '"></div>';
+    if (ci < calcs.length - 1) html += '<hr style="border:none;border-top:1px dashed #e9d5ff;margin:12px 0">';
+  });
+
+  // 판정기준
+  if (data.judgmentRule && data.judgmentRule.standardText) {
+    html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 10px;margin-top:8px">';
+    html += '<span style="font-size:11px;font-weight:600;color:#991b1b">⚖ 판정기준:</span> ';
+    html += '<span style="font-size:12px;font-weight:600;color:#dc2626">' + data.judgmentRule.standardText + (data.judgmentRule.unit ? ' ' + data.judgmentRule.unit : '') + '</span></div>';
+  }
+
+  html += '</div></div>';
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+
+  // 예시값이 있으면 자동 계산
+  calcs.forEach(function(_, ci) { _fcSimCalc(ci); });
+}
+
+function _fcSimCalc(ci) {
+  var d = window._fcSimData;
+  if (!d || !d.calcs[ci]) return;
+  var calc = d.calcs[ci];
+  var area = document.getElementById('fcsim-result-' + ci);
+  if (!area) return;
+
+  var formula = calc.formula || '';
+  var isCustom = !formula;
+  var vars, vals = {};
+
+  if (isCustom) {
+    var customEl = document.getElementById('fcsim-' + ci + '-custom');
+    formula = customEl ? customEl.value : '';
+    if (!formula) { area.innerHTML = ''; return; }
+    vars = ['A','B','C','D','E','F'];
+    vars.forEach(function(k) { vals[k] = parseFloat((document.getElementById('fcsim-' + ci + '-' + k) || {}).value) || 0; });
+  } else {
+    vars = _simParseVars(formula);
+    vars.forEach(function(v) { vals[v] = parseFloat((document.getElementById('fcsim-' + ci + '-' + v) || {}).value) || 0; });
+  }
+
+  var expr = formula;
+  vars.forEach(function(v) {
+    expr = expr.replace(new RegExp('\\b' + v + '\\b', 'g'), '(' + vals[v] + ')');
+  });
+
+  try {
+    var result = Function('"use strict"; return (' + expr + ')')();
+    if (typeof result !== 'number' || !isFinite(result)) throw new Error('계산 불가');
+
+    var rawStr = result.toString();
+    var unit = calc.unit || '';
+    var dp = calc.decimalPlaces != null ? calc.decimalPlaces : 2;
+    var rounded = (Math.round(result * Math.pow(10, dp)) / Math.pow(10, dp)).toFixed(dp);
+
+    var h = '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    h += '<div style="font-size:10px;font-weight:600;color:#92400e;margin-bottom:4px">📐 대입 결과</div>';
+    h += '<div style="font-family:monospace;font-size:10px;color:#78716c;word-break:break-all">' + expr + '</div>';
+    h += '</div>';
+    // 원시값
+    h += '<div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:6px 12px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between">';
+    h += '<span style="font-size:11px;font-weight:600;color:#0c4a6e">' + (calc.label || '결과') + ':</span>';
+    h += '<span style="font-family:monospace;font-size:13px;font-weight:700;color:#0369a1">' + rawStr + ' ' + unit + '</span></div>';
+    // 반올림값
+    h += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:6px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">';
+    h += '<span style="font-size:11px;font-weight:600;color:#166534">반올림 (소수점 ' + dp + '자리):</span>';
+    h += '<span style="font-family:monospace;font-size:15px;font-weight:800;color:#059669">' + rounded + ' ' + unit + '</span></div>';
+
+    // 판정 비교
+    var jr = d.judgment;
+    if (jr && jr.standardText) {
+      var limMatch = (jr.standardText + '').match(/([\d.]+)/);
+      if (limMatch) {
+        var lim = parseFloat(limMatch[1]);
+        var pass = parseFloat(rounded) <= lim;
+        h += '<div style="text-align:center;padding:6px;border-radius:6px;font-size:12px;font-weight:700;color:' + (pass ? '#16a34a' : '#dc2626') + ';background:' + (pass ? '#f0fdf4' : '#fef2f2') + ';border:1px solid ' + (pass ? '#86efac' : '#fca5a5') + '">';
+        h += (pass ? '✅ 적합' : '❌ 부적합') + ' <span style="font-size:10px;font-weight:400;color:#64748b">(기준: ' + jr.standardText + ')</span></div>';
+      }
+    }
+    area.innerHTML = h;
+  } catch(e) {
+    area.innerHTML = '<div style="padding:6px;text-align:center;color:#dc2626;font-size:11px;background:#fef2f2;border-radius:6px">⚠️ ' + e.message + '</div>';
+  }
 }
 
 function cancelReview() {
