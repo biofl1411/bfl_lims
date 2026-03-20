@@ -411,7 +411,7 @@ tr:hover{background:#f8f9fb}
             <h3 id="track-modal-title">역추적 매칭</h3>
             <button class="close" onclick="closeTrackModal()">&#10005;</button>
         </div>
-        <div class="modal-bd" id="track-modal-body"></div>
+        <div class="modal-bd" id="track-modal-body" style="position:relative"></div>
         <div class="modal-ft">
             <button class="btn btn-secondary" onclick="closeTrackModal()">닫기</button>
         </div>
@@ -1478,7 +1478,7 @@ function renderTrackModal(dep, stages) {
         '<div class="row"><span style="color:#6b7280">은행</span><span style="font-weight:700">' + dep.bank + '</span></div>' +
         '<div class="row"><span style="color:#6b7280">거래일</span><span>' + dep.date + ' ' + dep.time + '</span></div>' +
         '<div class="row"><span style="color:#6b7280">입금자(적요)</span><span style="font-weight:700">' + dep.depositor + '</span></div>' +
-        '<div class="row"><span style="color:#6b7280">입금액</span><span style="font-weight:700;color:#2563eb">' + formatMoney(dep.amount) + '</span></div>' +
+        '<div class="row"><span style="color:#6b7280">입금액</span><span style="font-weight:700;color:#2563eb">' + formatMoney(dep.amount) + '<span id="track-remain-badge" style="display:none;margin-left:8px;font-size:11px;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#92400e"></span></span></div>' +
         '</div>';
 
     var stageInfo = [
@@ -1490,6 +1490,22 @@ function renderTrackModal(dep, stages) {
         {name:'5단계: 합산 매칭', items:stages.s5||[], desc:'동일업체 다건 합산 = 입금액', highlight:(stages.s5||[]).length>0}
     ];
 
+    // 매칭 요약 한 줄 + 클릭 시 상세 오버레이
+    var stageSummaryParts = [];
+    stageInfo.forEach(function(si) {
+        if (si.items.length > 0) {
+            stageSummaryParts.push(si.name.replace(/^\d단계: /,'') + ' ' + si.items.length + '건');
+        }
+    });
+    var summaryText = stageSummaryParts.length > 0 ? stageSummaryParts.join(' · ') : '매칭 단계 없음';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:6px 0 10px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer" onclick="toggleStageDetail()">' +
+        '<span style="font-size:12px;color:#475569;flex:1">' + summaryText + '</span>' +
+        '<span style="font-size:11px;color:#94a3b8">상세 보기 ▸</span>' +
+        '</div>';
+
+    // 숨겨진 상세 오버레이
+    html += '<div id="track-stage-detail" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,.97);z-index:10;padding:16px;overflow-y:auto;border-radius:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:14px;font-weight:700">매칭 단계 상세</span><button onclick="toggleStageDetail()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#6b7280">✕</button></div>';
     stageInfo.forEach(function(si) {
         var hdStyle = si.highlight && si.items.length > 0 ? 'background:#fef3c7' : '';
         html += '<div class="track-stage"><div class="track-stage-hd" style="' + hdStyle + '">' +
@@ -1497,6 +1513,7 @@ function renderTrackModal(dep, stages) {
             ' <span class="cnt">' + si.items.length + '건</span>' +
             '<span style="font-weight:400;color:#9ca3af;font-size:11px;margin-left:4px">' + si.desc + '</span></div></div>';
     });
+    html += '</div>';
 
     // 합산 매칭 결과 (별도 섹션)
     var sumMatches = findSumMatch(dep);
@@ -1649,18 +1666,49 @@ async function selectSumMatch(idsJson, companyName) {
     showToast('합산 매칭 완료: ' + companyName + ' ' + receiptNos.length + '건 (' + formatMoney(dep.amount) + ')');
 }
 
-// 종합 후보 다중 선택 바 업데이트
+// 매칭 단계 상세 오버레이 토글
+function toggleStageDetail() {
+    var el = document.getElementById('track-stage-detail');
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// 종합 후보 다중 선택 바 업데이트 + 잔여 입금액 표시
 function updateMultiBar() {
     var chks = document.querySelectorAll('.track-multi-chk:checked');
     var bar = document.getElementById('track-multi-bar');
+    var badge = document.getElementById('track-remain-badge');
+    var dep = bankDeposits[_trackBankIdx];
+
+    // 선택 건 잔액 합계
+    var totalRemain = 0;
+    chks.forEach(function(c) { totalRemain += parseInt(c.dataset.remain) || 0; });
+
+    // 입금액 - 선택 잔액 = 남은 금액 배지 표시
+    if (badge && dep) {
+        if (chks.length > 0) {
+            var left = dep.amount - totalRemain;
+            badge.style.display = '';
+            if (left === 0) {
+                badge.style.background = '#dcfce7'; badge.style.color = '#166534';
+                badge.textContent = '잔여 0원 (정확 일치)';
+            } else if (left > 0) {
+                badge.style.background = '#fef3c7'; badge.style.color = '#92400e';
+                badge.textContent = '잔여 ' + formatMoney(left);
+            } else {
+                badge.style.background = '#fee2e2'; badge.style.color = '#991b1b';
+                badge.textContent = '초과 ' + formatMoney(Math.abs(left));
+            }
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
     if (!bar) return;
     if (chks.length < 2) {
         bar.style.display = 'none';
         return;
     }
-    var totalRemain = 0;
-    chks.forEach(function(c) { totalRemain += parseInt(c.dataset.remain) || 0; });
-    var dep = bankDeposits[_trackBankIdx];
     var diff = dep ? (dep.amount - totalRemain) : 0;
     var matchLabel = totalRemain === (dep ? dep.amount : 0) ? ' ✅ 금액 일치!' : ' (차액: ' + formatMoney(diff) + ')';
     document.getElementById('track-multi-info').innerHTML =
