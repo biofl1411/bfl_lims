@@ -1267,7 +1267,7 @@ function findAutoMatch(dep) {
     });
     if (candidates.length === 1) return candidates[0];
 
-    // 3순위: 대표자명 매칭 (80%)
+    // 3순위: 대표자명 매칭 — 대표자명 + 금액 일치 시 자동매칭
     candidates = [];
     allReceipts.forEach(function(r) {
         var d = r.data;
@@ -1282,7 +1282,7 @@ function findAutoMatch(dep) {
             candidates.push(r);
         }
     });
-    if (candidates.length === 1) return candidates[0];
+    if (candidates.length >= 1) return candidates[0];
 
     return null;
 }
@@ -1524,11 +1524,20 @@ function runReverseTrack(dep) {
         var compName = r.data.companyName || r.data.company || '';
         var comp = _companiesCache[compId] || _companiesCache[compName];
         if (!comp) return;
-        // 대표자명 매칭
+        // 대표자명 매칭 — 금액 근접도에 따라 점수 차등
         var ceo = (comp.ceo || comp.repName || '').trim();
         if (ceo.length >= 2 && dep.depositor.indexOf(ceo) !== -1) {
             s4.push(r);
-            addScore(r, 35, '대표자명매칭(' + ceo + ')');
+            var remain = getTotalFee(r.data) - getPaidAmount(r.data);
+            if (remain === dep.amount) {
+                addScore(r, 50, '대표자명+금액일치(' + ceo + ')');
+            } else {
+                // 금액 근접도 보너스 (차이 작을수록 높은 점수)
+                var diff = Math.abs(remain - dep.amount);
+                var ratio = 1 - Math.min(diff / dep.amount, 1);
+                var bonus = Math.round(ratio * 10); // 0~10점 추가
+                addScore(r, 35 + bonus, '대표자명매칭(' + ceo + ', 잔액' + formatMoney(remain) + ')');
+            }
             return;
         }
         // 담당자명 매칭
