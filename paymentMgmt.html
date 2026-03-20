@@ -1992,7 +1992,27 @@ async function applySingleMatch(idx) {
         renderTable();
         updateSummary();
         updateTabCounts();
-        showToast(dep.matchedReceiptNo + ' 입금처리 완료 (' + formatMoney(dep.amount) + ')');
+
+        // ★ 과입금 감지 → 담당자 알림
+        var totalFee = getTotalFee(r.data);
+        var totalPaid = getPaidAmount(r.data);
+        var overpay = totalPaid - totalFee;
+        if (overpay > 0) {
+            var salesRep = r.data.salesRep || '담당자 미지정';
+            var companyName = r.data.companyName || r.data.company || '';
+            showToast('⚠️ 과입금 감지: ' + dep.matchedReceiptNo + ' / ' + formatMoney(overpay) + ' 초과', 'warn');
+            if (confirm('과입금 ' + formatMoney(overpay) + ' 발생!\n\n' +
+                '접수번호: ' + dep.matchedReceiptNo + '\n' +
+                '업체: ' + companyName + '\n' +
+                '수수료: ' + formatMoney(totalFee) + '\n' +
+                '총 입금: ' + formatMoney(totalPaid) + '\n' +
+                '과입금: ' + formatMoney(overpay) + '\n\n' +
+                '담당자(' + salesRep + ')에게 알림을 보내시겠습니까?')) {
+                await sendOverpayNotification(dep.matchedReceiptId, r.data, overpay, dep);
+            }
+        } else {
+            showToast(dep.matchedReceiptNo + ' 입금처리 완료 (' + formatMoney(dep.amount) + ')');
+        }
     } catch(e) {
         showToast('입금처리 실패: ' + e.message);
     }
@@ -2054,6 +2074,51 @@ async function applySingleMatchSilent(idx) {
 
     saveMatchMapping(dep.depositor, r.data.companyName || r.data.company,
         r.data.companyId || r.data.companyCode, dep.matchedReceiptNo, dep._memo || '');
+
+    // 과입금 감지 시 자동 알림 기록
+    var totalFee = getTotalFee(r.data);
+    var totalPaid = getPaidAmount(r.data);
+    if (totalPaid > totalFee) {
+        await sendOverpayNotification(dep.matchedReceiptId, r.data, totalPaid - totalFee, dep);
+    }
+}
+
+// ======================== 과입금 알림 ========================
+async function sendOverpayNotification(receiptId, receiptData, overpayAmount, dep) {
+    var salesRep = receiptData.salesRep || '담당자 미지정';
+    var companyName = receiptData.companyName || receiptData.company || '';
+    var receiptNo = receiptData.receiptNo || receiptId;
+    var now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    var memoText = '[과입금 알림] ' + now + '\n' +
+        '입금액: ' + formatMoney(dep.amount) + ' (입금자: ' + dep.depositor + ')\n' +
+        '수수료: ' + formatMoney(getTotalFee(receiptData)) + '\n' +
+        '과입금: ' + formatMoney(overpayAmount) + '\n' +
+        '→ 환불 또는 선수금 처리 필요';
+
+    try {
+        // 접수건의 재무팀 메모에 과입금 알림 기록
+        var existingMemo = receiptData.memoFinance || '';
+        var newMemo = existingMemo ? existingMemo + '\n\n' + memoText : memoText;
+        await db.collection('receipts').doc(receiptId).update({
+            memoFinance: newMemo,
+            overpayAlert: {
+                amount: overpayAmount,
+                depositor: dep.depositor,
+                depositAmount: dep.amount,
+                salesRep: salesRep,
+                date: dep.date,
+                createdAt: new Date().toISOString(),
+                resolved: false
+            },
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        receiptData.memoFinance = newMemo;
+        showToast('📨 과입금 알림 전송: ' + receiptNo + ' / ' + salesRep + ' (' + formatMoney(overpayAmount) + ')', 'info');
+    } catch(e) {
+        console.error('과입금 알림 실패:', e);
+        showToast('과입금 알림 저장 실패', 'error');
+    }
 }
 
 // ======================== 역추적 관리 탭 ========================
