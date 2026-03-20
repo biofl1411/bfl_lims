@@ -36146,6 +36146,16 @@ function renderMfdsTestItems() {
         _pBundleNames = bd.names || {};
         _pBundleItems = bd.items || {};
         _pBundleFees = bd.fees || {};
+        _pBundleUnits = bd.units || {};
+      }
+      // 단위 없는 구 묶음 데이터 리셋 (1회성)
+      if (_pBundleNames['2_01'] && !_pBundleUnits['2_01_1']) {
+        delete _pBundleNames['2_01']; delete _pBundleItems['2_01_1']; delete _pBundleFees['2_01_1'];
+        delete _pBundleItems['2_01_2']; delete _pBundleFees['2_01_2'];
+      }
+      if (_pBundleNames['2_02'] && !_pBundleUnits['2_02_1']) {
+        delete _pBundleNames['2_02']; delete _pBundleItems['2_02_1']; delete _pBundleFees['2_02_1'];
+        delete _pBundleItems['2_02_2']; delete _pBundleFees['2_02_2'];
       }
       autoPopulateNutritionBundles();
     }).catch(function() {});
@@ -36447,13 +36457,15 @@ var _pBundleSelected = null; // 현재 선택된 묶음 키 (예: '1')
 var _pBundleNames = {};     // { '1_01': { '1': '9대 영양성분_13일', '2': '7대 영양성분_30일' } }
 var _pBundleItems = {};     // { '1_01_1': ['P10001','P10003'], ... }
 var _pBundleFees = {};      // { '1_01_1': 429000, ... }
+var _pBundleUnits = {};     // { '1_01_1': { 'P20001': '%', 'P20002': 'kcal/100g' } }
 var _pBundleSortable = null;
 
 function savePBundleData() {
   firebase.firestore().collection('settings').doc('pRefBundles').set({
     names: _pBundleNames,
     items: _pBundleItems,
-    fees: _pBundleFees
+    fees: _pBundleFees,
+    units: _pBundleUnits
   });
 }
 
@@ -36462,60 +36474,118 @@ function getBundleKey(subKey, sub3Key, bundleKey) { return subKey + '_' + sub3Ke
 // P2 영양성분 묶음 자동 생성 (14대/9대)
 function autoPopulateNutritionBundles() {
   var sub3 = _pRefSub3Data['2'] || {};
-  // P2-01(14대), P2-02(9대) 칩이 없으면 스킵
   if (!sub3['01'] && !sub3['02']) return;
 
-  // P2 시험항목 가져오기
   var p2Items = (_mfdsTestItems || []).filter(function(t) {
     return (t['시험항목코드'] || '').toUpperCase().indexOf('P2') === 0;
   });
   if (p2Items.length === 0) return;
 
-  // 이름→코드 매핑 (한글명 기준)
   function findCode(name) {
-    var found = p2Items.find(function(t) {
-      var hn = (t['한글명'] || '').trim();
-      return hn === name;
-    });
+    var found = p2Items.find(function(t) { return (t['한글명'] || '').trim() === name; });
     return found ? found['시험항목코드'] : null;
   }
 
-  // 14대 영양성분 전체 항목 (수분/회분 포함 16개)
-  var items14 = [
-    '수분(영양성분)', '회분(영양성분)', '열량', '나트륨', '탄수화물', '당류',
-    '조지방', '트랜스지방', '포화지방', '콜레스테롤', '조단백질',
-    '식이섬유', 'Vitamin D', '칼슘', '철', '칼륨'
+  // ── 14대 영양성분 항목 정의 ──
+  // g 단위 (고체) — 수분/회분 포함 16개
+  var items14g = [
+    { name: '수분(영양성분)', unit: '%' },
+    { name: '회분(영양성분)', unit: '%' },
+    { name: '열량', unit: 'kcal/100g' },
+    { name: '나트륨', unit: 'mg/100g' },
+    { name: '탄수화물', unit: 'g/100g' },
+    { name: '당류', unit: 'g/100g' },
+    { name: '조지방', unit: 'g/100g' },
+    { name: '트랜스지방', unit: 'g/100g' },
+    { name: '포화지방', unit: 'g/100g' },
+    { name: '콜레스테롤', unit: 'mg/100g' },
+    { name: '조단백질', unit: 'g/100g' },
+    { name: '식이섬유', unit: 'g/100g' },
+    { name: 'Vitamin D', unit: '㎍/100g' },
+    { name: '칼슘', unit: 'mg/100g' },
+    { name: '철', unit: 'mg/100g' },
+    { name: '칼륨', unit: 'mg/100g' }
   ];
-  // 9대 영양성분 (수분/회분 포함 11개)
-  var items9 = [
-    '수분(영양성분)', '회분(영양성분)', '열량', '나트륨', '탄수화물', '당류',
-    '조지방', '트랜스지방', '포화지방', '콜레스테롤', '조단백질'
+  // mL 단위 (액체) — 비중 포함 17개
+  var items14ml = [
+    { name: '비중(영양성분)', unit: 'g/100mL' },
+    { name: '수분(영양성분)', unit: 'g/100mL' },
+    { name: '회분(영양성분)', unit: 'g/100mL' },
+    { name: '열량', unit: 'kcal/100mL' },
+    { name: '나트륨', unit: 'mg/100mL' },
+    { name: '탄수화물', unit: 'g/100mL' },
+    { name: '당류', unit: 'g/100mL' },
+    { name: '조지방', unit: 'g/100mL' },
+    { name: '트랜스지방', unit: 'g/100mL' },
+    { name: '포화지방', unit: 'g/100mL' },
+    { name: '콜레스테롤', unit: 'mg/100mL' },
+    { name: '조단백질', unit: 'g/100mL' },
+    { name: '식이섬유', unit: 'g/100mL' },
+    { name: 'Vitamin D', unit: '㎍/100mL' },
+    { name: '칼슘', unit: 'mg/100mL' },
+    { name: '철', unit: 'mg/100mL' },
+    { name: '칼륨', unit: 'mg/100mL' }
   ];
+
+  // ── 9대 영양성분 항목 정의 ──
+  var items9g = [
+    { name: '수분(영양성분)', unit: '%' },
+    { name: '회분(영양성분)', unit: '%' },
+    { name: '열량', unit: 'kcal/100g' },
+    { name: '나트륨', unit: 'mg/100g' },
+    { name: '탄수화물', unit: 'g/100g' },
+    { name: '당류', unit: 'g/100g' },
+    { name: '조지방', unit: 'g/100g' },
+    { name: '트랜스지방', unit: 'g/100g' },
+    { name: '포화지방', unit: 'g/100g' },
+    { name: '콜레스테롤', unit: 'mg/100g' },
+    { name: '조단백질', unit: 'g/100g' }
+  ];
+  var items9ml = [
+    { name: '비중(영양성분)', unit: 'g/100mL' },
+    { name: '수분(영양성분)', unit: 'g/100mL' },
+    { name: '회분(영양성분)', unit: 'g/100mL' },
+    { name: '열량', unit: 'kcal/100mL' },
+    { name: '나트륨', unit: 'mg/100mL' },
+    { name: '탄수화물', unit: 'g/100mL' },
+    { name: '당류', unit: 'g/100mL' },
+    { name: '조지방', unit: 'g/100mL' },
+    { name: '트랜스지방', unit: 'g/100mL' },
+    { name: '포화지방', unit: 'g/100mL' },
+    { name: '콜레스테롤', unit: 'mg/100mL' },
+    { name: '조단백질', unit: 'g/100mL' }
+  ];
+
+  // 묶음 생성 헬퍼
+  function createBundle(nk, bundleNum, bundleName, itemDefs, fee) {
+    var codes = []; var units = {};
+    itemDefs.forEach(function(d) {
+      var code = findCode(d.name);
+      if (code) { codes.push(code); units[code] = d.unit; }
+    });
+    if (codes.length === 0) return false;
+    if (!_pBundleNames[nk]) _pBundleNames[nk] = {};
+    _pBundleNames[nk][bundleNum] = bundleName;
+    var bk = nk + '_' + bundleNum;
+    _pBundleItems[bk] = codes;
+    _pBundleFees[bk] = fee;
+    _pBundleUnits[bk] = units;
+    console.log('[영양성분] ' + bundleName + ' 자동 생성: ' + codes.length + '개 항목');
+    return true;
+  }
 
   var changed = false;
 
   // P2-01 (14대 영양성분) — 묶음이 비어있을 때만
   if (sub3['01'] && !(_pBundleNames['2_01'] && Object.keys(_pBundleNames['2_01']).length > 0)) {
-    var codes14 = items14.map(findCode).filter(Boolean);
-    if (codes14.length > 0) {
-      _pBundleNames['2_01'] = { '1': '14대 영양성분' };
-      _pBundleItems['2_01_1'] = codes14;
-      _pBundleFees['2_01_1'] = 429000;
-      changed = true;
-      console.log('[영양성분] P2-01 14대 묶음 자동 생성: ' + codes14.length + '개 항목');
-    }
+    changed = createBundle('2_01', '1', '14대 영양성분 (g)', items14g, 429000) || changed;
+    changed = createBundle('2_01', '2', '14대 영양성분 (mL)', items14ml, 429000) || changed;
   }
 
   // P2-02 (9대 영양성분) — 묶음이 비어있을 때만
   if (sub3['02'] && !(_pBundleNames['2_02'] && Object.keys(_pBundleNames['2_02']).length > 0)) {
-    var codes9 = items9.map(findCode).filter(Boolean);
-    if (codes9.length > 0) {
-      _pBundleNames['2_02'] = { '1': '9대 영양성분' };
-      _pBundleItems['2_02_1'] = codes9;
-      _pBundleFees['2_02_1'] = 429000;
-      changed = true;
-      console.log('[영양성분] P2-02 9대 묶음 자동 생성: ' + codes9.length + '개 항목');
-    }
+    changed = createBundle('2_02', '1', '9대 영양성분 (g)', items9g, 429000) || changed;
+    changed = createBundle('2_02', '2', '9대 영양성분 (mL)', items9ml, 429000) || changed;
   }
 
   if (changed) savePBundleData();
@@ -36624,17 +36694,21 @@ function renderPBundleDetail() {
     return;
   }
 
+  var bundleUnits = _pBundleUnits[bk] || {};
   var html = '';
   codes.forEach(function(code, idx) {
     var item = _mfdsTestItems.find(function(t) { return (t['시험항목코드'] || '') === code; });
     var name = item ? (item['한글명'] || item['시험항목명'] || code) : code;
-    var unit = item ? (item['단위'] || '') : '';
+    var savedUnit = bundleUnits[code] || '';
+    var mfdsUnit = item ? (item['단위'] || '') : '';
+    var unit = savedUnit || mfdsUnit;
+    var unitColor = savedUnit ? '#7c4dff' : '#999';
     html += '<div class="p-bundle-item" data-code="' + code + '">'
       + '<span class="grip">⠿</span>'
       + '<input type="checkbox" class="item-check" value="' + code + '" style="accent-color:#7c4dff;">'
       + '<span class="item-code">' + code + '</span>'
       + '<span class="item-name">' + name + '</span>'
-      + '<span style="color:#999;font-size:10px;flex-shrink:0;">' + unit + '</span>'
+      + '<span onclick="editBundleItemUnit(\'' + code + '\')" style="color:' + unitColor + ';font-size:10px;flex-shrink:0;cursor:pointer;min-width:60px;text-align:right;padding:2px 4px;border-radius:4px;border:1px dashed ' + (savedUnit ? '#c4b5fd' : '#ddd') + ';" title="클릭하여 단위 편집">' + (unit || '단위 설정') + '</span>'
       + '</div>';
   });
   container.innerHTML = html;
@@ -36655,6 +36729,28 @@ function renderPBundleDetail() {
       savePBundleData();
     }
   });
+}
+
+// 묶음 항목 단위 편집
+function editBundleItemUnit(code) {
+  if (!_pBundleSelected || !_mfdsTestSubFilter || !_pRefSub3Filter) return;
+  var bk = getBundleKey(_mfdsTestSubFilter, _pRefSub3Filter, _pBundleSelected);
+  var currentUnits = _pBundleUnits[bk] || {};
+  var current = currentUnits[code] || '';
+  var item = _mfdsTestItems.find(function(t) { return (t['시험항목코드'] || '') === code; });
+  var name = item ? (item['한글명'] || code) : code;
+  var input = prompt(name + ' 결과단위:', current);
+  if (input === null) return;
+  input = input.trim();
+  if (!_pBundleUnits[bk]) _pBundleUnits[bk] = {};
+  if (input) {
+    _pBundleUnits[bk][code] = input;
+  } else {
+    delete _pBundleUnits[bk][code];
+    if (Object.keys(_pBundleUnits[bk]).length === 0) delete _pBundleUnits[bk];
+  }
+  savePBundleData();
+  renderPBundleDetail();
 }
 
 // 묶음 생성 (P1-01 아래 P1-01-1, P1-01-2... 4단계)
