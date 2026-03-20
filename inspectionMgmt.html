@@ -36211,11 +36211,12 @@ function renderMfdsTestSubChips() {
       var code = (item['시험항목코드'] || '').toUpperCase();
       if (code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === s) cnt++;
     });
-    html += '<button type="button" onclick="setMfdsTestSubCategory(\'' + s + '\')" ' +
+    var dblClick = (_mfdsTestCatFilter === 'P') ? ' ondblclick="event.stopPropagation();renamePRefSubChip(\'' + s + '\')"' : '';
+    html += '<button type="button" onclick="setMfdsTestSubCategory(\'' + s + '\')"' + dblClick + ' ' +
       'style="padding:3px 9px;border-radius:10px;border:1px solid ' + (isActive ? cat.color : '#bbb') + ';' +
       'background:' + (isActive ? cat.color : '#f5f5f5') + ';color:' + (isActive ? '#fff' : '#555') + ';' +
       'font-size:11px;cursor:pointer;transition:all .15s;" ' +
-      'title="' + _mfdsTestCatFilter + s + 'xxxx (' + cnt + '건)">' +
+      'title="' + _mfdsTestCatFilter + s + 'xxxx (' + cnt + '건)' + (_mfdsTestCatFilter === 'P' ? ' — 더블클릭으로 이름 수정' : '') + '">' +
       s + ' ' + subs[s] + ' <span style="opacity:.6;">' + cnt + '</span></button>';
   });
   container.innerHTML = html;
@@ -36324,6 +36325,40 @@ function createPRefSub3Chip() {
   showToast('P' + parentKey + '-' + padded + " '" + name + "' 하위 그룹이 생성되었습니다", 'success');
 }
 
+// ══ P참고용: 소분류 칩 이름 수정 (더블클릭) ══
+function renamePRefSubChip(key) {
+  var oldName = (REF_SUB_CATEGORIES['P'] || {})[key] || '';
+  var newName = prompt('P' + key + ' 소분류 이름 수정:', oldName);
+  if (newName === null || !newName.trim() || newName.trim() === oldName) return;
+  newName = newName.trim();
+
+  // 중복 체크
+  var existing = Object.values(REF_SUB_CATEGORIES['P'] || {});
+  if (existing.indexOf(newName) >= 0) { showToast("'" + newName + "' 이미 존재합니다", 'warning'); return; }
+
+  REF_SUB_CATEGORIES['P'][key] = newName;
+  savePRefSubCategories();
+  renderMfdsTestSubChips();
+  renderPRefSub3Chips();
+  showToast('P' + key + ' → "' + newName + '" 이름 변경 완료', 'success');
+}
+
+// ══ P참고용: 3단계 서브칩 이름 수정 (더블클릭) ══
+function renamePRefSub3Chip(parentKey, chipKey) {
+  var sub3 = _pRefSub3Data[parentKey] || {};
+  var oldName = sub3[chipKey] || '';
+  var newName = prompt('P' + parentKey + '-' + chipKey + ' 이름 수정:', oldName);
+  if (newName === null || !newName.trim() || newName.trim() === oldName) return;
+  newName = newName.trim();
+
+  if (Object.values(sub3).indexOf(newName) >= 0) { showToast("'" + newName + "' 이미 존재합니다", 'warning'); return; }
+
+  _pRefSub3Data[parentKey][chipKey] = newName;
+  savePRefSub3Data();
+  renderPRefSub3Chips();
+  showToast('P' + parentKey + '-' + chipKey + ' → "' + newName + '" 이름 변경 완료', 'success');
+}
+
 // ══ P참고용 Firestore 저장 헬퍼 ══
 function savePRefSubCategories() {
   var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
@@ -36356,11 +36391,11 @@ function renderPRefSub3Chips() {
   var html = '<span style="font-size:10px;color:#999;margin-right:2px;">P' + parentKey + ' 하위:</span>';
   keys.forEach(function(k) {
     var isActive = _pRefSub3Filter === k;
-    html += '<button type="button" onclick="setPRefSub3Filter(\'' + k + '\')" ' +
+    html += '<button type="button" onclick="setPRefSub3Filter(\'' + k + '\')" ondblclick="event.stopPropagation();renamePRefSub3Chip(\'' + parentKey + '\',\'' + k + '\')" ' +
       'style="padding:2px 8px;border-radius:8px;border:1px solid ' + (isActive ? '#7c4dff' : '#ccc') + ';' +
       'background:' + (isActive ? '#7c4dff' : '#fafafa') + ';color:' + (isActive ? '#fff' : '#555') + ';' +
       'font-size:10px;cursor:pointer;transition:all .15s;" ' +
-      'title="P' + parentKey + '-' + k + ' ' + sub3[k] + '">' +
+      'title="P' + parentKey + '-' + k + ' ' + sub3[k] + ' — 더블클릭으로 이름 수정">' +
       'P' + parentKey + '-' + k + ' ' + sub3[k] + '</button>';
   });
   container.innerHTML = html;
