@@ -1509,10 +1509,14 @@ function renderTrackModal(dep, stages) {
             sm.receipts.forEach(function(g) {
                 var d = g.receipt.data;
                 ids.push(g.receipt.id);
-                html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #d1fae5">' +
-                    '<span>' + (d.receiptNo || g.receipt.id) + '</span>' +
-                    '<span style="color:#6b7280">' + (d.productName||'') + '</span>' +
-                    '<span style="font-weight:600;color:#2563eb">' + formatMoney(g.remain) + '</span>' +
+                var pName = d.productName || '';
+                if (!pName && d.samples && d.samples.length > 0) pName = d.samples.map(function(s){return s.productName||'';}).filter(Boolean).join(', ');
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid #d1fae5;gap:6px">' +
+                    '<span style="font-weight:600;min-width:90px">' + (d.receiptNo || g.receipt.id) + '</span>' +
+                    '<span style="color:#374151;font-size:10px">' + (d.receiptDate||'') + '</span>' +
+                    '<span style="color:#6b7280;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + pName + '</span>' +
+                    '<span style="color:#6b7280;font-size:10px">' + (d.salesRep||'') + '</span>' +
+                    '<span style="font-weight:600;color:#2563eb;min-width:70px;text-align:right">' + formatMoney(g.remain) + '</span>' +
                     '</div>';
             });
             html += '<button class="sel-btn" style="margin-top:8px;width:100%;padding:8px;font-size:13px" ' +
@@ -1527,12 +1531,33 @@ function renderTrackModal(dep, stages) {
         html += '<div class="track-stage"><div class="track-stage-bd">';
         stages.combined.forEach(function(c) {
             var d = c.receipt.data;
-            var remain = getTotalFee(d) - getPaidAmount(d);
+            var totalFee = getTotalFee(d);
+            var paid = getPaidAmount(d);
+            var remain = totalFee - paid;
+            var receiptDate = d.receiptDate || '';
+            var testPurpose = d.testPurpose || '';
+            var salesRep = d.salesRep || '';
+            var productName = d.productName || '';
+            if (d.samples && d.samples.length > 0) {
+                productName = d.samples.map(function(s){ return s.productName || ''; }).filter(Boolean).join(', ') || productName;
+            }
+            var sampleCount = d.sampleCount || (d.samples ? d.samples.length : '') || '';
             html += '<div class="track-cand">' +
                 '<span class="score">' + c.score + '</span>' +
                 '<div class="info">' +
                 '<div style="font-weight:600">' + (d.receiptNo || c.receipt.id) + ' - ' + (d.companyName||d.company||'-') + '</div>' +
-                '<div style="color:#6b7280;font-size:11px">' + (d.productName||'') + ' | 잔액: ' + formatMoney(remain) + '</div>' +
+                '<div style="color:#374151;font-size:11px;margin:2px 0">' +
+                    (receiptDate ? '<span style="margin-right:8px">📅 ' + receiptDate + '</span>' : '') +
+                    (testPurpose ? '<span style="margin-right:8px">🔬 ' + testPurpose + '</span>' : '') +
+                    (salesRep ? '<span style="margin-right:8px">👤 ' + salesRep + '</span>' : '') +
+                    (sampleCount ? '<span>검체 ' + sampleCount + '건</span>' : '') +
+                '</div>' +
+                '<div style="color:#6b7280;font-size:11px">' +
+                    (productName ? productName + ' | ' : '') +
+                    '수수료: ' + formatMoney(totalFee) +
+                    (paid > 0 ? ' (기입금: ' + formatMoney(paid) + ')' : '') +
+                    ' | <span style="font-weight:600;color:#2563eb">잔액: ' + formatMoney(remain) + '</span>' +
+                '</div>' +
                 '<div class="reason">' + c.reasons.join(' + ') + '</div>' +
                 '</div>' +
                 '<button class="sel-btn" onclick="selectTrackMatch(\'' + c.receipt.id + '\',\'' +
