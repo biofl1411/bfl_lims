@@ -1432,7 +1432,6 @@ async function runReceiptOCR() {
                     if (hint) hint.textContent = '✅ 특화 OCR 완료 — 새 파일 드롭 가능';
                     // 의뢰서 파일을 "기타" 첨부에 자동 등록
                     _attachOcrFileToEtc();
-                    showToast('🎯 특화 OCR 완료 — 자동입력된 내용을 확인하세요');
                     return;
                 }
             }
@@ -1625,7 +1624,7 @@ function fillFormFromOcrResult(result) {
       'radiation': '방사능 의뢰서', 'material': '물질검사 의뢰서',
       'halal-vegan': '할랄/비건 의뢰서', 'shelf-life': '소비기한 의뢰서'
     };
-    showToast('📋 ' + (formTypeLabels[formType] || formType) + ' 감지', 'info');
+    console.log('[OCR] 양식 감지:', formTypeLabels[formType] || formType);
 
     // [0] PIN 잠금 체크 — 잠금 시 해제 여부를 사용자에게 확인
     var pinTestField = document.getElementById('pin-test-field');
@@ -2996,7 +2995,6 @@ function onTestFieldChange() {
 
     clearInspectionItems();
 
-    showToast(`시험분야 선택: ${testField}. 검사목적을 선택하세요.`, 'info');
 }
 
 // ============================================================================
@@ -3232,7 +3230,6 @@ function onTestPurposeChange() {
             }
         }
         var modeLabel = _currentItemSource === 'mfdsTemplates' ? ' (식약처 연동)' : '';
-        showToast(`검사목적 선택: ${testPurpose}${modeLabel}`, 'info');
 
         // 이전 접수번호 자동 조회 (Firestore receipts에서 최근 내역)
         if (firestoreReady && testField) {
@@ -4005,36 +4002,29 @@ function selectRefTestItem(testItemCode) {
 // ============================================================================
 async function fetchLatestReceiptNo(testField, testPurpose) {
     try {
-        // 단일 필드 쿼리 (복합 인덱스 불필요)
+        // receiptNo 내림차순으로 최근 것부터 가져오기
         const snap = await db.collection('receipts')
             .where('testPurpose', '==', testPurpose)
-            .limit(50)
+            .orderBy('receiptNo', 'desc')
+            .limit(20)
             .get();
 
         const prevInput = document.getElementById('prev-receipt-no');
         if (!snap.empty) {
-            // 클라이언트에서 testField 필터 + createdAt 정렬
+            // 클라이언트에서 testField 필터
             const matched = snap.docs
                 .map(d => d.data())
-                .filter(r => r.testField === testField && r.receiptNo)
-                .sort((a, b) => {
-                    const ta = a.createdAt?.toDate?.() || new Date(0);
-                    const tb = b.createdAt?.toDate?.() || new Date(0);
-                    return tb - ta;
-                });
+                .filter(r => r.testField === testField && r.receiptNo);
 
             if (matched.length > 0) {
                 const prevNo = matched[0].receiptNo;
                 prevInput.value = prevNo;
                 console.log(`[Firestore] 이전 접수번호 조회: ${prevNo} (${testPurpose})`);
-                showToast(`이전 접수번호: ${prevNo}`, 'info');
             } else {
                 prevInput.value = '';
-                console.log(`[Firestore] 이전 접수 내역 없음 (${testField}/${testPurpose})`);
             }
         } else {
             prevInput.value = '';
-            console.log(`[Firestore] 이전 접수 내역 없음 (${testPurpose})`);
         }
     } catch (e) {
         console.warn('[Firestore] 이전 접수번호 조회 실패:', e.message);
@@ -5579,8 +5569,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // 이전 접수번호 설정
 // ============================================================================
 function setPrevReceiptNo() {
-    const prevNo = document.getElementById('prev-receipt-no').value.trim();
-    if (prevNo) showToast(`이전 접수번호: ${prevNo}에서 이어서 시작합니다.`, 'info');
+    // 이전 접수번호는 prev-receipt-no 필드에 표시만 (토스트 불필요)
 }
 
 // ============================================================================
