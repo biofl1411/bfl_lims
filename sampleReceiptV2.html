@@ -6532,12 +6532,10 @@ async function collectOcrCorrections(savedData) {
         return;
     }
 
-    // 접수자(담당자) 기준 보정키 결정
-    var correctorKey = '';
+    // 접수자(담당자) 기준 보정키 결정 — 항상 개인명
     var salesRep = (document.getElementById('sales-rep').value || '').trim();
-    if (salesRep) {
-        correctorKey = await _getCorrectorKey(salesRep);
-    }
+    var ocrReceptionist = ocr.receptionist || '';
+    var correctorKey = _getCorrectorKey(salesRep, ocrReceptionist);
 
     // Firestore에 보정 이력 저장
     var correctionDoc = {
@@ -6554,28 +6552,22 @@ async function collectOcrCorrections(savedData) {
     _lastOcrResult = null; // 수집 완료 후 초기화
 }
 
-// 접수자(담당자) → 보정키 변환: 고객지원팀/마케팅사업부는 팀명, 그 외는 개인명
-var _usersCacheForCorrection = null;
-async function _getCorrectorKey(name) {
-    try {
-        // users 캐시 로드 (한 번만)
-        if (!_usersCacheForCorrection) {
-            var snap = await db.collection('users').get();
-            _usersCacheForCorrection = snap.docs.map(function(d) { return d.data(); });
+// 접수자(담당자) → 보정키: 항상 개인명 기준 축적
+// 담당자가 팀명(고객지원팀 등)이면 OCR 인식된 접수자에서 개인명 추출
+function _getCorrectorKey(salesRep, ocrReceptionist) {
+    var name = (salesRep || '').trim();
+    var ocrName = (ocrReceptionist || '').trim();
+    // 담당자가 팀명인 경우 → OCR 접수자에서 개인명 추출 ("고객지원팀 홍길동" → "홍길동")
+    if (ocrName) {
+        var parts = ocrName.split(/\s+/);
+        if (parts.length > 1) {
+            // "고객지원팀 홍길동" → 마지막 부분이 이름
+            return parts[parts.length - 1];
         }
-        var user = _usersCacheForCorrection.find(function(u) {
-            return (u.name || u.아이디 || '') === name;
-        });
-        if (!user) return name; // 매칭 안 되면 이름 그대로
-        var dept = user.department || user.부서명 || '';
-        // 팀 단위로 축적하는 부서 목록 (동적으로 Firestore settings에서 가져올 수도 있음)
-        var teamDepts = ['고객지원팀', '마케팅사업부'];
-        if (teamDepts.indexOf(dept) >= 0) return dept;
-        return name; // 지사, 고객관리 등은 개인명
-    } catch(e) {
-        console.warn('[OCR보정] 접수자 조회 오류:', e.message);
-        return name;
+        // OCR 접수자가 개인명 하나면 그대로
+        return ocrName;
     }
+    return name;
 }
 
 // ============================================================================
