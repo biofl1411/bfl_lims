@@ -438,6 +438,16 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 .p-del-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#ffebee;color:#e53935;font-size:14px;font-weight:700;cursor:pointer;margin-right:6px;opacity:0;transition:opacity .15s;vertical-align:middle;line-height:1}
 .p-del-x:hover{background:#e53935;color:#fff}
 .mfds-test-row:hover .p-del-x{opacity:1}
+/* P참고용 액션 버튼 통일 스타일 */
+.p-act-btn{padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;white-space:nowrap;font-weight:600;transition:all .15s;line-height:1.4}
+.p-act-add{border:2px dashed #7c4dff;color:#7c4dff;background:#f3e8ff}
+.p-act-add:hover{background:#7c4dff;color:#fff}
+.p-act-del{border:1px solid #e53935;color:#e53935;background:#ffebee}
+.p-act-del:hover{background:#e53935;color:#fff}
+.p-act-move{border:1px solid #7c4dff;color:#7c4dff;background:#f3e8ff}
+.p-act-move:hover{background:#7c4dff;color:#fff}
+.p-act-sort{border:1px solid #7c4dff;color:#7c4dff;background:#fff}
+.p-act-sort:hover{background:#ede7f6}
 
 </style>
 </head>
@@ -760,17 +770,19 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <!-- 대분류 필터 칩 -->
     <div id="mfds-test-category-chips" style="display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 6px;"></div>
     <!-- 소분류 필터 칩 -->
-    <div style="display:flex;align-items:center;gap:6px;padding:0 16px 10px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:6px;padding:0 16px 6px;flex-wrap:wrap;">
       <div id="mfds-test-sub-chips" style="display:flex;flex-wrap:wrap;gap:5px;flex:1"></div>
       <div id="mfds-p-actions" style="display:none;flex-shrink:0;display:flex;gap:4px;align-items:center;">
-        <button onclick="createPRefSubChip()" style="padding:3px 8px;font-size:12px;border:2px dashed #7c4dff;color:#7c4dff;background:#f3e8ff;border-radius:8px;cursor:pointer;font-weight:700;line-height:1" title="P참고용 새 소분류 칩 생성">＋ 칩</button>
-        <button onclick="deletePRefSubChip()" style="padding:3px 8px;font-size:12px;border:1px solid #e53935;color:#e53935;background:#ffebee;border-radius:6px;cursor:pointer;white-space:nowrap" title="선택한 P소분류 칩 삭제">✕ 칩삭제</button>
-        <button onclick="openMoveToP()" style="padding:3px 10px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#f3e8ff;border-radius:6px;cursor:pointer;white-space:nowrap" title="다른 분야 항목을 P참고용으로 이동">📦 항목→P</button>
+        <button onclick="createPRefSubChip()" class="p-act-btn p-act-add" title="새 소분류 칩 추가">＋ 칩 추가</button>
+        <button onclick="deletePRefSubChip()" class="p-act-btn p-act-del" title="선택한 칩 삭제">✕ 칩 삭제</button>
         <span style="width:1px;height:16px;background:#ddd;margin:0 2px"></span>
-        <button onclick="sortPRefItems('name')" style="padding:3px 8px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap" title="이름순 정렬">가나다↕</button>
-        <button onclick="sortPRefItems('code')" style="padding:3px 8px;font-size:11px;border:1px solid #7c4dff;color:#7c4dff;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap" title="코드순 정렬">코드↕</button>
+        <button onclick="openMoveToP()" class="p-act-btn p-act-move" title="다른 분야 항목을 P참고용으로 이동">📦 항목 이동</button>
+        <button onclick="sortPRefItems('name')" class="p-act-btn p-act-sort" title="이름순 정렬">가나다↕</button>
+        <button onclick="sortPRefItems('code')" class="p-act-btn p-act-sort" title="코드순 정렬">코드↕</button>
       </div>
     </div>
+    <!-- P참고용 3단계 서브칩 -->
+    <div id="mfds-p-sub3-chips" style="display:none;padding:0 16px 8px;flex-wrap:wrap;gap:4px;align-items:center;"></div>
     <!-- 시험항목 테이블 -->
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -36061,7 +36073,8 @@ function renderMfdsTestItems() {
     MFDS_CODES.loadTestItems(),
     MFDS_CODES.loadItemMappings(),
     MFDS_CODES.loadUnits(),
-    firebase.firestore().collection('settings').doc('pRefSubCategories').get()
+    firebase.firestore().collection('settings').doc('pRefSubCategories').get(),
+    firebase.firestore().collection('settings').doc('pRefSub3Categories').get()
   ]).then(function(results) {
     _mfdsTestItems = results[0];
     _mfdsItemMappings = results[1];
@@ -36076,6 +36089,11 @@ function renderMfdsTestItems() {
         if (!REF_SUB_CATEGORIES['P']) REF_SUB_CATEGORIES['P'] = {};
         REF_SUB_CATEGORIES['P'][k] = pData[k];
       });
+    }
+    // P참고용 3단계 서브칩 데이터 복원
+    var p3Doc = results[4];
+    if (p3Doc.exists) {
+      _pRefSub3Data = p3Doc.data();
     }
     _mfdsTestFiltered = _mfdsTestItems;
     _mfdsTestPage = 0;
@@ -36116,6 +36134,16 @@ function applyMfdsTestFilters() {
       var code = (item['시험항목코드'] || '').toUpperCase();
       return code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === _mfdsTestSubFilter;
     });
+  }
+
+  // 2.5) P참고용 3단계 서브칩 필터
+  if (_pRefSub3Filter && _mfdsTestCatFilter === 'P' && _mfdsTestSubFilter) {
+    var sub3Name = (_pRefSub3Data[_mfdsTestSubFilter] || {})[_pRefSub3Filter] || '';
+    if (sub3Name) {
+      base = base.filter(function(item) {
+        return (item['_sub3'] || '') === sub3Name || (item['중분류명'] || '').indexOf(sub3Name) >= 0;
+      });
+    }
   }
 
   // 3) 검색어 필터
@@ -36197,8 +36225,10 @@ function renderMfdsTestSubChips() {
 function setMfdsTestCategory(cat) {
   _mfdsTestCatFilter = (_mfdsTestCatFilter === cat) ? 'all' : cat;
   _mfdsTestSubFilter = null;
+  _pRefSub3Filter = null;
   renderMfdsTestCategoryChips();
   renderMfdsTestSubChips();
+  renderPRefSub3Chips();
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
@@ -36210,32 +36240,37 @@ function setMfdsTestCategory(cat) {
 /** 소분류 필터 클릭 */
 function setMfdsTestSubCategory(sub) {
   _mfdsTestSubFilter = (_mfdsTestSubFilter === sub) ? null : sub;
+  _pRefSub3Filter = null;
   renderMfdsTestSubChips();
+  renderPRefSub3Chips();
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
 }
 
-// ══ P참고용: 신규 소분류 칩 생성 ══
+// ══ P참고용: 신규 소분류 칩 생성 (순번제: P1, P2, ...) ══
 var _pRefUsedKeys = []; // 사용된(삭제 포함) 키 목록 — 키 재사용 방지
+var _pRefSub3Filter = null; // 3단계 서브칩 필터 (예: '01', '02')
 
 function createPRefSubChip() {
+  // 3단계 칩 생성인지 2단계 칩 생성인지 판단
+  if (_mfdsTestSubFilter && _mfdsTestCatFilter === 'P') {
+    // 3단계 서브칩 생성 (P1-01, P1-02 형식)
+    createPRefSub3Chip();
+    return;
+  }
+
   var name = prompt('새 P참고용 소분류 이름을 입력하세요:\n(예: 유통기한, 알레르겐 등)');
   if (!name || !name.trim()) return;
   name = name.trim();
 
-  // 현재 사용중 + 과거 삭제된 키 모두 제외
+  // 다음 순번 계산 (1, 2, 3... 이미 사용된 번호 제외)
   var usedKeys = Object.keys(REF_SUB_CATEGORIES['P'] || {});
   var allUsed = usedKeys.concat(_pRefUsedKeys);
   var newKey = null;
-  var candidates = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  for (var i = 0; i < candidates.length; i++) {
-    if (allUsed.indexOf(candidates[i]) < 0) { newKey = candidates[i]; break; }
-  }
-  if (!newKey) {
-    for (var n = 0; n <= 9; n++) {
-      if (allUsed.indexOf(String(n)) < 0) { newKey = String(n); break; }
-    }
+  for (var n = 1; n <= 99; n++) {
+    var k = String(n);
+    if (allUsed.indexOf(k) < 0) { newKey = k; break; }
   }
   if (!newKey) { showToast('더 이상 소분류를 추가할 수 없습니다', 'warning'); return; }
 
@@ -36249,12 +36284,111 @@ function createPRefSubChip() {
   if (_pRefUsedKeys.indexOf(newKey) < 0) _pRefUsedKeys.push(newKey);
 
   // Firestore에 저장
-  var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
-  firebase.firestore().collection('settings').doc('pRefSubCategories').set(saveData);
+  savePRefSubCategories();
 
   // 소분류 칩 갱신
   renderMfdsTestSubChips();
   showToast("P" + newKey + " '" + name + "' 소분류가 생성되었습니다", 'success');
+}
+
+// ══ P참고용: 3단계 서브칩 생성 (P1-01, P1-02 형식) ══
+function createPRefSub3Chip() {
+  var parentKey = _mfdsTestSubFilter; // 예: '1'
+  var parentName = (REF_SUB_CATEGORIES['P'] || {})[parentKey] || parentKey;
+  var name = prompt('P' + parentKey + ' ' + parentName + ' 아래 하위 그룹 이름:\n(예: 9대 영양성분_13일)');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+
+  // 현재 3단계 칩 목록 가져오기
+  var sub3Key = '_sub3_' + parentKey;
+  var sub3 = _pRefSub3Data[parentKey] || {};
+
+  // 다음 순번
+  var existNums = Object.keys(sub3).map(Number).filter(function(n) { return !isNaN(n); });
+  var nextNum = 1;
+  while (existNums.indexOf(nextNum) >= 0) nextNum++;
+  var padded = ('0' + nextNum).slice(-2); // 01, 02, ...
+
+  // 중복 이름 체크
+  if (Object.values(sub3).indexOf(name) >= 0) { showToast("'" + name + "' 이미 존재합니다", 'warning'); return; }
+
+  // 메모리 추가
+  if (!_pRefSub3Data[parentKey]) _pRefSub3Data[parentKey] = {};
+  _pRefSub3Data[parentKey][padded] = name;
+
+  // Firestore 저장
+  savePRefSub3Data();
+
+  // 3단계 칩 갱신
+  renderPRefSub3Chips();
+  showToast('P' + parentKey + '-' + padded + " '" + name + "' 하위 그룹이 생성되었습니다", 'success');
+}
+
+// ══ P참고용 Firestore 저장 헬퍼 ══
+function savePRefSubCategories() {
+  var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
+  firebase.firestore().collection('settings').doc('pRefSubCategories').set(saveData);
+}
+
+// ══ P참고용 3단계 서브칩 데이터 ══
+var _pRefSub3Data = {}; // { '1': { '01': '9대 영양성분_13일', '02': '7대 영양성분_30일' }, ... }
+
+function savePRefSub3Data() {
+  firebase.firestore().collection('settings').doc('pRefSub3Categories').set(_pRefSub3Data);
+}
+
+function renderPRefSub3Chips() {
+  var container = document.getElementById('mfds-p-sub3-chips');
+  if (!container) return;
+  var parentKey = _mfdsTestSubFilter;
+  if (!parentKey || _mfdsTestCatFilter !== 'P') {
+    container.style.display = 'none';
+    return;
+  }
+  var sub3 = _pRefSub3Data[parentKey] || {};
+  var keys = Object.keys(sub3).sort();
+  if (keys.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'flex';
+  var parentName = (REF_SUB_CATEGORIES['P'] || {})[parentKey] || parentKey;
+  var html = '<span style="font-size:10px;color:#999;margin-right:2px;">P' + parentKey + ' 하위:</span>';
+  keys.forEach(function(k) {
+    var isActive = _pRefSub3Filter === k;
+    html += '<button type="button" onclick="setPRefSub3Filter(\'' + k + '\')" ' +
+      'style="padding:2px 8px;border-radius:8px;border:1px solid ' + (isActive ? '#7c4dff' : '#ccc') + ';' +
+      'background:' + (isActive ? '#7c4dff' : '#fafafa') + ';color:' + (isActive ? '#fff' : '#555') + ';' +
+      'font-size:10px;cursor:pointer;transition:all .15s;" ' +
+      'title="P' + parentKey + '-' + k + ' ' + sub3[k] + '">' +
+      'P' + parentKey + '-' + k + ' ' + sub3[k] + '</button>';
+  });
+  container.innerHTML = html;
+}
+
+function setPRefSub3Filter(k) {
+  _pRefSub3Filter = (_pRefSub3Filter === k) ? null : k;
+  renderPRefSub3Chips();
+  applyMfdsTestFilters();
+  _mfdsTestPage = 0;
+  renderMfdsTestTable();
+}
+
+function deletePRefSub3Chip() {
+  var parentKey = _mfdsTestSubFilter;
+  if (!parentKey || !_pRefSub3Filter) { showToast('삭제할 하위 칩을 먼저 선택하세요', 'warning'); return; }
+  var sub3 = _pRefSub3Data[parentKey] || {};
+  var chipName = sub3[_pRefSub3Filter] || _pRefSub3Filter;
+  if (!confirm('P' + parentKey + '-' + _pRefSub3Filter + ' "' + chipName + '" 하위 그룹을 삭제하시겠습니까?')) return;
+
+  delete _pRefSub3Data[parentKey][_pRefSub3Filter];
+  if (Object.keys(_pRefSub3Data[parentKey]).length === 0) delete _pRefSub3Data[parentKey];
+  savePRefSub3Data();
+  _pRefSub3Filter = null;
+  renderPRefSub3Chips();
+  applyMfdsTestFilters();
+  renderMfdsTestTable();
+  showToast('하위 그룹 삭제 완료', 'success');
 }
 
 // ══ P참고용: 다른 분야 항목을 P참고용으로 이동 ══
@@ -36425,8 +36559,13 @@ function deletePRefItem(code) {
   renderMfdsTestTable();
 }
 
-// ══ P참고용: 소분류 칩 삭제 ══
+// ══ P참고용: 소분류 칩 삭제 (3단계 칩 선택 시 3단계만 삭제) ══
 function deletePRefSubChip() {
+  // 3단계 서브칩이 선택된 상태면 3단계 칩만 삭제
+  if (_pRefSub3Filter && _mfdsTestSubFilter) {
+    deletePRefSub3Chip();
+    return;
+  }
   var sub = _mfdsTestSubFilter;
   if (!sub) { showToast('삭제할 P 소분류 칩을 먼저 선택하세요', 'warning'); return; }
   var subName = (REF_SUB_CATEGORIES['P'] || {})[sub] || sub;
@@ -36448,9 +36587,14 @@ function deletePRefSubChip() {
   // 소분류 카테고리에서 제거
   delete REF_SUB_CATEGORIES['P'][sub];
 
+  // 3단계 서브칩 데이터도 제거
+  if (_pRefSub3Data[sub]) {
+    delete _pRefSub3Data[sub];
+    savePRefSub3Data();
+  }
+
   // Firestore: 칩 정보 갱신 + usedKeys 기록
-  var saveData = Object.assign({}, REF_SUB_CATEGORIES['P'], { _usedKeys: _pRefUsedKeys });
-  firebase.firestore().collection('settings').doc('pRefSubCategories').set(saveData);
+  savePRefSubCategories();
 
   // Firestore: 소속 항목 삭제 (완료 대기 후 UI 갱신)
   if (codesToDelete.length > 0) {
@@ -36477,9 +36621,11 @@ function deletePRefSubChip() {
 
   // UI 갱신
   _mfdsTestSubFilter = null;
+  _pRefSub3Filter = null;
   buildMfdsTestCatIndex();
   renderMfdsTestCategoryChips();
   renderMfdsTestSubChips();
+  renderPRefSub3Chips();
   applyMfdsTestFilters();
   renderMfdsTestTable();
   showToast('P' + sub + ' "' + subName + '" 소분류가 삭제되었습니다', 'success');
