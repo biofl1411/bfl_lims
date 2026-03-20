@@ -71,8 +71,10 @@
 .sidebar.collapsed .nav-submenu{display:none!important;max-height:0!important}
 .sidebar.collapsed .nav-sub-item{display:none}
 
-.main{transition:margin-left 0.25s ease}
-body.sidebar-collapsed .main{margin-left:64px}
+.main,.main-container,.main-wrapper{transition:margin-left 0.25s ease}
+body.sidebar-collapsed .main,
+body.sidebar-collapsed .main-container,
+body.sidebar-collapsed .main-wrapper{margin-left:64px}
 @media(max-width:768px){.sidebar{display:none}}
 /* ── Sidebar Weather Widget ── */
 .sidebar-weather{flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);padding:14px 20px;background:rgba(0,0,0,0.15)}
