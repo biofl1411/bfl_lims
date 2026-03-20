@@ -429,6 +429,7 @@ async function _resolveCompanyAndFetch(company) {
     if (company.startsWith('(주)')) searchVariants.push(company.replace(/^\(주\)/, ''));
     if (company.startsWith('주식회사 ')) searchVariants.push(company.replace(/^주식회사 /, ''));
 
+    // companyName 필드로 검색
     for (var vi = 0; vi < searchVariants.length; vi++) {
         var snap = await db.collection('receipts')
             .where('companyName', '==', searchVariants[vi].trim())
@@ -436,6 +437,7 @@ async function _resolveCompanyAndFetch(company) {
         if (snap.size > 0) { allSnap = snap; company = searchVariants[vi].trim(); break; }
     }
 
+    // companyName 접두사 검색
     if (!allSnap || allSnap.size === 0) {
         for (var pi = 0; pi < searchVariants.length; pi++) {
             var prefix = searchVariants[pi].trim();
@@ -447,22 +449,64 @@ async function _resolveCompanyAndFetch(company) {
         }
     }
 
+    // company 필드로도 검색 (구버전 접수건 호환)
+    if (!allSnap || allSnap.size === 0) {
+        for (var vi2 = 0; vi2 < searchVariants.length; vi2++) {
+            var snap2 = await db.collection('receipts')
+                .where('company', '==', searchVariants[vi2].trim())
+                .get();
+            if (snap2.size > 0) { allSnap = snap2; company = searchVariants[vi2].trim(); break; }
+        }
+    }
+
+    // company 필드 접두사 검색
+    if (!allSnap || allSnap.size === 0) {
+        for (var pi2 = 0; pi2 < searchVariants.length; pi2++) {
+            var prefix2 = searchVariants[pi2].trim();
+            var prefixSnap2 = await db.collection('receipts')
+                .where('company', '>=', prefix2)
+                .where('company', '<=', prefix2 + '\uf8ff')
+                .get();
+            if (prefixSnap2.size > 0) { allSnap = prefixSnap2; company = prefixSnap2.docs[0].data().company; break; }
+        }
+    }
+
+    // companies 컬렉션에서 검색 후 receipts 재조회
     if (!allSnap || allSnap.size === 0) {
         var compSnap = await db.collection('companies')
             .where('name', '>=', company)
             .where('name', '<=', company + '\uf8ff')
             .get();
-        if (compSnap.size === 0 && !company.startsWith('(주)')) {
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('company', '>=', company)
+                .where('company', '<=', company + '\uf8ff')
+                .get();
+        }
+        if (compSnap.empty && !company.startsWith('(주)')) {
             compSnap = await db.collection('companies')
                 .where('name', '>=', '(주)' + company)
                 .where('name', '<=', '(주)' + company + '\uf8ff')
                 .get();
+            if (compSnap.empty) {
+                compSnap = await db.collection('companies')
+                    .where('company', '>=', '(주)' + company)
+                    .where('company', '<=', '(주)' + company + '\uf8ff')
+                    .get();
+            }
         }
-        if (compSnap.size > 0) {
-            var foundName = compSnap.docs[0].data().name;
+        if (!compSnap.empty) {
+            var cd = compSnap.docs[0].data();
+            var foundName = cd.name || cd.company || '';
+            // companyName과 company 모두 시도
             allSnap = await db.collection('receipts')
                 .where('companyName', '==', foundName)
                 .get();
+            if (allSnap.size === 0) {
+                allSnap = await db.collection('receipts')
+                    .where('company', '==', foundName)
+                    .get();
+            }
             if (allSnap.size > 0) company = foundName;
         }
     }
