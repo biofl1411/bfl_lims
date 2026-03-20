@@ -1965,7 +1965,20 @@ function fillFormFromOcrResult(result) {
             var pinReceiptDate = document.getElementById('pin-receipt-date');
             var isReceiptDateLocked = pinReceiptDate && pinReceiptDate.checked;
             if (receiptDateEl && !isReceiptDateLocked) {
-                receiptDateEl.value = result.signDate;
+                // 연도 보정: OCR이 연도를 잘못 읽는 경우 (예: 2026→2024)
+                var signVal = result.signDate;
+                var signParsed = new Date(signVal);
+                var now = new Date();
+                var diffDays = (now - signParsed) / (1000 * 60 * 60 * 24);
+                if (diffDays > 180) {
+                    // 6개월 이상 과거 → 연도를 현재 연도로 보정
+                    var correctedYear = now.getFullYear();
+                    var monthDay = signVal.slice(4); // "-MM-DD"
+                    signVal = correctedYear + monthDay;
+                    showToast('⚠️ 서명일 연도 보정: ' + result.signDate + ' → ' + signVal, 'warn');
+                    console.log('[OCR] 서명일 연도 보정:', result.signDate, '→', signVal);
+                }
+                receiptDateEl.value = signVal;
                 filledFields.push('receipt-date');
                 // 처리기한 자동 재계산
                 if (typeof calculateProcessingDeadline === 'function') calculateProcessingDeadline();
