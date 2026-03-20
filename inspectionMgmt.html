@@ -36612,11 +36612,17 @@ function renderPBundles() {
     var itemCount = (_pBundleItems[bk] || []).length;
     var fee = _pBundleFees[bk] || 0;
     var isActive = _pBundleSelected === k;
+    var codeLabel = 'P' + subKey + '-' + sub3Key + '-' + k;
     html += '<div class="p-bundle-card' + (isActive ? ' active' : '') + '" onclick="selectPBundle(\'' + k + '\')" ondblclick="event.stopPropagation();renamePBundle(\'' + k + '\')">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-      + '<div class="bundle-name">P' + subKey + '-' + sub3Key + '-' + k + '  ' + bundles[k] + '</div>'
-      + '<button onclick="event.stopPropagation();deletePBundle(\'' + k + '\')" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;padding:0 2px;line-height:1;" title="묶음 삭제">✕</button>'
+      + '<div>'
+      + '<span style="font-size:9px;color:#7c4dff;font-weight:600;background:#f3e8ff;padding:1px 5px;border-radius:4px;margin-right:4px;">' + codeLabel + '</span>'
+      + '<span class="bundle-name" style="font-size:12px;">' + bundles[k] + '</span>'
       + '</div>'
+      + '<div style="display:flex;gap:2px;flex-shrink:0;">'
+      + '<button onclick="event.stopPropagation();duplicatePBundle(\'' + k + '\')" style="background:none;border:none;color:#7c4dff;font-size:12px;cursor:pointer;padding:0 2px;line-height:1;" title="묶음 복사">⧉</button>'
+      + '<button onclick="event.stopPropagation();deletePBundle(\'' + k + '\')" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;padding:0 2px;line-height:1;" title="묶음 삭제">✕</button>'
+      + '</div></div>'
       + '<div class="bundle-meta">'
       + '<span>' + itemCount + '개 항목</span>'
       + '<span class="bundle-fee" onclick="event.stopPropagation();editBundleFee(\'' + k + '\')" title="세트 수수료 (클릭하여 수정)">'
@@ -36624,6 +36630,56 @@ function renderPBundles() {
       + '</div></div>';
   });
   container.innerHTML = html;
+
+  // 좌측 묶음 카드 드래그 정렬
+  if (window._pBundleListSortable) window._pBundleListSortable.destroy();
+  window._pBundleListSortable = new Sortable(container, {
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    onEnd: function() {
+      // 새 순서 추출 → _pBundleNames 재구성 (순번 키 재할당)
+      var cards = container.querySelectorAll('.p-bundle-card');
+      var oldBundles = _pBundleNames[nk] || {};
+      var newBundles = {};
+      var remap = {}; // oldKey → newKey
+      var idx = 1;
+      cards.forEach(function(card) {
+        // 카드에서 원래 키 찾기 (코드 라벨에서 추출)
+        var label = card.querySelector('span[style*="font-size:9px"]');
+        if (!label) return;
+        var parts = label.textContent.split('-');
+        var oldKey = parts[parts.length - 1];
+        var newKey = String(idx);
+        newBundles[newKey] = oldBundles[oldKey];
+        remap[oldKey] = newKey;
+        idx++;
+      });
+      // 아이템, 수수료, 단위 키 업데이트
+      var newItems = {}, newFees = {}, newUnits = {};
+      Object.keys(remap).forEach(function(oldKey) {
+        var newKey = remap[oldKey];
+        var oldBk = getBundleKey(subKey, sub3Key, oldKey);
+        var newBk = getBundleKey(subKey, sub3Key, newKey);
+        if (_pBundleItems[oldBk]) newItems[newBk] = _pBundleItems[oldBk];
+        if (_pBundleFees[oldBk]) newFees[newBk] = _pBundleFees[oldBk];
+        if (_pBundleUnits[oldBk]) newUnits[newBk] = _pBundleUnits[oldBk];
+        delete _pBundleItems[oldBk];
+        delete _pBundleFees[oldBk];
+        delete _pBundleUnits[oldBk];
+      });
+      Object.keys(newItems).forEach(function(k) { _pBundleItems[k] = newItems[k]; });
+      Object.keys(newFees).forEach(function(k) { _pBundleFees[k] = newFees[k]; });
+      Object.keys(newUnits).forEach(function(k) { _pBundleUnits[k] = newUnits[k]; });
+      _pBundleNames[nk] = newBundles;
+      // 선택된 묶음 키도 업데이트
+      if (_pBundleSelected && remap[_pBundleSelected]) {
+        _pBundleSelected = remap[_pBundleSelected];
+      }
+      savePBundleData();
+      renderPBundles();
+    }
+  });
+
   renderPBundleDetail();
 }
 
@@ -36796,6 +36852,44 @@ function deletePBundle(bundleKey) {
   if (_pBundleSelected === bundleKey) _pBundleSelected = null;
   renderPBundles();
   showToast('묶음 삭제 완료', 'success');
+}
+
+// 묶음 복사 (항목+수수료+단위 전부 복제)
+function duplicatePBundle(bundleKey) {
+  var subKey = _mfdsTestSubFilter;
+  var sub3Key = _pRefSub3Filter;
+  if (!subKey || !sub3Key) return;
+  var nk = subKey + '_' + sub3Key;
+  var srcName = (_pBundleNames[nk] || {})[bundleKey] || bundleKey;
+  var newName = prompt('복사할 묶음 이름:', srcName + ' (복사)');
+  if (!newName || !newName.trim()) return;
+  newName = newName.trim();
+
+  var bundles = _pBundleNames[nk] || {};
+  // 다음 번호
+  var existNums = Object.keys(bundles).map(Number).filter(function(n) { return !isNaN(n); });
+  var nextNum = 1;
+  while (existNums.indexOf(nextNum) >= 0) nextNum++;
+  var numKey = String(nextNum);
+
+  // 복제
+  if (!_pBundleNames[nk]) _pBundleNames[nk] = {};
+  _pBundleNames[nk][numKey] = newName;
+  var srcBk = getBundleKey(subKey, sub3Key, bundleKey);
+  var newBk = getBundleKey(subKey, sub3Key, numKey);
+  _pBundleItems[newBk] = (_pBundleItems[srcBk] || []).slice();
+  if (_pBundleFees[srcBk]) _pBundleFees[newBk] = _pBundleFees[srcBk];
+  if (_pBundleUnits[srcBk]) {
+    _pBundleUnits[newBk] = {};
+    Object.keys(_pBundleUnits[srcBk]).forEach(function(c) {
+      _pBundleUnits[newBk][c] = _pBundleUnits[srcBk][c];
+    });
+  }
+
+  savePBundleData();
+  _pBundleSelected = numKey;
+  renderPBundles();
+  showToast('"' + newName + '" 묶음 복사 완료', 'success');
 }
 
 // 묶음 이름 수정 (더블클릭)
