@@ -108,6 +108,18 @@ body.sidebar-collapsed .main-wrapper{margin-left:64px}
 .calc-memory{display:flex;gap:2px;padding:0 6px 4px}
 .calc-memory button{flex:1;padding:4px 0;border:none;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;background:rgba(255,255,255,0.04);color:#64748b;transition:all .1s}
 .calc-memory button:hover{background:rgba(255,255,255,0.1);color:#94a3b8}
+.calc-history{max-height:0;overflow:hidden;transition:max-height .25s ease;background:#0f172a;border-top:1px solid rgba(255,255,255,0.06)}
+.calc-history.open{max-height:160px}
+.calc-history-inner{max-height:152px;overflow-y:auto;padding:4px 8px}
+.calc-history-inner::-webkit-scrollbar{width:4px}
+.calc-history-inner::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+.calc-history-row{display:flex;justify-content:space-between;align-items:center;padding:3px 4px;border-bottom:1px solid rgba(255,255,255,0.04);font-family:'JetBrains Mono',monospace;font-size:10px}
+.calc-history-row .ch-expr{color:#64748b;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calc-history-row .ch-result{color:#4fc3f7;font-weight:700;margin-left:8px;white-space:nowrap}
+.calc-history-toggle{display:flex;justify-content:center;padding:2px;background:rgba(255,255,255,0.03);border-top:1px solid rgba(255,255,255,0.06);cursor:pointer}
+.calc-history-toggle:hover{background:rgba(255,255,255,0.06)}
+.calc-history-toggle span{font-size:9px;color:#475569;transition:transform .2s}
+.calc-history.open + .calc-history-toggle span{transform:rotate(180deg)}
 
 /* ── 단위변환 팝업 ── */
 .unit-popup{position:fixed;z-index:99999;width:340px;background:#1e293b;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 1px rgba(255,255,255,0.1);color:#e2e8f0;display:none;overflow:hidden;user-select:none}
@@ -795,174 +807,138 @@ async function loadSidebarWeather() {
 })();
 
 // ============================================================
-// 6. 계산기 위젯 (다중 인스턴스, 드래그 가능)
+// 6. 계산기 위젯 (별도 팝업 윈도우 — 듀얼 모니터 이동 가능)
 // ============================================================
 (function() {
-  var _calcInstances = {}; // id → state
-  var _calcNextId = 0;
-  var _calcFocused = null; // 현재 포커스된 계산기 id
+  var _calcWindows = [];
+  var _calcCount = 0;
 
-  function _createCalc() {
-    var id = ++_calcNextId;
-    var state = { mem: 0, expr: '', val: '0', newInput: true, op: '', prev: 0 };
-    _calcInstances[id] = state;
-
-    var div = document.createElement('div');
-    div.id = 'calc-popup-' + id;
-    div.className = 'calc-popup visible';
-    div.dataset.calcId = id;
-    div.setAttribute('tabindex', '0');
-    div.innerHTML =
-      '<div class="calc-titlebar" id="calc-drag-' + id + '">' +
-        '<span>🧮 계산기 #' + id + '</span>' +
-        '<button onclick="_calcClose(' + id + ')">✕</button>' +
+  function _calcHTML(id) {
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>🧮 계산기 #' + id + '</title><style>' +
+      '*{margin:0;padding:0;box-sizing:border-box}' +
+      'body{background:#1e293b;color:#e2e8f0;font-family:"Pretendard",-apple-system,"Segoe UI","Noto Sans KR",sans-serif;overflow:hidden;user-select:none}' +
+      '.disp{padding:12px 14px;background:#0f172a}' +
+      '.disp .expr{font-size:12px;color:#64748b;min-height:18px;word-break:break-all;font-family:"JetBrains Mono",monospace;text-align:right}' +
+      '.disp .val{font-size:32px;font-weight:700;color:#f1f5f9;text-align:right;overflow-x:auto;white-space:nowrap;font-family:"JetBrains Mono",monospace}' +
+      '.hist{max-height:0;overflow:hidden;transition:max-height .25s;background:#0f172a;border-top:1px solid rgba(255,255,255,0.06)}' +
+      '.hist.open{max-height:140px}' +
+      '.hist-inner{max-height:132px;overflow-y:auto;padding:4px 8px}' +
+      '.hist-inner::-webkit-scrollbar{width:4px}.hist-inner::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}' +
+      '.hr{display:flex;justify-content:space-between;padding:3px 4px;border-bottom:1px solid rgba(255,255,255,0.04);font-family:"JetBrains Mono",monospace;font-size:11px}' +
+      '.hr .he{color:#64748b;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.hr .hv{color:#4fc3f7;font-weight:700;margin-left:8px;white-space:nowrap}' +
+      '.htog{text-align:center;padding:3px;background:rgba(255,255,255,0.03);border-top:1px solid rgba(255,255,255,0.06);cursor:pointer;font-size:10px;color:#475569}' +
+      '.htog:hover{background:rgba(255,255,255,0.06)}' +
+      '.mem{display:flex;gap:2px;padding:2px 6px}' +
+      '.mem button{flex:1;padding:5px 0;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;background:rgba(255,255,255,0.04);color:#64748b}' +
+      '.mem button:hover{background:rgba(255,255,255,0.1);color:#94a3b8}' +
+      '.btns{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:4px 6px 6px}' +
+      '.btns button{padding:16px 0;border:none;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;transition:all .1s}' +
+      '.bn{background:#334155;color:#e2e8f0}.bn:hover{background:#475569}' +
+      '.bo{background:#1e40af;color:#93c5fd}.bo:hover{background:#2563eb}' +
+      '.bf{background:rgba(255,255,255,0.05);color:#94a3b8}.bf:hover{background:rgba(255,255,255,0.1)}' +
+      '.be{background:#059669;color:white}.be:hover{background:#10b981}' +
+      '</style></head><body>' +
+      '<div class="disp"><div class="expr" id="expr"></div><div class="val" id="val">0</div></div>' +
+      '<div class="hist" id="hist"><div class="hist-inner" id="hlist"></div></div>' +
+      '<div class="htog" id="htog">▼ 이력</div>' +
+      '<div class="mem">' +
+        '<button onclick="mf(\'mc\')">MC</button><button onclick="mf(\'mr\')">MR</button>' +
+        '<button onclick="mf(\'m+\')">M+</button><button onclick="mf(\'m-\')">M−</button>' +
       '</div>' +
-      '<div class="calc-display">' +
-        '<div class="calc-expr" id="calc-expr-' + id + '"></div>' +
-        '<div class="calc-val" id="calc-val-' + id + '">0</div>' +
+      '<div class="btns">' +
+        '<button class="bf" onclick="fn(\'C\')">C</button>' +
+        '<button class="bf" onclick="fn(\'pm\')">±</button>' +
+        '<button class="bf" onclick="fn(\'pct\')">%</button>' +
+        '<button class="bo" onclick="op(\'÷\')">÷</button>' +
+        '<button class="bn" onclick="ni(\'7\')">7</button>' +
+        '<button class="bn" onclick="ni(\'8\')">8</button>' +
+        '<button class="bn" onclick="ni(\'9\')">9</button>' +
+        '<button class="bo" onclick="op(\'×\')">×</button>' +
+        '<button class="bn" onclick="ni(\'4\')">4</button>' +
+        '<button class="bn" onclick="ni(\'5\')">5</button>' +
+        '<button class="bn" onclick="ni(\'6\')">6</button>' +
+        '<button class="bo" onclick="op(\'−\')">−</button>' +
+        '<button class="bn" onclick="ni(\'1\')">1</button>' +
+        '<button class="bn" onclick="ni(\'2\')">2</button>' +
+        '<button class="bn" onclick="ni(\'3\')">3</button>' +
+        '<button class="bo" onclick="op(\'+\')">+</button>' +
+        '<button class="bn" onclick="ni(\'0\')" style="grid-column:span 2">0</button>' +
+        '<button class="bn" onclick="ni(\'.\')">.</button>' +
+        '<button class="be" onclick="eq()">=</button>' +
       '</div>' +
-      '<div class="calc-memory">' +
-        '<button onclick="_cM(' + id + ',\'mc\')">MC</button>' +
-        '<button onclick="_cM(' + id + ',\'mr\')">MR</button>' +
-        '<button onclick="_cM(' + id + ',\'m+\')">M+</button>' +
-        '<button onclick="_cM(' + id + ',\'m-\')">M−</button>' +
-      '</div>' +
-      '<div class="calc-btns">' +
-        '<button class="cb-fn" onclick="_cF(' + id + ',\'C\')">C</button>' +
-        '<button class="cb-fn" onclick="_cF(' + id + ',\'pm\')">±</button>' +
-        '<button class="cb-fn" onclick="_cF(' + id + ',\'pct\')">%</button>' +
-        '<button class="cb-op" onclick="_cOp(' + id + ',\'÷\')">÷</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'7\')">7</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'8\')">8</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'9\')">9</button>' +
-        '<button class="cb-op" onclick="_cOp(' + id + ',\'×\')">×</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'4\')">4</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'5\')">5</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'6\')">6</button>' +
-        '<button class="cb-op" onclick="_cOp(' + id + ',\'−\')">−</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'1\')">1</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'2\')">2</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'3\')">3</button>' +
-        '<button class="cb-op" onclick="_cOp(' + id + ',\'+\')">+</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'0\')" style="grid-column:span 2">0</button>' +
-        '<button class="cb-num" onclick="_cN(' + id + ',\'.\')">.</button>' +
-        '<button class="cb-eq" onclick="_cEq(' + id + ')">=</button>' +
-      '</div>';
-    document.body.appendChild(div);
-    _makeDraggable(div, document.getElementById('calc-drag-' + id));
-
-    // 클릭 시 포커스 (최상단으로)
-    div.addEventListener('mousedown', function() {
-      _calcFocused = id;
-      // 모든 계산기 z-index 낮추고 이 계산기만 올림
-      document.querySelectorAll('.calc-popup').forEach(function(p) { p.style.zIndex = '99999'; });
-      div.style.zIndex = '100000';
-    });
-
-    // 키보드 입력
-    div.addEventListener('keydown', function(e) {
-      if (e.key >= '0' && e.key <= '9') _cN(id, e.key);
-      else if (e.key === '.') _cN(id, '.');
-      else if (e.key === '+') _cOp(id, '+');
-      else if (e.key === '-') _cOp(id, '−');
-      else if (e.key === '*') _cOp(id, '×');
-      else if (e.key === '/') { e.preventDefault(); _cOp(id, '÷'); }
-      else if (e.key === 'Enter' || e.key === '=') _cEq(id);
-      else if (e.key === 'Escape') _cF(id, 'C');
-      else if (e.key === 'Backspace') _cF(id, 'BS');
-    });
-
-    // 위치: 사이드바 옆 + 오프셋 (겹침 방지)
-    var sb = document.querySelector('.sidebar');
-    var sbW = sb ? sb.offsetWidth : 250;
-    var offset = (id - 1) * 30;
-    div.style.top = (80 + offset) + 'px';
-    div.style.left = (sbW + 16 + offset) + 'px';
-    div.focus();
-    _calcFocused = id;
-    _updBtnState();
-    return id;
+      '<script>' +
+      'var S={mem:0,expr:"",val:"0",ni:true,op:"",prev:0,hist:[]};' +
+      'function ud(){' +
+        'var e=S.expr;' +
+        'if(S.op&&!S.ni)e=S.prev+" "+S.op+" "+S.val;' +
+        'document.getElementById("expr").textContent=e;' +
+        'document.getElementById("val").textContent=S.val;' +
+      '}' +
+      'function uh(){' +
+        'var h="";' +
+        'for(var i=S.hist.length-1;i>=0;i--)' +
+          'h+="<div class=hr><span class=he>"+S.hist[i].e+"</span><span class=hv>= "+S.hist[i].r+"</span></div>";' +
+        'if(!h)h="<div style=\\"text-align:center;padding:8px;color:#475569;font-size:10px\\">계산 이력 없음</div>";' +
+        'document.getElementById("hlist").innerHTML=h;' +
+      '}' +
+      'document.getElementById("htog").onclick=function(){document.getElementById("hist").classList.toggle("open")};' +
+      'function ni(n){' +
+        'if(S.ni){S.val=(n==="."?"0.":n);S.ni=false}' +
+        'else{if(n==="."&&S.val.includes("."))return;if(S.val==="0"&&n!==".")S.val=n;else S.val+=n}' +
+        'ud();' +
+      '}' +
+      'function op(o){if(S.op&&!S.ni)eq();S.prev=parseFloat(S.val);S.op=o;S.expr=S.val+" "+o;S.ni=true;ud()}' +
+      'function eq(){' +
+        'if(!S.op)return;var c=parseFloat(S.val),r=0;' +
+        'if(S.op==="+")r=S.prev+c;else if(S.op==="\\u2212")r=S.prev-c;' +
+        'else if(S.op==="\\u00d7")r=S.prev*c;else if(S.op==="\\u00f7")r=c!==0?S.prev/c:NaN;' +
+        'var fe=S.prev+" "+S.op+" "+c;' +
+        'var rs=isNaN(r)||!isFinite(r)?"Error":String(parseFloat(r.toPrecision(12)));' +
+        'S.hist.push({e:fe,r:rs});S.expr=fe+" =";S.val=rs;S.op="";S.ni=true;' +
+        'ud();uh();' +
+        'var h=document.getElementById("hist");if(!h.classList.contains("open"))h.classList.add("open");' +
+      '}' +
+      'function fn(f){' +
+        'if(f==="C"){S.val="0";S.expr="";S.op="";S.prev=0;S.ni=true}' +
+        'else if(f==="pm")S.val=String(-parseFloat(S.val));' +
+        'else if(f==="pct")S.val=String(parseFloat(S.val)/100);' +
+        'else if(f==="BS"){S.val=S.val.length>1?S.val.slice(0,-1):"0"}' +
+        'ud();' +
+      '}' +
+      'function mf(f){' +
+        'var v=parseFloat(S.val)||0;' +
+        'if(f==="mc")S.mem=0;else if(f==="mr"){S.val=String(S.mem);S.ni=true}' +
+        'else if(f==="m+")S.mem+=v;else if(f==="m-")S.mem-=v;' +
+        'ud();' +
+      '}' +
+      'document.addEventListener("keydown",function(e){' +
+        'if(e.key>="0"&&e.key<="9")ni(e.key);' +
+        'else if(e.key===".")ni(".");' +
+        'else if(e.key==="+")op("+");' +
+        'else if(e.key==="-")op("\\u2212");' +
+        'else if(e.key==="*")op("\\u00d7");' +
+        'else if(e.key==="/"){e.preventDefault();op("\\u00f7")}' +
+        'else if(e.key==="Enter"||e.key==="=")eq();' +
+        'else if(e.key==="Escape")fn("C");' +
+        'else if(e.key==="Backspace")fn("BS");' +
+      '});' +
+      '<\/script></body></html>';
   }
-
-  function _updDisp(id) {
-    var s = _calcInstances[id]; if (!s) return;
-    var exprEl = document.getElementById('calc-expr-' + id);
-    var valEl = document.getElementById('calc-val-' + id);
-    if (exprEl) exprEl.textContent = s.expr;
-    if (valEl) valEl.textContent = s.val;
-  }
-
-  function _updBtnState() {
-    var count = Object.keys(_calcInstances).length;
-    var btns = document.querySelectorAll('.sidebar-widgets .sw-btn');
-    if (btns[0]) btns[0].classList.toggle('active', count > 0);
-  }
-
-  window._cN = function(id, n) {
-    var s = _calcInstances[id]; if (!s) return;
-    if (s.newInput) { s.val = (n === '.') ? '0.' : n; s.newInput = false; }
-    else {
-      if (n === '.' && s.val.includes('.')) return;
-      if (s.val === '0' && n !== '.') s.val = n;
-      else s.val += n;
-    }
-    _updDisp(id);
-  };
-
-  window._cOp = function(id, op) {
-    var s = _calcInstances[id]; if (!s) return;
-    if (s.op && !s.newInput) _cEq(id);
-    s.prev = parseFloat(s.val);
-    s.op = op;
-    s.expr = s.val + ' ' + op;
-    s.newInput = true;
-    _updDisp(id);
-  };
-
-  window._cEq = function(id) {
-    var s = _calcInstances[id]; if (!s || !s.op) return;
-    var cur = parseFloat(s.val);
-    var r = 0;
-    if (s.op === '+') r = s.prev + cur;
-    else if (s.op === '−') r = s.prev - cur;
-    else if (s.op === '×') r = s.prev * cur;
-    else if (s.op === '÷') r = cur !== 0 ? s.prev / cur : NaN;
-    s.expr = s.prev + ' ' + s.op + ' ' + cur + ' =';
-    s.val = isNaN(r) || !isFinite(r) ? 'Error' : String(parseFloat(r.toPrecision(12)));
-    s.op = '';
-    s.newInput = true;
-    _updDisp(id);
-  };
-
-  window._cF = function(id, fn) {
-    var s = _calcInstances[id]; if (!s) return;
-    if (fn === 'C') { s.val = '0'; s.expr = ''; s.op = ''; s.prev = 0; s.newInput = true; }
-    else if (fn === 'pm') { s.val = String(-parseFloat(s.val)); }
-    else if (fn === 'pct') { s.val = String(parseFloat(s.val) / 100); }
-    else if (fn === 'BS') { s.val = s.val.length > 1 ? s.val.slice(0, -1) : '0'; }
-    _updDisp(id);
-  };
-
-  window._cM = function(id, fn) {
-    var s = _calcInstances[id]; if (!s) return;
-    var v = parseFloat(s.val) || 0;
-    if (fn === 'mc') s.mem = 0;
-    else if (fn === 'mr') { s.val = String(s.mem); s.newInput = true; }
-    else if (fn === 'm+') s.mem += v;
-    else if (fn === 'm-') s.mem -= v;
-    _updDisp(id);
-  };
-
-  window._calcClose = function(id) {
-    var el = document.getElementById('calc-popup-' + id);
-    if (el) el.remove();
-    delete _calcInstances[id];
-    _updBtnState();
-  };
 
   window.toggleCalcPopup = function() {
-    // 항상 새 계산기 생성
-    _createCalc();
+    var id = ++_calcCount;
+    var offset = ((id - 1) % 5) * 40;
+    var w = window.open('', '_blank', 'width=320,height=520,top=' + (100 + offset) + ',left=' + (screen.width - 340 + offset) + ',resizable=no,menubar=no,toolbar=no,location=no,status=no');
+    if (!w) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+    w.document.open();
+    w.document.write(_calcHTML(id));
+    w.document.close();
+    _calcWindows.push(w);
+    // 닫힐 때 목록에서 제거
+    var check = setInterval(function() {
+      if (w.closed) { clearInterval(check); _calcWindows = _calcWindows.filter(function(x) { return x !== w; }); }
+    }, 1000);
   };
 })();
 
@@ -984,6 +960,7 @@ async function loadSidebarWeather() {
       '</div>' +
       '<div class="unit-tabs" id="unit-tabs">' +
         '<button class="active" onclick="_unitSw(\'ph\',this)">pH</button>' +
+        '<button onclick="_unitSw(\'conc\',this)">농도</button>' +
         '<button onclick="_unitSw(\'abs\',this)">흡광도</button>' +
         '<button onclick="_unitSw(\'temp\',this)">온도</button>' +
         '<button onclick="_unitSw(\'vol\',this)">부피</button>' +
@@ -1005,6 +982,12 @@ async function loadSidebarWeather() {
       h += '<label>H⁺ 농도 (mol/L)</label>';
       h += '<input type="text" id="uv-hplus" placeholder="1.0e-7" oninput="_unitCalcH()" style="font-size:13px">';
       h += '<div class="unit-result" id="uv-ph-result"></div>';
+    } else if (type === 'conc') {
+      h += '<label>입력 농도</label>';
+      h += '<div style="display:flex;gap:6px"><input type="number" step="any" id="uv-conc" placeholder="0.3" oninput="_unitCalcConc()" style="flex:1">';
+      h += '<select id="uv-conc-unit" onchange="_unitCalcConc()" style="width:90px">';
+      h += '<option value="mgkg">mg/kg</option><option value="ppm">ppm</option><option value="ppb">ppb</option><option value="ppt">ppt</option><option value="mgl">mg/L</option><option value="ugl">μg/L</option><option value="ugkg">μg/kg</option><option value="pct">%</option></select></div>';
+      h += '<div class="unit-result" id="uv-conc-result"></div>';
     } else if (type === 'abs') {
       h += '<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:10px;color:#64748b;font-family:monospace">A = ε × c × l &nbsp;→&nbsp; c = A / (ε × l)</div>';
       h += '<label>흡광도 (A)</label>';
@@ -1121,6 +1104,29 @@ async function loadSidebarWeather() {
     res.innerHTML = _rr('', (mg / 1000).toFixed(6), 'g') + _rr('', mg.toFixed(4), 'mg') + _rr('', (mg * 1000).toFixed(2), 'μg') + _rr('', (mg * 1e6).toFixed(0), 'ng');
   };
 
+  // 농도 변환 (mg/kg = ppm, μg/kg = ppb, ng/kg = ppt, % = 10000ppm)
+  window._unitCalcConc = function() {
+    var v = parseFloat((document.getElementById('uv-conc') || {}).value);
+    var u = (document.getElementById('uv-conc-unit') || {}).value || 'mgkg';
+    var res = document.getElementById('uv-conc-result');
+    if (!res || isNaN(v)) { if(res) res.innerHTML = ''; return; }
+    // 모두 ppm(=mg/kg=mg/L) 기준으로 변환
+    var ppm;
+    if (u === 'mgkg' || u === 'ppm' || u === 'mgl') ppm = v;
+    else if (u === 'ppb' || u === 'ugl' || u === 'ugkg') ppm = v / 1000;
+    else if (u === 'ppt') ppm = v / 1e6;
+    else if (u === 'pct') ppm = v * 10000;
+    else ppm = v;
+    var ppb = ppm * 1000;
+    var ppt = ppm * 1e6;
+    var pct = ppm / 10000;
+    res.innerHTML =
+      _rr('', pct < 0.0001 ? pct.toExponential(4) : pct.toFixed(6), '%') +
+      _rr('', ppm < 0.0001 ? ppm.toExponential(4) : ppm.toFixed(4), 'ppm (mg/kg, mg/L)') +
+      _rr('', ppb < 0.01 ? ppb.toExponential(4) : ppb.toFixed(2), 'ppb (μg/kg, μg/L)') +
+      _rr('', ppt < 1 ? ppt.toExponential(4) : ppt.toFixed(0), 'ppt (ng/kg, ng/L)');
+  };
+
   window._unitSw = function(type, btn) {
     _unitTab = type;
     document.querySelectorAll('#unit-tabs button').forEach(function(b) { b.classList.remove('active'); });
@@ -1162,11 +1168,8 @@ function _makeDraggable(el, handle) {
   document.addEventListener('mousemove', function(e) {
     if (!isDrag) return;
     var dx = e.clientX - sx, dy = e.clientY - sy;
-    var nx = ox + dx, ny = oy + dy;
-    // 화면 밖으로 나가지 않도록 (듀얼 모니터: screenX 사용 가능 범위 확장)
-    ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
-    el.style.left = nx + 'px';
-    el.style.top = ny + 'px';
+    el.style.left = (ox + dx) + 'px';
+    el.style.top = (oy + dy) + 'px';
     el.style.right = 'auto';
     el.style.bottom = 'auto';
   });
