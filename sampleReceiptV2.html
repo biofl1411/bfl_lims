@@ -6532,8 +6532,17 @@ async function collectOcrCorrections(savedData) {
         return;
     }
 
+    // 접수자(담당자) 기준 보정키 결정
+    var correctorKey = '';
+    var salesRep = (document.getElementById('sales-rep').value || '').trim();
+    if (salesRep) {
+        correctorKey = await _getCorrectorKey(salesRep);
+    }
+
     // Firestore에 보정 이력 저장
     var correctionDoc = {
+        correctorKey: correctorKey,
+        correctorName: salesRep,
         requester: ocr.requester || ocr.receptionist || '',
         receiptNo: savedData.receiptNo || '',
         timestamp: new Date().toISOString(),
@@ -6541,8 +6550,32 @@ async function collectOcrCorrections(savedData) {
     };
 
     await db.collection('ocrCorrections').add(correctionDoc);
-    console.log('[OCR보정] ' + corrections.length + '건 보정 저장 완료:', corrections.map(function(c) { return c.field + ': ' + c.original + ' → ' + c.corrected; }));
+    console.log('[OCR보정] ' + corrections.length + '건 보정 저장 (접수자: ' + correctorKey + '):', corrections.map(function(c) { return c.field + ': ' + c.original + ' → ' + c.corrected; }));
     _lastOcrResult = null; // 수집 완료 후 초기화
+}
+
+// 접수자(담당자) → 보정키 변환: 고객지원팀/마케팅사업부는 팀명, 그 외는 개인명
+var _usersCacheForCorrection = null;
+async function _getCorrectorKey(name) {
+    try {
+        // users 캐시 로드 (한 번만)
+        if (!_usersCacheForCorrection) {
+            var snap = await db.collection('users').get();
+            _usersCacheForCorrection = snap.docs.map(function(d) { return d.data(); });
+        }
+        var user = _usersCacheForCorrection.find(function(u) {
+            return (u.name || u.아이디 || '') === name;
+        });
+        if (!user) return name; // 매칭 안 되면 이름 그대로
+        var dept = user.department || user.부서명 || '';
+        // 팀 단위로 축적하는 부서 목록 (동적으로 Firestore settings에서 가져올 수도 있음)
+        var teamDepts = ['고객지원팀', '마케팅사업부'];
+        if (teamDepts.indexOf(dept) >= 0) return dept;
+        return name; // 지사, 고객관리 등은 개인명
+    } catch(e) {
+        console.warn('[OCR보정] 접수자 조회 오류:', e.message);
+        return name;
+    }
 }
 
 // ============================================================================
