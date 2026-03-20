@@ -5182,21 +5182,22 @@ function saveSampleToArray() {
         if (el) obj[id] = el.value;
     });
 
-    // 참고용(기준규격외) 모드: 개별 추가된 시험항목도 저장
-    if (_isRefTestMode) {
-        var refItems = [];
-        var tbody = document.getElementById('inspection-items-tbody');
-        if (tbody) {
-            tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
-                refItems.push({
-                    testCode: tr.getAttribute('data-test-code') || '',
-                    itemName: tr.getAttribute('data-item-key') || '',
-                    fee: parseInt(tr.getAttribute('data-fee') || '0', 10),
-                    unit: tr.getAttribute('data-unit') || ''
-                });
+    // 시험항목 테이블 상태 저장 (모든 모드에서 검체별 독립 저장)
+    var savedItems = [];
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (tbody) {
+        tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
+            savedItems.push({
+                testCode: tr.getAttribute('data-test-code') || '',
+                itemName: tr.getAttribute('data-item-key') || '',
+                fee: parseInt(tr.getAttribute('data-fee') || '0', 10),
+                unit: tr.getAttribute('data-unit') || ''
             });
-        }
-        obj._refTestItems = refItems;
+        });
+    }
+    obj._savedTestItems = savedItems;
+    if (_isRefTestMode) {
+        obj._refTestItems = savedItems;
     }
 
     _sampleData[_currentSampleIdx] = obj;
@@ -5221,8 +5222,10 @@ function loadSampleFromArray(idx) {
         textEl.style.display = 'none';
     }
 
-    // 참고용(기준규격외) 모드: 개별 추가된 시험항목 복원
-    if (_isRefTestMode && obj._refTestItems && obj._refTestItems.length > 0) {
+    // 시험항목 복원: 저장된 항목이 있으면 그대로 복원 (검체별 독립)
+    if (obj._savedTestItems && obj._savedTestItems.length > 0) {
+        restoreRefTestItems(obj._savedTestItems);
+    } else if (_isRefTestMode && obj._refTestItems && obj._refTestItems.length > 0) {
         restoreRefTestItems(obj._refTestItems);
     } else {
         // 검체유형 변경에 따라 시험항목 다시 로드
