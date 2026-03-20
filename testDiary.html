@@ -843,17 +843,23 @@ function renderFormTemplateDetail(ft) {
   html += '<button class="btn btn-primary" onclick="saveFormTemplateOverrides()" style="flex:1">💾 값 저장</button>';
   html += '</div>';
 
-  // ── 모의 계산기 ──
-  html += '<details style="border:1px solid #d8b4fe;border-radius:10px;overflow:hidden;margin-bottom:14px">';
-  html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);cursor:pointer;font-size:13px;font-weight:600;color:#6b21a8;display:flex;align-items:center;gap:8px;list-style:none">';
-  html += '<span>🧮 모의 계산기</span><span style="font-size:11px;font-weight:400;color:#8b5cf6">가상 값으로 계산 검증</span><span style="margin-left:auto;font-size:10px;color:#a78bfa">▼</span></summary>';
-  html += '<div style="padding:14px">';
-  html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
-  html += '<button class="sim-btn active" onclick="simSwitch(\'metal\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #2563eb;background:#dbeafe;color:#1e40af;cursor:pointer;font-weight:600">중금속</button>';
-  html += '<button class="sim-btn" onclick="simSwitch(\'micro\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">미생물</button>';
-  html += '<button class="sim-btn" onclick="simSwitch(\'chem\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">이화학</button>';
-  html += '<button class="sim-btn" onclick="simSwitch(\'custom\',this)" style="padding:5px 12px;border-radius:16px;font-size:11px;border:2px solid #e5e7eb;background:#f9fafb;color:#6b7280;cursor:pointer">사용자 정의</button>';
-  html += '</div><div id="sim-body"></div></div></details>';
+  // ── 모의 계산기 (해당 항목 전용) ──
+  if (a.calculations && a.calculations.length) {
+    // 필드 라벨 매핑 (변수명 → 한국어 라벨)
+    var _fm = {};
+    (a.sections || []).forEach(function(sec) {
+      (sec.fields || []).forEach(function(f) {
+        _fm[f.id] = { label: f.label, unit: f.unit || '', example: f.exampleValue || '' };
+      });
+    });
+    window._simCalcData = { calcs: a.calculations, fieldMap: _fm, judgment: a.judgmentRule || null };
+
+    html += '<details style="border:1px solid #d8b4fe;border-radius:10px;overflow:hidden;margin-bottom:14px" ontoggle="if(this.open)simInit()">';
+    html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);cursor:pointer;font-size:13px;font-weight:600;color:#6b21a8;display:flex;align-items:center;gap:8px;list-style:none">';
+    html += '<span>🧮 모의 계산기</span><span style="font-size:11px;font-weight:400;color:#8b5cf6">' + escH(ft.representativeItem) + ' 계산 검증</span>';
+    html += '<span style="margin-left:auto;font-size:10px;color:#a78bfa">▼</span></summary>';
+    html += '<div style="padding:14px" id="sim-body"></div></details>';
+  }
 
   // 변경 이력
   var history = ft._changeHistory || [];
@@ -2541,165 +2547,144 @@ function generateDiaryCn() {
 }
 
 // ============================================================
-// 모의 계산기 (시험일지 양식 상세 > 변경이력 위)
+// 모의 계산기 — 해당 항목 전용 (계산식 기반 동적 생성)
 // ============================================================
-function simSwitch(type, btn) {
-  document.querySelectorAll('.sim-btn').forEach(function(b) {
-    b.style.border='2px solid #e5e7eb'; b.style.background='#f9fafb'; b.style.color='#6b7280'; b.style.fontWeight='400';
+var _simReserved = /^(Math|PI|E|abs|pow|sqrt|log|log10|round|ceil|floor|min|max|parseFloat|parseInt|NaN|Infinity|true|false|undefined|null|return)$/;
+
+function _simParseVars(formula) {
+  var vars = [], seen = {}, re = /([a-zA-Z_]\w*)/g, m;
+  while ((m = re.exec(formula)) !== null) {
+    if (!seen[m[1]] && !_simReserved.test(m[1])) { seen[m[1]] = true; vars.push(m[1]); }
+  }
+  return vars;
+}
+
+function simInit() {
+  var el = document.getElementById('sim-body');
+  if (!el || el.dataset.inited) return;
+  el.dataset.inited = '1';
+  var d = window._simCalcData;
+  if (!d || !d.calcs || !d.calcs.length) { el.innerHTML = '<div style="padding:12px;text-align:center;color:#94a3b8;font-size:12px">계산식 없음</div>'; return; }
+
+  var h = '';
+  d.calcs.forEach(function(calc, ci) {
+    var formula = calc.formula || '';
+    var formulaText = calc.formulaText || formula || '';
+    var vars = formula ? _simParseVars(formula) : [];
+
+    // 계산식 표시
+    h += '<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px;margin-bottom:10px">';
+    h += '<div style="font-size:12px;font-weight:600;color:#7c3aed;margin-bottom:4px">' + (calc.label || '결과') + (calc.unit ? ' (' + calc.unit + ')' : '') + '</div>';
+    h += '<div style="font-family:monospace;font-size:11px;color:#4c1d95;background:white;padding:6px 10px;border-radius:6px;border:1px solid #e9d5ff;word-break:break-all">' + formulaText + '</div>';
+    h += '</div>';
+
+    if (vars.length > 0) {
+      // 변수 입력 필드 (field map에서 라벨 조회)
+      var cols = vars.length <= 2 ? '1fr 1fr' : vars.length <= 4 ? '1fr 1fr' : '1fr 1fr 1fr';
+      h += '<div style="display:grid;grid-template-columns:' + cols + ';gap:6px;margin-bottom:8px">';
+      vars.forEach(function(v) {
+        var fi = d.fieldMap[v] || {};
+        var lb = fi.label || v;
+        var unitStr = fi.unit ? ' (' + fi.unit + ')' : '';
+        var ph = fi.example || '0';
+        h += '<div><label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">' + lb + unitStr + '</label>';
+        h += '<input type="number" step="any" id="sim-' + ci + '-' + v + '" placeholder="' + ph + '" value="' + (fi.example || '') + '" oninput="simCalc(' + ci + ')" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>';
+      });
+      h += '</div>';
+    } else if (formula) {
+      // 변수 없는 상수식
+      h += '<div style="font-size:11px;color:#64748b;margin-bottom:8px">변수 없는 상수 수식</div>';
+    } else {
+      // formula가 없으면 수동 입력 모드
+      h += '<div style="margin-bottom:8px">';
+      h += '<label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">수식 직접 입력 (변수: A~F)</label>';
+      h += '<input type="text" id="sim-' + ci + '-custom" placeholder="(A - B) * C / (D * 1000)" oninput="simCalc(' + ci + ')" style="width:100%;padding:6px 8px;border:1px solid #94a3b8;border-radius:6px;font-size:12px;font-family:monospace;margin-bottom:6px">';
+      h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">';
+      ['A','B','C','D','E','F'].forEach(function(k) {
+        h += '<div><label style="font-size:10px;color:#475569">' + k + '</label>';
+        h += '<input type="number" step="any" id="sim-' + ci + '-' + k + '" placeholder="0" oninput="simCalc(' + ci + ')" style="width:100%;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>';
+      });
+      h += '</div></div>';
+    }
+
+    h += '<div id="sim-result-' + ci + '"></div>';
+    if (ci < d.calcs.length - 1) h += '<hr style="border:none;border-top:1px dashed #e9d5ff;margin:12px 0">';
   });
-  if(btn){btn.style.border='2px solid #2563eb';btn.style.background='#dbeafe';btn.style.color='#1e40af';btn.style.fontWeight='600';}
-  var el=document.getElementById('sim-body'); if(!el) return;
-  if(type==='metal') _smMetal(el);
-  else if(type==='micro') _smMicro(el);
-  else if(type==='chem') _smChem(el);
-  else _smCustom(el);
-}
-function _si(id,lb,ph,fn){return '<div><label style="font-size:11px;color:#475569;display:block;margin-bottom:3px">'+lb+'</label><input type="number" step="any" id="'+id+'" placeholder="'+ph+'" oninput="'+fn+'" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>';}
-function _sr(s,c,r,bg){return '<tr style="background:'+(bg||'')+'"><td style="padding:3px 6px;color:#78716c">'+s+'</td><td style="padding:3px 6px">'+c+'</td><td style="padding:3px 6px;text-align:right;font-weight:600;color:#0369a1">'+r+'</td></tr>';}
 
-function _smMetal(el){
-  var h='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px;margin-bottom:10px">';
-  h+='<div style="font-family:monospace;font-size:11px;color:#15803d">(시료 − Blank) × 볼륨 × 희석 ÷ (채취량 × 1000) ÷ 음용희석</div></div>';
-  h+='<div style="margin-bottom:8px"><select id="sm-item" onchange="smCalcM()" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">';
-  h+='<option value="0.3">납(Pb) 0.3</option><option value="0.05">카드뮴(Cd) 0.05</option><option value="0.1">비소(As) 0.1</option><option value="0.5">수은(Hg) 0.5</option><option value="1.0">메틸수은 1.0</option></select></div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">';
-  h+=_si('sm-sc','시료농도(µg/L)','0.023','smCalcM()');
-  h+=_si('sm-bc','Blank(µg/L)','0.000','smCalcM()');
-  h+=_si('sm-fv','최종볼륨(mL)','50','smCalcM()');
-  h+=_si('sm-dl','희석배수','1','smCalcM()');
-  h+=_si('sm-sw','채취량(g)','1.0384','smCalcM()');
-  h+=_si('sm-dd','음용희석배수','1','smCalcM()');
-  h+='</div><div id="sm-res"></div>';
-  el.innerHTML=h; smCalcM();
-}
-function smCalcM(){
-  var sc=parseFloat((document.getElementById('sm-sc')||{}).value)||0;
-  var bc=parseFloat((document.getElementById('sm-bc')||{}).value)||0;
-  var fv=parseFloat((document.getElementById('sm-fv')||{}).value)||50;
-  var dl=parseFloat((document.getElementById('sm-dl')||{}).value)||1;
-  var sw=parseFloat((document.getElementById('sm-sw')||{}).value)||0;
-  var dd=parseFloat((document.getElementById('sm-dd')||{}).value)||1;
-  var a=document.getElementById('sm-res'); if(!a) return;
-  if(sw<=0){a.innerHTML='<div style="padding:8px;text-align:center;color:#94a3b8;font-size:11px">채취량 입력</div>';return;}
-  var s1=sc-bc,s2=s1*fv,s3=s2*dl,s4=sw*1000,s5=s3/s4,s6=s5/dd;
-  var r=Math.max(0,s6),rd=r<0.01?'0.0':r.toFixed(2),rp=r<0.001?r.toExponential(3):r.toFixed(4);
-  var lim=parseFloat((document.getElementById('sm-item')||{}).value)||0.3;
-  var ok=(r<=lim||rd==='0.0');
-  var rev=r*sw*1000*dd/(fv*dl)+bc;
-  var h='<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
-  h+='<div style="font-weight:600;color:#92400e;font-size:11px;margin-bottom:6px">📐 단계별 계산</div>';
-  h+='<table style="width:100%;border-collapse:collapse;font-size:10px;font-family:monospace">';
-  h+=_sr('①','시료('+sc+') − Blank('+bc+')',s1.toFixed(6)+' µg/L','');
-  h+=_sr('②','① × 볼륨('+fv+')',s2.toFixed(6),'#fffbeb');
-  h+=_sr('③','② × 희석('+dl+')',s3.toFixed(6),'');
-  h+=_sr('④','채취량('+sw+') × 1000',s4.toFixed(4),'#fffbeb');
-  h+=_sr('⑤','③ ÷ ④',s5.toFixed(6),'');
-  if(dd!==1) h+=_sr('⑥','⑤ ÷ 음용('+dd+')',s6.toFixed(6),'#fffbeb');
-  h+='</table></div>';
-  h+='<div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:10px">';
-  h+='<strong style="color:#0369a1">🔄 역산:</strong> <span style="font-family:monospace">'+rev.toFixed(6)+' µg/L</span> '+(Math.abs(rev-sc)<0.0001?'✅':'⚠️')+'</div>';
-  h+='<div style="background:'+(ok?'#f0fdf4':'#fef2f2')+';border:2px solid '+(ok?'#22c55e':'#ef4444')+';border-radius:8px;padding:10px;text-align:center">';
-  h+='<div style="font-size:22px;font-weight:800;color:'+(ok?'#059669':'#dc2626')+'">'+rd+' <span style="font-size:12px">mg/kg</span></div>';
-  h+='<div style="font-size:10px;color:#64748b">(정밀: '+rp+')</div>';
-  h+='<div style="font-size:12px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';margin-top:4px">'+(ok?'✅ 적합':'❌ 부적합')+' <span style="font-size:10px;font-weight:400;color:#64748b">(기준 '+lim+')</span></div></div>';
-  a.innerHTML=h;
+  // 판정기준 표시
+  if (d.judgment && d.judgment.standardText) {
+    h += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 10px;margin-top:8px">';
+    h += '<span style="font-size:11px;font-weight:600;color:#991b1b">⚖ 판정기준:</span> ';
+    h += '<span style="font-size:12px;font-weight:600;color:#dc2626">' + d.judgment.standardText + (d.judgment.unit ? ' ' + d.judgment.unit : '') + '</span></div>';
+  }
+
+  el.innerHTML = h;
+  d.calcs.forEach(function(_, ci) { simCalc(ci); });
 }
 
-function _smMicro(el){
-  var h='<div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:8px;padding:8px 10px;margin-bottom:10px">';
-  h+='<div style="font-family:monospace;font-size:11px;color:#7e22ce">결과 = 평균 집락수 × 희석배수</div></div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">';
-  h+=_si('sm-c1','1차 집락수','15','smCalcMi()');
-  h+=_si('sm-c2','2차 집락수','18','smCalcMi()');
-  h+=_si('sm-md','희석배수','10000','smCalcMi()');
-  h+=_si('sm-ml','기준값(CFU/g)','100000','smCalcMi()');
-  h+='</div><div id="sm-res"></div>';
-  el.innerHTML=h; smCalcMi();
-}
-function smCalcMi(){
-  var c1=parseFloat((document.getElementById('sm-c1')||{}).value)||0;
-  var c2=parseFloat((document.getElementById('sm-c2')||{}).value)||0;
-  var dl=parseFloat((document.getElementById('sm-md')||{}).value)||1;
-  var lim=parseFloat((document.getElementById('sm-ml')||{}).value)||100000;
-  var avg=(c1+c2)/2,r=avg*dl,ok=r<=lim;
-  var a=document.getElementById('sm-res'); if(!a) return;
-  var h='<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
-  h+='<table style="width:100%;border-collapse:collapse;font-size:10px;font-family:monospace">';
-  h+=_sr('①','('+c1+' + '+c2+') ÷ 2',avg.toFixed(1),'');
-  h+=_sr('②','① × 희석('+dl.toLocaleString()+')',r.toLocaleString()+' CFU/g','#fffbeb');
-  h+='</table></div>';
-  h+='<div style="background:'+(ok?'#f0fdf4':'#fef2f2')+';border:2px solid '+(ok?'#22c55e':'#ef4444')+';border-radius:8px;padding:10px;text-align:center">';
-  h+='<div style="font-size:22px;font-weight:800;color:'+(ok?'#059669':'#dc2626')+'">'+r.toLocaleString()+' <span style="font-size:12px">CFU/g</span></div>';
-  h+='<div style="font-size:12px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';margin-top:4px">'+(ok?'✅ 적합':'❌ 부적합')+' <span style="font-size:10px;color:#64748b">(기준 '+lim.toLocaleString()+')</span></div></div>';
-  a.innerHTML=h;
-}
+function simCalc(ci) {
+  var d = window._simCalcData;
+  if (!d || !d.calcs[ci]) return;
+  var calc = d.calcs[ci];
+  var area = document.getElementById('sim-result-' + ci);
+  if (!area) return;
 
-function _smChem(el){
-  var h='<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:8px 10px;margin-bottom:10px">';
-  h+='<div style="font-family:monospace;font-size:11px;color:#1d4ed8">(적정량 − 공시험) × Factor × 역가 ÷ 시료량 × 100</div></div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">';
-  h+=_si('sm-tt','적정량(mL)','12.5','smCalcC()');
-  h+=_si('sm-bt','공시험(mL)','0.1','smCalcC()');
-  h+=_si('sm-fc','Factor','1.002','smCalcC()');
-  h+=_si('sm-pt','역가','0.014','smCalcC()');
-  h+=_si('sm-cs','시료량(g)','5.0','smCalcC()');
-  h+=_si('sm-cl','기준값(%)','','smCalcC()');
-  h+='</div><div id="sm-res"></div>';
-  el.innerHTML=h; smCalcC();
-}
-function smCalcC(){
-  var t=parseFloat((document.getElementById('sm-tt')||{}).value)||0;
-  var bt=parseFloat((document.getElementById('sm-bt')||{}).value)||0;
-  var f=parseFloat((document.getElementById('sm-fc')||{}).value)||1;
-  var p=parseFloat((document.getElementById('sm-pt')||{}).value)||1;
-  var s=parseFloat((document.getElementById('sm-cs')||{}).value)||0;
-  var lim=parseFloat((document.getElementById('sm-cl')||{}).value)||0;
-  var a=document.getElementById('sm-res'); if(!a) return;
-  if(s<=0){a.innerHTML='<div style="padding:8px;text-align:center;color:#94a3b8;font-size:11px">시료량 입력</div>';return;}
-  var s1=t-bt,s2=s1*f,s3=s2*p,r=(s3/s)*100;
-  var h='<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
-  h+='<table style="width:100%;border-collapse:collapse;font-size:10px;font-family:monospace">';
-  h+=_sr('①','적정('+t+') − 공시험('+bt+')',s1.toFixed(4)+' mL','');
-  h+=_sr('②','① × Factor('+f+')',s2.toFixed(6),'#fffbeb');
-  h+=_sr('③','② × 역가('+p+')',s3.toFixed(6),'');
-  h+=_sr('④','③ ÷ 시료('+s+') × 100',r.toFixed(4)+' %','#fffbeb');
-  h+='</table></div>';
-  var hl=lim>0,ok=hl?r<=lim:true;
-  h+='<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:8px;padding:10px;text-align:center">';
-  h+='<div style="font-size:22px;font-weight:800;color:#059669">'+r.toFixed(4)+' <span style="font-size:12px">%</span></div>';
-  if(hl) h+='<div style="font-size:12px;font-weight:700;color:'+(ok?'#16a34a':'#dc2626')+';margin-top:4px">'+(ok?'✅ 적합':'❌ 부적합')+' <span style="font-size:10px;color:#64748b">(기준 '+lim+'%)</span></div>';
-  h+='</div>';
-  a.innerHTML=h;
-}
+  var formula = calc.formula || '';
+  var isCustom = !formula;
+  var vars, vals = {};
 
-function _smCustom(el){
-  var h='<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;margin-bottom:10px">';
-  h+='<div style="font-size:11px;color:#64748b;margin-bottom:6px">변수 A~F 사용. 예: (A - B) * C / (D * 1000)</div>';
-  h+='<input type="text" id="sm-cf" value="(A - B) * C / (D * 1000)" oninput="smCalcX()" style="width:100%;padding:6px 8px;border:1px solid #94a3b8;border-radius:6px;font-size:12px;font-family:monospace"></div>';
-  h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0">';
-  [['A','시료','0.023'],['B','Blank','0'],['C','볼륨','50'],['D','채취량','1.0384'],['E','',''],['F','','']].forEach(function(v){
-    h+='<div><label style="font-size:10px;color:#475569">'+v[0]+(v[1]?' ('+v[1]+')':'')+'</label>';
-    h+='<input type="number" step="any" id="sm-v'+v[0]+'" value="'+v[2]+'" oninput="smCalcX()" style="width:100%;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>';
+  if (isCustom) {
+    // 수동 입력 모드
+    var customEl = document.getElementById('sim-' + ci + '-custom');
+    formula = customEl ? customEl.value : '';
+    if (!formula) { area.innerHTML = ''; return; }
+    vars = ['A','B','C','D','E','F'];
+    vars.forEach(function(k) { vals[k] = parseFloat((document.getElementById('sim-' + ci + '-' + k) || {}).value) || 0; });
+  } else {
+    vars = _simParseVars(formula);
+    vars.forEach(function(v) { vals[v] = parseFloat((document.getElementById('sim-' + ci + '-' + v) || {}).value) || 0; });
+  }
+
+  // 수식에 값 대입
+  var expr = formula;
+  vars.forEach(function(v) {
+    expr = expr.replace(new RegExp('\\b' + v + '\\b', 'g'), '(' + vals[v] + ')');
   });
-  h+='</div><div id="sm-res"></div>';
-  el.innerHTML=h; smCalcX();
-}
-function smCalcX(){
-  var f=(document.getElementById('sm-cf')||{}).value||'';
-  var a=document.getElementById('sm-res'); if(!a||!f) return;
-  var v={};
-  ['A','B','C','D','E','F'].forEach(function(k){v[k]=parseFloat((document.getElementById('sm-v'+k)||{}).value)||0;});
-  try{
-    var e=f;['A','B','C','D','E','F'].forEach(function(k){e=e.replace(new RegExp('\\b'+k+'\\b','g'),'('+v[k]+')');});
-    var r=Function('"use strict";return('+e+')')();
-    if(typeof r!=='number'||!isFinite(r)) throw new Error('계산 불가');
-    var h='<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
-    h+='<div style="font-family:monospace;font-size:10px;color:#78716c;word-break:break-all">= '+e+'</div></div>';
-    h+='<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:8px;padding:10px;text-align:center">';
-    h+='<div style="font-size:22px;font-weight:800;color:#059669">'+r.toFixed(6)+'</div>';
-    h+='<div style="font-size:10px;color:#64748b">('+r.toExponential(4)+')</div></div>';
-    a.innerHTML=h;
-  }catch(ex){a.innerHTML='<div style="padding:8px;text-align:center;color:#dc2626;font-size:11px;background:#fef2f2;border-radius:6px">⚠️ '+ex.message+'</div>';}
+
+  try {
+    var result = Function('"use strict"; return (' + expr + ')')();
+    if (typeof result !== 'number' || !isFinite(result)) throw new Error('계산 불가');
+
+    var dp = calc.decimalPlaces != null ? calc.decimalPlaces : 4;
+    var rd = result.toFixed(dp);
+
+    // 계산 과정 표시
+    var h = '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
+    h += '<div style="font-size:10px;font-weight:600;color:#92400e;margin-bottom:4px">📐 대입 결과</div>';
+    h += '<div style="font-family:monospace;font-size:10px;color:#78716c;word-break:break-all">' + expr + '</div>';
+    h += '<div style="font-family:monospace;font-size:12px;color:#0369a1;margin-top:4px;font-weight:600">= ' + rd + (calc.unit ? ' ' + calc.unit : '') + '</div>';
+    h += '</div>';
+
+    // 판정 비교
+    var jr = d.judgment;
+    var limVal = null;
+    if (jr && jr.standardText) {
+      var limMatch = (jr.standardText + '').match(/([\d.]+)/);
+      if (limMatch) limVal = parseFloat(limMatch[1]);
+    }
+    if (limVal !== null && !isNaN(limVal)) {
+      var pass = result <= limVal;
+      h += '<div style="background:' + (pass ? '#f0fdf4' : '#fef2f2') + ';border:2px solid ' + (pass ? '#22c55e' : '#ef4444') + ';border-radius:8px;padding:10px;text-align:center">';
+      h += '<div style="font-size:22px;font-weight:800;color:' + (pass ? '#059669' : '#dc2626') + '">' + rd + ' <span style="font-size:12px">' + (calc.unit || '') + '</span></div>';
+      h += '<div style="font-size:12px;font-weight:700;color:' + (pass ? '#16a34a' : '#dc2626') + ';margin-top:4px">' + (pass ? '✅ 적합' : '❌ 부적합') + ' <span style="font-size:10px;font-weight:400;color:#64748b">(기준: ' + jr.standardText + ')</span></div></div>';
+    } else {
+      h += '<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:8px;padding:10px;text-align:center">';
+      h += '<div style="font-size:22px;font-weight:800;color:#059669">' + rd + ' <span style="font-size:12px">' + (calc.unit || '') + '</span></div></div>';
+    }
+    area.innerHTML = h;
+  } catch(e) {
+    area.innerHTML = '<div style="padding:8px;text-align:center;color:#dc2626;font-size:11px;background:#fef2f2;border-radius:6px">⚠️ ' + e.message + '</div>';
+  }
 }
 
 </script>
