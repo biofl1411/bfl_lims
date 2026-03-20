@@ -1318,7 +1318,7 @@ function findSumMatch(dep) {
         }
     });
 
-    // 합산 금액 = 입금액 체크
+    // 합산 금액 = 입금액 체크 (업체 그룹별)
     var results = [];
     Object.keys(companyGroups).forEach(function(company) {
         var group = companyGroups[company];
@@ -1327,6 +1327,85 @@ function findSumMatch(dep) {
             results.push({ company: company, receipts: group, total: totalRemain });
         }
     });
+
+    // ★ 전체 미수금에서 1~4건 조합 금액 일치 탐색 (업체 무관)
+    if (results.length === 0) {
+        var allUnpaid = [];
+        allReceipts.forEach(function(r) {
+            var d = r.data;
+            var remain = getTotalFee(d) - getPaidAmount(d);
+            if (remain > 0 && remain <= dep.amount) {
+                allUnpaid.push({ receipt: r, remain: remain });
+            }
+        });
+        // 잔액 내림차순 정렬 (큰 금액부터 조합)
+        allUnpaid.sort(function(a, b) { return b.remain - a.remain; });
+        // 최대 50건만 탐색 (성능)
+        var pool = allUnpaid.slice(0, 50);
+        var found = null;
+
+        // 1건 일치
+        if (!found) {
+            for (var i = 0; i < pool.length; i++) {
+                if (pool[i].remain === dep.amount) {
+                    found = [pool[i]]; break;
+                }
+            }
+        }
+        // 2건 조합
+        if (!found) {
+            for (var i = 0; i < pool.length && !found; i++) {
+                for (var j = i + 1; j < pool.length; j++) {
+                    if (pool[i].remain + pool[j].remain === dep.amount) {
+                        found = [pool[i], pool[j]]; break;
+                    }
+                }
+            }
+        }
+        // 3건 조합
+        if (!found) {
+            for (var i = 0; i < Math.min(pool.length, 30) && !found; i++) {
+                for (var j = i + 1; j < Math.min(pool.length, 35) && !found; j++) {
+                    var partial = pool[i].remain + pool[j].remain;
+                    if (partial >= dep.amount) continue;
+                    for (var k = j + 1; k < pool.length; k++) {
+                        if (partial + pool[k].remain === dep.amount) {
+                            found = [pool[i], pool[j], pool[k]]; break;
+                        }
+                    }
+                }
+            }
+        }
+        // 4건 조합
+        if (!found) {
+            for (var i = 0; i < Math.min(pool.length, 20) && !found; i++) {
+                for (var j = i + 1; j < Math.min(pool.length, 25) && !found; j++) {
+                    var p2 = pool[i].remain + pool[j].remain;
+                    if (p2 >= dep.amount) continue;
+                    for (var k = j + 1; k < Math.min(pool.length, 30) && !found; k++) {
+                        var p3 = p2 + pool[k].remain;
+                        if (p3 >= dep.amount) continue;
+                        for (var l = k + 1; l < pool.length; l++) {
+                            if (p3 + pool[l].remain === dep.amount) {
+                                found = [pool[i], pool[j], pool[k], pool[l]]; break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (found) {
+            var companies = {};
+            found.forEach(function(g) {
+                var cn = g.receipt.data.companyName || g.receipt.data.company || '기타';
+                companies[cn] = true;
+            });
+            var label = Object.keys(companies).join(' + ');
+            results.push({ company: label, receipts: found, total: dep.amount });
+        }
+    }
+
     return results;
 }
 
