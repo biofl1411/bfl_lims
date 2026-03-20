@@ -795,150 +795,174 @@ async function loadSidebarWeather() {
 })();
 
 // ============================================================
-// 6. 계산기 위젯 (드래그 가능)
+// 6. 계산기 위젯 (다중 인스턴스, 드래그 가능)
 // ============================================================
 (function() {
-  var _calcMem = 0;
-  var _calcExpr = '';
-  var _calcVal = '0';
-  var _calcNewInput = true;
-  var _calcOp = '';
-  var _calcPrev = 0;
+  var _calcInstances = {}; // id → state
+  var _calcNextId = 0;
+  var _calcFocused = null; // 현재 포커스된 계산기 id
 
-  function _ensureCalcDOM() {
-    if (document.getElementById('calc-popup')) return;
+  function _createCalc() {
+    var id = ++_calcNextId;
+    var state = { mem: 0, expr: '', val: '0', newInput: true, op: '', prev: 0 };
+    _calcInstances[id] = state;
+
     var div = document.createElement('div');
-    div.id = 'calc-popup';
-    div.className = 'calc-popup';
+    div.id = 'calc-popup-' + id;
+    div.className = 'calc-popup visible';
+    div.dataset.calcId = id;
+    div.setAttribute('tabindex', '0');
     div.innerHTML =
-      '<div class="calc-titlebar" id="calc-drag">' +
-        '<span>🧮 계산기</span>' +
-        '<button onclick="toggleCalcPopup()">✕</button>' +
+      '<div class="calc-titlebar" id="calc-drag-' + id + '">' +
+        '<span>🧮 계산기 #' + id + '</span>' +
+        '<button onclick="_calcClose(' + id + ')">✕</button>' +
       '</div>' +
       '<div class="calc-display">' +
-        '<div class="calc-expr" id="calc-expr"></div>' +
-        '<div class="calc-val" id="calc-val">0</div>' +
+        '<div class="calc-expr" id="calc-expr-' + id + '"></div>' +
+        '<div class="calc-val" id="calc-val-' + id + '">0</div>' +
       '</div>' +
       '<div class="calc-memory">' +
-        '<button onclick="_calcMemFn(\'mc\')">MC</button>' +
-        '<button onclick="_calcMemFn(\'mr\')">MR</button>' +
-        '<button onclick="_calcMemFn(\'m+\')">M+</button>' +
-        '<button onclick="_calcMemFn(\'m-\')">M−</button>' +
+        '<button onclick="_cM(' + id + ',\'mc\')">MC</button>' +
+        '<button onclick="_cM(' + id + ',\'mr\')">MR</button>' +
+        '<button onclick="_cM(' + id + ',\'m+\')">M+</button>' +
+        '<button onclick="_cM(' + id + ',\'m-\')">M−</button>' +
       '</div>' +
       '<div class="calc-btns">' +
-        '<button class="cb-fn" onclick="_calcFn(\'C\')">C</button>' +
-        '<button class="cb-fn" onclick="_calcFn(\'±\')">±</button>' +
-        '<button class="cb-fn" onclick="_calcFn(\'%\')">%</button>' +
-        '<button class="cb-op" onclick="_calcOper(\'÷\')">÷</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'7\')">7</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'8\')">8</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'9\')">9</button>' +
-        '<button class="cb-op" onclick="_calcOper(\'×\')">×</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'4\')">4</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'5\')">5</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'6\')">6</button>' +
-        '<button class="cb-op" onclick="_calcOper(\'−\')">−</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'1\')">1</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'2\')">2</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'3\')">3</button>' +
-        '<button class="cb-op" onclick="_calcOper(\'+\')">+</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'0\')" style="grid-column:span 2">0</button>' +
-        '<button class="cb-num" onclick="_calcNum(\'.\')">.</button>' +
-        '<button class="cb-eq" onclick="_calcEqual()">=</button>' +
+        '<button class="cb-fn" onclick="_cF(' + id + ',\'C\')">C</button>' +
+        '<button class="cb-fn" onclick="_cF(' + id + ',\'pm\')">±</button>' +
+        '<button class="cb-fn" onclick="_cF(' + id + ',\'pct\')">%</button>' +
+        '<button class="cb-op" onclick="_cOp(' + id + ',\'÷\')">÷</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'7\')">7</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'8\')">8</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'9\')">9</button>' +
+        '<button class="cb-op" onclick="_cOp(' + id + ',\'×\')">×</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'4\')">4</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'5\')">5</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'6\')">6</button>' +
+        '<button class="cb-op" onclick="_cOp(' + id + ',\'−\')">−</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'1\')">1</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'2\')">2</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'3\')">3</button>' +
+        '<button class="cb-op" onclick="_cOp(' + id + ',\'+\')">+</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'0\')" style="grid-column:span 2">0</button>' +
+        '<button class="cb-num" onclick="_cN(' + id + ',\'.\')">.</button>' +
+        '<button class="cb-eq" onclick="_cEq(' + id + ')">=</button>' +
       '</div>';
     document.body.appendChild(div);
-    _makeDraggable(div, document.getElementById('calc-drag'));
-    // 키보드 입력
-    div.setAttribute('tabindex', '0');
-    div.addEventListener('keydown', function(e) {
-      if (e.key >= '0' && e.key <= '9') _calcNum(e.key);
-      else if (e.key === '.') _calcNum('.');
-      else if (e.key === '+') _calcOper('+');
-      else if (e.key === '-') _calcOper('−');
-      else if (e.key === '*') _calcOper('×');
-      else if (e.key === '/') { e.preventDefault(); _calcOper('÷'); }
-      else if (e.key === 'Enter' || e.key === '=') _calcEqual();
-      else if (e.key === 'Escape') _calcFn('C');
-      else if (e.key === 'Backspace') _calcFn('BS');
+    _makeDraggable(div, document.getElementById('calc-drag-' + id));
+
+    // 클릭 시 포커스 (최상단으로)
+    div.addEventListener('mousedown', function() {
+      _calcFocused = id;
+      // 모든 계산기 z-index 낮추고 이 계산기만 올림
+      document.querySelectorAll('.calc-popup').forEach(function(p) { p.style.zIndex = '99999'; });
+      div.style.zIndex = '100000';
     });
+
+    // 키보드 입력
+    div.addEventListener('keydown', function(e) {
+      if (e.key >= '0' && e.key <= '9') _cN(id, e.key);
+      else if (e.key === '.') _cN(id, '.');
+      else if (e.key === '+') _cOp(id, '+');
+      else if (e.key === '-') _cOp(id, '−');
+      else if (e.key === '*') _cOp(id, '×');
+      else if (e.key === '/') { e.preventDefault(); _cOp(id, '÷'); }
+      else if (e.key === 'Enter' || e.key === '=') _cEq(id);
+      else if (e.key === 'Escape') _cF(id, 'C');
+      else if (e.key === 'Backspace') _cF(id, 'BS');
+    });
+
+    // 위치: 사이드바 옆 + 오프셋 (겹침 방지)
+    var sb = document.querySelector('.sidebar');
+    var sbW = sb ? sb.offsetWidth : 250;
+    var offset = (id - 1) * 30;
+    div.style.top = (80 + offset) + 'px';
+    div.style.left = (sbW + 16 + offset) + 'px';
+    div.focus();
+    _calcFocused = id;
+    _updBtnState();
+    return id;
   }
 
-  function _updDisp() {
-    var exprEl = document.getElementById('calc-expr');
-    var valEl = document.getElementById('calc-val');
-    if (exprEl) exprEl.textContent = _calcExpr;
-    if (valEl) valEl.textContent = _calcVal;
+  function _updDisp(id) {
+    var s = _calcInstances[id]; if (!s) return;
+    var exprEl = document.getElementById('calc-expr-' + id);
+    var valEl = document.getElementById('calc-val-' + id);
+    if (exprEl) exprEl.textContent = s.expr;
+    if (valEl) valEl.textContent = s.val;
   }
 
-  window._calcNum = function(n) {
-    if (_calcNewInput) { _calcVal = (n === '.') ? '0.' : n; _calcNewInput = false; }
+  function _updBtnState() {
+    var count = Object.keys(_calcInstances).length;
+    var btns = document.querySelectorAll('.sidebar-widgets .sw-btn');
+    if (btns[0]) btns[0].classList.toggle('active', count > 0);
+  }
+
+  window._cN = function(id, n) {
+    var s = _calcInstances[id]; if (!s) return;
+    if (s.newInput) { s.val = (n === '.') ? '0.' : n; s.newInput = false; }
     else {
-      if (n === '.' && _calcVal.includes('.')) return;
-      if (_calcVal === '0' && n !== '.') _calcVal = n;
-      else _calcVal += n;
+      if (n === '.' && s.val.includes('.')) return;
+      if (s.val === '0' && n !== '.') s.val = n;
+      else s.val += n;
     }
-    _updDisp();
+    _updDisp(id);
   };
 
-  window._calcOper = function(op) {
-    if (_calcOp && !_calcNewInput) _calcEqual();
-    _calcPrev = parseFloat(_calcVal);
-    _calcOp = op;
-    _calcExpr = _calcVal + ' ' + op;
-    _calcNewInput = true;
-    _updDisp();
+  window._cOp = function(id, op) {
+    var s = _calcInstances[id]; if (!s) return;
+    if (s.op && !s.newInput) _cEq(id);
+    s.prev = parseFloat(s.val);
+    s.op = op;
+    s.expr = s.val + ' ' + op;
+    s.newInput = true;
+    _updDisp(id);
   };
 
-  window._calcEqual = function() {
-    if (!_calcOp) return;
-    var cur = parseFloat(_calcVal);
+  window._cEq = function(id) {
+    var s = _calcInstances[id]; if (!s || !s.op) return;
+    var cur = parseFloat(s.val);
     var r = 0;
-    if (_calcOp === '+') r = _calcPrev + cur;
-    else if (_calcOp === '−') r = _calcPrev - cur;
-    else if (_calcOp === '×') r = _calcPrev * cur;
-    else if (_calcOp === '÷') r = cur !== 0 ? _calcPrev / cur : NaN;
-    _calcExpr = _calcPrev + ' ' + _calcOp + ' ' + cur + ' =';
-    _calcVal = isNaN(r) || !isFinite(r) ? 'Error' : String(parseFloat(r.toPrecision(12)));
-    _calcOp = '';
-    _calcNewInput = true;
-    _updDisp();
+    if (s.op === '+') r = s.prev + cur;
+    else if (s.op === '−') r = s.prev - cur;
+    else if (s.op === '×') r = s.prev * cur;
+    else if (s.op === '÷') r = cur !== 0 ? s.prev / cur : NaN;
+    s.expr = s.prev + ' ' + s.op + ' ' + cur + ' =';
+    s.val = isNaN(r) || !isFinite(r) ? 'Error' : String(parseFloat(r.toPrecision(12)));
+    s.op = '';
+    s.newInput = true;
+    _updDisp(id);
   };
 
-  window._calcFn = function(fn) {
-    if (fn === 'C') { _calcVal = '0'; _calcExpr = ''; _calcOp = ''; _calcPrev = 0; _calcNewInput = true; }
-    else if (fn === '±') { _calcVal = String(-parseFloat(_calcVal)); }
-    else if (fn === '%') { _calcVal = String(parseFloat(_calcVal) / 100); }
-    else if (fn === 'BS') { _calcVal = _calcVal.length > 1 ? _calcVal.slice(0, -1) : '0'; }
-    _updDisp();
+  window._cF = function(id, fn) {
+    var s = _calcInstances[id]; if (!s) return;
+    if (fn === 'C') { s.val = '0'; s.expr = ''; s.op = ''; s.prev = 0; s.newInput = true; }
+    else if (fn === 'pm') { s.val = String(-parseFloat(s.val)); }
+    else if (fn === 'pct') { s.val = String(parseFloat(s.val) / 100); }
+    else if (fn === 'BS') { s.val = s.val.length > 1 ? s.val.slice(0, -1) : '0'; }
+    _updDisp(id);
   };
 
-  window._calcMemFn = function(fn) {
-    var v = parseFloat(_calcVal) || 0;
-    if (fn === 'mc') _calcMem = 0;
-    else if (fn === 'mr') { _calcVal = String(_calcMem); _calcNewInput = true; }
-    else if (fn === 'm+') _calcMem += v;
-    else if (fn === 'm-') _calcMem -= v;
-    _updDisp();
+  window._cM = function(id, fn) {
+    var s = _calcInstances[id]; if (!s) return;
+    var v = parseFloat(s.val) || 0;
+    if (fn === 'mc') s.mem = 0;
+    else if (fn === 'mr') { s.val = String(s.mem); s.newInput = true; }
+    else if (fn === 'm+') s.mem += v;
+    else if (fn === 'm-') s.mem -= v;
+    _updDisp(id);
+  };
+
+  window._calcClose = function(id) {
+    var el = document.getElementById('calc-popup-' + id);
+    if (el) el.remove();
+    delete _calcInstances[id];
+    _updBtnState();
   };
 
   window.toggleCalcPopup = function() {
-    _ensureCalcDOM();
-    var el = document.getElementById('calc-popup');
-    var isVisible = el.classList.contains('visible');
-    if (isVisible) {
-      el.classList.remove('visible');
-    } else {
-      // 사이드바 옆에 위치시키기
-      var sb = document.querySelector('.sidebar');
-      var sbW = sb ? sb.offsetWidth : 250;
-      el.style.top = '100px';
-      el.style.left = (sbW + 16) + 'px';
-      el.classList.add('visible');
-      el.focus();
-    }
-    // 아이콘 active 토글
-    var btns = document.querySelectorAll('.sidebar-widgets .sw-btn');
-    if (btns[0]) btns[0].classList.toggle('active', !isVisible);
+    // 항상 새 계산기 생성
+    _createCalc();
   };
 })();
 
