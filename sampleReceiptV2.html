@@ -4014,24 +4014,24 @@ function selectRefTestItem(testItemCode) {
 // ============================================================================
 async function fetchLatestReceiptNo(testField, testPurpose) {
     try {
-        // receiptNo 내림차순으로 최근 것부터 가져오기
+        // orderBy 없이 조회 → 클라이언트에서 정렬 (복합 인덱스 불필요)
         const snap = await db.collection('receipts')
             .where('testPurpose', '==', testPurpose)
-            .orderBy('receiptNo', 'desc')
-            .limit(20)
+            .where('testField', '==', testField)
+            .limit(50)
             .get();
 
         const prevInput = document.getElementById('prev-receipt-no');
         if (!snap.empty) {
-            // 클라이언트에서 testField 필터
             const matched = snap.docs
                 .map(d => d.data())
-                .filter(r => r.testField === testField && r.receiptNo);
+                .filter(r => r.receiptNo)
+                .sort((a, b) => (b.receiptNo || '').localeCompare(a.receiptNo || ''));
 
             if (matched.length > 0) {
                 const prevNo = matched[0].receiptNo;
                 prevInput.value = prevNo;
-                console.log(`[Firestore] 이전 접수번호 조회: ${prevNo} (${testPurpose})`);
+                console.log(`[Firestore] 이전 접수번호 조회: ${prevNo} (${testField}/${testPurpose})`);
                 setPrevReceiptNo();
             } else {
                 prevInput.value = '';
