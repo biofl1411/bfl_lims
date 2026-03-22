@@ -36999,18 +36999,47 @@ function duplicatePBundle(bundleKey) {
   if (!subKey || !sub3Key) return;
   var nk = subKey + '_' + sub3Key;
   var srcName = (_pBundleNames[nk] || {})[bundleKey] || bundleKey;
-  var newName = prompt('복사할 묶음 이름:', srcName + ' (복사)');
-  if (!newName || !newName.trim()) return;
-  newName = newName.trim();
+  var codeLabel = 'P' + subKey + '-' + sub3Key + '-' + bundleKey;
+  var srcBk = getBundleKey(subKey, sub3Key, bundleKey);
+  var itemCnt = (_pBundleItems[srcBk] || []).length;
+  var fee = _pBundleFees[srcBk] || 0;
 
+  var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mDupPB" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<h3 style="margin:0;font-size:14px;">묶음 복사</h3>'
+    + '<button onclick="document.getElementById(\'mDupPB\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:8px;font-size:12px">'
+    + '<span style="color:#7c4dff;font-weight:600">' + codeLabel + '</span> ' + srcName
+    + '<div style="margin-top:4px;font-size:11px;color:#999">' + itemCnt + '개 항목' + (fee > 0 ? ' · ' + fee.toLocaleString() + '원' : '') + ' 복사됩니다</div></div>'
+    + '<div style="font-size:11px;color:#666;margin-bottom:6px;">새 묶음 이름</div>'
+    + '<input id="dup-pb-input" value="' + (srcName + ' (복사)').replace(/"/g, '&quot;') + '" placeholder="복사할 묶음 이름" '
+    + 'style="width:100%;padding:10px 12px;border:1px solid #c4b5fd;border-radius:8px;font-size:14px;color:#5b21b6;font-weight:500;margin-bottom:12px" '
+    + 'onkeydown="if(event.key===\'Enter\')applyDuplicatePBundle(\'' + bundleKey + '\')">'
+    + '<div style="display:flex;justify-content:flex-end;gap:6px">'
+    + '<button onclick="document.getElementById(\'mDupPB\').remove()" style="padding:7px 14px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">취소</button>'
+    + '<button onclick="applyDuplicatePBundle(\'' + bundleKey + '\')" style="padding:7px 14px;border:none;background:#7c4dff;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">복사</button>'
+    + '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() { var el = document.getElementById('dup-pb-input'); if (el) { el.focus(); el.select(); } }, 100);
+}
+
+function applyDuplicatePBundle(bundleKey) {
+  var input = document.getElementById('dup-pb-input');
+  if (!input) return;
+  var newName = input.value.trim();
+  if (!newName) { showToast('이름을 입력하세요', 'warning'); return; }
+
+  var subKey = _mfdsTestSubFilter;
+  var sub3Key = _pRefSub3Filter;
+  var nk = subKey + '_' + sub3Key;
   var bundles = _pBundleNames[nk] || {};
-  // 다음 번호
+  if (Object.values(bundles).indexOf(newName) >= 0) { showToast("'" + newName + "' 이미 존재합니다", 'warning'); return; }
+
   var existNums = Object.keys(bundles).map(Number).filter(function(n) { return !isNaN(n); });
-  var nextNum = 1;
-  while (existNums.indexOf(nextNum) >= 0) nextNum++;
+  var nextNum = existNums.length > 0 ? Math.max.apply(null, existNums) + 1 : 1;
   var numKey = String(nextNum);
 
-  // 복제
   if (!_pBundleNames[nk]) _pBundleNames[nk] = {};
   _pBundleNames[nk][numKey] = newName;
   var srcBk = getBundleKey(subKey, sub3Key, bundleKey);
@@ -37027,6 +37056,7 @@ function duplicatePBundle(bundleKey) {
   savePBundleData();
   _pBundleSelected = numKey;
   renderPBundles();
+  document.getElementById('mDupPB').remove();
   showToast('"' + newName + '" 묶음 복사 완료', 'success');
 }
 
