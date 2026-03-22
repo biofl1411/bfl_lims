@@ -37125,6 +37125,7 @@ function filterBundleAddItems() {
   var q = (document.getElementById('bundle-add-search') || {}).value || '';
   q = q.toLowerCase();
   var items = window._bundleAddAvailable || [];
+  var sel = window._bundleAddSelected || new Set();
   var filtered = q ? items.filter(function(t) {
     return (t['시험항목코드']||'').toLowerCase().indexOf(q) >= 0 || (t['한글명']||'').toLowerCase().indexOf(q) >= 0;
   }) : items;
@@ -37132,21 +37133,27 @@ function filterBundleAddItems() {
   var html = '';
   filtered.forEach(function(t) {
     var code = t['시험항목코드'] || '';
-    var chk = (window._bundleAddSelected || new Set()).has(code) ? 'checked' : '';
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px">'
+    var isChecked = sel.has(code);
+    var chk = isChecked ? 'checked' : '';
+    var rowBg = isChecked ? 'background:#f3e8ff;' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px;transition:background .15s;' + rowBg + '">'
       + '<input type="checkbox" ' + chk + ' onchange="toggleBundleAddItem(\'' + code + '\',this.checked)" style="accent-color:#7c4dff">'
       + '<span style="color:#7c4dff;font-weight:600;width:70px;font-size:11px">' + code + '</span>'
       + '<span style="flex:1">' + (t['한글명'] || t['시험항목명'] || '') + '</span>'
-      + '<span style="color:#999;font-size:10px">' + (t['단위'] || '') + '</span></label>';
+      + (isChecked ? '<span style="font-size:9px;color:#fff;background:#7c4dff;padding:1px 6px;border-radius:8px;flex-shrink:0">선택</span>' : '')
+      + '<span style="color:#999;font-size:10px;flex-shrink:0">' + (t['단위'] || '') + '</span></label>';
   });
   if (!filtered.length) html = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">항목 없음</div>';
   document.getElementById('bundle-add-list').innerHTML = html;
-  document.getElementById('bundle-add-cnt').textContent = (window._bundleAddSelected || new Set()).size + '개';
+  document.getElementById('bundle-add-cnt').textContent = sel.size + '개';
+  // 추가 버튼에 선택 건수 표시
+  var addBtn = document.querySelector('#mAddToBundle button[onclick="executeBundleAdd()"]');
+  if (addBtn) addBtn.textContent = sel.size > 0 ? '추가 (' + sel.size + '개)' : '추가';
 }
 
 function toggleBundleAddItem(code, checked) {
   if (checked) window._bundleAddSelected.add(code); else window._bundleAddSelected.delete(code);
-  document.getElementById('bundle-add-cnt').textContent = window._bundleAddSelected.size + '개';
+  filterBundleAddItems();
 }
 
 function toggleBundleAddAll(checked) {
