@@ -36825,7 +36825,7 @@ function renderPBundleDetail() {
   });
 }
 
-// 묶음 항목 단위 편집
+// 묶음 항목 단위 편집 — 추천 단위 + 직접 입력
 function editBundleItemUnit(code) {
   if (!_pBundleSelected || !_mfdsTestSubFilter || !_pRefSub3Filter) return;
   var bk = getBundleKey(_mfdsTestSubFilter, _pRefSub3Filter, _pBundleSelected);
@@ -36833,18 +36833,86 @@ function editBundleItemUnit(code) {
   var current = currentUnits[code] || '';
   var item = _mfdsTestItems.find(function(t) { return (t['시험항목코드'] || '') === code; });
   var name = item ? (item['한글명'] || code) : code;
-  var input = prompt(name + ' 결과단위:', current);
-  if (input === null) return;
-  input = input.trim();
+
+  // ★ 추천 단위 수집
+  var suggestions = new Set();
+  // 1) 같은 묶음 내 다른 항목의 단위
+  Object.keys(currentUnits).forEach(function(c) { if (c !== code && currentUnits[c]) suggestions.add(currentUnits[c]); });
+  // 2) 다른 묶음에서 같은 코드의 단위
+  Object.keys(_pBundleUnits).forEach(function(k) {
+    if (k !== bk && _pBundleUnits[k][code]) suggestions.add(_pBundleUnits[k][code]);
+  });
+  // 3) 같은 이름의 시험항목 단위 (전체 검색)
+  if (item) {
+    var baseName = (item['한글명'] || '').replace(/\(.*\)/, '').trim();
+    _mfdsTestItems.forEach(function(t) {
+      var tName = (t['한글명'] || '').replace(/\(.*\)/, '').trim();
+      if (tName === baseName && t['단위']) suggestions.add(t['단위']);
+    });
+  }
+  // 4) 현재 항목의 기본 단위
+  if (item && item['단위']) suggestions.add(item['단위']);
+  // 현재값 제거 (별도 표시)
+  suggestions.delete(current);
+  var sugArr = Array.from(suggestions);
+
+  // 모달 생성
+  var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mEditUnit" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<h3 style="margin:0;font-size:14px;">결과단위 설정</h3>'
+    + '<button onclick="document.getElementById(\'mEditUnit\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:8px;font-size:12px">'
+    + '<span style="color:#7c4dff;font-weight:600">' + code + '</span> ' + name
+    + (current ? ' <span style="color:#999">현재: <b style="color:#7c4dff">' + current + '</b></span>' : '') + '</div>';
+
+  // 추천 단위 버튼
+  if (sugArr.length > 0) {
+    html += '<div style="margin-bottom:10px"><div style="font-size:11px;color:#666;margin-bottom:6px;">추천 단위</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    sugArr.forEach(function(u) {
+      html += '<button onclick="applyBundleUnit(\'' + code.replace(/'/g, "\\'") + '\',\'' + u.replace(/'/g, "\\'") + '\')" '
+        + 'style="padding:4px 12px;border:1px solid #c4b5fd;background:#f3e8ff;color:#7c4dff;border-radius:16px;font-size:12px;cursor:pointer;font-weight:500;transition:all .15s"'
+        + ' onmouseover="this.style.background=\'#7c4dff\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#f3e8ff\';this.style.color=\'#7c4dff\'">'
+        + u + '</button>';
+    });
+    html += '</div></div>';
+  }
+
+  // 직접 입력
+  html += '<div style="font-size:11px;color:#666;margin-bottom:6px;">직접 입력</div>'
+    + '<div style="display:flex;gap:6px">'
+    + '<input id="unit-custom-input" value="' + (current || '').replace(/"/g, '&quot;') + '" placeholder="단위 입력 (예: g/100g, mg/100mL)" '
+    + 'style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px" '
+    + 'onkeydown="if(event.key===\'Enter\')applyBundleUnit(\'' + code.replace(/'/g, "\\'") + '\',this.value)">'
+    + '<button onclick="applyBundleUnit(\'' + code.replace(/'/g, "\\'") + '\',document.getElementById(\'unit-custom-input\').value)" '
+    + 'style="padding:8px 14px;border:none;background:#7c4dff;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">적용</button></div>';
+
+  // 단위 해제
+  if (current) {
+    html += '<div style="margin-top:8px;text-align:right">'
+      + '<button onclick="applyBundleUnit(\'' + code.replace(/'/g, "\\'") + '\',\'\')" style="padding:4px 10px;border:1px solid #ddd;background:#fff;color:#999;border-radius:6px;font-size:11px;cursor:pointer">단위 해제</button></div>';
+  }
+  html += '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() { document.getElementById('unit-custom-input').focus(); }, 100);
+}
+
+function applyBundleUnit(code, unit) {
+  var bk = getBundleKey(_mfdsTestSubFilter, _pRefSub3Filter, _pBundleSelected);
+  unit = (unit || '').trim();
   if (!_pBundleUnits[bk]) _pBundleUnits[bk] = {};
-  if (input) {
-    _pBundleUnits[bk][code] = input;
+  if (unit) {
+    _pBundleUnits[bk][code] = unit;
   } else {
     delete _pBundleUnits[bk][code];
     if (Object.keys(_pBundleUnits[bk]).length === 0) delete _pBundleUnits[bk];
   }
   savePBundleData();
   renderPBundleDetail();
+  var modal = document.getElementById('mEditUnit');
+  if (modal) modal.remove();
+  showToast(unit ? '단위 설정: ' + unit : '단위 해제', 'success');
 }
 
 // 묶음 생성 (P1-01 아래 P1-01-1, P1-01-2... 4단계)
