@@ -36169,6 +36169,7 @@ function renderMfdsTestItems() {
         _pBundleItems = bd.items || {};
         _pBundleFees = bd.fees || {};
         _pBundleUnits = bd.units || {};
+        _pBundleDeleted = bd.deleted || [];
       }
       autoPopulateNutritionBundles();
     }).catch(function() {});
@@ -36474,6 +36475,7 @@ var _pBundleNames = {};     // { '1_01': { '1': '9대 영양성분_13일', '2': 
 var _pBundleItems = {};     // { '1_01_1': ['P10001','P10003'], ... }
 var _pBundleFees = {};      // { '1_01_1': 429000, ... }
 var _pBundleUnits = {};     // { '1_01_1': { 'P20001': '%', 'P20002': 'kcal/100g' } }
+var _pBundleDeleted = [];   // 삭제된 묶음 키 목록 (자동 재생성 방지)
 var _pBundleSortable = null;
 
 function savePBundleData() {
@@ -36481,7 +36483,8 @@ function savePBundleData() {
     names: _pBundleNames,
     items: _pBundleItems,
     fees: _pBundleFees,
-    units: _pBundleUnits
+    units: _pBundleUnits,
+    deleted: _pBundleDeleted
   });
 }
 
@@ -36600,11 +36603,12 @@ function autoPopulateNutritionBundles() {
 
   var changed = false;
 
-  // 묶음이 없거나 항목이 비어있으면 재생성
+  // 묶음이 없거나 항목이 비어있으면 재생성 (삭제 이력 체크)
   function needsPopulate(nk, bk) {
+    var fullKey = nk + '_' + bk;
+    if (_pBundleDeleted.indexOf(fullKey) >= 0) return false; // 사용자가 삭제한 묶음
     var names = _pBundleNames[nk] || {};
     if (!names[bk]) return true; // 이름 없음
-    var fullKey = nk + '_' + bk;
     var items = _pBundleItems[fullKey] || [];
     return items.length === 0; // 항목 없음
   }
@@ -36890,6 +36894,8 @@ function deletePBundle(bundleKey) {
   delete _pBundleItems[bk];
   delete _pBundleFees[bk];
   delete _pBundleUnits[bk];
+  // 삭제 이력 기록 (자동 재생성 방지)
+  if (_pBundleDeleted.indexOf(bk) < 0) _pBundleDeleted.push(bk);
 
   savePBundleData();
   if (_pBundleSelected === bundleKey) _pBundleSelected = null;
