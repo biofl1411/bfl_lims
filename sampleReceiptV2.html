@@ -905,8 +905,9 @@ body.sidebar-collapsed .main-container{margin-left:64px}
           <input id="right-item-search" type="text" placeholder="묶음명 또는 시험항목 검색..." autocomplete="off"
             oninput="searchRightPanelItems(this.value)" onfocus="searchRightPanelItems(this.value||'')"
             style="flex:1;padding:7px 12px;border:1px solid #c4b5fd;border-radius:8px;font-size:12px;background:#faf5ff;">
-          <div id="right-cat-chips" style="display:flex;gap:3px;flex-wrap:wrap;"></div>
         </div>
+        <!-- 범위 라벨 + 카테고리/소분류/묶음 칩 -->
+        <div id="right-cat-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;align-items:center;"></div>
         <div id="right-item-dropdown" class="autocomplete-list" style="position:absolute;top:100%;left:0;right:0;z-index:100;max-height:350px;overflow-y:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);display:none;margin-top:2px;"></div>
       </div>
       <div class="items-table-wrap">
@@ -3809,15 +3810,22 @@ async function loadItemGroupsData() {
 
 // ═══ P참고용 묶음(세트) 캐시 ═══
 var _pBundleCache = null; // { names, items, fees, units }
+var _pRefSub3Data = {};   // sub3 칩 데이터 (접수등록용)
 
 async function loadPBundleCache() {
     if (_pBundleCache) return _pBundleCache;
     try {
-        var doc = await db.collection('settings').doc('pRefBundles').get();
-        if (doc.exists) {
-            _pBundleCache = doc.data();
+        var results = await Promise.all([
+            db.collection('settings').doc('pRefBundles').get(),
+            db.collection('settings').doc('pRefSub3Categories').get()
+        ]);
+        if (results[0].exists) {
+            _pBundleCache = results[0].data();
         } else {
             _pBundleCache = { names: {}, items: {}, fees: {}, units: {} };
+        }
+        if (results[1].exists) {
+            _pRefSub3Data = results[1].data();
         }
     } catch(e) {
         console.warn('[묶음] 로드 실패:', e.message);
@@ -4252,21 +4260,79 @@ function closeRightDropdown() {
 function buildRightCatChips(filtered) {
     var container = document.getElementById('right-cat-chips');
     if (!container) return;
-    var catCounts = {};
-    filtered.forEach(function(t) {
-        var cat = (t['시험항목코드'] || '').charAt(0).toUpperCase();
-        if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
-    });
-    var cats = Object.keys(catCounts).sort();
-    if (cats.length <= 1) { container.innerHTML = ''; return; }
     var html = '';
-    cats.forEach(function(cat) {
-        var name = _REF_CAT_NAMES[cat] || cat;
-        var color = _REF_CAT_COLORS[cat] || '#64748b';
-        html += '<button type="button" onclick="toggleRightCatFilter(\'' + cat + '\')" '
-          + 'style="padding:1px 6px;border-radius:8px;border:1px solid ' + color + ';background:#fff;color:' + color + ';font-size:9px;cursor:pointer" '
-          + 'data-rcat="' + cat + '">' + cat + ' ' + name + ' ' + catCounts[cat] + '</button>';
-    });
+
+    // ★ 범위가 지정된 경우 (testItemCats가 있을 때)
+    var hasCatFilter = _currentTestItemCats && _currentTestItemCats.length > 0;
+    var hasSubFilter = _currentTestItemSubs && Object.keys(_currentTestItemSubs).length > 0;
+
+    if (hasCatFilter) {
+        // 1) 지정된 대분류 라벨 (고정, 클릭 불가)
+        _currentTestItemCats.forEach(function(cat) {
+            var name = _REF_CAT_NAMES[cat] || cat;
+            var color = _REF_CAT_COLORS[cat] || '#64748b';
+            var subs = _currentTestItemSubs[cat] || [];
+            var subText = '';
+            if (subs.length > 0) {
+                var subNames = subs.map(function(s) {
+                    return (_REF_SUBCAT_NAMES[cat + s] || s);
+                });
+                subText = ' > ' + subNames.join(', ');
+            }
+            html += '<span style="padding:2px 8px;border-radius:8px;background:' + color + ';color:#fff;font-size:10px;font-weight:600">'
+              + cat + ' ' + name + subText + ' ' + filtered.length + '건</span>';
+        });
+
+        // 2) P참고용이면 하위 묶음 칩 표시
+        if (_currentTestItemCats.indexOf('P') >= 0 && _pBundleCache && _pBundleCache.names) {
+            var pSubs = _currentTestItemSubs['P'] || [];
+            var names = _pBundleCache.names;
+            // sub3 칩 + 묶음 표시
+            var subKeys = pSubs.length > 0 ? pSubs : Object.keys(_pRefSub3Data || {});
+            subKeys.forEach(function(sk) {
+                var sub3 = (_pRefSub3Data || {})[sk] || {};
+                var sub3Keys = Object.keys(sub3).sort();
+                sub3Keys.forEach(function(s3k) {
+                    var nk = sk + '_' + s3k;
+                    var bundles = names[nk] || {};
+                    var bKeys = Object.keys(bundles).sort(function(a,b) { return Number(a)-Number(b); });
+                    if (bKeys.length > 0) {
+                        // sub3 그룹 라벨
+                        html += '<span style="margin-left:4px;font-size:9px;color:#999;">P' + sk + '-' + s3k + ':</span>';
+                        bKeys.forEach(function(bk) {
+                            var fullKey = nk + '_' + bk;
+                            var bName = bundles[bk];
+                            var cnt = ((_pBundleCache.items || {})[fullKey] || []).length;
+                            var fee = ((_pBundleCache.fees || {})[fullKey] || 0);
+                            var safeKey = fullKey.replace(/'/g, "\\'");
+                            html += '<button type="button" onclick="selectRefBundle(\'' + safeKey + '\')" '
+                              + 'style="padding:2px 8px;border-radius:10px;border:1px solid #c4b5fd;background:#faf5ff;color:#7c4dff;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s" '
+                              + 'onmouseover="this.style.background=\'#7c4dff\';this.style.color=\'#fff\'" '
+                              + 'onmouseout="this.style.background=\'#faf5ff\';this.style.color=\'#7c4dff\'" '
+                              + 'title="' + cnt + '개 항목' + (fee > 0 ? ' · ' + fee.toLocaleString() + '원' : '') + '">'
+                              + bName + '</button>';
+                        });
+                    }
+                });
+            });
+        }
+    } else {
+        // 범위 없음 → 대분류별 필터 칩
+        var catCounts = {};
+        filtered.forEach(function(t) {
+            var cat = (t['시험항목코드'] || '').charAt(0).toUpperCase();
+            if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
+        });
+        var cats = Object.keys(catCounts).sort();
+        cats.forEach(function(cat) {
+            var name = _REF_CAT_NAMES[cat] || cat;
+            var color = _REF_CAT_COLORS[cat] || '#64748b';
+            html += '<button type="button" onclick="toggleRightCatFilter(\'' + cat + '\')" '
+              + 'style="padding:1px 6px;border-radius:8px;border:1px solid ' + color + ';background:#fff;color:' + color + ';font-size:9px;cursor:pointer" '
+              + 'data-rcat="' + cat + '">' + cat + ' ' + name + ' ' + catCounts[cat] + '</button>';
+        });
+    }
+
     container.innerHTML = html;
 }
 
