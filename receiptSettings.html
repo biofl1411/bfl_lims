@@ -53,6 +53,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <button class="settings-tab" onclick="switchSettingsTab('ledger')"><span class="tab-icon">📒</span>접수대장</button>
         <button class="settings-tab" onclick="switchSettingsTab('stats')"><span class="tab-icon">📊</span>접수 통계</button>
         <button class="settings-tab" onclick="switchSettingsTab('ocrtpl')"><span class="tab-icon">🎯</span>OCR 템플릿</button>
+        <button class="settings-tab" onclick="switchSettingsTab('label')"><span class="tab-icon">🏷️</span>업체라벨</button>
     </div>
 
     <!-- 접수 공지 (iframe) -->
@@ -87,6 +88,70 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
     <div class="tab-content" id="tab-ocrtpl">
         <iframe src="ocrTemplateManager.html?embed=1" id="iframe-ocrtpl"></iframe>
     </div>
+
+    <!-- 업체라벨 관리 -->
+    <div class="tab-content" id="tab-label" style="padding:24px;overflow-y:auto">
+        <div style="max-width:900px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+                <h2 style="font-size:18px;font-weight:700;color:#1a2332">🏷️ 업체라벨 관리</h2>
+                <span style="font-size:12px;color:#8892a4">업체에 부여할 라벨을 관리합니다. 라벨은 접수등록 시 업체 필터링에 활용됩니다.</span>
+            </div>
+
+            <!-- 라벨 추가 폼 -->
+            <div style="background:#fff;border:1px solid #e2e6ed;border-radius:12px;padding:16px 20px;margin-bottom:20px">
+                <div style="font-size:13px;font-weight:700;color:#1a2332;margin-bottom:12px">새 라벨 추가</div>
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                    <div style="flex:1;min-width:200px">
+                        <label style="display:block;font-size:11px;color:#5f6b7a;font-weight:600;margin-bottom:4px">라벨명 <span style="color:#e53935">*</span></label>
+                        <input id="labelName" placeholder="예: VIP, 우선업체, 관찰대상..." style="width:100%;padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
+                    </div>
+                    <div style="min-width:120px">
+                        <label style="display:block;font-size:11px;color:#5f6b7a;font-weight:600;margin-bottom:4px">라벨 색상</label>
+                        <input id="labelColor" type="color" value="#1a73e8" style="width:100%;height:38px;border:1px solid #e2e6ed;border-radius:8px;cursor:pointer;padding:2px">
+                    </div>
+                    <button onclick="addLabel()" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;white-space:nowrap">+ 라벨 추가</button>
+                </div>
+            </div>
+
+            <!-- 라벨 목록 -->
+            <div style="background:#fff;border:1px solid #e2e6ed;border-radius:12px;overflow:hidden">
+                <div style="padding:14px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px">
+                    <span style="font-size:13px;font-weight:700;color:#1a2332">등록된 라벨</span>
+                    <span id="labelCount" style="font-size:11px;color:#8892a4">(0개)</span>
+                </div>
+                <div id="labelList" style="padding:8px 0;min-height:100px">
+                    <div style="text-align:center;padding:30px;color:#8892a4;font-size:12px">라벨이 없습니다. 위에서 새 라벨을 추가하세요.</div>
+                </div>
+            </div>
+
+            <!-- 업체 라벨 적용 -->
+            <div style="background:#fff;border:1px solid #e2e6ed;border-radius:12px;padding:16px 20px;margin-top:20px">
+                <div style="font-size:13px;font-weight:700;color:#1a2332;margin-bottom:12px">업체에 라벨 적용</div>
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                    <div style="flex:1;min-width:200px">
+                        <label style="display:block;font-size:11px;color:#5f6b7a;font-weight:600;margin-bottom:4px">업체 검색</label>
+                        <input id="labelCompanySearch" placeholder="회사명, 사업자번호 검색..." style="width:100%;padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px" oninput="searchLabelCompany(this.value)">
+                        <div id="labelCompanyDropdown" style="display:none;position:absolute;background:#fff;border:1px solid #e2e6ed;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;z-index:50;width:300px;margin-top:2px"></div>
+                    </div>
+                    <div style="min-width:160px">
+                        <label style="display:block;font-size:11px;color:#5f6b7a;font-weight:600;margin-bottom:4px">라벨 선택</label>
+                        <select id="labelSelect" style="width:100%;padding:9px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;cursor:pointer"><option value="">라벨 선택</option></select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding-bottom:2px">
+                        <label style="font-size:11px;color:#5f6b7a;font-weight:600;white-space:nowrap">영구 적용</label>
+                        <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer">
+                            <input type="checkbox" id="labelPermanent" checked style="opacity:0;width:0;height:0">
+                            <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:11px;transition:.3s" onclick="this.previousElementSibling.checked=!this.previousElementSibling.checked;this.style.background=this.previousElementSibling.checked?'#1a73e8':'#ccc'"></span>
+                            <span style="position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none" id="labelToggleKnob"></span>
+                        </label>
+                    </div>
+                    <button onclick="applyLabelToCompany()" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#2e7d32;color:#fff;white-space:nowrap">적용</button>
+                </div>
+                <!-- 적용된 라벨 목록 -->
+                <div id="appliedLabelList" style="margin-top:12px"></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -109,6 +174,222 @@ if (initTab) {
     var tabBtn = document.querySelector('.settings-tab[onclick*="' + initTab + '"]');
     if (tabBtn) tabBtn.click();
 }
+
+// ============================================================
+// 업체라벨 관리
+// ============================================================
+var _labels = [];
+var _labelSelectedCompany = null;
+
+function loadLabels() {
+    db.collection('settings').doc('companyLabels').get().then(function(doc) {
+        _labels = doc.exists ? (doc.data().labels || []) : [];
+        renderLabels();
+    }).catch(function(e) { console.warn('라벨 로드 실패:', e.message); });
+}
+
+function renderLabels() {
+    var container = document.getElementById('labelList');
+    var countEl = document.getElementById('labelCount');
+    var selectEl = document.getElementById('labelSelect');
+    if (countEl) countEl.textContent = '(' + _labels.length + '개)';
+
+    // 라벨 목록
+    if (_labels.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:30px;color:#8892a4;font-size:12px">라벨이 없습니다. 위에서 새 라벨을 추가하세요.</div>';
+    } else {
+        var html = '';
+        _labels.forEach(function(lb, i) {
+            html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid #f5f5f5">';
+            html += '<span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:' + (lb.color||'#1a73e8') + ';flex-shrink:0"></span>';
+            html += '<span style="font-size:13px;font-weight:600;color:#1a2332;flex:1">' + lb.name + '</span>';
+            html += '<span style="font-size:11px;color:#8892a4">' + (lb.count || 0) + '개 업체</span>';
+            html += '<button onclick="editLabel(' + i + ')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#1a73e8">수정</button>';
+            html += '<button onclick="deleteLabel(' + i + ')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#e53935">삭제</button>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    }
+
+    // 셀렉트 옵션 갱신
+    if (selectEl) {
+        var opts = '<option value="">라벨 선택</option>';
+        _labels.forEach(function(lb, i) {
+            opts += '<option value="' + i + '" style="color:' + (lb.color||'#1a73e8') + '">' + lb.name + '</option>';
+        });
+        selectEl.innerHTML = opts;
+    }
+}
+
+function saveLabels() {
+    return db.collection('settings').doc('companyLabels').set({ labels: _labels }, { merge: true });
+}
+
+function addLabel() {
+    var nameEl = document.getElementById('labelName');
+    var colorEl = document.getElementById('labelColor');
+    var name = (nameEl.value || '').trim();
+    if (!name) { alert('라벨명을 입력하세요.'); return; }
+    if (_labels.some(function(lb) { return lb.name === name; })) { alert('이미 존재하는 라벨입니다.'); return; }
+    _labels.push({ name: name, color: colorEl.value || '#1a73e8', count: 0 });
+    saveLabels().then(function() {
+        nameEl.value = '';
+        renderLabels();
+    });
+}
+
+function editLabel(idx) {
+    var lb = _labels[idx];
+    var newName = prompt('라벨명 수정:', lb.name);
+    if (!newName || newName.trim() === '' || newName.trim() === lb.name) return;
+    _labels[idx].name = newName.trim();
+    saveLabels().then(renderLabels);
+}
+
+function deleteLabel(idx) {
+    if (!confirm('"' + _labels[idx].name + '" 라벨을 삭제하시겠습니까?\n적용된 업체의 라벨도 해제됩니다.')) return;
+    var labelName = _labels[idx].name;
+    _labels.splice(idx, 1);
+    saveLabels().then(function() {
+        renderLabels();
+        // 해당 라벨이 적용된 업체에서 제거
+        db.collection('companies').where('labels', 'array-contains', labelName).get().then(function(snap) {
+            snap.forEach(function(doc) {
+                var labels = (doc.data().labels || []).filter(function(l) { return typeof l === 'string' ? l !== labelName : l.name !== labelName; });
+                db.collection('companies').doc(doc.id).update({ labels: labels });
+            });
+        });
+    });
+}
+
+var _labelSearchTimer = null;
+function searchLabelCompany(query) {
+    clearTimeout(_labelSearchTimer);
+    var dd = document.getElementById('labelCompanyDropdown');
+    if (!query || query.length < 1) { dd.style.display = 'none'; return; }
+    _labelSearchTimer = setTimeout(function() {
+        fsSearchCompanies(query, 10).then(function(results) {
+            if (results.length === 0) { dd.style.display = 'none'; return; }
+            var html = '';
+            results.forEach(function(c) {
+                html += '<div style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'" onclick="selectLabelCompany(\'' + c.id + '\',\'' + (c.company||'').replace(/'/g,"") + '\')">';
+                html += '<b>' + (c.company || '') + '</b> <span style="color:#8892a4">' + (c.bizNo || '') + '</span>';
+                var existLabels = c.labels || [];
+                if (existLabels.length > 0) {
+                    existLabels.forEach(function(lb) {
+                        var lbName = typeof lb === 'string' ? lb : lb.name;
+                        var lbColor = '#1a73e8';
+                        _labels.forEach(function(l) { if (l.name === lbName) lbColor = l.color; });
+                        html += ' <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9px;background:' + lbColor + '20;color:' + lbColor + ';font-weight:600">' + lbName + '</span>';
+                    });
+                }
+                html += '</div>';
+            });
+            dd.innerHTML = html;
+            dd.style.display = 'block';
+        });
+    }, 300);
+}
+
+function selectLabelCompany(id, name) {
+    _labelSelectedCompany = { id: id, name: name };
+    document.getElementById('labelCompanySearch').value = name;
+    document.getElementById('labelCompanyDropdown').style.display = 'none';
+    loadAppliedLabels(id);
+}
+
+function loadAppliedLabels(companyId) {
+    db.collection('companies').doc(companyId).get().then(function(doc) {
+        if (!doc.exists) return;
+        var data = doc.data();
+        var labels = data.labels || [];
+        var container = document.getElementById('appliedLabelList');
+        if (labels.length === 0) {
+            container.innerHTML = '<div style="font-size:11px;color:#8892a4;padding:4px 0">적용된 라벨 없음</div>';
+            return;
+        }
+        var html = '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        labels.forEach(function(lb) {
+            var lbName = typeof lb === 'string' ? lb : lb.name;
+            var permanent = typeof lb === 'string' ? true : lb.permanent !== false;
+            var lbColor = '#1a73e8';
+            _labels.forEach(function(l) { if (l.name === lbName) lbColor = l.color; });
+            html += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;background:' + lbColor + '15;color:' + lbColor + ';border:1px solid ' + lbColor + '40">';
+            html += lbName;
+            html += permanent ? ' (영구)' : ' (임시)';
+            html += ' <span style="cursor:pointer;margin-left:2px" onclick="removeLabelFromCompany(\'' + companyId + '\',\'' + lbName + '\')">✕</span>';
+            html += '</span>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    });
+}
+
+function applyLabelToCompany() {
+    if (!_labelSelectedCompany) { alert('업체를 선택하세요.'); return; }
+    var selectEl = document.getElementById('labelSelect');
+    var idx = parseInt(selectEl.value);
+    if (isNaN(idx)) { alert('라벨을 선택하세요.'); return; }
+    var lb = _labels[idx];
+    var permanent = document.getElementById('labelPermanent').checked;
+
+    db.collection('companies').doc(_labelSelectedCompany.id).get().then(function(doc) {
+        var data = doc.exists ? doc.data() : {};
+        var labels = data.labels || [];
+        // 이미 적용된 라벨인지 확인
+        var exists = labels.some(function(l) { return (typeof l === 'string' ? l : l.name) === lb.name; });
+        if (exists) { alert('이미 적용된 라벨입니다.'); return; }
+        labels.push({ name: lb.name, permanent: permanent, appliedAt: new Date().toISOString() });
+        return db.collection('companies').doc(_labelSelectedCompany.id).update({ labels: labels });
+    }).then(function() {
+        loadAppliedLabels(_labelSelectedCompany.id);
+        // 카운트 갱신
+        updateLabelCounts();
+    });
+}
+
+function removeLabelFromCompany(companyId, labelName) {
+    db.collection('companies').doc(companyId).get().then(function(doc) {
+        var labels = (doc.data().labels || []).filter(function(l) { return (typeof l === 'string' ? l : l.name) !== labelName; });
+        return db.collection('companies').doc(companyId).update({ labels: labels });
+    }).then(function() {
+        loadAppliedLabels(companyId);
+        updateLabelCounts();
+    });
+}
+
+function updateLabelCounts() {
+    db.collection('companies').get().then(function(snap) {
+        var counts = {};
+        snap.forEach(function(doc) {
+            var labels = doc.data().labels || [];
+            labels.forEach(function(lb) {
+                var name = typeof lb === 'string' ? lb : lb.name;
+                counts[name] = (counts[name] || 0) + 1;
+            });
+        });
+        _labels.forEach(function(lb) { lb.count = counts[lb.name] || 0; });
+        saveLabels().then(renderLabels);
+    });
+}
+
+// 토글 스위치 초기화
+(function() {
+    var cb = document.getElementById('labelPermanent');
+    var knob = document.getElementById('labelToggleKnob');
+    var track = cb ? cb.nextElementSibling : null;
+    if (cb && track) {
+        track.style.background = cb.checked ? '#1a73e8' : '#ccc';
+        if (knob) knob.style.left = cb.checked ? '20px' : '2px';
+        cb.addEventListener('change', function() {
+            track.style.background = cb.checked ? '#1a73e8' : '#ccc';
+            if (knob) knob.style.left = cb.checked ? '20px' : '2px';
+        });
+    }
+})();
+
+// Firebase 준비 시 라벨 로드
+document.addEventListener('firebase-ready', loadLabels);
 </script>
 </body>
 </html>
