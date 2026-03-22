@@ -36745,9 +36745,34 @@ function editBundleFee(bundleKey) {
   var current = _pBundleFees[bk] || 0;
   var nk = subKey + '_' + sub3Key;
   var bundleName = (_pBundleNames[nk] || {})[bundleKey] || bundleKey;
-  var input = prompt('P' + subKey + '-' + sub3Key + '-' + bundleKey + ' ' + bundleName + '\n\n세트 수수료 금액 (0 입력 시 해제):', current || '');
-  if (input === null) return;
-  var fee = parseInt(input) || 0;
+  var codeLabel = 'P' + subKey + '-' + sub3Key + '-' + bundleKey;
+
+  var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mEditFee" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:340px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<h3 style="margin:0;font-size:14px;">세트 수수료 설정</h3>'
+    + '<button onclick="document.getElementById(\'mEditFee\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:8px;font-size:12px">'
+    + '<span style="color:#7c4dff;font-weight:600">' + codeLabel + '</span> ' + bundleName + '</div>'
+    + '<div style="position:relative;margin-bottom:12px">'
+    + '<input id="fee-input" type="text" value="' + (current > 0 ? current.toLocaleString() : '') + '" placeholder="금액 입력" '
+    + 'oninput="this.value=this.value.replace(/[^0-9]/g,\'\').replace(/\\B(?=(\\d{3})+(?!\\d))/g,\',\')" '
+    + 'onkeydown="if(event.key===\'Enter\')applyBundleFee(\'' + bk.replace(/'/g, "\\'") + '\')" '
+    + 'style="width:100%;padding:10px 40px 10px 12px;border:1px solid #c4b5fd;border-radius:8px;font-size:16px;font-weight:600;text-align:right;color:#5b21b6">'
+    + '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#999;font-size:13px">원</span></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center">'
+    + (current > 0 ? '<button onclick="document.getElementById(\'fee-input\').value=\'\';applyBundleFee(\'' + bk.replace(/'/g, "\\'") + '\')" style="padding:6px 12px;border:1px solid #ddd;background:#fff;color:#999;border-radius:6px;font-size:11px;cursor:pointer">수수료 해제</button>' : '<span></span>')
+    + '<div style="display:flex;gap:6px">'
+    + '<button onclick="document.getElementById(\'mEditFee\').remove()" style="padding:7px 14px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">취소</button>'
+    + '<button onclick="applyBundleFee(\'' + bk.replace(/'/g, "\\'") + '\')" style="padding:7px 14px;border:none;background:#7c4dff;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">적용</button>'
+    + '</div></div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() { var el = document.getElementById('fee-input'); if (el) { el.focus(); el.select(); } }, 100);
+}
+
+function applyBundleFee(bk) {
+  var raw = (document.getElementById('fee-input').value || '').replace(/,/g, '');
+  var fee = parseInt(raw) || 0;
   if (fee > 0) {
     _pBundleFees[bk] = fee;
   } else {
@@ -36755,6 +36780,8 @@ function editBundleFee(bundleKey) {
   }
   savePBundleData();
   renderPBundles();
+  var modal = document.getElementById('mEditFee');
+  if (modal) modal.remove();
   showToast(fee > 0 ? '세트 수수료 ' + fee.toLocaleString() + '원 설정' : '세트 수수료 해제', 'success');
 }
 
