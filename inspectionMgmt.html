@@ -36198,23 +36198,26 @@ function applyMfdsTestFilters() {
   query = query.trim();
   var base = _mfdsTestItems;
 
-  // 1) 대분류 필터
-  if (_mfdsTestCatFilter !== 'all') {
-    base = base.filter(function(item) {
-      return (item['시험항목코드'] || '').charAt(0).toUpperCase() === _mfdsTestCatFilter;
-    });
+  // ★ 검색어가 있으면 카테고리/소분류 필터 무시 → 전체에서 검색
+  if (!query) {
+    // 1) 대분류 필터
+    if (_mfdsTestCatFilter !== 'all') {
+      base = base.filter(function(item) {
+        return (item['시험항목코드'] || '').charAt(0).toUpperCase() === _mfdsTestCatFilter;
+      });
+    }
+
+    // 2) 소분류 필터
+    if (_mfdsTestSubFilter && _mfdsTestCatFilter !== 'all') {
+      base = base.filter(function(item) {
+        var code = (item['시험항목코드'] || '').toUpperCase();
+        return code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === _mfdsTestSubFilter;
+      });
+    }
   }
 
-  // 2) 소분류 필터
-  if (_mfdsTestSubFilter && _mfdsTestCatFilter !== 'all') {
-    base = base.filter(function(item) {
-      var code = (item['시험항목코드'] || '').toUpperCase();
-      return code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === _mfdsTestSubFilter;
-    });
-  }
-
-  // 2.5) P참고용 3단계 서브칩 필터
-  if (_pRefSub3Filter && _mfdsTestCatFilter === 'P' && _mfdsTestSubFilter) {
+  // 2.5) P참고용 3단계 서브칩 필터 (검색어 없을 때만)
+  if (!query && _pRefSub3Filter && _mfdsTestCatFilter === 'P' && _mfdsTestSubFilter) {
     var sub3Name = (_pRefSub3Data[_mfdsTestSubFilter] || {})[_pRefSub3Filter] || '';
     if (sub3Name) {
       base = base.filter(function(item) {
