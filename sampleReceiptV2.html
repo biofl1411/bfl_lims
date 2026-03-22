@@ -899,6 +899,16 @@ body.sidebar-collapsed .main-container{margin-left:64px}
         </div>
       </div>
       <div id="inspection-source-info" style="display:none;margin-bottom:6px;padding:5px 10px;border-radius:6px;background:#e3f2fd;border:1px solid #bbdefb;font-size:11px;color:#1565c0"></div>
+      <!-- ★ 오른쪽 패널 시험항목 검색 (묶음+개별) -->
+      <div id="right-item-search-wrap" style="display:none;margin-bottom:6px;position:relative;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input id="right-item-search" type="text" placeholder="묶음명 또는 시험항목 검색..." autocomplete="off"
+            oninput="searchRightPanelItems(this.value)" onfocus="searchRightPanelItems(this.value||'')"
+            style="flex:1;padding:7px 12px;border:1px solid #c4b5fd;border-radius:8px;font-size:12px;background:#faf5ff;">
+          <div id="right-cat-chips" style="display:flex;gap:3px;flex-wrap:wrap;"></div>
+        </div>
+        <div id="right-item-dropdown" class="autocomplete-list" style="position:absolute;top:100%;left:0;right:0;z-index:100;max-height:350px;overflow-y:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);display:none;margin-top:2px;"></div>
+      </div>
       <div class="items-table-wrap">
         <table>
           <thead>
@@ -3289,6 +3299,8 @@ function updateInspectionMode(testPurpose) {
 
     var refCatLabelsEl = document.getElementById('ref-cat-labels');
 
+    var rightSearchWrap = document.getElementById('right-item-search-wrap');
+
     if (!testPurpose) {
         _restoreFoodTypeLabel(foodTypeLabel);
         _restoreFoodTypeInput(foodTypeInput);
@@ -3298,67 +3310,54 @@ function updateInspectionMode(testPurpose) {
         if (foodTypeInput) { foodTypeInput.disabled = true; foodTypeInput.placeholder = '검사목적을 먼저 선택하세요'; foodTypeInput.value = ''; }
         if (inspectionItemsEl) inspectionItemsEl.style.display = 'none';
         if (refCatLabelsEl) { refCatLabelsEl.style.display = 'none'; refCatLabelsEl.innerHTML = ''; }
+        if (rightSearchWrap) rightSearchWrap.style.display = 'none';
         _refActiveCat = '';
         checkFssTopRow();
         return;
     }
 
     if (src === 'mfdsTestItems') {
-        // ★ 시험항목 직접 검색 모드
+        // ★ 시험항목 직접 검색 모드 — 오른쪽 패널에서 검색
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
         checkFssTopRow();
-        if (foodTypeGroup) foodTypeGroup.style.display = '';
-
-        if (foodTypeLabel) {
-            var pinHtml = foodTypeLabel.querySelector('.pin-check');
-            foodTypeLabel.innerHTML = '시험항목 검색 <span class="required">*</span>';
-            if (pinHtml) foodTypeLabel.appendChild(pinHtml);
-        }
-
-        if (foodTypeInput) {
-            foodTypeInput.disabled = false;
-            foodTypeInput.value = '';
-            foodTypeInput.oninput = function() { searchRefTestItems(this.value); };
-            foodTypeInput.onfocus = function() { searchRefTestItems(this.value || ''); };
-            foodTypeInput.onclick = function() { searchRefTestItems(this.value || ''); };
-        }
+        // 왼쪽 검체유형 필드 숨김
+        if (foodTypeGroup) foodTypeGroup.style.display = 'none';
+        if (refCatLabelsEl) { refCatLabelsEl.style.display = 'none'; refCatLabelsEl.innerHTML = ''; }
 
         if (inspectionItemsEl) {
             inspectionItemsEl.style.display = 'block';
             var tbody = document.getElementById('inspection-items-tbody');
             if (tbody && tbody.children.length === 0) {
-                tbody.innerHTML = '<tr id="ref-test-empty-row"><td colspan="7" style="padding:30px;text-align:center;color:#999;font-size:13px">🔍 위 검색창에서 시험항목을 검색하여 추가하세요</td></tr>';
+                tbody.innerHTML = '<tr id="ref-test-empty-row"><td colspan="7" style="padding:30px;text-align:center;color:#999;font-size:13px">🔍 상단 검색창에서 묶음 또는 시험항목을 검색하여 추가하세요</td></tr>';
             }
             var tfoot = document.getElementById('inspection-items-tfoot');
             if (tfoot) tfoot.style.display = 'none';
         }
 
-        // 데이터 미리 로드 + placeholder 동적 건수 + 카테고리 라벨 빌드
+        // ★ 오른쪽 패널 검색바 활성화
+        if (rightSearchWrap) rightSearchWrap.style.display = 'block';
+        _isRefTestMode = true;
+
+        // 데이터 미리 로드
         if (typeof MFDS_CODES !== 'undefined') {
-            MFDS_CODES.loadTestItems().then(function(items) {
-                _refTestItemsCache = items;
-                // 칩 필터가 있으면 필터된 건수 표시
-                var filtered = _filterTestItemsByCats(items);
-                var cntText = filtered.length < items.length
-                    ? filtered.length.toLocaleString() + '/' + items.length.toLocaleString() + '건'
-                    : items.length.toLocaleString() + '건';
-                if (foodTypeInput) foodTypeInput.placeholder = '시험항목명 또는 코드 검색... (' + cntText + ')';
-                // ★ 카테고리 라벨 칩 빌드
-                buildRefCatLabels(items);
+            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache()]).then(function(r) {
+                _refTestItemsCache = r[0];
+                var filtered = _filterTestItemsByCats(r[0]);
+                var searchEl = document.getElementById('right-item-search');
+                if (searchEl) searchEl.placeholder = '묶음 또는 시험항목 검색... (' + filtered.length.toLocaleString() + '건)';
+                buildRightCatChips(filtered);
             });
         }
         var helpEl = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
-        if (helpEl) {
-            var catNames = _currentTestItemCats.length > 0 ? _currentTestItemCats.join(', ') + ' 범주' : '전체';
-            helpEl.textContent = '시험항목 탭 [' + catNames + ']에서 검색하여 추가합니다';
-        }
+        if (helpEl) helpEl.textContent = '';
 
     } else if (src === 'mfdsTemplates') {
         // 식약처 연동 모드 (자가품질 전용)
         _restoreFoodTypeLabel(foodTypeLabel);
         _restoreFoodTypeInput(foodTypeInput);
         if (refCatLabelsEl) { refCatLabelsEl.style.display = 'none'; refCatLabelsEl.innerHTML = ''; }
+        if (rightSearchWrap) rightSearchWrap.style.display = 'none';
         _refActiveCat = '';
         if (foodTypeGroup) foodTypeGroup.style.display = '';
         if (foodTypeInput) { foodTypeInput.disabled = false; foodTypeInput.placeholder = '식품유형 검색 (고시항목 기준)...'; foodTypeInput.value = ''; }
@@ -3379,54 +3378,39 @@ function updateInspectionMode(testPurpose) {
             MFDS_CODES.lockCategories('가공식품', '가공식품(전부개정)');
         }
     } else {
-        // ★ 참고용 그룹 모드 (itemGroups) — mfdsTestItems와 동일한 시험항목 검색 UI 사용
+        // ★ 참고용 그룹 모드 (itemGroups) — 오른쪽 패널에서 검색
         if (mfdsPickerEl) mfdsPickerEl.style.display = 'none';
         if (mfdsStdEl) mfdsStdEl.style.display = 'none';
         checkFssTopRow();
-        if (foodTypeGroup) foodTypeGroup.style.display = '';
-
-        if (foodTypeLabel) {
-            var pinHtml4 = foodTypeLabel.querySelector('.pin-check');
-            foodTypeLabel.innerHTML = '시험항목 검색 <span class="required">*</span>';
-            if (pinHtml4) foodTypeLabel.appendChild(pinHtml4);
-        }
-
-        if (foodTypeInput) {
-            foodTypeInput.disabled = false;
-            foodTypeInput.value = '';
-            foodTypeInput.oninput = function() { searchRefTestItems(this.value); };
-            foodTypeInput.onfocus = function() { searchRefTestItems(this.value || ''); };
-            foodTypeInput.onclick = function() { searchRefTestItems(this.value || ''); };
-        }
+        if (foodTypeGroup) foodTypeGroup.style.display = 'none';
+        if (refCatLabelsEl) { refCatLabelsEl.style.display = 'none'; refCatLabelsEl.innerHTML = ''; }
 
         if (inspectionItemsEl) {
             inspectionItemsEl.style.display = 'block';
             var tbody3 = document.getElementById('inspection-items-tbody');
             if (tbody3 && tbody3.children.length === 0) {
-                tbody3.innerHTML = '<tr id="ref-test-empty-row"><td colspan="7" style="padding:30px;text-align:center;color:#999;font-size:13px">🔍 위 검색창에서 시험항목을 검색하여 추가하세요</td></tr>';
+                tbody3.innerHTML = '<tr id="ref-test-empty-row"><td colspan="7" style="padding:30px;text-align:center;color:#999;font-size:13px">🔍 상단 검색창에서 묶음 또는 시험항목을 검색하여 추가하세요</td></tr>';
             }
             var tfoot3 = document.getElementById('inspection-items-tfoot');
             if (tfoot3) tfoot3.style.display = 'none';
         }
 
-        // 시험항목 + itemGroups 데이터 로드 + 카테고리 칩 빌드
+        // ★ 오른쪽 패널 검색바 활성화
+        if (rightSearchWrap) rightSearchWrap.style.display = 'block';
         _isRefTestMode = true;
+
         if (typeof MFDS_CODES !== 'undefined') {
-            MFDS_CODES.loadTestItems().then(function(items) {
-                _refTestItemsCache = items;
-                var filtered = _filterTestItemsByCats(items);
-                var cntText = filtered.length < items.length
-                    ? filtered.length.toLocaleString() + '/' + items.length.toLocaleString() + '건'
-                    : items.length.toLocaleString() + '건';
-                if (foodTypeInput) foodTypeInput.placeholder = '시험항목명 또는 코드 검색... (' + cntText + ')';
-                buildRefCatLabels(items);
+            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache()]).then(function(r) {
+                _refTestItemsCache = r[0];
+                var filtered = _filterTestItemsByCats(r[0]);
+                var searchEl = document.getElementById('right-item-search');
+                if (searchEl) searchEl.placeholder = '묶음 또는 시험항목 검색... (' + filtered.length.toLocaleString() + '건)';
+                buildRightCatChips(filtered);
             });
         }
-        loadItemGroupsData(); // itemGroups 수수료 캐시용
-
+        loadItemGroupsData();
         var helpEl3 = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
-        var catNames3 = _currentTestItemCats.length > 0 ? _currentTestItemCats.join(', ') + ' 범주' : '전체';
-        if (helpEl3) helpEl3.textContent = '시험항목 탭 [' + catNames3 + ']에서 검색하여 추가합니다';
+        if (helpEl3) helpEl3.textContent = '';
     }
 }
 
@@ -4129,6 +4113,142 @@ function selectRefTestItem(testItemCode) {
  * 묶음(세트) 선택 시 — 전체 항목을 한번에 추가 + 세트 수수료 적용
  * @param {string} bundleKey - 묶음 키 (예: "2_01_1")
  */
+// ============================================================================
+// 오른쪽 패널 시험항목 검색 (묶음 + 개별 항목)
+// ============================================================================
+var _rightActiveCat = '';
+
+function searchRightPanelItems(query) {
+    var list = document.getElementById('right-item-dropdown');
+    if (!list) return;
+    if (!_refTestItemsCache) { list.style.display = 'none'; return; }
+
+    // 묶음 검색
+    var bundleResults = query ? searchBundles(query) : searchBundles('');
+
+    // 개별 항목 검색
+    var results = MFDS_CODES.searchTestItems(query, _refTestItemsCache);
+    results = _filterTestItemsByCats(results);
+
+    // 카테고리 필터 적용
+    if (_rightActiveCat) {
+        results = _filterByLabelKey(results, _rightActiveCat);
+        bundleResults = bundleResults.filter(function(b) { return b.code.indexOf(_rightActiveCat) >= 0; });
+    }
+
+    if (results.length === 0 && bundleResults.length === 0) {
+        list.innerHTML = '<div style="padding:12px;color:#8892a4;font-size:12px;text-align:center">검색 결과 없음</div>';
+        list.style.display = 'block';
+        return;
+    }
+
+    // 이미 추가된 코드
+    var addedCodes = new Set();
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (tbody) tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) { addedCodes.add(tr.getAttribute('data-test-code')); });
+
+    var html = '';
+
+    // 묶음 결과
+    if (bundleResults.length > 0) {
+        html += '<div style="padding:4px 10px;font-size:10px;color:#7c4dff;font-weight:600;background:#f3e8ff;border-bottom:1px solid #e0d4f5;">📦 묶음 (세트)</div>';
+        bundleResults.forEach(function(b) {
+            var safeKey = b.key.replace(/'/g, "\\'");
+            html += '<div class="autocomplete-item" style="padding:6px 10px;font-size:12px;background:#faf5ff;cursor:pointer" onclick="selectRefBundle(\'' + safeKey + '\');closeRightDropdown()">'
+              + '<div style="display:flex;align-items:center;gap:6px">'
+              + '<span style="font-family:monospace;font-size:10px;color:#7c4dff;background:#f3e8ff;padding:1px 5px;border-radius:3px;font-weight:600">' + b.code + '</span>'
+              + '<span style="font-weight:600;font-size:12px;color:#5b21b6">' + b.name + '</span>'
+              + '<span style="font-size:10px;color:#999">' + b.count + '개</span>'
+              + (b.fee > 0 ? '<span style="font-size:10px;color:#7c4dff;font-weight:600;margin-left:auto">' + b.fee.toLocaleString() + '원</span>' : '')
+              + '</div></div>';
+        });
+        if (results.length > 0) html += '<div style="padding:4px 10px;font-size:10px;color:#666;font-weight:600;background:#f5f5f5;border-top:1px solid #eee;border-bottom:1px solid #eee;">개별 항목</div>';
+    }
+
+    // 개별 항목
+    results.forEach(function(item) {
+        var code = item['시험항목코드'] || '';
+        var name = item['한글명'] || '';
+        var isAdded = addedCodes.has(code);
+        var displayName = name, displayCode = code;
+        if (query) {
+            var safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var regex = new RegExp('(' + safeQ + ')', 'gi');
+            displayName = name.replace(regex, '<mark>$1</mark>');
+            displayCode = code.replace(regex, '<mark>$1</mark>');
+        }
+        var feeInfo = _refFeeMap ? _refFeeMap[code] : null;
+        var fee = (feeInfo && feeInfo.fee > 0) ? feeInfo.fee : getFeeByCode(code, name);
+        var feeHtml = fee > 0 ? '<span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + fee.toLocaleString() + '원</span>' : '';
+        var clickAction = isAdded ? 'removeRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')';
+        html += '<div class="autocomplete-item" style="padding:5px 10px;font-size:12px;cursor:pointer;' + (isAdded ? 'opacity:0.4;' : '') + '" onclick="' + clickAction + ';searchRightPanelItems(document.getElementById(\'right-item-search\').value)">'
+          + '<div style="display:flex;align-items:center;gap:6px">'
+          + '<span style="font-family:monospace;font-size:10px;color:#1565c0;background:#e3f2fd;padding:1px 4px;border-radius:3px">' + displayCode + '</span>'
+          + '<span style="font-weight:500">' + displayName + '</span>'
+          + (isAdded ? '<span style="font-size:9px;color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:3px">추가됨</span>' : '')
+          + feeHtml + '</div></div>';
+    });
+
+    if (results.length >= 50) {
+        html += '<div style="padding:8px 12px;color:#999;font-size:11px;text-align:center;border-top:1px solid #eee">최대 50건 — 검색어를 더 입력하세요</div>';
+    }
+
+    list.innerHTML = html;
+    list.style.display = 'block';
+}
+
+function closeRightDropdown() {
+    var list = document.getElementById('right-item-dropdown');
+    if (list) list.style.display = 'none';
+    var input = document.getElementById('right-item-search');
+    if (input) input.value = '';
+}
+
+function buildRightCatChips(filtered) {
+    var container = document.getElementById('right-cat-chips');
+    if (!container) return;
+    var catCounts = {};
+    filtered.forEach(function(t) {
+        var cat = (t['시험항목코드'] || '').charAt(0).toUpperCase();
+        if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
+    });
+    var cats = Object.keys(catCounts).sort();
+    if (cats.length <= 1) { container.innerHTML = ''; return; }
+    var html = '';
+    cats.forEach(function(cat) {
+        var name = _REF_CAT_NAMES[cat] || cat;
+        var color = _REF_CAT_COLORS[cat] || '#64748b';
+        html += '<button type="button" onclick="toggleRightCatFilter(\'' + cat + '\')" '
+          + 'style="padding:1px 6px;border-radius:8px;border:1px solid ' + color + ';background:#fff;color:' + color + ';font-size:9px;cursor:pointer" '
+          + 'data-rcat="' + cat + '">' + cat + ' ' + name + ' ' + catCounts[cat] + '</button>';
+    });
+    container.innerHTML = html;
+}
+
+function toggleRightCatFilter(cat) {
+    _rightActiveCat = (_rightActiveCat === cat) ? '' : cat;
+    var btns = document.querySelectorAll('#right-cat-chips button');
+    btns.forEach(function(b) {
+        var c = b.getAttribute('data-rcat');
+        var color = _REF_CAT_COLORS[c] || '#64748b';
+        if (c === _rightActiveCat) {
+            b.style.background = color; b.style.color = '#fff';
+        } else {
+            b.style.background = '#fff'; b.style.color = color;
+        }
+    });
+    searchRightPanelItems(document.getElementById('right-item-search').value || '');
+}
+
+// 오른쪽 드롭다운 외부 클릭 시 닫기
+document.addEventListener('click', function(e) {
+    var wrap = document.getElementById('right-item-search-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+        var dd = document.getElementById('right-item-dropdown');
+        if (dd) dd.style.display = 'none';
+    }
+});
+
 function selectRefBundle(bundleKey) {
     if (!_pBundleCache || !_refTestItemsCache) return;
     var codes = (_pBundleCache.items || {})[bundleKey] || [];
