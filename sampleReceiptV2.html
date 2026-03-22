@@ -3338,15 +3338,17 @@ function updateInspectionMode(testPurpose) {
         // ★ 오른쪽 패널 검색바 활성화
         if (rightSearchWrap) rightSearchWrap.style.display = 'block';
         _isRefTestMode = true;
+        _rightFilteredCache = null; // 범위 변경 시 캐시 초기화
+        _rightActiveCat = '';
 
         // 데이터 미리 로드
         if (typeof MFDS_CODES !== 'undefined') {
-            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache()]).then(function(r) {
+            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache(), buildRefFeeMap()]).then(function(r) {
                 _refTestItemsCache = r[0];
-                var filtered = _filterTestItemsByCats(r[0]);
+                _rightFilteredCache = _filterTestItemsByCats(r[0]);
                 var searchEl = document.getElementById('right-item-search');
-                if (searchEl) searchEl.placeholder = '묶음 또는 시험항목 검색... (' + filtered.length.toLocaleString() + '건)';
-                buildRightCatChips(filtered);
+                if (searchEl) searchEl.placeholder = '묶음 또는 시험항목 검색... (' + _rightFilteredCache.length.toLocaleString() + '건)';
+                buildRightCatChips(_rightFilteredCache);
             });
         }
         var helpEl = foodTypeGroup ? foodTypeGroup.querySelector('.field-help') : null;
@@ -3398,14 +3400,16 @@ function updateInspectionMode(testPurpose) {
         // ★ 오른쪽 패널 검색바 활성화
         if (rightSearchWrap) rightSearchWrap.style.display = 'block';
         _isRefTestMode = true;
+        _rightFilteredCache = null; // 범위 변경 시 캐시 초기화
+        _rightActiveCat = '';
 
         if (typeof MFDS_CODES !== 'undefined') {
-            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache()]).then(function(r) {
+            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache(), buildRefFeeMap()]).then(function(r) {
                 _refTestItemsCache = r[0];
-                var filtered = _filterTestItemsByCats(r[0]);
+                _rightFilteredCache = _filterTestItemsByCats(r[0]);
                 var searchEl = document.getElementById('right-item-search');
-                if (searchEl) searchEl.placeholder = '묶음 또는 시험항목 검색... (' + filtered.length.toLocaleString() + '건)';
-                buildRightCatChips(filtered);
+                if (searchEl) searchEl.placeholder = '묶음 또는 시험항목 검색... (' + _rightFilteredCache.length.toLocaleString() + '건)';
+                buildRightCatChips(_rightFilteredCache);
             });
         }
         loadItemGroupsData();
@@ -4117,18 +4121,21 @@ function selectRefTestItem(testItemCode) {
 // 오른쪽 패널 시험항목 검색 (묶음 + 개별 항목)
 // ============================================================================
 var _rightActiveCat = '';
+var _rightFilteredCache = null; // 검사목적 범위로 사전 필터링된 항목 캐시
 
 function searchRightPanelItems(query) {
     var list = document.getElementById('right-item-dropdown');
     if (!list) return;
     if (!_refTestItemsCache) { list.style.display = 'none'; return; }
 
-    // 묶음 검색
-    var bundleResults = query ? searchBundles(query) : searchBundles('');
+    // ★ 검사목적 범위로 사전 필터링된 항목 사용
+    if (!_rightFilteredCache) _rightFilteredCache = _filterTestItemsByCats(_refTestItemsCache);
 
-    // 개별 항목 검색
-    var results = MFDS_CODES.searchTestItems(query, _refTestItemsCache);
-    results = _filterTestItemsByCats(results);
+    // 묶음 검색 (범위 내 묶음만)
+    var bundleResults = searchBundlesFiltered(query);
+
+    // 개별 항목 검색 — 사전 필터링된 목록에서 검색
+    var results = MFDS_CODES.searchTestItems(query, _rightFilteredCache);
 
     // 카테고리 필터 적용
     if (_rightActiveCat) {
@@ -4195,6 +4202,44 @@ function searchRightPanelItems(query) {
 
     list.innerHTML = html;
     list.style.display = 'block';
+}
+
+/** 검사목적 범위 내 묶음만 검색 */
+function searchBundlesFiltered(query) {
+    if (!_pBundleCache || !_pBundleCache.names) return [];
+    var q = (query || '').toLowerCase();
+    var results = [];
+    var names = _pBundleCache.names;
+
+    // 검사목적의 testItemCats/Subs로 묶음 키 필터링
+    Object.keys(names).forEach(function(nk) {
+        var parts = nk.split('_'); // "2_01" → subKey=2
+        var prefix = 'P' + parts[0]; // "P2"
+        // 범위 체크: testItemCats에 해당 대분류가 포함되어야 함
+        if (_currentTestItemCats.length > 0 && _currentTestItemCats.indexOf('P') < 0) return;
+        // 소분류 체크
+        var subs = _currentTestItemSubs['P'];
+        if (subs && subs.length > 0 && subs.indexOf(parts[0]) < 0) return;
+
+        var bundles = names[nk];
+        Object.keys(bundles).forEach(function(bk) {
+            var bundleName = bundles[bk];
+            if (!q || bundleName.toLowerCase().indexOf(q) >= 0 || ('P' + nk.replace('_', '-') + '-' + bk).toLowerCase().indexOf(q) >= 0) {
+                var fullKey = nk + '_' + bk;
+                var itemCodes = (_pBundleCache.items || {})[fullKey] || [];
+                var fee = (_pBundleCache.fees || {})[fullKey] || 0;
+                results.push({
+                    key: fullKey,
+                    code: 'P' + parts[0] + '-' + parts[1] + '-' + bk,
+                    name: bundleName,
+                    items: itemCodes,
+                    fee: fee,
+                    count: itemCodes.length
+                });
+            }
+        });
+    });
+    return results;
 }
 
 function closeRightDropdown() {
