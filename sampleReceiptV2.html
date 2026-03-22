@@ -4258,17 +4258,39 @@ function searchBundlesFiltered(query) {
     return results;
 }
 
-function toggleRightBundleGroup(groupId) {
-    var el = document.getElementById(groupId);
-    var arrow = document.getElementById(groupId + '_arrow');
-    if (!el) return;
-    if (el.style.display === 'none') {
-        el.style.display = 'flex';
-        if (arrow) arrow.style.transform = 'rotate(90deg)';
-    } else {
-        el.style.display = 'none';
-        if (arrow) arrow.style.transform = '';
-    }
+function selectRightSub3(sk, s3k) {
+    var key = sk + '_' + s3k;
+    // 칩 활성화 토글
+    var btns = document.querySelectorAll('#right-cat-chips button[data-rsub3]');
+    btns.forEach(function(b) {
+        var isActive = b.getAttribute('data-rsub3') === key;
+        b.style.background = isActive ? '#7c4dff' : '#faf5ff';
+        b.style.color = isActive ? '#fff' : '#5b21b6';
+    });
+    // 하단에 해당 묶음 표시
+    var detail = document.getElementById('right-bundle-detail');
+    if (!detail || !_pBundleCache) return;
+    var nk = key;
+    var bundles = (_pBundleCache.names || {})[nk] || {};
+    var bKeys = Object.keys(bundles).sort(function(a,b) { return Number(a)-Number(b); });
+    if (bKeys.length === 0) { detail.innerHTML = '<span style="font-size:11px;color:#999">묶음 없음</span>'; return; }
+    var html = '';
+    bKeys.forEach(function(bk) {
+        var fullKey = nk + '_' + bk;
+        var bName = bundles[bk];
+        var cnt = ((_pBundleCache.items || {})[fullKey] || []).length;
+        var fee = ((_pBundleCache.fees || {})[fullKey] || 0);
+        var safeKey = fullKey.replace(/'/g, "\\'");
+        html += '<button type="button" onclick="selectRefBundle(\'' + safeKey + '\')" '
+          + 'style="padding:3px 10px;border-radius:10px;border:1px solid #c4b5fd;background:#faf5ff;color:#7c4dff;font-size:11px;cursor:pointer;font-weight:500;transition:all .15s" '
+          + 'onmouseover="this.style.background=\'#7c4dff\';this.style.color=\'#fff\'" '
+          + 'onmouseout="this.style.background=\'#faf5ff\';this.style.color=\'#7c4dff\'" '
+          + 'title="' + cnt + '개 항목' + (fee > 0 ? ' · ' + fee.toLocaleString() + '원' : '') + '">'
+          + bName + ' <span style="opacity:.6;font-size:9px">' + cnt + '</span>'
+          + (fee > 0 ? ' <span style="opacity:.6;font-size:9px">' + fee.toLocaleString() + '원</span>' : '')
+          + '</button>';
+    });
+    detail.innerHTML = html;
 }
 
 function closeRightDropdown() {
@@ -4304,50 +4326,29 @@ function buildRightCatChips(filtered) {
               + cat + ' ' + name + subText + ' ' + filtered.length + '건</span>';
         });
 
-        // 2) P참고용이면 sub3 그룹 → 클릭 시 하위 묶음 펼침
+        // 2) P참고용이면 sub3 그룹을 가로 칩으로 표시, 클릭 시 하단에 묶음
         if (_currentTestItemCats.indexOf('P') >= 0 && _pBundleCache && _pBundleCache.names) {
             var pSubs = _currentTestItemSubs['P'] || [];
-            var names = _pBundleCache.names;
-            var subKeys = pSubs.length > 0 ? pSubs : Object.keys(_pRefSub3Data || {});
-            html += '</div><div id="right-bundle-tree" style="margin-top:4px;">';
-            subKeys.forEach(function(sk) {
+            var bNames = _pBundleCache.names;
+            var subKeys2 = pSubs.length > 0 ? pSubs : Object.keys(_pRefSub3Data || {});
+            // sub3 가로 칩
+            subKeys2.forEach(function(sk) {
                 var sub3 = (_pRefSub3Data || {})[sk] || {};
-                var sub3Keys = Object.keys(sub3).sort();
-                sub3Keys.forEach(function(s3k) {
+                Object.keys(sub3).sort().forEach(function(s3k) {
                     var nk = sk + '_' + s3k;
-                    var bundles = names[nk] || {};
-                    var bKeys = Object.keys(bundles).sort(function(a,b) { return Number(a)-Number(b); });
-                    if (bKeys.length === 0) return;
+                    var bundles = bNames[nk] || {};
+                    var bCnt = Object.keys(bundles).length;
+                    if (bCnt === 0) return;
                     var sub3Label = sub3[s3k] || s3k;
-                    var totalItems = 0;
-                    bKeys.forEach(function(bk) { totalItems += ((_pBundleCache.items || {})[nk + '_' + bk] || []).length; });
-                    var groupId = 'rbg_' + sk + '_' + s3k;
-                    // sub3 그룹 헤더 (클릭으로 토글)
-                    html += '<div style="margin-bottom:4px;">'
-                      + '<div onclick="toggleRightBundleGroup(\'' + groupId + '\')" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#f3e8ff;border:1px solid #e0d4f5;border-radius:8px;cursor:pointer;transition:all .15s" '
-                      + 'onmouseover="this.style.background=\'#ede9fe\'" onmouseout="this.style.background=\'#f3e8ff\'">'
-                      + '<span id="' + groupId + '_arrow" style="font-size:10px;color:#7c4dff;transition:transform .2s">▶</span>'
-                      + '<span style="font-size:11px;font-weight:600;color:#5b21b6">P' + sk + '-' + s3k + ' ' + sub3Label + '</span>'
-                      + '<span style="font-size:10px;color:#999">' + bKeys.length + '묶음 · ' + totalItems + '항목</span>'
-                      + '</div>'
-                      // 하위 묶음 (기본 숨김)
-                      + '<div id="' + groupId + '" style="display:none;padding:4px 0 0 20px;display:flex;flex-wrap:wrap;gap:4px;display:none">';
-                    bKeys.forEach(function(bk) {
-                        var fullKey = nk + '_' + bk;
-                        var bName = bundles[bk];
-                        var cnt = ((_pBundleCache.items || {})[fullKey] || []).length;
-                        var fee = ((_pBundleCache.fees || {})[fullKey] || 0);
-                        var safeKey = fullKey.replace(/'/g, "\\'");
-                        html += '<button type="button" onclick="selectRefBundle(\'' + safeKey + '\')" '
-                          + 'style="padding:3px 10px;border-radius:10px;border:1px solid #c4b5fd;background:#faf5ff;color:#7c4dff;font-size:11px;cursor:pointer;font-weight:500;transition:all .15s" '
-                          + 'onmouseover="this.style.background=\'#7c4dff\';this.style.color=\'#fff\'" '
-                          + 'onmouseout="this.style.background=\'#faf5ff\';this.style.color=\'#7c4dff\'" '
-                          + 'title="' + cnt + '개 항목' + (fee > 0 ? ' · ' + fee.toLocaleString() + '원' : '') + '">'
-                          + bName + ' <span style="opacity:.6;font-size:9px">' + cnt + '</span></button>';
-                    });
-                    html += '</div></div>';
+                    var chipId = 'rsub3_' + sk + '_' + s3k;
+                    html += '<button type="button" id="' + chipId + '" onclick="selectRightSub3(\'' + sk + '\',\'' + s3k + '\')" '
+                      + 'style="padding:2px 8px;border-radius:10px;border:1px solid #c4b5fd;background:#faf5ff;color:#5b21b6;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s" '
+                      + 'data-rsub3="' + sk + '_' + s3k + '">'
+                      + 'P' + sk + '-' + s3k + ' ' + sub3Label + ' <span style="opacity:.6">' + bCnt + '</span></button>';
                 });
             });
+            // 하단 묶음 표시 영역
+            html += '</div><div id="right-bundle-detail" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-height:0">';
         }
     } else {
         // 범위 없음 → 대분류별 필터 칩
