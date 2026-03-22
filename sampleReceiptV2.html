@@ -726,13 +726,29 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       </div>
     </div>
 
-    <!-- 공지여부 + 긴급여부 -->
+    <!-- 5행: 공지여부 + 지부 + 라벨 -->
     <div class="f-row c3">
       <div class="f-grp">
         <label>공지여부</label>
         <select id="notice-required">
           <option value="">선택</option><option value="예">예</option><option value="아니오">아니오</option>
         </select>
+      </div>
+      <div class="f-grp">
+        <label>지부</label>
+        <select id="receipt-branch">
+          <option value="">선택</option>
+        </select>
+      </div>
+      <div class="f-grp" style="position:relative">
+        <label>라벨</label>
+        <div style="display:flex;gap:3px;align-items:center">
+          <select id="receipt-label" style="flex:1;min-width:0">
+            <option value="">선택</option>
+          </select>
+          <button type="button" class="btn-mini secondary" onclick="addReceiptLabel()" title="라벨 추가" style="white-space:nowrap">+</button>
+        </div>
+        <div id="receipt-label-chips" style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px"></div>
       </div>
     </div>
 
@@ -2253,6 +2269,11 @@ window.addEventListener('firebase-ready', async function() {
     } catch(e) {
         console.warn('[Firestore] 로드 실패, 기존 방식 사용:', e.message);
     }
+
+    // 지부 드롭다운 로드
+    loadBranchOptions();
+    // 라벨 드롭다운 로드
+    loadLabelOptions();
 
     // 수수료 Firestore 맵 로드 (자가품질위탁검사용)
     await loadFirestoreFeeMap();
@@ -7763,6 +7784,73 @@ document.addEventListener('click', function(e) {
         if (ph) ph.style.display = 'none';
     }
 });
+
+// ============================================================================
+// 지부 드롭다운
+// ============================================================================
+var _receiptBranches = [];
+async function loadBranchOptions() {
+    try {
+        _receiptBranches = await fsGetBranches();
+    } catch(e) { _receiptBranches = []; }
+    var sel = document.getElementById('receipt-branch');
+    if (!sel) return;
+    var html = '<option value="">선택</option>';
+    _receiptBranches.forEach(function(b) {
+        html += '<option value="' + (b.id||'') + '">' + (b.company||b.name||'이름없음') + '</option>';
+    });
+    sel.innerHTML = html;
+}
+
+// ============================================================================
+// 라벨 관리 (접수등록용)
+// ============================================================================
+var _receiptLabels = [];
+var _selectedReceiptLabels = [];
+
+async function loadLabelOptions() {
+    try {
+        var doc = await db.collection('settings').doc('companyLabels').get();
+        _receiptLabels = doc.exists ? (doc.data().labels || []) : [];
+    } catch(e) { _receiptLabels = []; }
+    var sel = document.getElementById('receipt-label');
+    if (!sel) return;
+    var html = '<option value="">선택</option>';
+    _receiptLabels.forEach(function(lb, i) {
+        html += '<option value="' + i + '">' + lb.name + '</option>';
+    });
+    sel.innerHTML = html;
+}
+
+function addReceiptLabel() {
+    var sel = document.getElementById('receipt-label');
+    var idx = parseInt(sel.value);
+    if (isNaN(idx)) return;
+    var lb = _receiptLabels[idx];
+    if (_selectedReceiptLabels.some(function(l) { return l.name === lb.name; })) return;
+    _selectedReceiptLabels.push({ name: lb.name, color: lb.color || '#1a73e8' });
+    sel.value = '';
+    renderReceiptLabelChips();
+}
+
+function removeReceiptLabel(name) {
+    _selectedReceiptLabels = _selectedReceiptLabels.filter(function(l) { return l.name !== name; });
+    renderReceiptLabelChips();
+}
+
+function renderReceiptLabelChips() {
+    var container = document.getElementById('receipt-label-chips');
+    if (!container) return;
+    if (_selectedReceiptLabels.length === 0) { container.innerHTML = ''; return; }
+    var html = '';
+    _selectedReceiptLabels.forEach(function(lb) {
+        html += '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:' + lb.color + '15;color:' + lb.color + ';border:1px solid ' + lb.color + '40">';
+        html += lb.name;
+        html += ' <span style="cursor:pointer" onclick="removeReceiptLabel(\'' + lb.name.replace(/'/g, "\\'") + '\')">✕</span>';
+        html += '</span>';
+    });
+    container.innerHTML = html;
+}
 
 // 사이드바 JS → js/sidebar.js로 이관됨
 </script>
