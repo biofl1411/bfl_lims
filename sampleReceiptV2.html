@@ -1828,6 +1828,7 @@ function fillFormFromOcrResult(result) {
                     if (ts) {
                         var tsMap = {'냉장':'냉장','냉동':'냉동','실온':'실온','상온':'상온','冷蔵':'냉장','冷凍':'냉동'};
                         ts.value = tsMap[sample.transportStatus] || sample.transportStatus;
+                        syncInlineUI('transport');
                         filledFields.push('transport-status');
                     }
                 }
@@ -1875,7 +1876,7 @@ function fillFormFromOcrResult(result) {
                     }
                     if (parsed.unit) {
                         var unitEl = document.getElementById('sample-amount-unit');
-                        if (unitEl) { unitEl.value = parsed.unit; }
+                        if (unitEl) { unitEl.value = parsed.unit; selectUnit(parsed.unit); }
                     }
                     if (parsed.packageUnit) {
                         var puEl = document.getElementById('package-unit');
@@ -1897,6 +1898,7 @@ function fillFormFromOcrResult(result) {
                         if (unitEl2) {
                             var unitMap = { 'g': 'g', 'kg': 'kg', 'ml': 'ml', 'mL': 'ml', 'L': 'L', 'l': 'L', 'ea': 'ea', '개': 'ea' };
                             unitEl2.value = unitMap[sample.sampleAmountUnit] || 'g';
+                            selectUnit(unitEl2.value);
                         }
                     }
                     if (sample.packageUnit) {
@@ -7857,6 +7859,13 @@ var _inlineMap = {
     transport: { display: 'transport-display', badge: 'transport-badge', hidden: 'transport-status', picker: 'transport-picker' },
     notice: { display: 'notice-display', badge: 'notice-badge', hidden: 'notice-required', picker: 'notice-picker' }
 };
+// 색상 매핑
+var _inlineColors = {
+    receive: { '내방':['#1565c0','#e3f2fd','#bbdefb'], '택배':['#e65100','#fff3e0','#ffe0b2'], '바이오물류':['#2e7d32','#e8f5e9','#c8e6c9'], '일반물류':['#5f6b7a','#f5f5f5','#ddd'] },
+    form: { '일반':['#1565c0','#e3f2fd','#bbdefb'], '홈페이지':['#7b1fa2','#f3e5f5','#e1bee7'] },
+    transport: { '냉장':['#1565c0','#e3f2fd','#bbdefb'], '냉동':['#0d47a1','#e3f2fd','#90caf9'], '실온':['#e65100','#fff3e0','#ffe0b2'], '상온':['#2e7d32','#e8f5e9','#c8e6c9'] },
+    notice: { '예':['#2e7d32','#e8f5e9','#c8e6c9'], '아니오':['#5f6b7a','#f5f5f5','#ddd'] }
+};
 function selectInline(type, val, color, bg, border) {
     var m = _inlineMap[type];
     if (!m) return;
@@ -7866,6 +7875,18 @@ function selectInline(type, val, color, bg, border) {
     badge.textContent = val;
     badge.style.color = color; badge.style.background = bg; badge.style.borderColor = border;
     document.getElementById(m.picker).style.display = 'none';
+}
+// OCR 등 외부에서 hidden input 값 설정 후 UI 동기화
+function syncInlineUI(type) {
+    var m = _inlineMap[type];
+    if (!m) return;
+    var val = document.getElementById(m.hidden).value;
+    if (!val) return;
+    var colors = (_inlineColors[type] || {})[val] || ['#666','#f5f5f5','#ddd'];
+    document.getElementById(m.display).value = val;
+    var badge = document.getElementById(m.badge);
+    badge.textContent = val;
+    badge.style.color = colors[0]; badge.style.background = colors[1]; badge.style.borderColor = colors[2];
 }
 document.addEventListener('click', function(e) {
     _inlinePickerIds.forEach(function(pid) {
