@@ -672,11 +672,10 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <div class="f-grp"><label>제조일자</label><input type="date" id="manufacture-date" onchange="calcExpiryDate()"></div>
       <div class="f-grp">
         <label>소비기한(일수)</label>
-        <div style="display:flex;align-items:center;gap:3px">
-          <span style="font-size:10px;color:#64748b;white-space:nowrap">제조일로부터</span>
-          <input type="text" id="expiry-days" style="width:50px;text-align:center" placeholder="0"
+        <div style="position:relative">
+          <input type="text" id="expiry-days" placeholder="제조일로부터" style="width:100%;padding-right:28px"
             oninput="this.value=this.value.replace(/[^0-9]/g,'');calcExpiryDate()">
-          <span style="font-size:10px;color:#64748b">일</span>
+          <span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;pointer-events:none">일</span>
         </div>
       </div>
       <div class="f-grp"><label>소비기한</label>
@@ -759,20 +758,33 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       </div>
     </div>
 
-    <!-- 긴급여부 -->
-    <div class="f-grp" style="margin-top:4px">
-      <label>긴급여부</label>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center" id="urgent-btns">
-        <button type="button" class="urgent-btn active" data-val="일반" onclick="selectUrgent(this)">일반</button>
-        <button type="button" class="urgent-btn" data-val="긴급" onclick="selectUrgent(this)">⚡긴급</button>
-        <button type="button" class="urgent-btn" data-val="시간긴급" onclick="selectUrgent(this)">⏰시간긴급</button>
-        <input type="number" id="urgent-time" min="1" max="72" placeholder="h" style="display:none;width:50px;padding:4px 4px;border:1.5px solid #f59e0b;border-radius:6px;font-size:11px;text-align:center;background:#fffbeb;font-weight:600" title="긴급 시간(h)">
-        <select id="urgent-ampm" style="display:none;padding:4px;border:1.5px solid #f59e0b;border-radius:6px;font-size:11px;background:#fffbeb;font-weight:600">
-          <option value="">-</option><option value="오전">오전</option><option value="오후">오후</option>
-        </select>
-        <button type="button" class="urgent-btn" data-val="미생물긴급" onclick="selectUrgent(this)">🧫미생물긴급</button>
+    <!-- 6행: 긴급여부 (인라인) -->
+    <div class="f-row c3">
+      <div class="f-grp" style="position:relative">
+        <label>긴급여부</label>
+        <div style="position:relative">
+          <input type="text" id="urgent-display" value="일반" readonly onclick="toggleUrgentPicker()" style="cursor:pointer;width:100%;padding-right:30px">
+          <span id="urgent-label-badge" onclick="toggleUrgentPicker()" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer;user-select:none">일반</span>
+        </div>
+        <div id="urgent-picker" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:2px;padding:4px 0">
+          <div onclick="selectUrgentInline('일반')" style="padding:5px 12px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#e8f5e9'" onmouseout="this.style.background=''">일반</div>
+          <div onclick="selectUrgentInline('긴급')" style="padding:5px 12px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#fff3e0'" onmouseout="this.style.background=''">⚡ 긴급</div>
+          <div onclick="selectUrgentInline('시간긴급')" style="padding:5px 12px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#fff3e0'" onmouseout="this.style.background=''">⏰ 시간긴급</div>
+          <div onclick="selectUrgentInline('미생물긴급')" style="padding:5px 12px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#fce4ec'" onmouseout="this.style.background=''">🧫 미생물긴급</div>
+        </div>
+        <input type="hidden" id="urgent-value" value="일반">
       </div>
-      <input type="hidden" id="urgent-value" value="일반">
+      <div class="f-grp" id="urgent-time-grp" style="display:none">
+        <label>긴급 시간</label>
+        <div style="display:flex;align-items:center;gap:3px">
+          <input type="number" id="urgent-time" min="1" max="72" placeholder="h" style="width:60px;text-align:center">
+          <span style="font-size:10px;color:#64748b">시간</span>
+          <select id="urgent-ampm" style="padding:4px;border:1px solid #d0d5dd;border-radius:5px;font-size:11px">
+            <option value="">-</option><option value="오전">오전</option><option value="오후">오후</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-grp"></div>
     </div>
 
     <!-- 파일 첨부 -->
@@ -7790,6 +7802,32 @@ document.addEventListener('click', function(e) {
         var ph = document.getElementById('product-history-panel');
         if (ph) ph.style.display = 'none';
     }
+});
+
+// ============================================================================
+// 긴급여부 인라인
+// ============================================================================
+function toggleUrgentPicker() {
+    var p = document.getElementById('urgent-picker');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function selectUrgentInline(val) {
+    document.getElementById('urgent-value').value = val;
+    document.getElementById('urgent-display').value = val;
+    var badge = document.getElementById('urgent-label-badge');
+    badge.textContent = val;
+    var colors = {'일반':['#2e7d32','#e8f5e9','#c8e6c9'],'긴급':['#e65100','#fff3e0','#ffe0b2'],'시간긴급':['#e65100','#fff3e0','#ffe0b2'],'미생물긴급':['#c62828','#fce4ec','#f8bbd0']};
+    var c = colors[val] || colors['일반'];
+    badge.style.color = c[0]; badge.style.background = c[1]; badge.style.borderColor = c[2];
+    document.getElementById('urgent-picker').style.display = 'none';
+    var timeGrp = document.getElementById('urgent-time-grp');
+    if (timeGrp) timeGrp.style.display = (val === '시간긴급') ? '' : 'none';
+}
+document.addEventListener('click', function(e) {
+    var p = document.getElementById('urgent-picker');
+    var d = document.getElementById('urgent-display');
+    var b = document.getElementById('urgent-label-badge');
+    if (p && d && !p.contains(e.target) && e.target !== d && e.target !== b) p.style.display = 'none';
 });
 
 // ============================================================================
