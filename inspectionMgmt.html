@@ -37040,19 +37040,31 @@ function addItemToBundle() {
   var bk = getBundleKey(subKey, sub3Key, _pBundleSelected);
   var existing = new Set(_pBundleItems[bk] || []);
 
-  // P 소분류 항목 중 이 묶음에 없는 것만 표시
+  // 소분류 항목 (기본) / P 전체 항목 (토글 시)
   var prefix = 'P' + subKey;
-  var available = _mfdsTestItems.filter(function(t) {
+  var subName = (REF_SUB_CATEGORIES['P'] || {})[subKey] || subKey;
+  var availableSub = _mfdsTestItems.filter(function(t) {
     var code = (t['시험항목코드'] || '').toUpperCase();
     return code.indexOf(prefix) === 0 && !existing.has(t['시험항목코드']);
   });
+  var availableAll = _mfdsTestItems.filter(function(t) {
+    var code = (t['시험항목코드'] || '').toUpperCase();
+    return code.charAt(0) === 'P' && !existing.has(t['시험항목코드']);
+  });
+  window._bundleAddScopeAll = false;
 
   var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mAddToBundle" onclick="if(event.target===this)this.remove()">'
     + '<div style="background:#fff;border-radius:12px;padding:20px;width:520px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
     + '<h3 style="margin:0;font-size:14px;">항목 추가 → P' + subKey + '-' + sub3Key + '-' + _pBundleSelected + '</h3>'
     + '<button onclick="document.getElementById(\'mAddToBundle\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
-    + '<input id="bundle-add-search" placeholder="항목명/코드 검색..." oninput="filterBundleAddItems()" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px;">'
+    + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'
+    + '<input id="bundle-add-search" placeholder="항목명/코드 검색..." oninput="filterBundleAddItems()" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;flex:1;">'
+    + '<label style="display:flex;align-items:center;gap:4px;font-size:10px;color:#666;white-space:nowrap;cursor:pointer;" title="ON: P 전체 항목 / OFF: ' + subName + ' 항목만">'
+    + '<span id="bundle-scope-label" style="font-size:10px;">' + subName + '</span>'
+    + '<div onclick="toggleBundleScope()" style="width:36px;height:18px;border-radius:9px;background:#ddd;position:relative;cursor:pointer;transition:background .2s" id="bundle-scope-toggle">'
+    + '<div style="width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)" id="bundle-scope-thumb"></div>'
+    + '</div><span style="font-size:10px;">P전체</span></label></div>'
     + '<label style="font-size:11px;display:flex;align-items:center;gap:4px;margin-bottom:6px;"><input type="checkbox" id="bundle-add-all" onchange="toggleBundleAddAll(this.checked)" style="accent-color:#7c4dff"> 전체선택 <span id="bundle-add-cnt" style="color:#7c4dff;font-weight:600;">0개</span></label>'
     + '<div id="bundle-add-list" style="flex:1;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;max-height:350px"></div>'
     + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">'
@@ -37060,8 +37072,29 @@ function addItemToBundle() {
     + '<button onclick="executeBundleAdd()" style="padding:7px 14px;border:none;background:#7c4dff;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">추가</button></div>'
     + '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
-  window._bundleAddAvailable = available;
+  window._bundleAddAvailableSub = availableSub;
+  window._bundleAddAvailableAll = availableAll;
+  window._bundleAddAvailable = availableSub;
   window._bundleAddSelected = new Set();
+  filterBundleAddItems();
+}
+
+function toggleBundleScope() {
+  window._bundleAddScopeAll = !window._bundleAddScopeAll;
+  var toggle = document.getElementById('bundle-scope-toggle');
+  var thumb = document.getElementById('bundle-scope-thumb');
+  if (window._bundleAddScopeAll) {
+    toggle.style.background = '#7c4dff';
+    thumb.style.left = '20px';
+    window._bundleAddAvailable = window._bundleAddAvailableAll;
+  } else {
+    toggle.style.background = '#ddd';
+    thumb.style.left = '2px';
+    window._bundleAddAvailable = window._bundleAddAvailableSub;
+  }
+  window._bundleAddSelected = new Set();
+  var allChk = document.getElementById('bundle-add-all');
+  if (allChk) allChk.checked = false;
   filterBundleAddItems();
 }
 
