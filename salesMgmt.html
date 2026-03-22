@@ -324,6 +324,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
     <!-- ===== 고객사 관리 - 목록 ===== -->
     <div class="page" id="page-customerList">
+      <!-- 고객사/지부 전환 탭 -->
+      <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e2e6ed">
+        <button class="btn" id="tabCustBtn" onclick="switchCustTab('customer')" style="border-radius:8px 8px 0 0;border:1px solid #e2e6ed;border-bottom:2px solid #1a73e8;background:#fff;color:#1a73e8;font-weight:700;padding:10px 20px">고객사</button>
+        <button class="btn" id="tabBranchBtn" onclick="switchCustTab('branch')" style="border-radius:8px 8px 0 0;border:1px solid #e2e6ed;border-bottom:none;background:#f8f9fb;color:#8892a4;font-weight:600;padding:10px 20px;margin-left:-1px">지부</button>
+      </div>
       <div class="stats">
         <div class="stat"><div class="stat-val">47</div><div class="stat-label">전체 거래처</div></div>
         <div class="stat"><div class="stat-val" style="color:#2e7d32">38</div><div class="stat-label">활동 중</div></div>
@@ -1648,6 +1653,74 @@ const pageNames = {
   apiSettings:'API 수집 설정',
   ledger:'매출처 원장', transactions:'거래내역'
 };
+
+// ============================================================
+// 고객사 / 지부 탭 전환
+// ============================================================
+var _custTabMode = 'customer';
+var _branchesCache = [];
+
+function switchCustTab(mode) {
+  _custTabMode = mode;
+  var custBtn = document.getElementById('tabCustBtn');
+  var branchBtn = document.getElementById('tabBranchBtn');
+  if (mode === 'customer') {
+    custBtn.style.borderBottom = '2px solid #1a73e8';
+    custBtn.style.background = '#fff';
+    custBtn.style.color = '#1a73e8';
+    branchBtn.style.borderBottom = 'none';
+    branchBtn.style.background = '#f8f9fb';
+    branchBtn.style.color = '#8892a4';
+    loadCustomers();
+  } else {
+    branchBtn.style.borderBottom = '2px solid #1a73e8';
+    branchBtn.style.background = '#fff';
+    branchBtn.style.color = '#1a73e8';
+    custBtn.style.borderBottom = 'none';
+    custBtn.style.background = '#f8f9fb';
+    custBtn.style.color = '#8892a4';
+    loadBranches();
+  }
+}
+
+async function loadBranches() {
+  var tbody = document.getElementById('customerTbody');
+  if (!tbody) return;
+  try {
+    _branchesCache = await fsGetBranches();
+  } catch(e) {
+    console.warn('지부 로드 실패:', e.message);
+    _branchesCache = [];
+  }
+  var visCols = getVisibleColumns();
+  tbody.innerHTML = '';
+  _branchesCache.forEach(function(c) {
+    var tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    var tdHtml = '<td class="center"><input type="checkbox" class="row-check" value="' + (c.id||'') + '"></td>';
+    visCols.forEach(function(col) { tdHtml += col.render(c); });
+    tr.innerHTML = tdHtml;
+    if (c.id) {
+      tr.onclick = function() { location.href = 'branchMgmt.html?id=' + c.id; };
+    }
+    tbody.appendChild(tr);
+  });
+  // 통계
+  var stats = document.querySelectorAll('#page-customerList .stat-val');
+  if (stats.length >= 4) {
+    stats[0].textContent = _branchesCache.length;
+    stats[1].textContent = _branchesCache.filter(function(b){return b.status==='활동';}).length;
+    stats[2].textContent = 0;
+    stats[3].textContent = 0;
+  }
+  var labels = document.querySelectorAll('#page-customerList .stat-label');
+  if (labels.length >= 4) {
+    labels[0].textContent = '전체 지부';
+    labels[1].textContent = '활동 중';
+    labels[2].textContent = '미수금 지부';
+    labels[3].textContent = '위험';
+  }
+}
 
 // ============================================================
 // 등급 점수 자동 계산 엔진

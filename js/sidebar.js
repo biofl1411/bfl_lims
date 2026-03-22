@@ -207,7 +207,7 @@ const SIDEBAR_MENU = [
       { label: '접수 등록',         href: 'sampleReceiptV2.html',   page: 'reception-register' },
       { label: '접수 현황',         href: 'receiptStatus.html',  page: 'reception-status' },
       { label: '실적보고',          disabled: true },
-      { label: '지부관리',          disabled: true },
+      { label: '지부관리',          href: 'branchMgmt.html',  page: 'reception-branch' },
       { label: '설정',              href: 'receiptSettings.html',  page: 'reception-settings' }
     ]
   },

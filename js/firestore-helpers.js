@@ -849,3 +849,63 @@ async function fsCheckAllSamplesComplete(receiptNo, totalSamples) {
     .get();
   return snap.size >= totalSamples;
 }
+
+// ============================================================
+// 지부 (branches) CRUD
+// ============================================================
+
+async function fsGetBranches(opts) {
+  opts = opts || {};
+  var ref = db.collection('branches');
+  if (opts.status) ref = ref.where('status', '==', opts.status);
+  ref = ref.orderBy(opts.orderBy || 'createdAt', 'desc');
+  if (opts.limit) ref = ref.limit(opts.limit);
+  var snap = await ref.get();
+  return snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+}
+
+async function fsGetBranchById(id) {
+  var doc = await db.collection('branches').doc(id).get();
+  return doc.exists ? Object.assign({ id: doc.id }, doc.data()) : null;
+}
+
+async function fsSaveBranch(data) {
+  var now = firebase.firestore.FieldValue.serverTimestamp();
+  if (data.id) {
+    var id = data.id;
+    delete data.id;
+    data.updatedAt = now;
+    await db.collection('branches').doc(id).update(data);
+    return id;
+  } else {
+    data.createdAt = now;
+    data.updatedAt = now;
+    var ref = await db.collection('branches').add(data);
+    return ref.id;
+  }
+}
+
+async function fsDeleteBranch(id) {
+  await db.collection('branches').doc(id).delete();
+}
+
+async function fsDeleteBranchFiles(branchId) {
+  try {
+    var doc = await db.collection('branches').doc(branchId).get();
+    if (!doc.exists) return;
+    var data = doc.data();
+    var files = data.files || {};
+    if (files.bizLicensePath) {
+      try { await storage.ref(files.bizLicensePath).delete(); } catch(e) { console.warn('[Storage] 지부 사업자등록증 삭제 실패:', e.message); }
+    }
+    if (files.permitDocs && files.permitDocs.length > 0) {
+      for (var i = 0; i < files.permitDocs.length; i++) {
+        if (files.permitDocs[i].path) {
+          try { await storage.ref(files.permitDocs[i].path).delete(); } catch(e) { console.warn('[Storage] 지부 인허가문서 삭제 실패:', e.message); }
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('[Storage] 지부 파일 삭제 중 오류:', branchId, e.message);
+  }
+}
