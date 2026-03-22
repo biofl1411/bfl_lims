@@ -3819,6 +3819,58 @@ async function loadItemGroupsData() {
     return _itemGroupsCache;
 }
 
+// ═══ P참고용 묶음(세트) 캐시 ═══
+var _pBundleCache = null; // { names, items, fees, units }
+
+async function loadPBundleCache() {
+    if (_pBundleCache) return _pBundleCache;
+    try {
+        var doc = await db.collection('settings').doc('pRefBundles').get();
+        if (doc.exists) {
+            _pBundleCache = doc.data();
+        } else {
+            _pBundleCache = { names: {}, items: {}, fees: {}, units: {} };
+        }
+    } catch(e) {
+        console.warn('[묶음] 로드 실패:', e.message);
+        _pBundleCache = { names: {}, items: {}, fees: {}, units: {} };
+    }
+    return _pBundleCache;
+}
+
+/** 묶음명 검색 — query와 매칭되는 묶음 목록 반환 */
+function searchBundles(query) {
+    if (!_pBundleCache || !_pBundleCache.names) return [];
+    var q = (query || '').toLowerCase();
+    var results = [];
+    var names = _pBundleCache.names;
+    Object.keys(names).forEach(function(nk) {
+        var bundles = names[nk];
+        Object.keys(bundles).forEach(function(bk) {
+            var bundleName = bundles[bk];
+            if (!q || bundleName.toLowerCase().indexOf(q) >= 0) {
+                var fullKey = nk + '_' + bk;
+                var itemCodes = (_pBundleCache.items || {})[fullKey] || [];
+                var fee = (_pBundleCache.fees || {})[fullKey] || 0;
+                var units = (_pBundleCache.units || {})[fullKey] || {};
+                // nk를 파싱: "2_01" → subKey=2, sub3Key=01
+                var parts = nk.split('_');
+                var codeLabel = 'P' + parts[0] + '-' + parts[1] + '-' + bk;
+                results.push({
+                    key: fullKey,
+                    code: codeLabel,
+                    name: bundleName,
+                    items: itemCodes,
+                    fee: fee,
+                    units: units,
+                    count: itemCodes.length
+                });
+            }
+        });
+    });
+    return results;
+}
+
 // ═══ 참고용 수수료 맵 ═══
 var _refFeeMap = null;
 
@@ -3881,10 +3933,14 @@ async function searchRefTestItems(query) {
         }
     }
 
-    // 수수료 맵 빌드 (최초 1회)
+    // 수수료 맵 + 묶음 데이터 로드 (최초 1회)
     await buildRefFeeMap();
+    await loadPBundleCache();
 
-    // 검색 실행
+    // ★ 묶음명 검색 (query가 있을 때만)
+    var bundleResults = query ? searchBundles(query) : [];
+
+    // 개별 항목 검색
     var results = MFDS_CODES.searchTestItems(query, _refTestItemsCache);
 
     // 칩 카테고리 필터 적용 (시험항목 모드)
@@ -3893,9 +3949,15 @@ async function searchRefTestItems(query) {
     // ★ 활성 카테고리 라벨 필터 적용 (대분류 1글자 or 소분류 2글자)
     if (_refActiveCat) {
         results = _filterByLabelKey(results, _refActiveCat);
+        // 묶음도 카테고리 필터 적용
+        if (_refActiveCat.length <= 2) {
+            bundleResults = bundleResults.filter(function(b) {
+                return b.code.indexOf(_refActiveCat) >= 0;
+            });
+        }
     }
 
-    if (results.length === 0) {
+    if (results.length === 0 && bundleResults.length === 0) {
         list.innerHTML = '<div style="padding:12px;color:#8892a4;font-size:12px;text-align:center">검색 결과 없음</div>';
         list.classList.add('active');
         return;
@@ -3911,8 +3973,29 @@ async function searchRefTestItems(query) {
         });
     }
 
-    // 목록 렌더링
     var html = '';
+
+    // ★ 묶음 결과를 상단에 표시
+    if (bundleResults.length > 0) {
+        html += '<div style="padding:4px 10px;font-size:10px;color:#7c4dff;font-weight:600;background:#f3e8ff;border-bottom:1px solid #e0d4f5;">📦 묶음 (세트)</div>';
+        bundleResults.forEach(function(b) {
+            var safeKey = b.key.replace(/'/g, "\\'");
+            html += '<div class="autocomplete-item" style="padding:6px 10px;font-size:12px;background:#faf5ff;" onclick="selectRefBundle(\'' + safeKey + '\')">';
+            html += '<div style="display:flex;align-items:center;gap:6px">';
+            html += '<span style="font-family:monospace;font-size:10px;color:#7c4dff;background:#f3e8ff;padding:1px 5px;border-radius:3px;font-weight:600">' + b.code + '</span>';
+            html += '<span style="font-weight:600;font-size:12px;color:#5b21b6">' + b.name + '</span>';
+            html += '<span style="font-size:10px;color:#999">' + b.count + '개 항목</span>';
+            if (b.fee > 0) {
+                html += '<span style="font-size:10px;color:#7c4dff;font-weight:600;margin-left:auto">' + b.fee.toLocaleString() + '원 (세트)</span>';
+            }
+            html += '</div></div>';
+        });
+        if (results.length > 0) {
+            html += '<div style="padding:4px 10px;font-size:10px;color:#666;font-weight:600;background:#f5f5f5;border-top:1px solid #eee;border-bottom:1px solid #eee;">개별 항목</div>';
+        }
+    }
+
+    // 개별 항목 목록 렌더링
     results.forEach(function(item) {
         var code = item['시험항목코드'] || '';
         var name = item['한글명'] || '';
@@ -4037,6 +4120,114 @@ function selectRefTestItem(testItemCode) {
     } else {
         searchRefTestItems(document.getElementById('food-type-input').value || '');
     }
+
+    saveSampleToArray();
+    updateFeeSummary();
+}
+
+/**
+ * 묶음(세트) 선택 시 — 전체 항목을 한번에 추가 + 세트 수수료 적용
+ * @param {string} bundleKey - 묶음 키 (예: "2_01_1")
+ */
+function selectRefBundle(bundleKey) {
+    if (!_pBundleCache || !_refTestItemsCache) return;
+    var codes = (_pBundleCache.items || {})[bundleKey] || [];
+    var bundleFee = (_pBundleCache.fees || {})[bundleKey] || 0;
+    var bundleUnits = (_pBundleCache.units || {})[bundleKey] || {};
+    if (codes.length === 0) { showToast('묶음에 항목이 없습니다', 'warning'); return; }
+
+    // 묶음명 찾기
+    var bundleName = '';
+    var names = _pBundleCache.names || {};
+    Object.keys(names).forEach(function(nk) {
+        Object.keys(names[nk]).forEach(function(bk) {
+            if (nk + '_' + bk === bundleKey) bundleName = names[nk][bk];
+        });
+    });
+
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+
+    // 빈 안내 행 제거
+    var emptyRow = document.getElementById('ref-test-empty-row');
+    if (emptyRow) emptyRow.remove();
+
+    // 이미 추가된 코드
+    var addedCodes = new Set();
+    tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
+        addedCodes.add(tr.getAttribute('data-test-code'));
+    });
+
+    var addedCount = 0;
+    var skippedCount = 0;
+
+    codes.forEach(function(code) {
+        if (addedCodes.has(code)) { skippedCount++; return; }
+
+        var item = _refTestItemsCache.find(function(t) { return t['시험항목코드'] === code; });
+        if (!item) return;
+
+        var rowCount = tbody.querySelectorAll('tr[data-test-code]').length;
+        var idx = rowCount + 1;
+        var name = item['한글명'] || '';
+        var eng = item['영문명'] || '';
+        var unit = bundleUnits[code] || item['단위'] || '';
+
+        // 개별 수수료 (세트 수수료가 있으면 0으로 표시, 합계는 세트 수수료 사용)
+        var individualFee = 0;
+        if (!bundleFee) {
+            if (_refFeeMap && _refFeeMap[code]) individualFee = _refFeeMap[code].fee || 0;
+            if (!individualFee) individualFee = getFeeByCode(code, name) || 0;
+        }
+
+        var tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.setAttribute('data-item-key', name);
+        tr.setAttribute('data-fee', individualFee);
+        tr.setAttribute('data-test-code', code);
+        tr.setAttribute('data-unit', unit);
+        tr.setAttribute('data-bundle-key', bundleKey);
+        tr.innerHTML = '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + (idx - 1) + '" onchange="onInspectionCheckChange()"></td>'
+            + '<td style="padding:8px 12px;color:#667085">' + idx + '</td>'
+            + '<td style="padding:8px 12px;color:#344054;font-weight:500">' + name + (eng ? ' <span style="font-size:11px;color:#999">(' + eng + ')</span>' : '') + '</td>'
+            + '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + code + '</td>'
+            + '<td style="padding:8px 12px;color:#7c4dff;font-size:12px">' + unit + '</td>'
+            + '<td style="padding:8px 12px;color:#999;font-size:12px">-</td>'
+            + '<td style="padding:8px 12px;text-align:right;color:' + (bundleFee ? '#999;text-decoration:line-through;font-size:11px' : '#344054') + '">'
+            + (individualFee > 0 ? individualFee.toLocaleString() + '원' : '-') + '</td>';
+        tbody.appendChild(tr);
+        addedCount++;
+    });
+
+    // 세트 수수료가 있으면 패키지 수수료 행 추가
+    if (bundleFee > 0) {
+        var pkgTr = document.createElement('tr');
+        pkgTr.style.borderBottom = '2px solid #e0d4f5';
+        pkgTr.style.background = '#faf5ff';
+        pkgTr.setAttribute('data-bundle-key', bundleKey);
+        pkgTr.setAttribute('data-fee', bundleFee);
+        pkgTr.setAttribute('data-package-fee', bundleFee);
+        pkgTr.setAttribute('data-item-key', '📦 ' + bundleName);
+        pkgTr.setAttribute('data-test-code', 'BUNDLE_' + bundleKey);
+        pkgTr.innerHTML = '<td style="padding:8px 6px;text-align:center"></td>'
+            + '<td style="padding:8px 12px"></td>'
+            + '<td colspan="4" style="padding:8px 12px;color:#7c4dff;font-weight:600;font-size:12px">📦 ' + bundleName + ' <span style="font-size:10px;color:#999;font-weight:400">세트 수수료 (' + addedCount + '개 항목)</span></td>'
+            + '<td style="padding:8px 12px;text-align:right;color:#7c4dff;font-weight:700">' + bundleFee.toLocaleString() + '원</td>';
+        tbody.appendChild(pkgTr);
+    }
+
+    // 합계 표시
+    recalcInspectionTable();
+    document.getElementById('food-type-value').value = '참고용(기준규격외)';
+
+    var msg = bundleName + ' ' + addedCount + '개 항목 추가';
+    if (skippedCount > 0) msg += ' (' + skippedCount + '개 이미 추가됨)';
+    if (bundleFee > 0) msg += ' · 세트 수수료 ' + bundleFee.toLocaleString() + '원';
+    showToast(msg, 'success');
+
+    // 드롭다운 닫기
+    var foodList = document.getElementById('food-type-list');
+    if (foodList) foodList.classList.remove('active');
 
     saveSampleToArray();
     updateFeeSummary();
