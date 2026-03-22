@@ -36498,7 +36498,15 @@ function autoPopulateNutritionBundles() {
   if (p2Items.length === 0) return;
 
   function findCode(name) {
+    // 1) 정확 매칭
     var found = p2Items.find(function(t) { return (t['한글명'] || '').trim() === name; });
+    if (found) return found['시험항목코드'];
+    // 2) 부분 매칭 (괄호 제거 후)
+    var baseName = name.replace(/\(.*\)/, '').trim();
+    found = p2Items.find(function(t) { return (t['한글명'] || '').trim() === baseName; });
+    if (found) return found['시험항목코드'];
+    // 3) 포함 매칭
+    found = p2Items.find(function(t) { return (t['한글명'] || '').indexOf(baseName) >= 0; });
     return found ? found['시험항목코드'] : null;
   }
 
@@ -36592,16 +36600,25 @@ function autoPopulateNutritionBundles() {
 
   var changed = false;
 
-  // P2-01 (14대 영양성분) — 묶음이 비어있을 때만
-  if (sub3['01'] && !(_pBundleNames['2_01'] && Object.keys(_pBundleNames['2_01']).length > 0)) {
-    changed = createBundle('2_01', '1', '14대 영양성분 (g)', items14g, 429000) || changed;
-    changed = createBundle('2_01', '2', '14대 영양성분 (mL)', items14ml, 429000) || changed;
+  // 묶음이 없거나 항목이 비어있으면 재생성
+  function needsPopulate(nk, bk) {
+    var names = _pBundleNames[nk] || {};
+    if (!names[bk]) return true; // 이름 없음
+    var fullKey = nk + '_' + bk;
+    var items = _pBundleItems[fullKey] || [];
+    return items.length === 0; // 항목 없음
   }
 
-  // P2-02 (9대 영양성분) — 묶음이 비어있을 때만
-  if (sub3['02'] && !(_pBundleNames['2_02'] && Object.keys(_pBundleNames['2_02']).length > 0)) {
-    changed = createBundle('2_02', '1', '9대 영양성분 (g)', items9g, 429000) || changed;
-    changed = createBundle('2_02', '2', '9대 영양성분 (mL)', items9ml, 429000) || changed;
+  // P2-01 (14대 영양성분)
+  if (sub3['01']) {
+    if (needsPopulate('2_01', '1')) changed = createBundle('2_01', '1', '14대 영양성분 (g)', items14g, 429000) || changed;
+    if (needsPopulate('2_01', '2')) changed = createBundle('2_01', '2', '14대 영양성분 (mL)', items14ml, 429000) || changed;
+  }
+
+  // P2-02 (9대 영양성분)
+  if (sub3['02']) {
+    if (needsPopulate('2_02', '1')) changed = createBundle('2_02', '1', '9대 영양성분 (g)', items9g, 429000) || changed;
+    if (needsPopulate('2_02', '2')) changed = createBundle('2_02', '2', '9대 영양성분 (mL)', items9ml, 429000) || changed;
   }
 
   if (changed) savePBundleData();
