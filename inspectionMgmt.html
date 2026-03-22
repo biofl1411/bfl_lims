@@ -37128,17 +37128,40 @@ function renamePBundle(bundleKey) {
   if (!subKey || !sub3Key) return;
   var nk = subKey + '_' + sub3Key;
   var oldName = (_pBundleNames[nk] || {})[bundleKey] || '';
-  var newName = prompt('P' + subKey + '-' + sub3Key + '-' + bundleKey + ' 묶음 이름 수정:', oldName);
-  if (newName === null || !newName.trim() || newName.trim() === oldName) return;
-  newName = newName.trim();
+  var codeLabel = 'P' + subKey + '-' + sub3Key + '-' + bundleKey;
 
+  var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mRenamePB" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:340px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<h3 style="margin:0;font-size:14px;">묶음 이름 수정</h3>'
+    + '<button onclick="document.getElementById(\'mRenamePB\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:8px;font-size:12px">'
+    + '<span style="color:#7c4dff;font-weight:600">' + codeLabel + '</span></div>'
+    + '<input id="rename-pb-input" value="' + oldName.replace(/"/g, '&quot;') + '" placeholder="묶음 이름 입력" '
+    + 'style="width:100%;padding:10px 12px;border:1px solid #c4b5fd;border-radius:8px;font-size:14px;color:#5b21b6;font-weight:500;margin-bottom:12px" '
+    + 'onkeydown="if(event.key===\'Enter\')applyRenamePBundle(\'' + nk.replace(/'/g, "\\'") + '\',\'' + bundleKey + '\')">'
+    + '<div style="display:flex;justify-content:flex-end;gap:6px">'
+    + '<button onclick="document.getElementById(\'mRenamePB\').remove()" style="padding:7px 14px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">취소</button>'
+    + '<button onclick="applyRenamePBundle(\'' + nk.replace(/'/g, "\\'") + '\',\'' + bundleKey + '\')" style="padding:7px 14px;border:none;background:#7c4dff;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">적용</button>'
+    + '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() { var el = document.getElementById('rename-pb-input'); if (el) { el.focus(); el.select(); } }, 100);
+}
+
+function applyRenamePBundle(nk, bundleKey) {
+  var input = document.getElementById('rename-pb-input');
+  if (!input) return;
+  var newName = input.value.trim();
+  if (!newName) return;
   var bundles = _pBundleNames[nk] || {};
+  var oldName = bundles[bundleKey] || '';
+  if (newName === oldName) { document.getElementById('mRenamePB').remove(); return; }
   if (Object.values(bundles).indexOf(newName) >= 0) { showToast("'" + newName + "' 이미 존재합니다", 'warning'); return; }
-
   if (!_pBundleNames[nk]) _pBundleNames[nk] = {};
   _pBundleNames[nk][bundleKey] = newName;
   savePBundleData();
   renderPBundles();
+  document.getElementById('mRenamePB').remove();
   showToast('묶음 이름 변경 완료', 'success');
 }
 
