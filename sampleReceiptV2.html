@@ -527,6 +527,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <label class="send-chip"><input type="checkbox" name="report-send" value="선발송" onchange="toggleReportSendOption()"><span>🚀 선발송</span></label>
       <label class="send-chip"><input type="checkbox" name="report-send" value="팩스(선)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('fax-option-panel',this.closest('label'));else closeSendPanel('fax-option-panel')"><span>📠 팩스</span></label>
       <label class="send-chip"><input type="checkbox" name="report-send" value="메일(사본)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('email-option-panel',this.closest('label'));else closeSendPanel('email-option-panel')"><span>📧 메일</span></label>
+      <label class="send-chip"><input type="checkbox" name="report-send" value="지부" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('branch-send-panel',this.closest('label'));else closeSendPanel('branch-send-panel')"><span>🏢 지부</span></label>
     </div>
   </div>
 
@@ -591,6 +592,19 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       </div>
       <button type="button" onclick="addCcField()" class="btn-mini secondary" style="margin-top:3px">+ CC 추가</button>
     </div>
+  </div>
+
+  <!-- 지부 발송 옵션 -->
+  <div id="branch-send-panel" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:300px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:12px;font-weight:600">🏢 지부 발송</span>
+      <button type="button" onclick="document.getElementById('branch-send-panel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8">✕</button>
+    </div>
+    <div style="margin-bottom:6px">
+      <input type="text" id="branch-send-search" class="cp-inp" placeholder="지부명 검색..." style="width:100%" oninput="searchBranchSend(this.value)" onfocus="searchBranchSend(this.value)">
+    </div>
+    <div id="branch-send-list" style="max-height:160px;overflow-y:auto;border:1px solid #eef0f4;border-radius:6px"></div>
+    <div id="branch-send-selected" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px"></div>
   </div>
 
   <!-- 업체 정보 오버레이 (hover) -->
@@ -7876,6 +7890,56 @@ document.addEventListener('click', function(e) {
         if (p && p.style.display !== 'none' && !p.contains(e.target) && !p.parentElement.contains(e.target)) p.style.display = 'none';
     });
 });
+
+// ============================================================================
+// 지부 발송 선택
+// ============================================================================
+var _selectedSendBranches = [];
+function searchBranchSend(query) {
+    var list = document.getElementById('branch-send-list');
+    if (!list) return;
+    var q = (query || '').toLowerCase().trim();
+    var filtered = q ? _receiptBranches.filter(function(b) {
+        return ((b.company||b.name||'').toLowerCase().indexOf(q) >= 0) || ((b.bizNo||'').indexOf(q) >= 0);
+    }) : _receiptBranches;
+    if (filtered.length === 0) {
+        list.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#8892a4">검색 결과 없음</div>';
+        return;
+    }
+    var html = '';
+    filtered.forEach(function(b) {
+        var checked = _selectedSendBranches.some(function(s) { return s.id === b.id; });
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f5f5f5">';
+        html += '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleSendBranch(\'' + b.id + '\',\'' + (b.company||b.name||'').replace(/'/g,'') + '\',this.checked)">';
+        html += '<span>' + (b.company||b.name||'') + '</span>';
+        if (b.addr1) html += ' <span style="color:#8892a4;font-size:10px">' + b.addr1 + '</span>';
+        html += '</label>';
+    });
+    list.innerHTML = html;
+}
+function toggleSendBranch(id, name, checked) {
+    if (checked) {
+        if (!_selectedSendBranches.some(function(s) { return s.id === id; })) {
+            _selectedSendBranches.push({ id: id, name: name });
+        }
+    } else {
+        _selectedSendBranches = _selectedSendBranches.filter(function(s) { return s.id !== id; });
+    }
+    renderSendBranchChips();
+}
+function renderSendBranchChips() {
+    var container = document.getElementById('branch-send-selected');
+    if (!container) return;
+    if (_selectedSendBranches.length === 0) { container.innerHTML = ''; return; }
+    var html = '';
+    _selectedSendBranches.forEach(function(b) {
+        html += '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb">';
+        html += b.name;
+        html += ' <span style="cursor:pointer" onclick="toggleSendBranch(\'' + b.id + '\',\'' + b.name.replace(/'/g,'') + '\',false);searchBranchSend(document.getElementById(\'branch-send-search\').value)">✕</span>';
+        html += '</span>';
+    });
+    container.innerHTML = html;
+}
 
 // ============================================================================
 // 긴급여부 인라인
