@@ -37374,16 +37374,91 @@ function deletePRefSub3Chip() {
   if (!parentKey || !_pRefSub3Filter) { showToast('삭제할 하위 칩을 먼저 선택하세요', 'warning'); return; }
   var sub3 = _pRefSub3Data[parentKey] || {};
   var chipName = sub3[_pRefSub3Filter] || _pRefSub3Filter;
-  if (!confirm('P' + parentKey + '-' + _pRefSub3Filter + ' "' + chipName + '" 하위 그룹을 삭제하시겠습니까?')) return;
+  if (!confirm('P' + parentKey + '-' + _pRefSub3Filter + ' "' + chipName + '" 하위 그룹을 삭제하시겠습니까?\n\n포함된 묶음도 함께 삭제됩니다.')) return;
 
-  delete _pRefSub3Data[parentKey][_pRefSub3Filter];
-  if (Object.keys(_pRefSub3Data[parentKey]).length === 0) delete _pRefSub3Data[parentKey];
+  var delKey = _pRefSub3Filter;
+
+  // 삭제되는 칩의 묶음 데이터 정리
+  var delNk = parentKey + '_' + delKey;
+  var delBundles = _pBundleNames[delNk] || {};
+  Object.keys(delBundles).forEach(function(bk) {
+    var fullBk = delNk + '_' + bk;
+    delete _pBundleItems[fullBk];
+    delete _pBundleFees[fullBk];
+    delete _pBundleUnits[fullBk];
+  });
+  delete _pBundleNames[delNk];
+
+  // sub3 칩 삭제
+  delete sub3[delKey];
+
+  // ★ 연번 재정렬: 남은 키를 01, 02, 03... 순으로 재할당
+  var remainKeys = Object.keys(sub3).sort();
+  var remap = {}; // oldKey → newKey
+  var newSub3 = {};
+  remainKeys.forEach(function(oldKey, idx) {
+    var newKey = String(idx + 1).padStart(2, '0');
+    newSub3[newKey] = sub3[oldKey];
+    if (oldKey !== newKey) remap[oldKey] = newKey;
+  });
+
+  // sub3 데이터 교체
+  if (Object.keys(newSub3).length === 0) {
+    delete _pRefSub3Data[parentKey];
+  } else {
+    _pRefSub3Data[parentKey] = newSub3;
+  }
+
+  // 묶음 데이터 키 리매핑
+  if (Object.keys(remap).length > 0) {
+    var remapOps = [];
+    Object.keys(remap).forEach(function(oldK) {
+      var newK = remap[oldK];
+      var oldNk = parentKey + '_' + oldK;
+      var newNk = parentKey + '_' + newK;
+      // names
+      if (_pBundleNames[oldNk]) {
+        var bundles = _pBundleNames[oldNk];
+        Object.keys(bundles).forEach(function(bk) {
+          var oldBk = oldNk + '_' + bk;
+          var newBk = newNk + '_' + bk;
+          remapOps.push({ oldBk: oldBk, newBk: newBk });
+        });
+        _pBundleNames[newNk] = bundles;
+        delete _pBundleNames[oldNk];
+      }
+    });
+    remapOps.forEach(function(op) {
+      if (_pBundleItems[op.oldBk]) { _pBundleItems[op.newBk] = _pBundleItems[op.oldBk]; delete _pBundleItems[op.oldBk]; }
+      if (_pBundleFees[op.oldBk]) { _pBundleFees[op.newBk] = _pBundleFees[op.oldBk]; delete _pBundleFees[op.oldBk]; }
+      if (_pBundleUnits[op.oldBk]) { _pBundleUnits[op.newBk] = _pBundleUnits[op.oldBk]; delete _pBundleUnits[op.oldBk]; }
+    });
+    // deleted 배열도 리매핑
+    _pBundleDeleted = _pBundleDeleted.map(function(dk) {
+      var parts = dk.split('_');
+      if (parts[0] === parentKey && remap[parts[1]]) {
+        parts[1] = remap[parts[1]];
+        return parts.join('_');
+      }
+      return dk;
+    });
+  }
+
   savePRefSub3Data();
+  savePBundleData();
   _pRefSub3Filter = null;
+  _pBundleSelected = null;
   renderPRefSub3Chips();
+  // 묶음 패널 숨기고 테이블 복원
+  var bp = document.getElementById('p-bundle-panel');
+  var ta = document.querySelector('#panel-test-items > div[style*="overflow-x"]');
+  var pg = document.getElementById('mfds-test-item-pagination');
+  if (bp) bp.style.display = 'none';
+  if (ta) ta.style.display = '';
+  if (pg) pg.style.display = '';
   applyMfdsTestFilters();
   renderMfdsTestTable();
-  showToast('하위 그룹 삭제 완료', 'success');
+  showToast('하위 그룹 삭제 + 연번 정렬 완료', 'success');
 }
 
 // ══ P참고용: 다른 분야 항목을 P참고용으로 이동 ══
