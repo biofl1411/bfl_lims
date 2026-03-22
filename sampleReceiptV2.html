@@ -3463,10 +3463,8 @@ var _REF_CAT_COLORS = {
     'H':'#9333ea','I':'#be185d','X':'#64748b','P':'#ea580c'
 };
 // P코드 소분류 이름 (참고용 전용)
-var _REF_SUBCAT_NAMES = {
-    'P1':'이화학','P2':'영양/기능','P3':'미생물','P4':'중금속',
-    'P5':'식품첨가물','P6':'곰팡이독소','P9':'기타'
-};
+// P소분류 이름 — Firestore pRefSubCategories에서 동적 로드 (폴백용 초기값)
+var _REF_SUBCAT_NAMES = {};
 var _refActiveCat = ''; // 현재 활성 카테고리 ('': 선택 없음)
 var _refDropdownKeep = false; // 드롭다운 리프레시 시 전역 click 핸들러 무시 플래그
 var _refLabelMode = ''; // 'major' or 'sub' (대분류/소분류 모드)
@@ -3817,7 +3815,8 @@ async function loadPBundleCache() {
     try {
         var results = await Promise.all([
             db.collection('settings').doc('pRefBundles').get(),
-            db.collection('settings').doc('pRefSub3Categories').get()
+            db.collection('settings').doc('pRefSub3Categories').get(),
+            db.collection('settings').doc('pRefSubCategories').get()
         ]);
         if (results[0].exists) {
             _pBundleCache = results[0].data();
@@ -3826,6 +3825,15 @@ async function loadPBundleCache() {
         }
         if (results[1].exists) {
             _pRefSub3Data = results[1].data();
+        }
+        // P소분류 이름 동적 로드
+        if (results[2].exists) {
+            var subData = results[2].data();
+            delete subData._usedKeys;
+            Object.keys(subData).forEach(function(k) {
+                _REF_SUBCAT_NAMES['P' + k] = subData[k];
+            });
+            console.log('[P소분류] 동적 로드:', Object.keys(_REF_SUBCAT_NAMES).length + '건');
         }
     } catch(e) {
         console.warn('[묶음] 로드 실패:', e.message);
