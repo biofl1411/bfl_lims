@@ -36600,28 +36600,23 @@ function autoPopulateNutritionBundles() {
     return true;
   }
 
+  // ★ 이미 묶음 데이터가 Firestore에 존재하면 자동 생성 건너뜀
+  // (사용자가 수동으로 묶음을 관리하는 경우 간섭하지 않음)
+  var hasAnyBundle = Object.keys(_pBundleNames).length > 0;
+  if (hasAnyBundle) return;
+
   var changed = false;
 
-  // 묶음이 없거나 항목이 비어있으면 재생성 (삭제 이력 체크)
-  function needsPopulate(nk, bk) {
-    var fullKey = nk + '_' + bk;
-    if (_pBundleDeleted.indexOf(fullKey) >= 0) return false; // 사용자가 삭제한 묶음
-    var names = _pBundleNames[nk] || {};
-    if (!names[bk]) return true; // 이름 없음
-    var items = _pBundleItems[fullKey] || [];
-    return items.length === 0; // 항목 없음
-  }
-
-  // P2-01 (14대 영양성분)
+  // P2-01 (14대 영양성분) — 최초 1회만 (묶음이 전혀 없을 때)
   if (sub3['01']) {
-    if (needsPopulate('2_01', '1')) changed = createBundle('2_01', '1', '14대 영양성분 (g)', items14g, 429000) || changed;
-    if (needsPopulate('2_01', '2')) changed = createBundle('2_01', '2', '14대 영양성분 (mL)', items14ml, 429000) || changed;
+    changed = createBundle('2_01', '1', '14대 영양성분 (g)', items14g, 429000) || changed;
+    changed = createBundle('2_01', '2', '14대 영양성분 (mL)', items14ml, 429000) || changed;
   }
 
   // P2-02 (9대 영양성분)
   if (sub3['02']) {
-    if (needsPopulate('2_02', '1')) changed = createBundle('2_02', '1', '9대 영양성분 (g)', items9g, 429000) || changed;
-    if (needsPopulate('2_02', '2')) changed = createBundle('2_02', '2', '9대 영양성분 (mL)', items9ml, 429000) || changed;
+    changed = createBundle('2_02', '1', '9대 영양성분 (g)', items9g, 429000) || changed;
+    changed = createBundle('2_02', '2', '9대 영양성분 (mL)', items9ml, 429000) || changed;
   }
 
   if (changed) savePBundleData();
