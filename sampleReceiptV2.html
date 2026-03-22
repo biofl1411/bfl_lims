@@ -742,19 +742,18 @@ body.sidebar-collapsed .main-container{margin-left:64px}
           <option value="">선택</option><option value="예">예</option><option value="아니오">아니오</option>
         </select>
       </div>
-      <div class="f-grp">
+      <div class="f-grp" style="position:relative">
         <label>지부</label>
-        <select id="receipt-branch">
-          <option value="">선택</option>
-        </select>
+        <input type="text" id="receipt-branch-input" placeholder="지부명 검색..." autocomplete="off" oninput="searchBranchInline(this.value)" onfocus="searchBranchInline(this.value)">
+        <input type="hidden" id="receipt-branch" value="">
+        <div id="branch-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;margin-top:2px"></div>
       </div>
       <div class="f-grp" style="position:relative">
         <label>라벨</label>
-        <div style="display:flex;gap:3px;align-items:center">
-          <select id="receipt-label" style="flex:1;min-width:0">
-            <option value="">선택</option>
-          </select>
-          <button type="button" class="btn-mini secondary" onclick="addReceiptLabel()" title="라벨 추가" style="white-space:nowrap">+</button>
+        <div style="position:relative">
+          <input type="text" id="receipt-label-input" placeholder="라벨 선택..." autocomplete="off" readonly onclick="toggleLabelPicker()" style="cursor:pointer">
+          <span onclick="toggleLabelPicker()" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#f3e5f5;color:#7b1fa2;border:1px solid #e1bee7;border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;user-select:none">+</span>
+          <div id="label-picker-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;margin-top:2px;padding:4px 0"></div>
         </div>
         <div id="receipt-label-chips" style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px"></div>
       </div>
@@ -7823,21 +7822,50 @@ document.addEventListener('click', function(e) {
 });
 
 // ============================================================================
-// 지부 드롭다운
+// 지부 인라인 검색
 // ============================================================================
 var _receiptBranches = [];
 async function loadBranchOptions() {
     try {
         _receiptBranches = await fsGetBranches();
     } catch(e) { _receiptBranches = []; }
-    var sel = document.getElementById('receipt-branch');
-    if (!sel) return;
-    var html = '<option value="">선택</option>';
-    _receiptBranches.forEach(function(b) {
-        html += '<option value="' + (b.id||'') + '">' + (b.company||b.name||'이름없음') + '</option>';
-    });
-    sel.innerHTML = html;
 }
+
+function searchBranchInline(query) {
+    var dd = document.getElementById('branch-search-dropdown');
+    if (!dd) return;
+    var q = (query || '').toLowerCase().trim();
+    var filtered = q ? _receiptBranches.filter(function(b) {
+        return ((b.company||b.name||'').toLowerCase().indexOf(q) >= 0) ||
+               ((b.bizNo||'').indexOf(q) >= 0);
+    }) : _receiptBranches;
+    if (filtered.length === 0) {
+        dd.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#8892a4">검색 결과 없음</div>';
+        dd.style.display = 'block';
+        return;
+    }
+    var html = '';
+    filtered.forEach(function(b) {
+        html += '<div style="padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'\'" onclick="selectBranch(\'' + (b.id||'') + '\',\'' + (b.company||b.name||'').replace(/'/g,'') + '\')">';
+        html += '<b>' + (b.company||b.name||'') + '</b>';
+        if (b.bizNo) html += ' <span style="color:#8892a4;font-size:10px">' + b.bizNo + '</span>';
+        html += '</div>';
+    });
+    dd.innerHTML = html;
+    dd.style.display = 'block';
+}
+
+function selectBranch(id, name) {
+    document.getElementById('receipt-branch').value = id;
+    document.getElementById('receipt-branch-input').value = name;
+    document.getElementById('branch-search-dropdown').style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+    var dd = document.getElementById('branch-search-dropdown');
+    var inp = document.getElementById('receipt-branch-input');
+    if (dd && inp && !dd.contains(e.target) && e.target !== inp) dd.style.display = 'none';
+});
 
 // ============================================================================
 // 라벨 관리 (접수등록용)
@@ -7850,25 +7878,48 @@ async function loadLabelOptions() {
         var doc = await db.collection('settings').doc('companyLabels').get();
         _receiptLabels = doc.exists ? (doc.data().labels || []) : [];
     } catch(e) { _receiptLabels = []; }
-    var sel = document.getElementById('receipt-label');
-    if (!sel) return;
-    var html = '<option value="">선택</option>';
-    _receiptLabels.forEach(function(lb, i) {
-        html += '<option value="' + i + '">' + lb.name + '</option>';
-    });
-    sel.innerHTML = html;
 }
 
-function addReceiptLabel() {
-    var sel = document.getElementById('receipt-label');
-    var idx = parseInt(sel.value);
-    if (isNaN(idx)) return;
-    var lb = _receiptLabels[idx];
-    if (_selectedReceiptLabels.some(function(l) { return l.name === lb.name; })) return;
-    _selectedReceiptLabels.push({ name: lb.name, color: lb.color || '#1a73e8' });
-    sel.value = '';
-    renderReceiptLabelChips();
+function toggleLabelPicker() {
+    var dd = document.getElementById('label-picker-dropdown');
+    if (!dd) return;
+    if (dd.style.display === 'block') { dd.style.display = 'none'; return; }
+    var html = '';
+    if (_receiptLabels.length === 0) {
+        html = '<div style="padding:8px 12px;font-size:11px;color:#8892a4">등록된 라벨 없음</div>';
+    } else {
+        _receiptLabels.forEach(function(lb, i) {
+            var selected = _selectedReceiptLabels.some(function(s) { return s.name === lb.name; });
+            html += '<div onclick="toggleLabelItem(' + i + ')" style="padding:5px 12px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px' + (selected ? ';background:#f3e5f5' : '') + '" onmouseover="this.style.background=\'' + (selected ? '#e1bee7' : '#f5f5f5') + '\'" onmouseout="this.style.background=\'' + (selected ? '#f3e5f5' : '') + '\'">';
+            html += '<span style="width:12px;height:12px;border-radius:3px;background:' + (lb.color||'#1a73e8') + ';flex-shrink:0"></span>';
+            html += '<span style="flex:1">' + lb.name + '</span>';
+            if (selected) html += '<span style="color:#7b1fa2;font-weight:700">✓</span>';
+            html += '</div>';
+        });
+    }
+    dd.innerHTML = html;
+    dd.style.display = 'block';
 }
+
+function toggleLabelItem(idx) {
+    var lb = _receiptLabels[idx];
+    var exists = _selectedReceiptLabels.some(function(s) { return s.name === lb.name; });
+    if (exists) {
+        _selectedReceiptLabels = _selectedReceiptLabels.filter(function(s) { return s.name !== lb.name; });
+    } else {
+        _selectedReceiptLabels.push({ name: lb.name, color: lb.color || '#1a73e8' });
+    }
+    renderReceiptLabelChips();
+    toggleLabelPicker(); // 갱신
+    toggleLabelPicker(); // 다시 열기
+}
+
+document.addEventListener('click', function(e) {
+    var dd = document.getElementById('label-picker-dropdown');
+    var inp = document.getElementById('receipt-label-input');
+    var plus = inp ? inp.nextElementSibling : null;
+    if (dd && inp && !dd.contains(e.target) && e.target !== inp && e.target !== plus) dd.style.display = 'none';
+});
 
 function removeReceiptLabel(name) {
     _selectedReceiptLabels = _selectedReceiptLabels.filter(function(l) { return l.name !== name; });
@@ -7877,7 +7928,9 @@ function removeReceiptLabel(name) {
 
 function renderReceiptLabelChips() {
     var container = document.getElementById('receipt-label-chips');
+    var inp = document.getElementById('receipt-label-input');
     if (!container) return;
+    if (inp) inp.placeholder = _selectedReceiptLabels.length > 0 ? _selectedReceiptLabels.length + '개 선택됨' : '라벨 선택...';
     if (_selectedReceiptLabels.length === 0) { container.innerHTML = ''; return; }
     var html = '';
     _selectedReceiptLabels.forEach(function(lb) {
