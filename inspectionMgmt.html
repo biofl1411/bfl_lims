@@ -787,7 +787,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <!-- 소분류 필터 칩 + 액션 버튼 -->
     <div style="display:flex;align-items:center;gap:6px;padding:0 16px 6px;flex-wrap:wrap;">
       <div id="mfds-test-sub-chips" style="display:flex;flex-wrap:wrap;gap:5px;flex:1"></div>
-      <div id="mfds-p-actions" style="display:none;flex-shrink:0;display:flex;gap:4px;align-items:center;">
+      <div id="mfds-p-actions" style="display:none;flex-shrink:0;gap:4px;align-items:center;">
         <button onclick="createPRefSubChip()" class="p-act-btn p-act-add" title="새 소분류 칩 추가">＋ 칩 추가</button>
         <button onclick="deletePRefSubChip()" class="p-act-btn p-act-del" title="선택한 칩 삭제">✕ 칩 삭제</button>
         <span style="width:1px;height:16px;background:#ddd;margin:0 2px"></span>
@@ -36107,7 +36107,29 @@ var _mfdsAddSelectedSub = null;   // 추가모달 소분류
 /** 시험항목 데이터 로드 + 렌더링 */
 function renderMfdsTestItems() {
   if (_mfdsTestLoaded) {
-    renderMfdsTestTable();
+    buildMfdsTestCatIndex();
+    renderMfdsTestCategoryChips();
+    renderMfdsTestSubChips();
+    renderPRefSub3Chips();
+    // P참고용 액션 버튼 표시 복원
+    var pAct = document.getElementById('mfds-p-actions');
+    if (pAct) pAct.style.display = (_mfdsTestCatFilter === 'P') ? 'flex' : 'none';
+    // 묶음 패널/테이블 토글 복원
+    var bp = document.getElementById('p-bundle-panel');
+    var ta = document.querySelector('#panel-test-items > div[style*="overflow-x"]');
+    var pg = document.getElementById('mfds-test-item-pagination');
+    if (_mfdsTestCatFilter === 'P' && _mfdsTestSubFilter && _pRefSub3Filter) {
+      if (bp) bp.style.display = 'block';
+      if (ta) ta.style.display = 'none';
+      if (pg) pg.style.display = 'none';
+      renderPBundles();
+    } else {
+      if (bp) bp.style.display = 'none';
+      if (ta) ta.style.display = '';
+      if (pg) pg.style.display = '';
+      applyMfdsTestFilters();
+      renderMfdsTestTable();
+    }
     return;
   }
   var tbody = document.getElementById('mfds-test-item-tbody');
@@ -36843,11 +36865,11 @@ function deletePBundle(bundleKey) {
     delete _pBundleNames[nk][bundleKey];
     if (Object.keys(_pBundleNames[nk]).length === 0) delete _pBundleNames[nk];
   }
-  // 항목 삭제
+  // 항목/수수료/단위 삭제
   var bk = getBundleKey(subKey, sub3Key, bundleKey);
   delete _pBundleItems[bk];
-  // 수수료 삭제
   delete _pBundleFees[bk];
+  delete _pBundleUnits[bk];
 
   savePBundleData();
   if (_pBundleSelected === bundleKey) _pBundleSelected = null;
