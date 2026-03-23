@@ -5705,6 +5705,11 @@ var _sampleFieldIds = [
     'sample-location','sample-box-no','disposal-date',
     'remarks'
 ];
+// 1번 시료에서 설정하면 나머지 시료에도 자동 적용되는 공유 필드
+var _sharedFieldIds = [
+    'sample-receive-method','receipt-form-type','transport-status','notice-required',
+    'receipt-branch-input','receipt-branch'
+];
 
 function selectUrgent(btn) {
     document.querySelectorAll('.urgent-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -5812,12 +5817,36 @@ function saveSampleToArray() {
     if (_isRefTestMode) {
         obj._refTestItems = savedItems;
     }
+    // 라벨 칩 HTML 저장
+    var lc = document.getElementById('label-inline-chips');
+    if (lc) obj._labelChipsHtml = lc.innerHTML;
 
     _sampleData[_currentSampleIdx] = obj;
+
+    // 1번 시료(index 0)에서 공유 필드를 다른 시료에 전파
+    if (_currentSampleIdx === 0) {
+        var labelChipsHtml = '';
+        var lc = document.getElementById('label-inline-chips');
+        if (lc) labelChipsHtml = lc.innerHTML;
+        for (var si = 1; si < _sampleData.length; si++) {
+            if (!_sampleData[si]) _sampleData[si] = {};
+            _sharedFieldIds.forEach(function(fid) {
+                // 다른 시료에 값이 아직 없으면 1번 시료 값 적용
+                if (!_sampleData[si][fid]) _sampleData[si][fid] = obj[fid] || '';
+            });
+            if (!_sampleData[si]._labelChipsHtml) _sampleData[si]._labelChipsHtml = labelChipsHtml;
+        }
+    }
 }
 
 function loadSampleFromArray(idx) {
     var obj = _sampleData[idx] || {};
+    // 공유 필드: 값이 없으면 1번 시료 값을 상속
+    if (idx > 0 && _sampleData[0]) {
+        _sharedFieldIds.forEach(function(fid) {
+            if (!obj[fid] && _sampleData[0][fid]) obj[fid] = _sampleData[0][fid];
+        });
+    }
     _sampleFieldIds.forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.value = obj[id] || '';
@@ -5853,6 +5882,15 @@ function loadSampleFromArray(idx) {
     // 식약처 품목코드 선택 상태 복원
     restoreMfdsProductDisplay();
     document.getElementById('sample-label').textContent = '📌 ' + getSampleNo(idx);
+
+    // 인라인 라벨 UI 동기화 (시료접수/접수형태/운반상태/공지여부)
+    ['receive','formType','transport','notice'].forEach(function(t) { syncInlineUI(t); });
+
+    // 라벨 칩 복원
+    if (obj._labelChipsHtml) {
+        var lc = document.getElementById('label-inline-chips');
+        if (lc) lc.innerHTML = obj._labelChipsHtml;
+    }
 
     // 품목정보 검증 패널 갱신 (보고번호 기반)
     refreshVerifyPanelForSample();
