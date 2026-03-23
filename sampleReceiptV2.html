@@ -438,7 +438,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
   <!-- 긴급여부 -->
   <div class="cp-field" style="position:relative">
     <span class="cp-lbl">긴급</span>
-    <div style="display:flex;align-items:center;gap:0;border:1px solid #d0d5dd;border-radius:5px;background:#fff;min-height:24px;padding:0 4px">
+    <div class="cp-inp" style="display:flex;align-items:center;gap:0;padding:0 4px;cursor:pointer;min-width:50px">
       <span id="urgent-label-badge" onclick="toggleUrgentPicker()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer;user-select:none;flex-shrink:0">일반</span>
       <span id="urgent-time-inline" style="display:none;align-items:center;gap:2px;margin-left:4px">
         <input type="number" id="urgent-time" min="1" max="72" placeholder="h" style="width:32px;text-align:center;border:1px solid #ffe0b2;border-radius:4px;font-size:9px;padding:1px;background:#fffbeb;font-weight:600">
@@ -526,7 +526,6 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <label class="send-chip"><input type="checkbox" name="report-send" value="선발송" onchange="toggleReportSendOption()"><span>🚀 선발송</span></label>
       <label class="send-chip"><input type="checkbox" name="report-send" value="팩스(선)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('fax-option-panel',this.closest('label'));else closeSendPanel('fax-option-panel')"><span>📠 팩스</span></label>
       <label class="send-chip"><input type="checkbox" name="report-send" value="메일(사본)" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('email-option-panel',this.closest('label'));else closeSendPanel('email-option-panel')"><span>📧 메일</span></label>
-      <label class="send-chip"><input type="checkbox" name="report-send" value="지부" onchange="toggleReportSendOption();if(this.checked)positionSendPanel('branch-send-panel',this.closest('label'));else closeSendPanel('branch-send-panel')"><span>🏢 지부</span></label>
     </div>
   </div>
 
@@ -544,8 +543,16 @@ body.sidebar-collapsed .main-container{margin-left:64px}
         <input type="checkbox" name="mail-addr-type" value="lic" onchange="toggleMailAddrType()"> 인허가 주소 <span id="mail-lic-addr-preview" style="color:#5f6b7a;font-size:11px"></span>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" name="mail-addr-type" value="branch" onchange="toggleMailAddrType()"> 🏢 지부 주소
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
         <input type="checkbox" name="mail-addr-type" value="other" onchange="toggleMailAddrType()"> 다른 주소
       </label>
+    </div>
+    <div id="mail-branch-addr-panel" style="display:none;margin-top:8px">
+      <input type="text" id="mail-branch-search" class="cp-inp" placeholder="지부명 검색..." style="width:100%;margin-bottom:4px" oninput="searchMailBranch(this.value)" onfocus="searchMailBranch(this.value)">
+      <div id="mail-branch-list" style="max-height:120px;overflow-y:auto;border:1px solid #eef0f4;border-radius:6px"></div>
+      <div id="mail-branch-selected" style="margin-top:4px"></div>
     </div>
     <div id="mail-other-addr-panel" style="display:none;margin-top:8px">
       <div style="display:flex;gap:6px;margin-bottom:4px">
@@ -593,18 +600,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     </div>
   </div>
 
-  <!-- 지부 발송 옵션 -->
-  <div id="branch-send-panel" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:12px;min-width:300px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span style="font-size:12px;font-weight:600">🏢 지부 발송</span>
-      <button type="button" onclick="document.getElementById('branch-send-panel').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8">✕</button>
-    </div>
-    <div style="margin-bottom:6px">
-      <input type="text" id="branch-send-search" class="cp-inp" placeholder="지부명 검색..." style="width:100%" oninput="searchBranchSend(this.value)" onfocus="searchBranchSend(this.value)">
-    </div>
-    <div id="branch-send-list" style="max-height:160px;overflow-y:auto;border:1px solid #eef0f4;border-radius:6px"></div>
-    <div id="branch-send-selected" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px"></div>
-  </div>
+  <!-- 지부 발송: 우편 패널 안으로 통합됨 -->
 
   <!-- 업체 정보 오버레이 (hover) -->
   <div id="company-changelog" style="display:none;position:fixed;z-index:9500;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:0;min-width:580px;max-width:750px;max-height:400px;overflow:hidden">
@@ -5426,7 +5422,35 @@ function updateMailAddrPreviews() {
 
 function toggleMailAddrType() {
     var otherCb = document.querySelector('input[name="mail-addr-type"][value="other"]');
+    var branchCb = document.querySelector('input[name="mail-addr-type"][value="branch"]');
     document.getElementById('mail-other-addr-panel').style.display = (otherCb && otherCb.checked) ? '' : 'none';
+    var branchPanel = document.getElementById('mail-branch-addr-panel');
+    if (branchPanel) branchPanel.style.display = (branchCb && branchCb.checked) ? '' : 'none';
+}
+
+function searchMailBranch(query) {
+    var list = document.getElementById('mail-branch-list');
+    if (!list) return;
+    var q = (query || '').toLowerCase().trim();
+    var filtered = q ? _receiptBranches.filter(function(b) {
+        return ((b.company||b.name||'').toLowerCase().indexOf(q) >= 0);
+    }) : _receiptBranches;
+    if (filtered.length === 0) { list.innerHTML = '<div style="padding:6px 10px;font-size:11px;color:#8892a4">검색 결과 없음</div>'; return; }
+    var html = '';
+    filtered.forEach(function(b) {
+        html += '<div style="padding:5px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'\'" onclick="selectMailBranch(\'' + (b.id||'') + '\',\'' + (b.company||b.name||'').replace(/'/g,'') + '\',\'' + (b.addr1||'').replace(/'/g,'') + '\')">';
+        html += '<b>' + (b.company||b.name||'') + '</b>';
+        if (b.addr1) html += ' <span style="color:#8892a4;font-size:10px">' + b.addr1 + '</span>';
+        html += '</div>';
+    });
+    list.innerHTML = html;
+}
+
+function selectMailBranch(id, name, addr) {
+    document.getElementById('mail-branch-search').value = name;
+    document.getElementById('mail-branch-list').innerHTML = '';
+    var sel = document.getElementById('mail-branch-selected');
+    if (sel) sel.innerHTML = '<div style="font-size:11px;color:#1565c0;padding:2px 0">🏢 ' + name + (addr ? ' — ' + addr : '') + '</div>';
 }
 
 function updateFaxPreview() {
