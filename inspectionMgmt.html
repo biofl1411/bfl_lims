@@ -30803,6 +30803,9 @@ function downloadTmplFeeExcel() {
     var totalFee = tmpl.testItems.reduce(function(s, ti) { return s + (ti.fee || 0); }, 0);
 
     tmpl.testItems.forEach(function(ti) {
+      var fee = ti.fee || 0;
+      var supply = Math.round(fee / 1.1);
+      var vat = fee - supply;
       detailRows.push({
         '식품유형': tmpl.templateName,
         '품목코드': tmpl.foodTypeCode || '',
@@ -30810,25 +30813,30 @@ function downloadTmplFeeExcel() {
         '시험항목코드': ti.testItemCode || '',
         '기준규격': ti.standard || '',
         '단위': ti.unit || '',
-        '단가': ti.fee || 0
+        '공급가액': supply,
+        'VAT': vat,
+        '합계(VAT포함)': fee
       });
     });
 
+    var totalSupply = Math.round(totalFee / 1.1);
     summaryRows.push({
       '식품유형': tmpl.templateName,
       '품목코드': tmpl.foodTypeCode || '',
       '시험항목수': tmpl.testItems.length,
-      '합계': totalFee
+      '공급가액': totalSupply,
+      'VAT': totalFee - totalSupply,
+      '합계(VAT포함)': totalFee
     });
   });
 
   var wb = XLSX.utils.book_new();
   var ws1 = XLSX.utils.json_to_sheet(summaryRows);
-  ws1['!cols'] = [{wch:25},{wch:18},{wch:10},{wch:14}];
+  ws1['!cols'] = [{wch:25},{wch:18},{wch:10},{wch:12},{wch:10},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws1, '식품유형별 단가');
 
   var ws2 = XLSX.utils.json_to_sheet(detailRows);
-  ws2['!cols'] = [{wch:25},{wch:18},{wch:25},{wch:12},{wch:40},{wch:10},{wch:14}];
+  ws2['!cols'] = [{wch:25},{wch:18},{wch:25},{wch:12},{wch:40},{wch:10},{wch:12},{wch:10},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws2, '항목별 상세');
 
   var today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
