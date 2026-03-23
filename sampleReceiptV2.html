@@ -4949,18 +4949,26 @@ async function loadInspectionItems(foodType) {
         await loadFirestoreFeeMap();
         var total = 0;
         var html = '';
-        var feeChargedCodes = {}; // 동일 코드 수수료 중복 방지 (보존료, 산화방지제 등)
+        var feeChargedGroups = {}; // 수수료 그룹 중복 방지 (보존료↔그 외 보존료, 산화방지제↔그 외 산화방지제)
+        // 동일 수수료 그룹: 같은 그룹 내 코드는 수수료 1회만 부과
+        var FEE_GROUP_MAP = {
+            'B60016': 'preservative',   // 보존료
+            'B60095': 'preservative',   // 그 외 보존료
+            'B60019': 'antioxidant',    // 산화방지제
+            'B60117': 'antioxidant'     // 그 외 산화방지제
+        };
         tmpl.testItems.forEach(function(ti, idx) {
             var baseFee = ti.fee || getFeeByCode(ti.testItemCode, ti.testItemName) || 0;
             var active = typeof MFDS_CODES !== 'undefined' ? MFDS_CODES.isActive(ti.testItemCode) : true;
-            // 동일 코드가 이미 수수료 부과된 경우 0원 처리
+            // 동일 코드 또는 동일 수수료 그룹이 이미 부과된 경우 0원 처리
             var fee = baseFee;
             var isDupFee = false;
-            if (ti.testItemCode && feeChargedCodes[ti.testItemCode]) {
+            var feeGroupKey = FEE_GROUP_MAP[ti.testItemCode] || ti.testItemCode;
+            if (feeGroupKey && feeChargedGroups[feeGroupKey]) {
                 fee = 0;
                 isDupFee = true;
             }
-            if (active && baseFee > 0) feeChargedCodes[ti.testItemCode] = true;
+            if (active && baseFee > 0) feeChargedGroups[feeGroupKey] = true;
             if (active) total += fee;
             var itemName = ti.testItemName + (ti.proviso ? ' (' + ti.proviso + ')' : '');
             var itemKey = (ti.testItemName || '') + '||' + (ti.proviso || '');
