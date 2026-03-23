@@ -30720,7 +30720,14 @@ function renderTemplates() {
   var allData = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
   filtered.forEach(function(tmpl, idx) {
     var realIdx = allData.indexOf(tmpl);
-    var totalFee = tmpl.testItems.reduce(function(s, ti) { return s + (ti.fee || 0); }, 0);
+    // 동일 코드/그룹 수수료 중복 방지 (보존료↔그 외 보존료, 산화방지제↔그 외 산화방지제)
+    var _tmplFeeGroupMap = {'B60016':'preservative','B60095':'preservative','B60019':'antioxidant','B60117':'antioxidant'};
+    var _tmplFeeCharged = {};
+    var totalFee = 0;
+    tmpl.testItems.forEach(function(ti) {
+      var gk = _tmplFeeGroupMap[ti.testItemCode] || ti.testItemCode;
+      if (!_tmplFeeCharged[gk]) { totalFee += (ti.fee || 0); if (ti.fee > 0) _tmplFeeCharged[gk] = true; }
+    });
     html += '<div style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden;">';
     html += '<div style="padding:12px 16px;background:#f8fafc;display:flex;align-items:center;gap:10px;">';
     html += '<span onclick="toggleTmplDetail(this.parentElement)" style="font-size:11px;color:#999;cursor:pointer;">▶</span>';
@@ -30741,14 +30748,19 @@ function renderTemplates() {
     html += '<th style="padding:6px 8px;text-align:left;font-weight:600;">단위</th>';
     html += '<th style="padding:6px 8px;text-align:right;font-weight:600;">수수료</th>';
     html += '</tr></thead><tbody>';
+    var _tmplRowFeeCharged = {};
     tmpl.testItems.forEach(function(ti, j) {
+      var gk = _tmplFeeGroupMap[ti.testItemCode] || ti.testItemCode;
+      var isDup = _tmplRowFeeCharged[gk] && ti.fee > 0;
+      if (ti.fee > 0) _tmplRowFeeCharged[gk] = true;
+      var feeHtml = ti.fee ? (isDup ? '<span style="color:#999;text-decoration:line-through;" title="동일 시험항목 그룹 — 수수료 1회만 부과">' + ti.fee.toLocaleString() + '원</span>' : ti.fee.toLocaleString() + '원') : '-';
       html += '<tr style="border-top:1px solid #f0f0f0;">';
       html += '<td style="padding:6px 8px;color:#999;">' + (j + 1) + '</td>';
       html += '<td style="padding:6px 8px;font-weight:500;">' + ti.testItemName + (ti.proviso ? ' <span style="color:#e65100;font-size:10px;">(' + ti.proviso + ')</span>' : '') + '</td>';
       html += '<td style="padding:6px 8px;font-family:monospace;color:#1565c0;">' + ti.testItemCode + '</td>';
       html += '<td style="padding:6px 8px;">' + (ti.standard || '-') + '</td>';
       html += '<td style="padding:6px 8px;">' + (ti.unit || '-') + '</td>';
-      html += '<td style="padding:6px 8px;text-align:right;font-weight:500;">' + (ti.fee ? ti.fee.toLocaleString() + '원' : '-') + '</td>';
+      html += '<td style="padding:6px 8px;text-align:right;font-weight:500;">' + feeHtml + '</td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
