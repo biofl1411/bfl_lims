@@ -4949,12 +4949,22 @@ async function loadInspectionItems(foodType) {
         await loadFirestoreFeeMap();
         var total = 0;
         var html = '';
+        var feeChargedCodes = {}; // 동일 코드 수수료 중복 방지 (보존료, 산화방지제 등)
         tmpl.testItems.forEach(function(ti, idx) {
-            var fee = ti.fee || getFeeByCode(ti.testItemCode, ti.testItemName) || 0;
+            var baseFee = ti.fee || getFeeByCode(ti.testItemCode, ti.testItemName) || 0;
             var active = typeof MFDS_CODES !== 'undefined' ? MFDS_CODES.isActive(ti.testItemCode) : true;
+            // 동일 코드가 이미 수수료 부과된 경우 0원 처리
+            var fee = baseFee;
+            var isDupFee = false;
+            if (ti.testItemCode && feeChargedCodes[ti.testItemCode]) {
+                fee = 0;
+                isDupFee = true;
+            }
+            if (active && baseFee > 0) feeChargedCodes[ti.testItemCode] = true;
             if (active) total += fee;
             var itemName = ti.testItemName + (ti.proviso ? ' (' + ti.proviso + ')' : '');
             var itemKey = (ti.testItemName || '') + '||' + (ti.proviso || '');
+            var feeDisplay = isDupFee ? '<span style="color:#999;text-decoration:line-through" title="동일 시험항목 — 수수료 1회만 부과">' + baseFee.toLocaleString() + '원</span>' : fee.toLocaleString() + '원';
             html += '<tr style="border-bottom:1px solid #eee;' + (active ? '' : 'opacity:.4;') + '" data-item-key="' + itemKey + '" data-fee="' + fee + '" data-test-code="' + (ti.testItemCode || '') + '" data-unit="' + (ti.unit || '') + '">';
             html += '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + idx + '" onchange="onInspectionCheckChange()"' + (active ? '' : ' disabled') + '></td>';
             html += '<td style="padding:8px 12px;color:#667085">' + (idx + 1) + '</td>';
@@ -4962,7 +4972,7 @@ async function loadInspectionItems(foodType) {
             html += '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + (ti.testItemCode || '') + '</td>';
             html += '<td style="padding:8px 12px;color:#344054;font-size:12px">' + (ti.standard || '-') + '</td>';
             html += '<td style="padding:8px 12px;color:#667085;font-size:12px">' + (ti.unit || '-') + '</td>';
-            html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + fee.toLocaleString() + '원</td>';
+            html += '<td style="padding:8px 12px;text-align:right;color:#344054">' + feeDisplay + '</td>';
             html += '</tr>';
         });
 
