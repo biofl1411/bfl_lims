@@ -619,7 +619,94 @@ async function splitPdfPages(file) {
   return pages;
 }
 
-/* ===== General OCR로 텍스트 추출 후 문서 유형 판별 ===== */
+/* ===== Claude Vision으로 PDF 페이지 자동 분류 + 필드 추출 ===== */
+var _pdfClaudeResults = {}; // 페이지별 Claude 추출 결과 캐시
+
+async function classifyPdfPagesWithClaude(pageFiles) {
+  // 모든 페이지를 한 번에 Claude에게 보내서 분류 + 필드 추출
+  var content = [];
+  for (var i = 0; i < pageFiles.length; i++) {
+    var b64 = await fileToBase64(pageFiles[i]);
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/png', data: b64 }
+    });
+    content.push({ type: 'text', text: '위 이미지는 페이지 ' + (i + 1) + '입니다.' });
+  }
+
+  content.push({ type: 'text', text: '위 이미지들을 분석하여 각 페이지가 어떤 문서인지 분류하고, 해당 필드를 추출하세요.\n\n' +
+    '반드시 아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이):\n' +
+    '{\n' +
+    '  "pages": [\n' +
+    '    {\n' +
+    '      "page": 1,\n' +
+    '      "type": "bizLicense" 또는 "permit" 또는 "unknown",\n' +
+    '      "fields": {\n' +
+    '        // type이 bizLicense인 경우:\n' +
+    '        "companyName": "회사명",\n' +
+    '        "repName": "대표자명",\n' +
+    '        "bizNo": "사업자번호 (xxx-xx-xxxxx)",\n' +
+    '        "corpNo": "법인번호 (xxxxxx-xxxxxxx, 없으면 빈문자)",\n' +
+    '        "bizType": "업태",\n' +
+    '        "bizItem": "종목",\n' +
+    '        "openDate": "개업일자 (YYYY-MM-DD)",\n' +
+    '        "zipCode": "우편번호",\n' +
+    '        "address": "사업장 주소",\n' +
+    '        "isCorp": true/false,\n' +
+    '        // type이 permit인 경우:\n' +
+    '        "licRepName": "인허가 대표자",\n' +
+    '        "licBizName": "영업소 명칭",\n' +
+    '        "licNo": "인허가번호 (제 xxxx-xxxxxxx 호)",\n' +
+    '        "licBizForm": "영업의 형태/종류 (예: 식품제조가공업, 즉석판매제조가공업 등)",\n' +
+    '        "licField": "분야 (식품 또는 축산)",\n' +
+    '        "licAddr": "영업소 소재지 주소"\n' +
+    '      }\n' +
+    '    }\n' +
+    '  ]\n' +
+    '}\n\n' +
+    '규칙:\n' +
+    '- 사업자등록증: "사업자등록증" 제목, 납세, 과세유형, 개업연월일 등이 있는 문서\n' +
+    '- 인허가문서: 영업허가증, 영업신고증, 영업등록증 등 식품/축산 관련 인허가 문서\n' +
+    '- 축산물 관련 키워드(축산물가공업, 축산물유통전문판매업 등)가 있으면 licField를 "축산"으로\n' +
+    '- 사업자번호는 반드시 xxx-xx-xxxxx 형식으로, 인허가번호는 "제 xxxx-xxxxxxx 호" 형식으로\n' +
+    '- 빈 값은 빈 문자열로'
+  });
+
+  try {
+    var resp = await fetch('/fss/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: content }]
+      })
+    });
+    var data = await resp.json();
+    if (data.content && data.content[0]) {
+      var text = data.content[0].text || '';
+      // JSON 블록 추출
+      var jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        var result = JSON.parse(jsonMatch[0]);
+        console.log('[PDF분류] Claude 결과:', result);
+        // 결과 캐시
+        if (result.pages) {
+          result.pages.forEach(function(p) {
+            _pdfClaudeResults[p.page - 1] = p;
+          });
+        }
+        return result;
+      }
+    }
+    throw new Error('Claude 응답 파싱 실패');
+  } catch(e) {
+    console.warn('[PDF분류] Claude 분류 실패:', e.message, '— 키워드 폴백');
+    return null;
+  }
+}
+
+/* ===== 키워드 기반 폴백 분류 (Claude 실패 시) ===== */
 async function detectDocTypeByText(pageFile) {
   try {
     var b64 = await fileToBase64(pageFile);
@@ -633,17 +720,13 @@ async function detectDocTypeByText(pageFile) {
       })
     });
     var data = await resp.json();
-    // General OCR 전체 텍스트 추출
     var fullText = '';
     if (data.images && data.images[0] && data.images[0].fields) {
       data.images[0].fields.forEach(function(f) { fullText += (f.inferText || '') + ' '; });
     }
-    console.log('[PDF분류] ' + pageFile.name + ' 텍스트:', fullText.substring(0, 200));
+    console.log('[PDF분류-폴백] ' + pageFile.name + ' 텍스트:', fullText.substring(0, 200));
 
-    // 가중치 기반 키워드 판별 (강력 키워드 = 3점, 보통 = 1점)
     var bizScore = 0, permitScore = 0;
-
-    // 사업자등록증 전용 키워드 (강력)
     if (/사업자\s*등록\s*증/.test(fullText)) bizScore += 5;
     if (/납세\s*(의무자|번호)/.test(fullText)) bizScore += 3;
     if (/과세\s*유형/.test(fullText)) bizScore += 3;
@@ -651,8 +734,6 @@ async function detectDocTypeByText(pageFile) {
     if (/세무서/.test(fullText)) bizScore += 2;
     if (/업태/.test(fullText)) bizScore += 1;
     if (/종목/.test(fullText)) bizScore += 1;
-
-    // 영업허가/신고 전용 키워드 (강력)
     if (/영업\s*(허가증|신고증|등록증)/.test(fullText)) permitScore += 5;
     if (/영업의\s*(종류|형태)/.test(fullText)) permitScore += 3;
     if (/영업소\s*(명칭|소재지)/.test(fullText)) permitScore += 3;
@@ -660,22 +741,126 @@ async function detectDocTypeByText(pageFile) {
     if (/축산물\s*위생/.test(fullText)) permitScore += 3;
     if (/영업\s*신고/.test(fullText)) permitScore += 2;
     if (/허가\s*번호/.test(fullText)) permitScore += 2;
-    if (/신고\s*번호/.test(fullText)) permitScore += 2;
-    if (/유통\s*기한|소비\s*기한/.test(fullText)) permitScore += 1;
-
-    console.log('[PDF분류] 점수 — 사업자:' + bizScore + ', 인허가:' + permitScore);
 
     if (bizScore > permitScore && bizScore >= 3) return 'bizLicense';
     if (permitScore > bizScore && permitScore >= 3) return 'permit';
-    if (bizScore === permitScore && bizScore >= 3) {
-      // 동점 — 사업자등록증 제목 유무로 최종 판별
-      return /사업자\s*등록\s*증/.test(fullText) ? 'bizLicense' : 'permit';
-    }
+    if (bizScore === permitScore && bizScore >= 3) return /사업자\s*등록\s*증/.test(fullText) ? 'bizLicense' : 'permit';
     return 'unknown';
   } catch(e) {
-    console.warn('[PDF분류] OCR 실패:', e.message);
+    console.warn('[PDF분류-폴백] OCR 실패:', e.message);
     return 'unknown';
   }
+}
+
+/* ===== Claude 추출 결과로 사업자등록증 필드 자동 채움 ===== */
+function applyClaudeBizFields(f) {
+  var changes = [];
+  var now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+  function setField(id, label, val) {
+    if (!val) return;
+    var el = document.getElementById(id);
+    if (!el) return;
+    var old = el.value || '';
+    el.value = val;
+    if (old !== val) changes.push({ field: label, from: old, to: val });
+  }
+
+  // 법인여부
+  if (f.isCorp === true || f.isCorp === 'true') {
+    document.getElementById('isCorp').checked = true;
+    document.getElementById('isIndiv').checked = false;
+  } else if (f.isCorp === false || f.isCorp === 'false') {
+    document.getElementById('isCorp').checked = false;
+    document.getElementById('isIndiv').checked = true;
+  }
+
+  setField('companyName', '회사명', f.companyName);
+  setField('repName', '대표자명', f.repName);
+  setField('bizNo', '사업자번호', f.bizNo);
+  setField('corpNo', '법인번호', f.corpNo);
+  setField('bizType', '업태', f.bizType);
+  setField('bizItem', '종목', f.bizItem);
+  setField('openDate', '개업일자', f.openDate);
+  setField('zipCode', '우편번호', f.zipCode);
+  setField('addr1', '기본주소', f.address);
+
+  // 변경 이력
+  if (changes.length > 0) {
+    var detail = changes.map(function(c) { return '[' + c.field + '] "' + c.from + '" → "' + c.to + '"'; }).join(', ');
+    _changeLog.push({ date: now, who: '시스템 (사업자등록증 Claude)', detail: '사업자등록증 Claude Vision에 의해 입력됨 — ' + detail });
+    renderChangeLog();
+  }
+
+  document.getElementById('bizLicOcrStatus').style.display = 'block';
+  document.getElementById('bizLicOcrStatus').innerHTML = '✅ Claude Vision 인식 완료! 필드를 확인해주세요.';
+  showToast('✅ 사업자등록증 — Claude Vision 자동 입력 완료');
+}
+
+/* ===== Claude 추출 결과로 인허가 필드 자동 채움 ===== */
+function applyClaudePermitFields(f, idx) {
+  var changes = [];
+  var now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+  function setField(id, label, val) {
+    if (!val) return;
+    var el = document.getElementById(id);
+    if (!el) return;
+    var old = el.value || '';
+    el.value = val;
+    if (old !== val) changes.push({ field: label, from: old, to: val });
+  }
+
+  setField('licRepName_' + idx, '인허가 대표자', f.licRepName);
+  setField('licBizName_' + idx, '영업소명칭', f.licBizName);
+  setField('licNo_' + idx, '인허가번호', f.licNo);
+  setField('licAddr_' + idx, '인허가 소재지', f.licAddr);
+
+  // 영업의 형태 select 매칭
+  if (f.licBizForm) {
+    var sel = document.getElementById('licBizForm_' + idx);
+    if (sel) {
+      var matched = false;
+      var normalize = function(s) { return s.replace(/[·\s\-·‧・]/g, ''); };
+      var normBiz = normalize(f.licBizForm);
+      for (var j = 0; j < sel.options.length; j++) {
+        var normOpt = normalize(sel.options[j].text);
+        if (normOpt && (normOpt.includes(normBiz) || normBiz.includes(normOpt))) {
+          sel.selectedIndex = j; matched = true; break;
+        }
+      }
+      if (!matched) {
+        var opt = document.createElement('option');
+        opt.value = f.licBizForm; opt.textContent = f.licBizForm + ' (Claude)'; opt.selected = true;
+        sel.appendChild(opt);
+      }
+      changes.push({ field: '영업의 형태', from: '', to: f.licBizForm });
+    }
+  }
+
+  // 분야 (식품/축산)
+  if (f.licField) {
+    var fieldSel = document.getElementById('licField_' + idx);
+    if (fieldSel) {
+      for (var k = 0; k < fieldSel.options.length; k++) {
+        if (fieldSel.options[k].text.includes(f.licField) || fieldSel.options[k].value === f.licField) {
+          fieldSel.selectedIndex = k; break;
+        }
+      }
+      changes.push({ field: '분야', from: '', to: f.licField });
+    }
+  }
+
+  // 변경 이력
+  if (changes.length > 0) {
+    var detail = changes.map(function(c) { return '[' + c.field + '] "' + c.from + '" → "' + c.to + '"'; }).join(', ');
+    _changeLog.push({ date: now, who: '시스템 (인허가문서 Claude)', detail: '인허가문서 Claude Vision에 의해 입력됨 — ' + detail });
+    renderChangeLog();
+  }
+
+  var statusEl = document.getElementById('licOcrStatus_' + idx);
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.innerHTML = '✅ Claude Vision 인식 완료!'; }
+  showToast('✅ 인허가문서 — Claude Vision 자동 입력 완료');
 }
 
 /* ===== 사업자등록증 OCR ===== */
@@ -697,11 +882,27 @@ function handleBizLicFile(file) {
         return;
       }
 
-      // 멀티페이지 — General OCR로 텍스트 추출 후 문서 유형 판별
-      document.getElementById('bizLicFileName').textContent = '📎 ' + file.name + ' (' + pages.length + '페이지 감지 — 자동 분류 중...)';
+      // 멀티페이지 — Claude Vision으로 분류 + 필드 추출
+      document.getElementById('bizLicFileName').textContent = '📎 ' + file.name + ' (' + pages.length + '페이지 감지 — Claude 분석 중...)';
+      _pdfClaudeResults = {};
 
-      Promise.all(pages.map(function(p) { return detectDocTypeByText(p); })).then(function(types) {
-        console.log('[PDF분류] 결과:', types);
+      classifyPdfPagesWithClaude(pages).then(function(claudeResult) {
+        var types;
+        if (claudeResult && claudeResult.pages) {
+          types = pages.map(function(_, idx) {
+            var p = claudeResult.pages.find(function(cp) { return cp.page === idx + 1; });
+            return p ? p.type : 'unknown';
+          });
+          console.log('[PDF분류] Claude 결과:', types);
+        } else {
+          // Claude 실패 — 키워드 폴백
+          showToast('⚠️ Claude 분류 실패 — 키워드 기반 폴백', 'warning');
+          return Promise.all(pages.map(function(p) { return detectDocTypeByText(p); }));
+        }
+        return types;
+      }).then(function(types) {
+        if (!types) return;
+        console.log('[PDF분류] 최종 분류:', types);
 
         var bizPages = [], permitPages = [], unknownPages = [];
         types.forEach(function(t, idx) {
@@ -753,11 +954,24 @@ function handleBizLicFile(file) {
           showToast('ℹ️ 사업자등록증 ' + bizPages.length + '페이지 감지 — 핵심 페이지로 OCR 실행', 'info');
         }
 
-        // 자동 OCR 실행 — 분류 완료 후 즉시
+        // Claude 결과가 있으면 바로 필드 채움, 없으면 Clova OCR 실행
+        var claudeBizResult = bizPages.length > 0 ? _pdfClaudeResults[bizPages[0]] : null;
+        var claudePermitResult = permitPages.length > 0 ? _pdfClaudeResults[permitPages[0]] : null;
+
         setTimeout(function() {
-          runBizLicOCR();
+          if (claudeBizResult && claudeBizResult.fields) {
+            applyClaudeBizFields(claudeBizResult.fields);
+          } else {
+            runBizLicOCR();
+          }
           if (permitPages.length > 0 && _licFiles[1]) {
-            setTimeout(function() { runLicOCR(1); }, 500);
+            setTimeout(function() {
+              if (claudePermitResult && claudePermitResult.fields) {
+                applyClaudePermitFields(claudePermitResult.fields, 1);
+              } else {
+                runLicOCR(1);
+              }
+            }, 500);
           }
         }, 300);
       }).catch(function(err) {
