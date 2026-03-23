@@ -698,6 +698,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       </div>
       <span id="tmpl-count" style="font-size:12px;color:var(--sub);white-space:nowrap;"></span>
       <button onclick="openTmplEditor()" style="padding:6px 14px;border:none;background:#1565c0;color:#fff;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">+ 식품유형 추가</button>
+      <button onclick="downloadTmplFeeExcel()" style="padding:6px 14px;border:1px solid #16a34a;background:#f0fdf4;color:#16a34a;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">📊 단가 엑셀</button>
       <button onclick="importMfdsTemplatesToFirestore()" style="padding:6px 14px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">📥 Firestore 임포트</button>
     </div>
     <div id="tmpl-list" style="font-size:13px;"></div>
@@ -30785,6 +30786,54 @@ function toggleTmplDetail(el) {
 function searchTemplates() {
   clearTimeout(_tmplSearchTimer);
   _tmplSearchTimer = setTimeout(renderTemplates, 200);
+}
+
+// ── 식품유형 단가 엑셀 다운로드 ──
+function downloadTmplFeeExcel() {
+  if (typeof XLSX === 'undefined') { showToast('엑셀 라이브러리 미로드', 'error'); return; }
+  var data = mfdsTemplateData.length > 0 ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
+  if (!data.length) { showToast('식품유형 데이터가 없습니다', 'warning'); return; }
+
+  // 시트1: 식품유형별 요약
+  var summaryRows = [];
+  // 시트2: 전체 항목 상세
+  var detailRows = [];
+
+  data.forEach(function(tmpl) {
+    var totalFee = tmpl.testItems.reduce(function(s, ti) { return s + (ti.fee || 0); }, 0);
+
+    tmpl.testItems.forEach(function(ti) {
+      detailRows.push({
+        '식품유형': tmpl.templateName,
+        '품목코드': tmpl.foodTypeCode || '',
+        '시험항목': ti.testItemName + (ti.proviso ? ' (' + ti.proviso + ')' : ''),
+        '시험항목코드': ti.testItemCode || '',
+        '기준규격': ti.standard || '',
+        '단위': ti.unit || '',
+        '단가': ti.fee || 0
+      });
+    });
+
+    summaryRows.push({
+      '식품유형': tmpl.templateName,
+      '품목코드': tmpl.foodTypeCode || '',
+      '시험항목수': tmpl.testItems.length,
+      '합계': totalFee
+    });
+  });
+
+  var wb = XLSX.utils.book_new();
+  var ws1 = XLSX.utils.json_to_sheet(summaryRows);
+  ws1['!cols'] = [{wch:25},{wch:18},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws1, '식품유형별 단가');
+
+  var ws2 = XLSX.utils.json_to_sheet(detailRows);
+  ws2['!cols'] = [{wch:25},{wch:18},{wch:25},{wch:12},{wch:40},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws2, '항목별 상세');
+
+  var today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  XLSX.writeFile(wb, '식품유형_단가_' + today + '.xlsx');
+  showToast('식품유형 단가 ' + data.length + '건 엑셀 다운로드 완료', 'success');
 }
 
 // ── 식품유형 CRUD (추가/수정/삭제) ──
