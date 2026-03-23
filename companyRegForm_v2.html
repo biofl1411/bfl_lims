@@ -640,18 +640,36 @@ async function detectDocTypeByText(pageFile) {
     }
     console.log('[PDF분류] ' + pageFile.name + ' 텍스트:', fullText.substring(0, 200));
 
-    // 키워드 기반 판별
-    var bizKeywords = /사업자\s*등록\s*증|사업자등록증|등록번호|납세|과세|업태|종목|개업/;
-    var permitKeywords = /영업\s*신고|영업신고증|허가증|인허가|영업의\s*종류|영업소|식품위생|축산물위생|영업허가/;
+    // 가중치 기반 키워드 판별 (강력 키워드 = 3점, 보통 = 1점)
+    var bizScore = 0, permitScore = 0;
 
-    var isBiz = bizKeywords.test(fullText);
-    var isPermit = permitKeywords.test(fullText);
+    // 사업자등록증 전용 키워드 (강력)
+    if (/사업자\s*등록\s*증/.test(fullText)) bizScore += 5;
+    if (/납세\s*(의무자|번호)/.test(fullText)) bizScore += 3;
+    if (/과세\s*유형/.test(fullText)) bizScore += 3;
+    if (/개업\s*[년연]?\s*월\s*일/.test(fullText)) bizScore += 3;
+    if (/세무서/.test(fullText)) bizScore += 2;
+    if (/업태/.test(fullText)) bizScore += 1;
+    if (/종목/.test(fullText)) bizScore += 1;
 
-    if (isBiz && !isPermit) return 'bizLicense';
-    if (isPermit && !isBiz) return 'permit';
-    if (isBiz && isPermit) {
-      // 둘 다 매칭 — 사업자번호 패턴으로 최종 판별
-      return /\d{3}\s*-\s*\d{2}\s*-\s*\d{5}/.test(fullText) ? 'bizLicense' : 'permit';
+    // 영업허가/신고 전용 키워드 (강력)
+    if (/영업\s*(허가증|신고증|등록증)/.test(fullText)) permitScore += 5;
+    if (/영업의\s*(종류|형태)/.test(fullText)) permitScore += 3;
+    if (/영업소\s*(명칭|소재지)/.test(fullText)) permitScore += 3;
+    if (/식품위생법/.test(fullText)) permitScore += 3;
+    if (/축산물\s*위생/.test(fullText)) permitScore += 3;
+    if (/영업\s*신고/.test(fullText)) permitScore += 2;
+    if (/허가\s*번호/.test(fullText)) permitScore += 2;
+    if (/신고\s*번호/.test(fullText)) permitScore += 2;
+    if (/유통\s*기한|소비\s*기한/.test(fullText)) permitScore += 1;
+
+    console.log('[PDF분류] 점수 — 사업자:' + bizScore + ', 인허가:' + permitScore);
+
+    if (bizScore > permitScore && bizScore >= 3) return 'bizLicense';
+    if (permitScore > bizScore && permitScore >= 3) return 'permit';
+    if (bizScore === permitScore && bizScore >= 3) {
+      // 동점 — 사업자등록증 제목 유무로 최종 판별
+      return /사업자\s*등록\s*증/.test(fullText) ? 'bizLicense' : 'permit';
     }
     return 'unknown';
   } catch(e) {
