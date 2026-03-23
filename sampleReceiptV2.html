@@ -5828,6 +5828,9 @@ function loadSampleFromArray(idx) {
     // 식약처 품목코드 선택 상태 복원
     restoreMfdsProductDisplay();
     document.getElementById('sample-label').textContent = '📌 ' + getSampleNo(idx);
+
+    // 품목정보 검증 패널 갱신 (보고번호 기반)
+    refreshVerifyPanelForSample();
 }
 
 /**
@@ -7601,6 +7604,50 @@ async function fetchReportNo(manual) {
     } catch(e) {
         console.warn('[보고번호 조회 실패]', e.message);
         if (manual) showToast('보고번호 조회 실패: ' + e.message, 'error');
+    }
+}
+
+// ============================================================================
+// 시료 전환 시 품목정보 검증 패널 갱신 (보고번호 기반 정확 매칭)
+// ============================================================================
+async function refreshVerifyPanelForSample() {
+    var reportNo = (document.getElementById('report-no').value || '').trim();
+    var panel = document.getElementById('report-verify-panel');
+    if (!reportNo) {
+        if (panel) panel.style.display = 'none';
+        return;
+    }
+    try {
+        var snap = await db.collection('fss_products').where('prdlst_report_no', '==', reportNo).limit(1).get();
+        if (!snap.empty) {
+            renderReportVerifyPanel(snap.docs[0].data());
+        } else {
+            // 보고번호로 못 찾으면 인허가번호+제품명으로 재시도
+            var licNo = (document.getElementById('lic-no').value || '').replace(/[^0-9]/g, '');
+            var productName = (document.getElementById('product-name').value || '').trim();
+            if (licNo && productName) {
+                var snap2 = await db.collection('fss_products').where('lcns_no', '==', licNo).get();
+                var normalizedInput = productName.replace(/\s/g, '').toLowerCase();
+                var matched = null;
+                snap2.forEach(function(doc) {
+                    var d = doc.data();
+                    var prdName = (d.prdlst_nm || '').replace(/\s/g, '').toLowerCase();
+                    if (prdName === normalizedInput || prdName.indexOf(normalizedInput) >= 0 || normalizedInput.indexOf(prdName) >= 0) {
+                        if (!matched || (d.prms_dt || '') > (matched.prms_dt || '')) matched = d;
+                    }
+                });
+                if (matched) {
+                    renderReportVerifyPanel(matched);
+                } else if (panel) {
+                    panel.style.display = 'none';
+                }
+            } else if (panel) {
+                panel.style.display = 'none';
+            }
+        }
+    } catch(e) {
+        console.warn('[검증패널 갱신 실패]', e.message);
+        if (panel) panel.style.display = 'none';
     }
 }
 
