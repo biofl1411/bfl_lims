@@ -704,7 +704,8 @@ body.sidebar-collapsed .main-container{margin-left:64px}
         <div style="position:relative">
           <input type="text" id="expiry-days" placeholder="제조일로부터" style="width:100%;padding-right:28px"
             oninput="this.value=this.value.replace(/[^0-9]/g,'');calcExpiryDate()">
-          <span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;pointer-events:none">일</span>
+          <span id="expiry-unit-label" onclick="toggleExpiryUnit()" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer;user-select:none">일</span>
+          <input type="hidden" id="expiry-unit" value="일">
         </div>
       </div>
       <div class="f-grp"><label>소비기한</label>
@@ -804,7 +805,6 @@ body.sidebar-collapsed .main-container{margin-left:64px}
           </div>
           <input type="hidden" id="notice-required" value="">
         </div>
-        <textarea id="notice-memo-box" placeholder="메모 내용을 입력하세요..." style="display:none;width:100%;margin-top:4px;padding:6px 8px;border:1px solid #bbdefb;border-radius:5px;font-size:11px;resize:vertical;min-height:40px;max-height:100px;font-family:inherit;background:#f0f7ff" oninput="markAsModified()"></textarea>
       </div>
       <div class="f-grp" style="position:relative">
         <label>지부</label>
@@ -823,7 +823,8 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       </div>
     </div>
 
-    <!-- 긴급여부: 상단 헤더바로 이동됨 -->
+    <!-- 메모 박스 (공지여부 '메모' 선택 시) -->
+    <textarea id="notice-memo-box" placeholder="메모 내용을 입력하세요..." style="display:none;width:100%;padding:8px 10px;border:1px solid #bbdefb;border-radius:5px;font-size:12px;resize:vertical;min-height:50px;max-height:120px;font-family:inherit;background:#f0f7ff" oninput="markAsModified()"></textarea>
 
     <!-- 파일 첨부 -->
     <div class="f-sec-title">📎 첨부파일</div>
@@ -6012,19 +6013,22 @@ function updatePaymentSummary() {
 // 소비기한 일수 → "제조일로부터 ○○일" 텍스트 설정
 // ============================================================================
 function calcExpiryDate() {
-    var days = parseInt(document.getElementById('expiry-days').value);
+    var val = parseInt(document.getElementById('expiry-days').value);
+    var unit = (document.getElementById('expiry-unit') || {}).value || '일';
     var dateEl = document.getElementById('expiry-date');
     var textEl = document.getElementById('expiry-date-text');
-    if (days > 0) {
-        // 제조일로부터 일수 모드 → 달력 숨기고 텍스트 표시
+    if (val > 0) {
         dateEl.style.visibility = 'hidden';
         textEl.style.display = '';
-        textEl.value = '제조일로부터 ' + days + '일';
-        // 제조일이 있으면 실제 날짜도 계산하여 date 필드에 저장
+        textEl.value = '제조일로부터 ' + val + unit;
         var mfgDate = document.getElementById('manufacture-date').value;
         if (mfgDate) {
             var d = new Date(mfgDate);
-            d.setDate(d.getDate() + days);
+            if (unit === '년') {
+                d.setFullYear(d.getFullYear() + val);
+            } else {
+                d.setDate(d.getDate() + val);
+            }
             dateEl.value = d.toISOString().slice(0, 10);
         }
     }
@@ -7859,6 +7863,28 @@ document.addEventListener('click', function(e) {
         if (ph) ph.style.display = 'none';
     }
 });
+
+// ============================================================================
+// 소비기한 단위 토글 (일 ↔ 년)
+// ============================================================================
+function toggleExpiryUnit() {
+    var unit = document.getElementById('expiry-unit');
+    var label = document.getElementById('expiry-unit-label');
+    if (unit.value === '일') {
+        unit.value = '년';
+        label.textContent = '년';
+        label.style.background = '#fff3e0';
+        label.style.color = '#e65100';
+        label.style.borderColor = '#ffe0b2';
+    } else {
+        unit.value = '일';
+        label.textContent = '일';
+        label.style.background = '#e3f2fd';
+        label.style.color = '#1565c0';
+        label.style.borderColor = '#bbdefb';
+    }
+    calcExpiryDate();
+}
 
 // ============================================================================
 // 공통 인라인 피커
