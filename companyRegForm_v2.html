@@ -600,9 +600,147 @@ var _licFiles = {};
 var _bizLicOcrResult = null;   // 사업자등록증 OCR 인식 결과 (Firebase 저장용)
 var _licOcrResults = {};        // 인허가 OCR 인식 결과 {idx: {...}} (Firebase 저장용)
 
+/* ===== PDF 멀티페이지 자동 분리 (pdf.js) ===== */
+async function splitPdfPages(file) {
+  var arrayBuf = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+  var pages = [];
+  for (var i = 1; i <= pdf.numPages; i++) {
+    var page = await pdf.getPage(i);
+    var viewport = page.getViewport({ scale: 2.0 });
+    var canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    var ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+    var blob = await new Promise(function(resolve) { canvas.toBlob(resolve, 'image/png'); });
+    pages.push(new File([blob], file.name.replace('.pdf', '_p' + i + '.png'), { type: 'image/png' }));
+  }
+  return pages;
+}
+
+/* ===== OCR 결과로 문서 유형 판별 ===== */
+function detectDocType(ocrData) {
+  if (!ocrData || !ocrData.images || !ocrData.images[0]) return 'unknown';
+  var img = ocrData.images[0];
+  // bizLicense API가 성공적으로 파싱하면 사업자등록증일 가능성 높음
+  if (img.bizLicense && img.bizLicense.result) {
+    var res = img.bizLicense.result;
+    var getText = function(arr) { return (arr && arr[0] && arr[0].text) ? arr[0].text.trim() : ''; };
+    var bizNo = getText(res.registerNumber) || getText(res.bisRegistrationNumber);
+    var companyName = getText(res.companyName) || getText(res.corpName);
+    var taxType = getText(res.taxType) || '';
+    // 사업자번호가 xxx-xx-xxxxx 패턴이면 사업자등록증
+    if (bizNo && /\d{3}-?\d{2}-?\d{5}/.test(bizNo)) return 'bizLicense';
+    // 과세유형이 있으면 사업자등록증
+    if (/과세|면세|법인|간이/.test(taxType)) return 'bizLicense';
+    // 인허가번호 패턴 (제 xxxx-xxxxxxx호)
+    if (bizNo && /제?\s*\d{4}/.test(bizNo)) return 'permit';
+    // 영업소명칭이 있고 사업자번호 패턴이 아니면 인허가
+    if (companyName && !bizNo) return 'permit';
+  }
+  return 'unknown';
+}
+
 /* ===== 사업자등록증 OCR ===== */
 function handleBizLicFile(file) {
   if (!file) return;
+
+  // PDF 멀티페이지 감지
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    document.getElementById('bizLicFileName').textContent = '📎 ' + file.name + ' (페이지 분석 중...)';
+    document.getElementById('bizLicOcrBtn').disabled = true;
+
+    splitPdfPages(file).then(function(pages) {
+      if (pages.length <= 1) {
+        // 단일 페이지 — 기존 로직
+        _bizLicFile = file;
+        document.getElementById('bizLicFileName').textContent = '📎 ' + file.name;
+        document.getElementById('bizLicOcrBtn').disabled = false;
+        document.getElementById('bizLicPreview').style.display = 'none';
+        return;
+      }
+
+      // 멀티페이지 — 각 페이지 OCR로 문서 유형 판별
+      document.getElementById('bizLicFileName').textContent = '📎 ' + file.name + ' (' + pages.length + '페이지 감지 — 자동 분류 중...)';
+
+      var ocrPromises = pages.map(function(pageFile) {
+        return fileToBase64(pageFile).then(function(b64) {
+          return fetch(OCR_BIZ_LICENSE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              version: 'V2', requestId: 'bfl-split-' + Date.now() + '-' + Math.random().toString(36).substr(2,4),
+              timestamp: Date.now(),
+              images: [{ format: 'png', name: pageFile.name, data: b64 }]
+            })
+          }).then(function(r) { return r.json(); });
+        });
+      });
+
+      Promise.all(ocrPromises).then(function(results) {
+        var bizPage = null, permitPage = null;
+        var bizIdx = -1, permitIdx = -1;
+
+        results.forEach(function(ocrData, idx) {
+          var docType = detectDocType(ocrData);
+          console.log('[PDF분리] 페이지 ' + (idx + 1) + ': ' + docType);
+          if (docType === 'bizLicense' && !bizPage) { bizPage = pages[idx]; bizIdx = idx; }
+          else if (!permitPage) { permitPage = pages[idx]; permitIdx = idx; }
+        });
+
+        // 사업자등록증 슬롯에 설정
+        if (bizPage) {
+          _bizLicFile = bizPage;
+          document.getElementById('bizLicOcrBtn').disabled = false;
+          // 미리보기
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            document.getElementById('bizLicPreviewImg').src = e.target.result;
+            document.getElementById('bizLicPreview').style.display = 'block';
+          };
+          reader.readAsDataURL(bizPage);
+        } else {
+          // 판별 실패 — 1페이지를 사업자등록증으로 가정
+          _bizLicFile = pages[0];
+          bizIdx = 0;
+          document.getElementById('bizLicOcrBtn').disabled = false;
+          permitPage = pages.length > 1 ? pages[1] : null;
+          permitIdx = 1;
+        }
+
+        // 인허가문서 슬롯에 자동 설정
+        if (permitPage) {
+          _licFiles[1] = permitPage;
+          var licFileName = document.getElementById('licFileName_1');
+          if (licFileName) licFileName.textContent = '📁 ' + permitPage.name + ' (자동 분류)';
+          var licOcrBtn = document.getElementById('licOcrBtn_1');
+          if (licOcrBtn) licOcrBtn.disabled = false;
+        }
+
+        var msg = '📄 PDF ' + pages.length + '페이지 자동 분류 완료';
+        if (bizIdx >= 0) msg += ' — 페이지 ' + (bizIdx + 1) + ': 사업자등록증';
+        if (permitIdx >= 0 && permitPage) msg += ', 페이지 ' + (permitIdx + 1) + ': 인허가문서';
+        document.getElementById('bizLicFileName').textContent = '📎 ' + file.name + ' (' + pages.length + '페이지)';
+        showToast(msg);
+      }).catch(function(err) {
+        console.error('PDF 분류 실패:', err);
+        // 실패 시 원본 그대로 사용
+        _bizLicFile = file;
+        document.getElementById('bizLicFileName').textContent = '📎 ' + file.name;
+        document.getElementById('bizLicOcrBtn').disabled = false;
+        showToast('⚠️ PDF 자동 분류 실패 — 원본 파일로 OCR 진행', 'warning');
+      });
+    }).catch(function(err) {
+      console.error('PDF 분할 실패:', err);
+      _bizLicFile = file;
+      document.getElementById('bizLicFileName').textContent = '📎 ' + file.name;
+      document.getElementById('bizLicOcrBtn').disabled = false;
+    });
+    return;
+  }
+
+  // 이미지 파일 — 기존 로직
   _bizLicFile = file;
   document.getElementById('bizLicFileName').textContent = '📎 ' + file.name;
   document.getElementById('bizLicOcrBtn').disabled = false;
