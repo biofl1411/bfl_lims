@@ -1162,6 +1162,106 @@ function runBizLicOCR() {
 /* ===== 인허가 OCR ===== */
 function handleLicFile(idx, file) {
   if (!file) return;
+
+  // PDF 멀티페이지 → Claude Vision 분류
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name + ' (페이지 분석 중...)';
+    document.getElementById('licOcrBtn_' + idx).disabled = true;
+
+    splitPdfPages(file).then(function(pages) {
+      if (pages.length <= 1) {
+        _licFiles[idx] = file;
+        document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name;
+        document.getElementById('licOcrBtn_' + idx).disabled = false;
+        return;
+      }
+
+      document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name + ' (' + pages.length + '페이지 — Claude 분석 중...)';
+      _pdfClaudeResults = {};
+
+      classifyPdfPagesWithClaude(pages).then(function(claudeResult) {
+        var types;
+        if (claudeResult && claudeResult.pages) {
+          types = pages.map(function(_, i) {
+            var p = claudeResult.pages.find(function(cp) { return cp.page === i + 1; });
+            return p ? p.type : 'unknown';
+          });
+        } else {
+          return Promise.all(pages.map(function(p) { return detectDocTypeByText(p); }));
+        }
+        return types;
+      }).then(function(types) {
+        if (!types) return;
+        var bizPages = [], permitPages = [], unknownPages = [];
+        types.forEach(function(t, i) {
+          if (t === 'bizLicense') bizPages.push(i);
+          else if (t === 'permit') permitPages.push(i);
+          else unknownPages.push(i);
+        });
+
+        // 인허가가 없으면 첫 unknown을 인허가로
+        if (permitPages.length === 0 && unknownPages.length > 0) permitPages.push(unknownPages.shift());
+        if (bizPages.length === 0 && unknownPages.length > 0) bizPages.push(unknownPages.shift());
+
+        // 인허가 → 현재 슬롯에 배치
+        var permitFile = permitPages.length > 0 ? pages[permitPages[0]] : pages[0];
+        _licFiles[idx] = permitFile;
+        document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name + ' (' + pages.length + '페이지)';
+        document.getElementById('licOcrBtn_' + idx).disabled = false;
+
+        // 사업자등록증 → 사업자등록증 슬롯에 배치
+        if (bizPages.length > 0 && !_bizLicFile) {
+          var bizFile = pages[bizPages[0]];
+          _bizLicFile = bizFile;
+          document.getElementById('bizLicFileName').textContent = '📎 ' + bizFile.name + ' (자동 분류)';
+          document.getElementById('bizLicOcrBtn').disabled = false;
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            document.getElementById('bizLicPreviewImg').src = e.target.result;
+            document.getElementById('bizLicPreview').style.display = 'block';
+          };
+          reader.readAsDataURL(bizFile);
+        }
+
+        var msgs = [];
+        bizPages.forEach(function(i) { msgs.push('p' + (i+1) + ':사업자등록증'); });
+        permitPages.forEach(function(i) { msgs.push('p' + (i+1) + ':인허가문서'); });
+        showToast('📄 PDF 자동 분류: ' + msgs.join(', '));
+
+        // Claude 결과로 자동 채움
+        var claudePermit = permitPages.length > 0 ? _pdfClaudeResults[permitPages[0]] : null;
+        var claudeBiz = bizPages.length > 0 ? _pdfClaudeResults[bizPages[0]] : null;
+
+        setTimeout(function() {
+          if (claudePermit && claudePermit.fields) {
+            applyClaudePermitFields(claudePermit.fields, idx);
+          } else {
+            runLicOCR(idx);
+          }
+          if (bizPages.length > 0 && _bizLicFile) {
+            setTimeout(function() {
+              if (claudeBiz && claudeBiz.fields) {
+                applyClaudeBizFields(claudeBiz.fields);
+              } else {
+                runBizLicOCR();
+              }
+            }, 500);
+          }
+        }, 300);
+      }).catch(function(err) {
+        console.error('인허가 PDF 분류 실패:', err);
+        _licFiles[idx] = file;
+        document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name;
+        document.getElementById('licOcrBtn_' + idx).disabled = false;
+      });
+    }).catch(function(err) {
+      _licFiles[idx] = file;
+      document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name;
+      document.getElementById('licOcrBtn_' + idx).disabled = false;
+    });
+    return;
+  }
+
   _licFiles[idx] = file;
   document.getElementById('licFileName_' + idx).textContent = '📁 ' + file.name;
   document.getElementById('licOcrBtn_' + idx).disabled = false;
