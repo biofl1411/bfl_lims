@@ -614,7 +614,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <button class="cl-tab active" data-cl-tab="changelog" onclick="switchClTab('changelog')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #1a73e8;color:#1a73e8;font-family:inherit">📋 업체 변경이력 <span id="changelog-count" style="font-size:9px;color:#8892a4"></span></button>
       <button class="cl-tab" data-cl-tab="fss-info" onclick="switchClTab('fss-info')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#5f6b7a;font-family:inherit">🏢 식약처 업체 정보</button>
       <button class="cl-tab" data-cl-tab="fss-change" onclick="switchClTab('fss-change')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#5f6b7a;font-family:inherit">📜 식약처 변경 이력 <span id="fss-change-count" style="font-size:9px;color:#8892a4"></span></button>
-      <button class="cl-tab" data-cl-tab="new-biz" onclick="switchClTab('new-biz')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#5f6b7a;font-family:inherit">🆕 신규 등록 <span id="new-biz-count" style="font-size:9px;color:#8892a4"></span></button>
+      <button class="cl-tab" data-cl-tab="products" onclick="switchClTab('products')" style="flex:1;padding:8px 12px;font-size:11px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#5f6b7a;font-family:inherit">📦 제품 정보 <span id="products-count" style="font-size:9px;color:#8892a4"></span></button>
     </div>
     <!-- 탭 바디 -->
     <div style="padding:10px 12px;max-height:340px;overflow-y:auto">
@@ -627,8 +627,8 @@ body.sidebar-collapsed .main-container{margin-left:64px}
       <div id="cl-pane-fss-change" style="display:none;font-size:11px">
         <div id="fss-change-body" style="color:#64748b;text-align:center;padding:20px">업체를 선택하면 조회됩니다</div>
       </div>
-      <div id="cl-pane-new-biz" style="display:none;font-size:11px">
-        <div id="new-biz-body" style="color:#64748b;text-align:center;padding:20px">로딩 중...</div>
+      <div id="cl-pane-products" style="display:none;font-size:11px">
+        <div id="products-body" style="color:#64748b;text-align:center;padding:20px">업체를 선택하면 제품 목록이 조회됩니다</div>
       </div>
     </div>
   </div>
@@ -2578,62 +2578,109 @@ function switchClTab(tabName) {
         btn.style.color = isActive ? '#1a73e8' : '#5f6b7a';
         btn.classList.toggle('active', isActive);
     });
-    ['changelog', 'fss-info', 'fss-change', 'new-biz'].forEach(function(id) {
+    ['changelog', 'fss-info', 'fss-change', 'products'].forEach(function(id) {
         var el = document.getElementById('cl-pane-' + id);
         if (el) el.style.display = (id === tabName) ? '' : 'none';
     });
 }
 
-// 신규 등록 업체 탭 로드 (최근 30일)
-function loadNewBizTab() {
-    var body = document.getElementById('new-biz-body');
-    var countSpan = document.getElementById('new-biz-count');
+// 제품 정보 탭 로드 (선택된 업체의 인허가번호 기반)
+function loadProductsTab() {
+    var body = document.getElementById('products-body');
+    var countSpan = document.getElementById('products-count');
+    if (!body) return;
+
+    var licNoRaw = (document.getElementById('lic-no').value || '').trim();
+    var licNo = licNoRaw.replace(/[^0-9]/g, '');
+    var companyName = (document.getElementById('company-search').value || '').trim();
+
+    if (!licNo) {
+        body.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">업체를 선택하면 제품 목록이 조회됩니다</div>';
+        if (countSpan) countSpan.textContent = '';
+        return;
+    }
+
     body.innerHTML = '<div style="color:#64748b;text-align:center;padding:10px">로딩 중...</div>';
 
-    var since = new Date();
-    since.setDate(since.getDate() - 30);
-
-    db.collection('fss_new_businesses')
-      .orderBy('detected_at', 'desc')
-      .where('detected_at', '>=', since)
-      .limit(50)
-      .get()
+    db.collection('fss_products').where('lcns_no', '==', licNo).get()
       .then(function(snap) {
         if (snap.empty) {
-            body.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">최근 30일간 신규 등록 업체가 없습니다</div>';
-            countSpan.textContent = '';
+            body.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:16px">등록된 제품이 없습니다 (인허가번호: ' + licNo + ')</div>';
+            if (countSpan) countSpan.textContent = '';
             return;
         }
-        countSpan.textContent = '(' + snap.size + ')';
-        var html = '<table style="width:100%;border-collapse:collapse;font-size:10px">';
-        html += '<thead><tr style="background:#f8f9fb"><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">업소명</th><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">업종</th><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">인허가일</th><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">소재지</th></tr></thead><tbody>';
+        if (countSpan) countSpan.textContent = '(' + snap.size + ')';
 
-        snap.forEach(function(doc) {
-            var b = doc.data();
-            var pdt = b.prms_dt || '';
-            if (pdt.length === 8) pdt = pdt.substring(0,4)+'-'+pdt.substring(4,6)+'-'+pdt.substring(6,8);
-            var addr = (b.locp_addr || '').substring(0, 25);
-            html += '<tr style="border-bottom:1px solid #f0f2f5">'
-              + '<td style="padding:3px 6px;font-weight:600">' + (b.bssh_nm || '-') + '</td>'
-              + '<td style="padding:3px 6px;color:#5f6b7a">' + (b.induty_nm || '-') + '</td>'
-              + '<td style="padding:3px 6px;color:#5f6b7a">' + pdt + '</td>'
-              + '<td style="padding:3px 6px;color:#8892a4" title="' + (b.locp_addr||'') + '">' + addr + '</td>'
+        // 제품을 이름순 정렬
+        var products = [];
+        snap.forEach(function(doc) { products.push(doc.data()); });
+        products.sort(function(a, b) { return (a.prdlst_nm || '').localeCompare(b.prdlst_nm || '', 'ko'); });
+
+        var html = '<div style="margin-bottom:6px;font-size:10px;color:#64748b">' + (companyName || '') + ' (' + licNo + ') — ' + products.length + '건</div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:10px">';
+        html += '<thead><tr style="background:#f8f9fb">'
+          + '<th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">제품명</th>'
+          + '<th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">보고번호</th>'
+          + '<th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e2e6ed">식품유형</th>'
+          + '<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #e2e6ed">선택</th>'
+          + '</tr></thead><tbody>';
+
+        products.forEach(function(p, i) {
+            var reportNo = p.prdlst_report_no || '-';
+            var foodType = p.prdlst_dcnm || p.food_type || '-';
+            html += '<tr style="border-bottom:1px solid #f0f2f5;cursor:pointer" '
+              + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'\'" '
+              + 'onclick="applyProductFromTab(' + i + ')">'
+              + '<td style="padding:4px 6px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (p.prdlst_nm || '') + '">' + (p.prdlst_nm || '-') + '</td>'
+              + '<td style="padding:4px 6px;color:#6d28d9;font-weight:500">' + reportNo + '</td>'
+              + '<td style="padding:4px 6px;color:#5f6b7a">' + foodType + '</td>'
+              + '<td style="padding:4px 6px;text-align:center"><span style="color:#1a73e8;font-size:9px">적용</span></td>'
               + '</tr>';
         });
         html += '</tbody></table>';
-        html += '<div style="text-align:right;margin-top:6px"><a href="admin_new_businesses.html" target="_blank" style="font-size:10px;color:#1a73e8;text-decoration:none">전체 보기 →</a></div>';
         body.innerHTML = html;
+
+        // 제품 데이터 캐시 (클릭 시 적용용)
+        window._cachedProducts = products;
       })
       .catch(function(e) {
         body.innerHTML = '<div style="color:#e53e3e;text-align:center;padding:10px">로드 실패: ' + e.message + '</div>';
       });
 }
 
-// 페이지 로드 시 신규 업체 탭 데이터 미리 로드
-if (typeof waitForFirebase === 'function') {
-    waitForFirebase().then(function() { loadNewBizTab(); });
-} else {
-    setTimeout(loadNewBizTab, 2000);
+// 제품 선택 시 폼에 적용
+function applyProductFromTab(idx) {
+    var products = window._cachedProducts;
+    if (!products || !products[idx]) return;
+    var p = products[idx];
+
+    // 제품명
+    if (p.prdlst_nm) {
+        document.getElementById('product-name').value = p.prdlst_nm;
+    }
+    // 보고번호
+    if (p.prdlst_report_no) {
+        document.getElementById('report-no').value = p.prdlst_report_no;
+    }
+    // 검체유형 (식품의유형)
+    var foodType = p.prdlst_dcnm || p.food_type || '';
+    if (foodType) {
+        document.getElementById('food-type-input').value = foodType;
+        document.getElementById('food-type-value').value = foodType;
+        if (typeof loadInspectionItems === 'function') {
+            loadInspectionItems(foodType);
+        }
+    }
+    // 검증 패널
+    if (typeof renderReportVerifyPanel === 'function') {
+        renderReportVerifyPanel(p);
+    }
+
+    showToast('제품 적용: ' + p.prdlst_nm, 'info');
+
+    // 오버레이 숨기기
+    var overlay = document.getElementById('company-changelog');
+    if (overlay) overlay.style.display = 'none';
 }
 
 // 식약처 API 업체 정보 + 변경 이력 로드
@@ -6704,6 +6751,9 @@ function selectCompany(elOrObj) {
 
     // 식약처 API 정보 로드 (hover 오버레이용) → 완료 후 인허가 변경 알림도 처리
     loadFssCompanyData(lic.licNo || lic.licenseNo || '', c.createdAt || c.regDate || '');
+
+    // 제품 정보 탭 자동 로드
+    loadProductsTab();
 }
 
 // ============================================================================
