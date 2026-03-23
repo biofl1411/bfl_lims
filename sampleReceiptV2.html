@@ -136,10 +136,15 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 .cp-main-area{flex:1;display:flex;overflow:hidden;min-height:0}
 
 /* ─── 왼쪽: 시료정보 ─── */
-.cp-left{width:620px;flex-shrink:0;overflow-y:auto;padding:12px 14px;background:#fff;border-right:2px solid #e2e8f0;display:flex;flex-direction:column;gap:6px}
+.cp-left{width:620px;flex-shrink:0;overflow-y:auto;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:6px}
 .cp-left::-webkit-scrollbar{width:4px}
 .cp-left::-webkit-scrollbar-track{background:transparent}
 .cp-left::-webkit-scrollbar-thumb{background:#d0d5dd;border-radius:4px}
+
+/* ─── 리사이저 ─── */
+.cp-resizer{width:5px;cursor:col-resize;background:#e2e8f0;flex-shrink:0;transition:background .15s;position:relative}
+.cp-resizer:hover,.cp-resizer.active{background:#94a3b8}
+.cp-resizer::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:30px;border-left:1px solid #94a3b8;border-right:1px solid #94a3b8}
 
 /* ─── 오른쪽: 시험항목 ─── */
 .cp-right{flex:1;overflow-y:auto;padding:8px 10px;background:#fafbfc;display:flex;flex-direction:column;gap:6px}
@@ -799,7 +804,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
           <div id="notice-picker" style="display:none;position:absolute;left:calc(100% + 4px);top:50%;transform:translateY(-50%);background:#fff;border:1px solid #d0d5dd;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.12);z-index:200;padding:3px;white-space:nowrap">
             <div style="display:flex;gap:2px">
               <span onclick="selectInline('notice','예','#2e7d32','#e8f5e9','#c8e6c9')" style="padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;border-radius:4px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9">예</span>
-              <span onclick="selectInline('notice','아니오','#5f6b7a','#f5f5f5','#ddd')" style="padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;border-radius:4px;background:#f5f5f5;color:#5f6b7a;border:1px solid #ddd">아니오</span>
+              <span onclick="selectInline('notice','아니요','#5f6b7a','#f5f5f5','#ddd')" style="padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;border-radius:4px;background:#f5f5f5;color:#5f6b7a;border:1px solid #ddd">아니요</span>
               <span onclick="selectInline('notice','메모','#1565c0','#e3f2fd','#bbdefb')" style="padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;border-radius:4px;background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb">메모</span>
             </div>
           </div>
@@ -824,7 +829,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     </div>
 
     <!-- 메모 박스 (공지여부 '메모' 선택 시) -->
-    <textarea id="notice-memo-box" placeholder="메모 내용을 입력하세요..." style="display:none;width:100%;padding:8px 10px;border:1px solid #bbdefb;border-radius:5px;font-size:12px;resize:vertical;min-height:50px;max-height:120px;font-family:inherit;background:#f0f7ff" oninput="markAsModified()"></textarea>
+    <textarea id="notice-memo-box" placeholder="메모에 기록된 내용은 공지 대상이 아닙니다" style="display:none;width:100%;padding:8px 10px;border:1px solid #bbdefb;border-radius:5px;font-size:12px;resize:vertical;min-height:50px;max-height:120px;font-family:inherit;background:#f0f7ff" oninput="markAsModified()"></textarea>
 
     <!-- 파일 첨부 -->
     <div class="f-sec-title">📎 첨부파일</div>
@@ -866,6 +871,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     <textarea id="remarks" style="display:none"></textarea>
 
     <!-- 접수 공지 -->
+    <div id="receipt-notice-section">
     <div id="notice-template-area" style="display:none;padding:8px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <label style="font-weight:600;font-size:12px;color:#f57f17">접수 공지</label>
@@ -887,6 +893,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     <div class="f-grp" id="notice-memo-area" style="display:none">
       <textarea id="notice-memo" style="display:none"></textarea>
     </div>
+    </div><!-- /receipt-notice-section -->
 
     <!-- 계산서 readonly 필드 (업체 선택 시 자동 채움, 숨김) -->
     <input type="hidden" id="company-name">
@@ -903,6 +910,9 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 
   </div><!-- /cp-left -->
 
+
+  <!-- 리사이저 -->
+  <div class="cp-resizer" id="cp-resizer"></div>
 
   <!-- ─── 오른쪽: 시험항목 ─── -->
   <div class="cp-right">
@@ -7865,6 +7875,41 @@ document.addEventListener('click', function(e) {
 });
 
 // ============================================================================
+// 패널 리사이저
+// ============================================================================
+(function() {
+    var resizer = document.getElementById('cp-resizer');
+    var left = document.querySelector('.cp-left');
+    if (!resizer || !left) return;
+    var saved = localStorage.getItem('bfl_cpLeftWidth');
+    if (saved) left.style.width = saved + 'px';
+    var startX, startW;
+    resizer.addEventListener('mousedown', function(e) {
+        startX = e.clientX;
+        startW = left.offsetWidth;
+        resizer.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+    function onMove(e) {
+        var w = startW + (e.clientX - startX);
+        if (w < 400) w = 400;
+        if (w > 900) w = 900;
+        left.style.width = w + 'px';
+    }
+    function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        resizer.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem('bfl_cpLeftWidth', left.offsetWidth);
+    }
+})();
+
+// ============================================================================
 // 소비기한 단위 토글 (일 ↔ 년)
 // ============================================================================
 function toggleExpiryUnit() {
@@ -7908,7 +7953,7 @@ var _inlineColors = {
     receive: { '내방':['#1565c0','#e3f2fd','#bbdefb'], '택배':['#e65100','#fff3e0','#ffe0b2'], '바이오물류':['#2e7d32','#e8f5e9','#c8e6c9'], '일반물류':['#5f6b7a','#f5f5f5','#ddd'] },
     form: { '일반':['#1565c0','#e3f2fd','#bbdefb'], '홈페이지':['#7b1fa2','#f3e5f5','#e1bee7'] },
     transport: { '냉장':['#1565c0','#e3f2fd','#bbdefb'], '냉동':['#0d47a1','#e3f2fd','#90caf9'], '실온':['#e65100','#fff3e0','#ffe0b2'], '상온':['#2e7d32','#e8f5e9','#c8e6c9'] },
-    notice: { '예':['#2e7d32','#e8f5e9','#c8e6c9'], '아니오':['#5f6b7a','#f5f5f5','#ddd'], '메모':['#1565c0','#e3f2fd','#bbdefb'] }
+    notice: { '예':['#2e7d32','#e8f5e9','#c8e6c9'], '아니요':['#5f6b7a','#f5f5f5','#ddd'], '메모':['#1565c0','#e3f2fd','#bbdefb'] }
 };
 function selectInline(type, val, color, bg, border) {
     var m = _inlineMap[type];
@@ -7923,6 +7968,9 @@ function selectInline(type, val, color, bg, border) {
     if (type === 'notice') {
         var memoBox = document.getElementById('notice-memo-box');
         if (memoBox) memoBox.style.display = (val === '메모') ? '' : 'none';
+        // 접수공지 박스 표시/숨김
+        var noticeSection = document.getElementById('receipt-notice-section');
+        if (noticeSection) noticeSection.style.display = (val === '아니요') ? 'none' : '';
         if (val === '예' && typeof loadNoticeTemplate === 'function') loadNoticeTemplate();
     }
 }
