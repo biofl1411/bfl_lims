@@ -30802,10 +30802,35 @@ function downloadTmplFeeExcel() {
   data.forEach(function(tmpl) {
     var totalFee = tmpl.testItems.reduce(function(s, ti) { return s + (ti.fee || 0); }, 0);
 
+    // 동시분석 그룹 비고 생성용: 같은 식품유형 내 코드 목록 수집
+    var feeGroupMap = {'B60016':'preservative','B60095':'preservative','B60019':'antioxidant','B60117':'antioxidant','B10001':'heavy_metal_Pb_Cd','B10007':'heavy_metal_Pb_Cd','B30004':'aflatoxin','B30013':'aflatoxin','B30015':'aflatoxin','B30016':'aflatoxin','B30017':'aflatoxin'};
+    var groupNames = {
+      'preservative': '보존료', 'antioxidant': '산화방지제',
+      'heavy_metal_Pb_Cd': '납/카드뮴 동시분석', 'aflatoxin': '아플라톡신'
+    };
+    // 그룹별 항목명 수집
+    var groupMembers = {};
+    tmpl.testItems.forEach(function(ti) {
+      var gk = feeGroupMap[ti.testItemCode];
+      if (gk) {
+        if (!groupMembers[gk]) groupMembers[gk] = [];
+        groupMembers[gk].push(ti.testItemName);
+      }
+    });
+
     tmpl.testItems.forEach(function(ti) {
       var fee = ti.fee || 0;
       var supply = Math.round(fee / 1.1);
       var vat = fee - supply;
+      // 비고: 동시분석 그룹이면 같은 그룹 내 다른 항목명 표시
+      var remark = '';
+      var gk = feeGroupMap[ti.testItemCode];
+      if (gk && groupMembers[gk] && groupMembers[gk].length > 1) {
+        var others = groupMembers[gk].filter(function(n) { return n !== ti.testItemName; });
+        // 중복 제거
+        others = others.filter(function(v, i, a) { return a.indexOf(v) === i; });
+        remark = groupNames[gk] + ' 동시분석 (' + others.join(', ') + ' 포함) — 수수료 1회';
+      }
       detailRows.push({
         '식품유형': tmpl.templateName,
         '품목코드': tmpl.foodTypeCode || '',
@@ -30815,7 +30840,8 @@ function downloadTmplFeeExcel() {
         '단위': ti.unit || '',
         '공급가액': supply,
         'VAT': vat,
-        '합계(VAT포함)': fee
+        '합계(VAT포함)': fee,
+        '비고': remark
       });
     });
 
@@ -30836,7 +30862,7 @@ function downloadTmplFeeExcel() {
   XLSX.utils.book_append_sheet(wb, ws1, '식품유형별 단가');
 
   var ws2 = XLSX.utils.json_to_sheet(detailRows);
-  ws2['!cols'] = [{wch:25},{wch:18},{wch:25},{wch:12},{wch:40},{wch:10},{wch:12},{wch:10},{wch:14}];
+  ws2['!cols'] = [{wch:25},{wch:18},{wch:25},{wch:12},{wch:40},{wch:10},{wch:12},{wch:10},{wch:14},{wch:45}];
   XLSX.utils.book_append_sheet(wb, ws2, '항목별 상세');
 
   var today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
