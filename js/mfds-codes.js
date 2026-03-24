@@ -449,6 +449,14 @@ MFDS_CODES.unlockCategories = function() {
 // ============================================================
 
 /**
+ * 시험항목 캐시 초기화 (업로드 후 강제 리로드용)
+ */
+MFDS_CODES.clearTestItemCache = function() {
+  _mc_testItemCache = null;
+  console.log('[MFDS_CODES] 시험항목 캐시 초기화');
+};
+
+/**
  * 시험항목 전체 로드 (캐시)
  * @returns {Promise<Array>}
  */
