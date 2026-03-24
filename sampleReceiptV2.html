@@ -2646,7 +2646,24 @@ async function loadReceiptForEdit(docId) {
                     // ★ 모드 확정 후 첫 시료 시험항목 재로드
                     _currentSampleIdx = 0;
                     loadSampleFromArray(0);
-                    console.log('[편집모드] mfdsTestItems 모드 확정 → 첫 시료 재로드');
+                    // 첫 시료에 유효 항목이 없으면 다른 시료에서 복사
+                    setTimeout(function() {
+                        var tb = document.getElementById('inspection-items-tbody');
+                        var hasValid = tb && tb.querySelectorAll('tr[data-test-code]').length > 0;
+                        if (!hasValid && _sampleData.length > 1) {
+                            for (var ci = 1; ci < _sampleData.length; ci++) {
+                                var otherItems = _sampleData[ci]._savedTestItems || _sampleData[ci]._refTestItems || [];
+                                var pItems = otherItems.filter(function(it) { return (it.testCode||'').charAt(0)==='P' || (it.testCode||'').indexOf('BUNDLE_')===0; });
+                                if (pItems.length > 0) {
+                                    _sampleData[0]._savedTestItems = JSON.parse(JSON.stringify(pItems));
+                                    _sampleData[0]._refTestItems = JSON.parse(JSON.stringify(pItems));
+                                    loadSampleFromArray(0);
+                                    console.log('[편집모드] 시료' + (ci+1) + '에서 P코드 항목 복사 → 시료1');
+                                    break;
+                                }
+                            }
+                        }
+                    }, 300);
                 }
             }, 2000);
         }
