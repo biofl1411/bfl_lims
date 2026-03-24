@@ -821,14 +821,23 @@ async function loadList() {
   // ── 데이터 로드 ──
   var allCustomers = await getCustomers();
 
-  // ── 등급 실시간 계산 (공통 모듈) ──
+  // ── 등급 실시간 계산 + Firestore 저장 (기준점) ──
   try {
     for (var gi = 0; gi < allCustomers.length; gi++) {
       var gc = allCustomers[gi];
       var gr = await gradeCalcCompany(gc, {});
+      var changed = gc.grade !== gr.grade || gc.gradeScore !== gr.score;
       gc.grade = gr.grade;
       gc.gradeScore = gr.score;
       gc.gradeScoreDetail = gr.detail;
+      // Firestore에 저장 (변경된 경우만)
+      if (changed && (gc.id || gc._id)) {
+        try {
+          db.collection('companies').doc(gc.id || gc._id).update({
+            grade: gr.grade, gradeScore: gr.score, gradeScoreDetail: gr.detail
+          });
+        } catch(ue) {}
+      }
     }
   } catch(e) { console.warn('등급 실시간 계산 실패:', e.message); }
 

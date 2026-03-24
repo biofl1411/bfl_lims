@@ -2538,19 +2538,12 @@ async function loadCustomers() {
     console.warn('접수 데이터 기반 계산 실패:', e.message);
   }
 
-  // ── 등급 실시간 계산 (공통 모듈) ──
-  for (var gi = 0; gi < allCustomers.length; gi++) {
-    try {
-      var gc = allCustomers[gi];
-      var custKey = gc.id || (gc.company || '').trim();
-      var gStats = _companyReceiptStats[custKey] || {};
-      gStats.trafficLight = _companyTrafficLight[custKey] || 'green';
-      var gr = await gradeCalcCompany(gc, gStats);
-      gc._calcGrade = gr.grade;
-      gc._calcScore = gr.score;
-      gc._calcDetail = gr.detail;
-    } catch(e) { allCustomers[gi]._calcGrade = 'F'; allCustomers[gi]._calcScore = 0; }
-  }
+  // ── 등급: Firestore 저장 값 사용 (companyMgmt에서 계산/저장) ──
+  allCustomers.forEach(function(gc) {
+    gc._calcGrade = gc.grade || 'F';
+    gc._calcScore = gc.gradeScore || 0;
+    gc._calcDetail = gc.gradeScoreDetail || '';
+  });
 
   // ── 검색 필터 ──
   var q = _custSearchQuery.toLowerCase().trim();
