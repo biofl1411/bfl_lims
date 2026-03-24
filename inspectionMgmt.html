@@ -35706,20 +35706,21 @@ function renderTestItemCatChips(show) {
     return;
   }
 
-  // 건수 집계 (PA/PB 가상 카테고리 포함)
+  // 건수 집계 (PA/PB 독립 카테고리)
   var catCounts = {};
   var totalCnt = 0;
   (_mfdsTestItems || []).forEach(function(t) {
     var code = (t['시험항목코드'] || '').toUpperCase();
-    var p = code.charAt(0);
-    if (p) { catCounts[p] = (catCounts[p] || 0) + 1; totalCnt++; }
-    // PA/PB 가상 카테고리: P코드의 두번째 자리가 A 또는 B (16진수)
-    if (p === 'P' && code.length >= 2) {
-      var sub = code.charAt(1).toUpperCase();
-      // 소분류 A=10, B=11 (16진수) → 코드 PA..., PB...
-      // 실제로는 REF_SUB_CATEGORIES의 키로 판별
-      if (sub === 'A') catCounts['PA'] = (catCounts['PA'] || 0) + 1;
-      else if (sub === 'B') catCounts['PB'] = (catCounts['PB'] || 0) + 1;
+    // PA/PB 코드는 독립 카테고리 (P에 포함하지 않음)
+    if (code.indexOf('PA') === 0) {
+      catCounts['PA'] = (catCounts['PA'] || 0) + 1;
+      totalCnt++;
+    } else if (code.indexOf('PB') === 0) {
+      catCounts['PB'] = (catCounts['PB'] || 0) + 1;
+      totalCnt++;
+    } else {
+      var p = code.charAt(0);
+      if (p) { catCounts[p] = (catCounts[p] || 0) + 1; totalCnt++; }
     }
   });
 
@@ -35784,28 +35785,13 @@ function renderTestItemSubChips() {
 }
 
 function toggleTestItemCat(letter) {
-  // PA/PB 가상 카테고리 처리
-  var cat = REF_CODE_CATEGORIES[letter];
-  if (cat && cat.virtual && cat.parentCat) {
-    var parent = cat.parentCat;
-    var subKey = cat.subKey;
+  // PA/PB 독립 카테고리 처리
+  if (letter === 'PA' || letter === 'PB') {
     var idx = _editTestItemCats.indexOf(letter);
     if (idx >= 0) {
-      // 해제: PA/PB 제거, P + 소분류도 정리
       _editTestItemCats.splice(idx, 1);
-      var pIdx = _editTestItemCats.indexOf(parent);
-      if (pIdx >= 0) _editTestItemCats.splice(pIdx, 1);
-      delete _editTestItemSubs[parent];
-      delete _editTestItemSubs[letter];
     } else {
-      // 선택: P + 소분류 A/B 설정
-      // 다른 PA/PB 해제
-      ['PA','PB'].forEach(function(vk) { var vi = _editTestItemCats.indexOf(vk); if (vi >= 0) _editTestItemCats.splice(vi, 1); });
-      var pIdx2 = _editTestItemCats.indexOf(parent);
-      if (pIdx2 >= 0) _editTestItemCats.splice(pIdx2, 1);
       _editTestItemCats.push(letter);
-      _editTestItemCats.push(parent);
-      _editTestItemSubs[parent] = [subKey];
     }
     renderTestItemCatChips(true);
     return;
@@ -36341,15 +36327,26 @@ function applyMfdsTestFilters() {
 
   // ★ 검색어가 있으면 카테고리/소분류 필터 무시 → 전체에서 검색
   if (!query) {
-    // 1) 대분류 필터
+    // 1) 대분류 필터 (PA/PB는 2글자 접두사)
     if (_mfdsTestCatFilter !== 'all') {
-      base = base.filter(function(item) {
-        return (item['시험항목코드'] || '').charAt(0).toUpperCase() === _mfdsTestCatFilter;
-      });
+      var catF = _mfdsTestCatFilter;
+      if (catF === 'PA' || catF === 'PB') {
+        // PA/PB: 코드가 PA... 또는 PB...로 시작
+        base = base.filter(function(item) {
+          return (item['시험항목코드'] || '').toUpperCase().indexOf(catF) === 0;
+        });
+      } else {
+        base = base.filter(function(item) {
+          var code = (item['시험항목코드'] || '').toUpperCase();
+          // P 카테고리: PA/PB 코드 제외
+          if (catF === 'P') return code.charAt(0) === 'P' && code.indexOf('PA') !== 0 && code.indexOf('PB') !== 0;
+          return code.charAt(0) === catF;
+        });
+      }
     }
 
-    // 2) 소분류 필터
-    if (_mfdsTestSubFilter && _mfdsTestCatFilter !== 'all') {
+    // 2) 소분류 필터 (PA/PB는 소분류 없음)
+    if (_mfdsTestSubFilter && _mfdsTestCatFilter !== 'all' && _mfdsTestCatFilter !== 'PA' && _mfdsTestCatFilter !== 'PB') {
       base = base.filter(function(item) {
         var code = (item['시험항목코드'] || '').toUpperCase();
         return code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === _mfdsTestSubFilter;
