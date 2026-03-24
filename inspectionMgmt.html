@@ -36973,6 +36973,29 @@ function editBundleItemUnit(code) {
   }
   // 4) 현재 항목의 기본 단위
   if (item && item['단위']) suggestions.add(item['단위']);
+  // 5) ★ mfdsTemplates(자가품질위탁검사용)에서 같은 코드/이름의 단위
+  var tmplData = typeof mfdsTemplateData !== 'undefined' ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
+  tmplData.forEach(function(tmpl) {
+    (tmpl.testItems || []).forEach(function(ti) {
+      if (ti.unit) {
+        // 코드 매칭
+        if (ti.testItemCode === code) suggestions.add(ti.unit);
+        // 이름 매칭 (괄호 제거 후 비교)
+        if (item) {
+          var tiName = (ti.testItemName || '').replace(/\(.*\)/, '').split('||')[0].trim();
+          var baseName2 = (item['한글명'] || '').replace(/\(.*\)/, '').split('||')[0].trim();
+          if (tiName && baseName2 && tiName === baseName2) suggestions.add(ti.unit);
+        }
+      }
+    });
+  });
+  // 6) 일반적인 단위 추천 (자주 사용)
+  if (suggestions.size === 0) {
+    var codePrefix = code.charAt(0);
+    if (codePrefix === 'C') { suggestions.add('CFU/g'); suggestions.add('CFU/mL'); }
+    else if (codePrefix === 'B') { suggestions.add('mg/kg'); suggestions.add('g/kg'); }
+    else if (codePrefix === 'P') { suggestions.add('g/100g'); suggestions.add('mg/100g'); suggestions.add('g/100mL'); }
+  }
   // 현재값 제거 (별도 표시)
   suggestions.delete(current);
   var sugArr = Array.from(suggestions);
