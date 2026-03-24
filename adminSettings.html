@@ -630,9 +630,12 @@ function updateGradeTotalScore() {
 function addDynRow(key, score, condition) {
     var tbody = document.getElementById('dyn-' + key);
     if (!tbody) return;
+    var catMap = { dept: 5, rcpt: 6, move: 7, sample: 8 };
+    var catEl = document.getElementById('cat-max-' + (catMap[key] || 5));
+    var maxScore = catEl ? +catEl.value : 100;
     var tr = document.createElement('tr');
     tr.innerHTML =
-      '<td><input type="number" value="' + (score || 0) + '" min="0" max="100" class="rule-input dyn-score-' + key + '"></td>' +
+      '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '"></td>' +
       '<td><input type="text" value="' + (condition || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력"></td>' +
       '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove()" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
     tbody.appendChild(tr);
@@ -659,9 +662,13 @@ function collectDynRows(key) {
 function addDynRowExt(key, score, threshold) {
     var tbody = document.getElementById('dyn-' + key);
     if (!tbody) return;
+    // 카테고리 번호 매핑
+    var catMap = { rev: 1, freq: 2, dur: 3, pay: 4 };
+    var catEl = document.getElementById('cat-max-' + (catMap[key] || 1));
+    var maxScore = catEl ? +catEl.value : 100;
     var tr = document.createElement('tr');
     tr.innerHTML =
-      '<td><input type="number" value="' + (score || 0) + '" min="0" max="100" class="rule-input dyn-score-' + key + '"></td>' +
+      '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '"></td>' +
       '<td><input type="text" value="' + (threshold || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력"></td>' +
       '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove()" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
     tbody.appendChild(tr);
@@ -677,7 +684,7 @@ function renderDynRowsExt(key, scores, conditions) {
     }
 }
 
-/* 배점 변경 시 하위 점수를 비율에 맞게 자동 조정 */
+/* 배점 변경 시 하위 점수를 비율에 맞게 자동 조정 + max 제한 */
 function onCatMaxChange(key, newMax) {
     newMax = +newMax || 1;
     var scoreEls = document.querySelectorAll('.dyn-score-' + key);
@@ -686,10 +693,13 @@ function onCatMaxChange(key, newMax) {
     var curMax = 0;
     scoreEls.forEach(function(el) { if (+el.value > curMax) curMax = +el.value; });
     if (curMax === 0) curMax = 1;
-    // 비율 조정
+    // 비율 조정 + max 속성 갱신
     var ratio = newMax / curMax;
     scoreEls.forEach(function(el) {
-      el.value = Math.round((+el.value || 0) * ratio);
+      var newVal = Math.round((+el.value || 0) * ratio);
+      if (newVal > newMax) newVal = newMax;
+      el.value = newVal;
+      el.max = newMax;
     });
 }
 
