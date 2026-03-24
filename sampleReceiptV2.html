@@ -3646,9 +3646,18 @@ function updateInspectionMode(testPurpose) {
 function _filterTestItemsByCats(items) {
     if (!_currentTestItemCats || _currentTestItemCats.length === 0) return items;
     return items.filter(function(t) {
-        var code = (t['시험항목코드'] || '');
-        var major = code.charAt(0).toUpperCase();
+        var code = (t['시험항목코드'] || '').toUpperCase();
+        // PA/PB 2글자 접두사 체크
+        var prefix2 = code.substring(0, 2);
+        if (prefix2 === 'PA' || prefix2 === 'PB') {
+            // PA/PB가 cats에 있으면 통과
+            if (_currentTestItemCats.indexOf(prefix2) >= 0) return true;
+            // P가 cats에 있으면 PA/PB 제외 (P 독립 영역)
+            return false;
+        }
+        var major = code.charAt(0);
         if (_currentTestItemCats.indexOf(major) < 0) return false;
+        // P 카테고리에서 PA/PB 제외 (이미 위에서 처리됨)
         var subs = _currentTestItemSubs[major];
         if (subs && subs.length > 0) {
             return subs.indexOf(code.charAt(1)) >= 0;
@@ -3678,12 +3687,14 @@ function _restoreFoodTypeInput(inputEl) {
 var _REF_CAT_NAMES = {
     'A':'이화학','B':'중금속','C':'미생물','D':'기생충',
     'E':'잔류농약','F':'동물용의약품','G':'GMO',
-    'H':'이물/곰팡이','I':'질병검사','X':'기타','P':'참고용'
+    'H':'이물/곰팡이','I':'질병검사','X':'기타','P':'참고용',
+    'PA':'참고용(식품)','PB':'참고용(축산)'
 };
 var _REF_CAT_COLORS = {
     'A':'#2563eb','B':'#7c3aed','C':'#059669','D':'#d97706',
     'E':'#dc2626','F':'#0891b2','G':'#4f46e5',
-    'H':'#9333ea','I':'#be185d','X':'#64748b','P':'#ea580c'
+    'H':'#9333ea','I':'#be185d','X':'#64748b','P':'#ea580c',
+    'PA':'#1565c0','PB':'#6d4c41'
 };
 // P코드 소분류 이름 (참고용 전용)
 // P소분류 이름 — Firestore pRefSubCategories에서 동적 로드 (폴백용 초기값)
@@ -4462,8 +4473,13 @@ function searchBundlesFiltered(query) {
     Object.keys(names).forEach(function(nk) {
         var parts = nk.split('_'); // "2_01" → subKey=2
         var prefix = 'P' + parts[0]; // "P2"
-        // 범위 체크: testItemCats에 해당 대분류가 포함되어야 함
-        if (_currentTestItemCats.length > 0 && _currentTestItemCats.indexOf('P') < 0) return;
+        // 범위 체크: testItemCats에 P 또는 PA/PB가 포함되어야 함
+        if (_currentTestItemCats.length > 0) {
+            var hasP = _currentTestItemCats.indexOf('P') >= 0;
+            var hasPA = _currentTestItemCats.indexOf('PA') >= 0;
+            var hasPB = _currentTestItemCats.indexOf('PB') >= 0;
+            if (!hasP && !hasPA && !hasPB) return;
+        }
         // 소분류 체크
         var subs = _currentTestItemSubs['P'];
         if (subs && subs.length > 0 && subs.indexOf(parts[0]) < 0) return;
@@ -4558,9 +4574,10 @@ function buildRightCatChips(filtered) {
               + cat + ' ' + name + subText + ' ' + filtered.length + '건</span>';
         });
 
-        // 2) P참고용이면 sub3 그룹을 가로 칩으로 표시, 클릭 시 하단에 묶음
-        if (_currentTestItemCats.indexOf('P') >= 0 && _pBundleCache && _pBundleCache.names) {
-            var pSubs = _currentTestItemSubs['P'] || [];
+        // 2) P/PA/PB 참고용이면 sub3 그룹을 가로 칩으로 표시, 클릭 시 하단에 묶음
+        var hasPType = _currentTestItemCats.indexOf('P') >= 0 || _currentTestItemCats.indexOf('PA') >= 0 || _currentTestItemCats.indexOf('PB') >= 0;
+        if (hasPType && _pBundleCache && _pBundleCache.names) {
+            var pSubs = _currentTestItemSubs['P'] || _currentTestItemSubs['PA'] || _currentTestItemSubs['PB'] || [];
             var bNames = _pBundleCache.names;
             var subKeys2 = pSubs.length > 0 ? pSubs : Object.keys(_pRefSub3Data || {});
             // sub3 가로 칩
