@@ -2530,6 +2530,25 @@ async function loadReceiptForEdit(docId) {
         // 기존 첨부파일 보관 (수정 시 보호용)
         window._editExistingFiles = data.files || null;
 
+        // 지부
+        if (data.branchId || data.branchName) {
+            var brEl = document.getElementById('receipt-branch');
+            if (brEl) brEl.value = data.branchId || '';
+            var brInpEl = document.getElementById('receipt-branch-input');
+            if (brInpEl) brInpEl.value = data.branchName || '';
+        }
+
+        // 라벨
+        if (data.labels && data.labels.length > 0) {
+            setTimeout(function() {
+                data.labels.forEach(function(lb) {
+                    if (typeof addLabelChip === 'function') {
+                        addLabelChip(lb.name, lb.color);
+                    }
+                });
+            }, 500);
+        }
+
         // 시료 데이터
         var samples = data.samples || [];
         if (samples.length > 0) {
@@ -6016,7 +6035,7 @@ function loadSampleFromArray(idx) {
     document.getElementById('sample-label').textContent = '📌 ' + getSampleNo(idx);
 
     // 인라인 라벨 UI 동기화 (시료접수/접수형태/운반상태/공지여부)
-    ['receive','formType','transport','notice'].forEach(function(t) { syncInlineUI(t); });
+    ['receive','form','transport','notice'].forEach(function(t) { syncInlineUI(t); });
 
     // 라벨 칩 복원
     if (obj._labelChipsHtml) {
@@ -7295,6 +7314,17 @@ function collectReceiptData() {
                     amount: parseInt(entry.querySelector('.pay-entry-amount')?.value) || 0,
                     memo: entry.querySelector('.pay-entry-memo')?.value || ''
                 });
+            });
+            return arr;
+        })(),
+        // 지부
+        branchId: document.getElementById('receipt-branch')?.value || '',
+        branchName: document.getElementById('receipt-branch-input')?.value || '',
+        // 라벨
+        labels: (function() {
+            var arr = [];
+            document.querySelectorAll('#receipt-label-chips .label-chip-item').forEach(function(chip) {
+                arr.push({ name: chip.getAttribute('data-label-name') || chip.textContent.replace('✕','').trim(), color: chip.getAttribute('data-label-color') || '' });
             });
             return arr;
         })()
