@@ -7236,13 +7236,36 @@ async function saveReceipt() {
                     var oldData = oldDoc.data();
                     // 빈 값 제거: 새 데이터에서 빈 문자열인 필드는 기존 값 유지
                     Object.keys(data).forEach(function(k) {
-                        if (k === 'id' || k === 'editLog' || k === 'samples' || k === 'files' || k === 'status') return; // 항상 덮어쓰기
+                        if (k === 'id' || k === 'editLog' || k === 'files' || k === 'status') return; // 항상 덮어쓰기
+                        if (k === 'samples') return; // 아래에서 별도 처리
                         if (data[k] === '' || data[k] === null || data[k] === undefined) {
                             if (oldData[k] !== undefined && oldData[k] !== '' && oldData[k] !== null) {
-                                data[k] = oldData[k]; // 기존 값 유지
+                                data[k] = oldData[k];
                             }
                         }
                     });
+
+                    // samples 병합: 각 시료의 시험항목이 비어있으면 기존 값 보존
+                    var oldSamples = oldData.samples || [];
+                    var newSamples = data.samples || [];
+                    for (var si = 0; si < newSamples.length; si++) {
+                        var ns = newSamples[si];
+                        var os = oldSamples[si] || {};
+                        // 시험항목이 비어있으면 기존 값 유지
+                        if ((!ns.testItems || ns.testItems.length === 0) && os.testItems && os.testItems.length > 0) {
+                            ns.testItems = os.testItems;
+                        }
+                        if ((!ns.refTestItems || ns.refTestItems.length === 0) && os.refTestItems && os.refTestItems.length > 0) {
+                            ns.refTestItems = os.refTestItems;
+                        }
+                        // 시료 필드도 빈 값이면 기존 값 보존
+                        Object.keys(ns).forEach(function(sk) {
+                            if (sk === 'testItems' || sk === 'refTestItems' || sk === 'idx') return;
+                            if ((ns[sk] === '' || ns[sk] === null || ns[sk] === undefined) && os[sk]) {
+                                ns[sk] = os[sk];
+                            }
+                        });
+                    }
                     var changes = [];
                     var checkFields = [
                         ['companyName','거래처'], ['testPurpose','검사목적'], ['testField','시험분야'],
