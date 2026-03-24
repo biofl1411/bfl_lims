@@ -2496,6 +2496,30 @@ async function loadReceiptForEdit(docId) {
             _currentSampleIdx = 0;
             renderSampleNav();
             loadSampleFromArray(0);
+
+            // 편집 모드: 시험항목이 비어있으면 자동 로드 (모든 검사목적)
+            setTimeout(function() {
+                var tbody = document.getElementById('inspection-items-tbody');
+                var hasItems = tbody && tbody.querySelectorAll('tr[data-test-code]').length > 0;
+                if (!hasItems) {
+                    var s0 = _sampleData[0] || {};
+                    var foodTypeVal = s0['food-type-value'] || s0['food-type-input'] || '';
+                    var mfdsCode = s0['mfds-product-code'] || '';
+                    // 식품유형이 있으면 시험항목 자동 로드
+                    if (foodTypeVal || mfdsCode) {
+                        var loadTarget = foodTypeVal || mfdsCode;
+                        console.log('[편집모드] 시험항목 자동 로드 시도:', loadTarget);
+                        if (typeof loadInspectionItems === 'function') {
+                            loadInspectionItems(loadTarget);
+                        }
+                        // 식품유형 관련 UI 복원
+                        var ftInput = document.getElementById('food-type-input');
+                        if (ftInput && foodTypeVal) ftInput.value = foodTypeVal;
+                    } else {
+                        console.log('[편집모드] 식품유형 없음 — 시험항목 로드 건너뜀');
+                    }
+                }
+            }, 1000);
         }
 
         // 편집 모드 doc ID 저장
@@ -5855,9 +5879,7 @@ function saveSampleToArray() {
         });
     }
     obj._savedTestItems = savedItems;
-    if (_isRefTestMode) {
-        obj._refTestItems = savedItems;
-    }
+    obj._refTestItems = savedItems; // 모든 모드에서 시험항목 저장
     // 라벨 칩 HTML 저장
     var lc = document.getElementById('label-inline-chips');
     if (lc) obj._labelChipsHtml = lc.innerHTML;
