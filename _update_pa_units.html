@@ -20,6 +20,38 @@ async function runUpdate() {
   var codes = Object.keys(PA_UNITS);
   log('업데이트 대상: ' + codes.length + '건');
 
+  // 먼저 PA 항목이 실제로 존재하는지 확인
+  log('PA 항목 존재 확인 중...');
+  var testSnap = await db.collection('mfds_test_items').where('시험항목코드', '==', 'PA0005').get();
+  log('PA0005 검색 결과: ' + testSnap.size + '건');
+  if (testSnap.size > 0) {
+    testSnap.forEach(function(doc) {
+      var d = doc.data();
+      log('  문서ID: ' + doc.id + ', 한글명: ' + d['한글명'] + ', 현재 단위: ' + (d['단위'] || '없음'));
+    });
+  } else {
+    // 문서ID가 코드인 경우 직접 접근 시도
+    log('where 검색 실패, 문서ID로 직접 접근 시도...');
+    var directDoc = await db.collection('mfds_test_items').doc('PA0005').get();
+    if (directDoc.exists) {
+      var dd = directDoc.data();
+      log('  문서ID PA0005 발견! 한글명: ' + dd['한글명'] + ', 시험항목코드: ' + dd['시험항목코드']);
+      log('  → 문서ID 방식으로 업데이트합니다.');
+      await updateByDocId(db, codes);
+      return;
+    } else {
+      log('  ❌ 문서ID PA0005도 없음');
+      log('  전체 컬렉션에서 PA로 시작하는 항목 검색...');
+      var allSnap = await db.collection('mfds_test_items').orderBy('시험항목코드').startAt('PA').endAt('PA\uf8ff').limit(3).get();
+      log('  PA* 검색 결과: ' + allSnap.size + '건');
+      allSnap.forEach(function(doc) {
+        log('    ' + doc.id + ' → ' + JSON.stringify(doc.data()).substring(0, 100));
+      });
+    }
+  }
+  log('');
+  log('=== where 방식으로 업데이트 시작 ===');
+
   var batch = db.batch();
   var batchCount = 0;
   var totalUpdated = 0;
@@ -59,6 +91,46 @@ async function runUpdate() {
 
   log('');
   log('=== 완료 ===');
+  log('업데이트: ' + totalUpdated + '건');
+  log('미발견: ' + notFound + '건');
+}
+
+async function updateByDocId(db, codes) {
+  log('문서ID 방식 업데이트 시작...');
+  var batch = db.batch();
+  var batchCount = 0;
+  var totalUpdated = 0;
+  var notFound = 0;
+
+  for (var i = 0; i < codes.length; i++) {
+    var code = codes[i];
+    var unit = PA_UNITS[code];
+    var ref = db.collection('mfds_test_items').doc(code);
+    var doc = await ref.get();
+    if (!doc.exists) {
+      notFound++;
+      if (notFound <= 5) log('  ❌ ' + code + ' 미발견');
+      continue;
+    }
+    batch.update(ref, { '단위': unit });
+    batchCount++;
+    totalUpdated++;
+
+    if (batchCount >= 450) {
+      await batch.commit();
+      log('  ✅ ' + totalUpdated + '건 커밋');
+      batch = db.batch();
+      batchCount = 0;
+    }
+  }
+
+  if (batchCount > 0) {
+    await batch.commit();
+    log('  ✅ 최종 ' + totalUpdated + '건 커밋');
+  }
+
+  log('');
+  log('=== 문서ID 방식 완료 ===');
   log('업데이트: ' + totalUpdated + '건');
   log('미발견: ' + notFound + '건');
 }
