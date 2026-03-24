@@ -2598,26 +2598,28 @@ async function loadReceiptForEdit(docId) {
             renderSampleNav();
             loadSampleFromArray(0);
 
-            // 편집 모드: 시험항목이 비어있으면 자동 로드 (모든 검사목적)
+            // 편집 모드: 시험항목이 비어있으면 자동 로드
             setTimeout(function() {
                 var tbody = document.getElementById('inspection-items-tbody');
                 var hasItems = tbody && tbody.querySelectorAll('tr[data-test-code]').length > 0;
                 if (!hasItems) {
-                    var s0 = _sampleData[0] || {};
-                    var foodTypeVal = s0['food-type-value'] || s0['food-type-input'] || '';
-                    var mfdsCode = s0['mfds-product-code'] || '';
-                    // 식품유형이 있으면 시험항목 자동 로드
-                    if (foodTypeVal || mfdsCode) {
-                        var loadTarget = foodTypeVal || mfdsCode;
-                        console.log('[편집모드] 시험항목 자동 로드 시도:', loadTarget);
-                        if (typeof loadInspectionItems === 'function') {
-                            loadInspectionItems(loadTarget);
+                    // mfdsTemplates(자가품질위탁검사용)만 식품유형으로 자동 로드
+                    if (_currentItemSource === 'mfdsTemplates') {
+                        var s0 = _sampleData[0] || {};
+                        var foodTypeVal = s0['food-type-value'] || s0['food-type-input'] || '';
+                        if (foodTypeVal) {
+                            console.log('[편집모드] mfdsTemplates 시험항목 자동 로드:', foodTypeVal);
+                            loadInspectionItems(foodTypeVal);
+                            var ftInput = document.getElementById('food-type-input');
+                            if (ftInput) ftInput.value = foodTypeVal;
                         }
-                        // 식품유형 관련 UI 복원
-                        var ftInput = document.getElementById('food-type-input');
-                        if (ftInput && foodTypeVal) ftInput.value = foodTypeVal;
                     } else {
-                        console.log('[편집모드] 식품유형 없음 — 시험항목 로드 건너뜀');
+                        // 다른 모드: 시료 전환으로 복원 시도
+                        if (_sampleData.length > 1) {
+                            switchSample(1);
+                            setTimeout(function() { switchSample(0); }, 200);
+                        }
+                        console.log('[편집모드] 시험항목 비어있음 — 시료 전환으로 복원 시도');
                     }
                 }
             }, 1000);
