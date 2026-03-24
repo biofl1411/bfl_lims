@@ -3718,8 +3718,34 @@ document.addEventListener('DOMContentLoaded', function() {
 /* ===== 등급 자동 산출 (8개 항목 점수 합산) ===== */
 var _gradeRulesCache = null;
 
+var _userDeptMap = null; // 사용자 이름 → 부서 매핑
+
+async function loadUserDeptMap() {
+  if (_userDeptMap) return _userDeptMap;
+  _userDeptMap = {};
+  try {
+    var users = await fsGetUsers();
+    (users || []).forEach(function(u) {
+      var name = u.name || u['아이디'] || '';
+      var dept = u.department || u['부서명'] || '';
+      if (name && dept) _userDeptMap[name] = dept;
+    });
+  } catch(e) { console.warn('사용자 부서 매핑 로드 실패:', e.message); }
+  return _userDeptMap;
+}
+
+function resolveDept(salesRep) {
+  // salesRep이 부서명이면 그대로, 사람 이름이면 부서로 변환
+  if (!salesRep || !_userDeptMap) return salesRep;
+  // 부서명 직접 매칭 확인 (팀/부/실/과로 끝나면 부서명)
+  if (/(팀|부|실|과|사업부|센터)$/.test(salesRep)) return salesRep;
+  // 사용자 이름→부서 매핑
+  return _userDeptMap[salesRep] || salesRep;
+}
+
 async function loadGradeRulesForCalc() {
   if (_gradeRulesCache) return _gradeRulesCache;
+  await loadUserDeptMap();
   try {
     var r = await fsGetSettings('gradeRules');
     if (r && r.grades) { _gradeRulesCache = r; return r; }
@@ -3803,11 +3829,12 @@ async function calcCompanyGrade(company, receipts) {
   total += tlResult.score;
   details.push('결제신뢰도: ' + tlResult.score + '/' + tlResult.max + ' (' + tlResult.matched + ')');
 
-  // 5. 담당부서
+  // 5. 담당부서 (영업담당이 사람 이름이면 부서로 변환)
   var salesRep = company.salesRep || '';
-  var deptResult = calcScoreForCondition(rules.department, salesRep);
+  var deptName = resolveDept(salesRep);
+  var deptResult = calcScoreForCondition(rules.department, deptName);
   total += deptResult.score;
-  details.push('담당부서: ' + deptResult.score + '/' + deptResult.max + ' (' + (salesRep || '없음') + ')');
+  details.push('담당부서: ' + deptResult.score + '/' + deptResult.max + ' (' + (salesRep ? salesRep + (deptName !== salesRep ? '→' + deptName : '') : '없음') + ')');
 
   // 6. 접수형태 — 접수 데이터에서 가장 많은 형태
   var formType = '';
