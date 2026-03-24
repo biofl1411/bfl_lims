@@ -3744,14 +3744,33 @@ function calcScoreForCondition(ruleObj, value) {
   if (!ruleObj || !value) return { score: 0, max: 0, matched: '' };
   var scores = ruleObj.scores || [];
   var conds = ruleObj.conditions || [];
-  var normalize = function(s) { return (s||'').replace(/\s/g,'').toLowerCase(); };
+  var maxScore = scores.length ? Math.max.apply(null, scores) : 0;
+  var normalize = function(s) { return (s||'').replace(/[\s,·]/g,'').toLowerCase(); };
   var nVal = normalize(value);
-  for (var i = conds.length - 1; i >= 0; i--) {
-    if (normalize(conds[i]) === nVal || normalize(conds[i]).indexOf(nVal) >= 0 || nVal.indexOf(normalize(conds[i])) >= 0) {
-      return { score: scores[i] || 0, max: Math.max.apply(null, scores), matched: conds[i] };
+  if (!nVal) return { score: 0, max: maxScore, matched: '없음' };
+
+  // 높은 점수부터 매칭 (최고점 우선)
+  var sorted = conds.map(function(c, i) { return { cond: c, score: scores[i] || 0, idx: i }; })
+    .sort(function(a, b) { return b.score - a.score; });
+
+  for (var i = 0; i < sorted.length; i++) {
+    var nCond = normalize(sorted[i].cond);
+    // 콤마로 구분된 여러 조건 지원 (예: "고객지원팀, 마케팅사업부")
+    var parts = sorted[i].cond.split(/[,，]/).map(function(p) { return normalize(p); });
+    for (var j = 0; j < parts.length; j++) {
+      if (!parts[j]) continue;
+      // 정확 매칭
+      if (parts[j] === nVal) return { score: sorted[i].score, max: maxScore, matched: sorted[i].cond };
+      // 포함 매칭 (부서 계층: "마케팅사업부" → "마케팅팀" 매칭)
+      // 조건의 핵심 키워드 추출 (끝의 팀/부/실/과 제거)
+      var coreVal = nVal.replace(/(팀|부|실|과|사업부|센터)$/, '');
+      var coreCond = parts[j].replace(/(팀|부|실|과|사업부|센터)$/, '');
+      if (coreVal && coreCond && (coreVal.indexOf(coreCond) >= 0 || coreCond.indexOf(coreVal) >= 0)) {
+        return { score: sorted[i].score, max: maxScore, matched: sorted[i].cond + ' (하위매칭)' };
+      }
     }
   }
-  return { score: 0, max: Math.max.apply(null, scores.length ? scores : [0]), matched: '미매칭' };
+  return { score: 0, max: maxScore, matched: '미매칭: ' + value };
 }
 
 function calcTrafficLightScore(rules, tlColor) {
