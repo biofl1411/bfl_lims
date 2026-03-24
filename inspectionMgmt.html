@@ -33279,6 +33279,46 @@ function getRefCodeCategoryBadge(code) {
   return '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;background:' + cat.color + ';white-space:nowrap;">' + label + '</span>';
 }
 
+// PA/PB 항목 → 참고용매핑에 자동 등록 (mfds_test_items에서 가져옴)
+async function registerPAPBRefFeeItems() {
+  if (!_refFeeData) return;
+  // 이미 PA 항목이 있는지 확인
+  var hasPAItems = _refFeeData.some(function(m) {
+    return (m.testItemCode || '').toUpperCase().indexOf('PA') === 0;
+  });
+  var hasPBItems = _refFeeData.some(function(m) {
+    return (m.testItemCode || '').toUpperCase().indexOf('PB') === 0;
+  });
+  if (hasPAItems && hasPBItems) return; // 이미 등록됨
+
+  var testItems = await MFDS_CODES.loadTestItems();
+  var existingCodes = {};
+  _refFeeData.forEach(function(m) { existingCodes[(m.testItemCode || '').toUpperCase()] = true; });
+
+  var added = 0;
+  testItems.forEach(function(ti) {
+    var code = (ti['시험항목코드'] || '').toUpperCase();
+    var prefix2 = code.substring(0, 2);
+    if (prefix2 !== 'PA' && prefix2 !== 'PB') return;
+    if (existingCodes[code]) return;
+    _refFeeData.push({
+      testItemCode: code,
+      itemName: ti['한글명'] || '',
+      engName: ti['영문명'] || '',
+      unit: ti['단위'] || '',
+      fee: 0,
+      note: ''
+    });
+    existingCodes[code] = true;
+    added++;
+  });
+
+  if (added > 0) {
+    _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
+    console.log('[참고용수수료] PA/PB 항목 ' + added + '건 자동 등록');
+  }
+}
+
 // Allergen 항목 → 참고용맵핑 X2(RT-PCR), X3(Elisa) 자동 등록
 function registerAllergenRefFeeItems() {
   if (!_refFeeData) return;
@@ -33392,6 +33432,9 @@ async function loadAndRenderRefFee() {
       _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
       console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건 (수수료 미설정)');
     }
+
+    // PA/PB 항목 자동 등록 — refFeeMapping에 없으면 mfds_test_items에서 추가
+    await registerPAPBRefFeeItems();
 
     // Allergen(RT-PCR) → X2, Allergen(ELISA) → X3 항목 자동 등록 (2026-03-03)
     registerAllergenRefFeeItems();
