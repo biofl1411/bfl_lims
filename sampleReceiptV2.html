@@ -4590,6 +4590,35 @@ document.addEventListener('click', function(e) {
     }
 });
 
+/** 다른 시료에 현재 시험항목 일괄 적용 확인 (공통) */
+function askApplyToOtherSamples() {
+    if (_sampleData.length <= 1) return;
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr[data-test-code]');
+    if (rows.length === 0) return;
+
+    if (!confirm('다른 시료(' + (_sampleData.length - 1) + '건)에도 동일한 시험항목을 적용하시겠습니까?')) return;
+
+    var currentItems = [];
+    rows.forEach(function(tr) {
+        currentItems.push({
+            testCode: tr.getAttribute('data-test-code') || '',
+            itemName: tr.getAttribute('data-item-key') || '',
+            fee: parseInt(tr.getAttribute('data-fee') || '0', 10),
+            unit: tr.getAttribute('data-unit') || '',
+            packageFee: parseInt(tr.getAttribute('data-package-fee') || '0', 10),
+            bundleKey: tr.getAttribute('data-bundle-key') || ''
+        });
+    });
+    for (var oi = 0; oi < _sampleData.length; oi++) {
+        if (oi === _currentSampleIdx) continue;
+        _sampleData[oi]._savedTestItems = JSON.parse(JSON.stringify(currentItems));
+        _sampleData[oi]._refTestItems = JSON.parse(JSON.stringify(currentItems));
+    }
+    showToast('전체 시료(' + (_sampleData.length - 1) + '건)에 동일 시험항목 적용 완료');
+}
+
 function selectRefBundle(bundleKey) {
     if (!_pBundleCache || !_refTestItemsCache) return;
     var codes = (_pBundleCache.items || {})[bundleKey] || [];
@@ -4609,11 +4638,24 @@ function selectRefBundle(bundleKey) {
     var tbody = document.getElementById('inspection-items-tbody');
     if (!tbody) return;
 
-    // ★ 묶음 중복 방지: 이미 동일 묶음이 추가되어 있으면 차단
+    // ★ 동일 묶음 중복 방지
     var existingBundleRow = tbody.querySelector('tr[data-test-code="BUNDLE_' + bundleKey + '"]');
     if (existingBundleRow) {
         showToast(bundleName + ' 묶음이 이미 추가되어 있습니다', 'warning');
         return;
+    }
+
+    // ★ 다른 묶음이 이미 있으면 교체 확인
+    var existingOtherBundle = tbody.querySelector('tr[data-test-code^="BUNDLE_"]');
+    if (existingOtherBundle) {
+        var existingBundleName = existingOtherBundle.getAttribute('data-item-key') || '';
+        if (!confirm('현재 "' + existingBundleName.replace('📦 ','') + '" 묶음이 적용되어 있습니다.\n"' + bundleName + '" 묶음으로 변경하시겠습니까?')) {
+            return;
+        }
+        // 기존 묶음 항목 모두 제거
+        var oldBundleKey = existingOtherBundle.getAttribute('data-test-code').replace('BUNDLE_','');
+        var removeRows = tbody.querySelectorAll('tr[data-bundle-key="' + oldBundleKey + '"], tr[data-test-code="BUNDLE_' + oldBundleKey + '"]');
+        removeRows.forEach(function(r) { r.remove(); });
     }
 
     // 빈 안내 행 제거
@@ -4700,29 +4742,8 @@ function selectRefBundle(bundleKey) {
     saveSampleToArray();
     updateFeeSummary();
 
-    // ★ 다른 시료에도 동일 묶음 적용 확인
-    if (_sampleData.length > 1) {
-        var applyAll = confirm('다른 시료(' + (_sampleData.length - 1) + '건)에도 동일 묶음을 추가하시겠습니까?');
-        if (applyAll) {
-            var currentItems = [];
-            tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
-                currentItems.push({
-                    testCode: tr.getAttribute('data-test-code') || '',
-                    itemName: tr.getAttribute('data-item-key') || '',
-                    fee: parseInt(tr.getAttribute('data-fee') || '0', 10),
-                    unit: tr.getAttribute('data-unit') || '',
-                    packageFee: parseInt(tr.getAttribute('data-package-fee') || '0', 10),
-                    bundleKey: tr.getAttribute('data-bundle-key') || ''
-                });
-            });
-            for (var oi = 0; oi < _sampleData.length; oi++) {
-                if (oi === _currentSampleIdx) continue;
-                _sampleData[oi]._savedTestItems = JSON.parse(JSON.stringify(currentItems));
-                _sampleData[oi]._refTestItems = JSON.parse(JSON.stringify(currentItems));
-            }
-            showToast('전체 시료(' + (_sampleData.length - 1) + '건)에 동일 묶음 적용 완료');
-        }
-    }
+    // ★ 다른 시료에도 동일 항목 적용 확인
+    askApplyToOtherSamples();
 }
 
 // ============================================================================
