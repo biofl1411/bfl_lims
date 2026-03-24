@@ -1,138 +1,83 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>PA 단위 업데이트</title>
+<head><meta charset="UTF-8"><title>PA 단위+수수료 업데이트</title>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 </head>
 <body>
-<h2>PA 시험항목 단위 일괄 업데이트</h2>
-<button onclick="runUpdate()" style="padding:12px 24px;font-size:16px;background:#1565c0;color:#fff;border:none;border-radius:8px;cursor:pointer;">업데이트 실행</button>
+<h2>PA 시험항목 단위 + 수수료 일괄 업데이트</h2>
+<button onclick="runUpdate()" id="btnRun" style="padding:12px 24px;font-size:16px;background:#1565c0;color:#fff;border:none;border-radius:8px;cursor:pointer;">1. 단위 업데이트 (mfds_test_items)</button>
+<button onclick="runFeeUpdate()" style="padding:12px 24px;font-size:16px;background:#e65100;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-left:8px;">2. 수수료 업데이트 (refFeeMapping)</button>
 <pre id="log" style="margin-top:16px;max-height:600px;overflow:auto;background:#f5f5f5;padding:12px;font-size:12px;"></pre>
 <script>
-var PA_UNITS = {"PA0005":"mg/kg","PA0006":"ppm","PA0007":"%","PA0008":"%","PA0009":"%","PA0010":"%","PA0011":"%","PA0012":"%","PA0013":"CFU/g","PA0014":"CFU/g","PA0015":"CFU/g","PA0016":"CFU/mL","PA0020":"CFU/g","PA0021":"CFU/mL","PA0022":"CFU/100㎠","PA0023":"CFU/plate,15min","PA0024":"CFU/측정면적","PA0025":"CFU/plate,25min","PA0026":"CFU/mL","PA0027":"CFU/g","PA0029":"CFU/g","PA0030":"CFU/mL","PA0031":"CFU/㎠","PA0032":"CFU/plate,15min","PA0033":"CFU/측정면적","PA0034":"음성/250mL","PA0035":"CFU/g","PA0036":"CFU/g","PA0037":"MPN/g","PA0038":"CFU/g","PA0039":"CFU/mL","PA0041":"음성/50mL","PA0043":"CFU/g","PA0044":"CFU/mL","PA0045":"CFU/100㎠","PA0046":"CFU/plate,15min","PA0047":"CFU/측정면적","PA0048":"MPN/100mL","PA0049":"MPN/50mL","PA0050":"CFU/50mL","PA0051":"MPN/50mL","PA0052":"CFU/50mL","PA0053":"CFU/mL","PA0054":"CFU/g","PA0059":"음성/250mL","PA0062":"CFU/g","PA0063":"CFU/mL","PA0064":"CFU/측정면적","PA0065":"CFU/plate,15min","PA0066":"CFU/mL","PA0067":"CFU/g","PA0069":"CFU/g","PA0070":"CFU/mL","PA0071":"CFU/측정면적","PA0073":"CFU/mL","PA0074":"CFU/g","PA0078":"CFU/mL","PA0079":"CFU/g","PA0081":"CFU/mL","PA0082":"CFU/g","PA0084":"CFU/g","PA0085":"CFU/mL","PA0086":"CFU/측정면적","PA0088":"CFU/mL","PA0089":"CFU/g","PA0092":"음성/250mL","PA0099":"CFU/g","PA0100":"CFU/측정면적","PA0101":"CFU/mL","PA0102":"CFU/plate,15min","PA0103":"CFU/mL","PA0104":"CFU/g","PA0110":"CFU/g","PA0111":"CFU/mL","PA0112":"CFU/mL","PA0113":"CFU/g","PA0114":"CFU/g","PA0115":"CFU/g","PA0116":"CFU/mL","PA0117":"%","PA0119":"CFU/g","PA0120":"CFU/mL","PA0121":"CFU/g","PA0127":"음성/25g","PA0128":"음성/25g","PA0129":"음성/25g","PA0130":"음성/25g","PA0131":"음성/25g","PA0132":"음성/25g","PA0133":"meq/kg","PA0134":"mL","PA0135":"%","PA0136":"mL","PA0137":"%","PA0139":"%","PA0140":"%","PA0141":"mg/100g","PA0142":"%","PA0143":"g/100mL","PA0144":"%","PA0145":"mg KOH/g","PA0146":"mg/g","PA0147":"g/100g","PA0148":"meq/kg","PA0149":"㎍/kg","PA0152":"%","PA0153":"g/kg","PA0154":"g/kg","PA0155":"g/kg","PA0156":"g/kg","PA0157":"g/kg","PA0158":"g/kg","PA0159":"g/kg","PA0160":"g/kg","PA0161":"g/kg","PA0162":"g/kg","PA0164":"g/kg","PA0167":"g/kg","PA0168":"g/kg","PA0169":"g/kg","PA0170":"g/kg","PA0171":"g/kg","PA0172":"g/kg","PA0173":"g/kg","PA0174":"g/kg","PA0175":"g/kg","PA0176":"g/kg","PA0177":"g/kg","PA0178":"g/kg","PA0179":"g/kg","PA0180":"g/kg","PA0181":"g/kg","PA0182":"g/kg","PA0183":"g/kg","PA0184":"%","PA0185":"%","PA0186":"g/100g","PA0187":"g/100g","PA0188":"%","PA0189":"%","PA0190":"g/100mL","PA0191":"%","PA0192":"%","PA0198":"%","PA0199":"mg/kg","PA0200":"mg%","PA0201":"%","PA0202":"%","PA0203":"w/v%","PA0204":"%","PA0205":"%","PA0206":"%","PA0207":"%","PA0208":"%","PA0209":"%","PA0210":"㎍/kg","PA0211":"㎍/kg","PA0212":"㎍/kg","PA0213":"㎍/kg","PA0214":"㎍/kg","PA0215":"㎍/kg","PA0216":"㎍/kg","PA0217":"㎍/kg","PA0218":"㎍/kg","PA0219":"mg/kg","PA0220":"㎍/kg","PA0221":"mg/kg","PA0222":"㎍/kg","PA0223":"mg/kg","PA0225":"mg/L","PA0226":"mg/mL","PA0227":"mg/kg","PA0228":"v/v%","PA0229":"%","PA0230":"mg/100mL","PA0231":"w/v%","PA0232":"w/w%","PA0233":"mg/g","PA0234":"mg/100g","PA0235":"mg/100mL","PA0236":"mg/kg","PA0237":"mg/L","PA0238":"mg/mL","PA0239":"mg/kg","PA0240":"mg/100g","PA0241":"mg/kg","PA0242":"mcg/kg","PA0243":"mg/kg","PA0244":"mg/kg","PA0245":"mg/kg","PA0246":"mg/kg","PA0247":"mg/kg","PA0248":"mcg/kg","PA0249":"mg/kg","PA0250":"mcg/kg","PA0251":"mg/100g","PA0252":"mg/kg","PA0253":"mg/L","PA0254":"mg/kg","PA0255":"mg/kg","PA0256":"mcg/kg","PA0257":"mcg/kg","PA0258":"mg/100g","PA0259":"mg/kg","PA0260":"mg/100g","PA0261":"mg/kg","PA0262":"mg/g","PA0263":"mg/g","PA0264":"mg/100g","PA0265":"mg/kg","PA0266":"mg/100g","PA0267":"mg/100g","PA0268":"㎍/100g","PA0269":"㎍/100g","PA0270":"mg/kg","PA0271":"mg/100g","PA0272":"mg/kg","PA0273":"mg/100g","PA0274":"㎍/g","PA0275":"㎍/100g","PA0276":"mg/kg","PA0277":"㎍/kg","PA0278":"mg/g","PA0279":"mg/kg","PA0280":"mg/100g","PA0281":"mg/100g","PA0282":"mg/g","PA0283":"mg/kg","PA0284":"mg/100g","PA0285":"mg/kg","PA0286":"mg/g","PA0287":"㎍/g","PA0288":"㎍/100g","PA0289":"%","PA0290":"mg/100g","PA0291":"㎍/g","PA0292":"%","PA0293":"mg/kg","PA0294":"%","PA0295":"%","PA0296":"%","PA0297":"%","PA0298":"%","PA0299":"g/100g","PA0300":"g/100g","PA0301":"g/100g","PA0302":"g/100mL","PA0303":"g/100mL","PA0304":"g/100g","PA0305":"mg/g","PA0306":"mg/kg","PA0307":"mg/g","PA0308":"%","PA0309":"%","PA0310":"%","PA0311":"g/100g","PA0312":"%","PA0313":"g/100g","PA0314":"%","PA0315":"%","PA0316":"g/100g","PA0317":"g/100g","PA0318":"g/100mL","PA0319":"g/100g","PA0320":"g/100g","PA0321":"g/100g","PA0322":"mg/L","PA0323":"%","PA0324":"mg/L","PA0325":"mg/L","PA0326":"mg/L","PA0327":"mg/L","PA0328":"mg/kg","PA0329":"g/kg","PA0330":"mg/kg","PA0331":"mg/g","PA0332":"mg/g","PA0333":"mg/g","PA0334":"mg/g","PA0335":"mg/g","PA0336":"%","PA0337":"mg/g","PA0341":"g/100g","PA0342":"%","PA0345":"g/100g","PA0346":"mg/g","PA0347":"%","PA0348":"mg/kg","PA0349":"mg/kg","PA0350":"kg/cm²","PA0351":"mg/L","PA0352":"mg/100g","PA0354":"%","PA0364":"g","PA0370":"㎍/100g","PA0371":"㎍/100mL","PA0372":"mg/kg","PA0373":"mg/kg","PA0374":"mg/kg","PA0375":"mg/kg","PA0376":"mg/kg","PA0377":"mg/kg","PA0378":"mg/kg","PA0379":"mg/kg","PA0380":"mg/kg","PA0381":"mg/kg","PA0382":"g/kg","PA0383":"g","PA0384":"mg/kg","PA0385":"mg/kg","PA0392":"mg/kg","PA0393":"mg/kg","PA0397":"CFU/g","PA0398":"CFU/mL","PA0399":"CFU/g","PA0400":"CFU/측정면적","PA0402":"CFU/g","PA0403":"CFU/mL","PA0405":"mg/100g","PA0406":"CFU/g","PA0407":"CFU/표면면적","PA0408":"CFU/mL","PA0410":"CFU/mL","PA0411":"CFU/g","PA0413":"%","PA0414":"KJ/100g","PA0415":"%","PA0416":"%","PA0417":"kcal/100g","PA0418":"g/100g","PA0419":"g/100g","PA0420":"g/100g","PA0421":"g/100g","PA0422":"g/100g","PA0423":"g/100g","PA0424":"mg/100g","PA0425":"mg/100g","PA0426":"g/100g","PA0427":"g/100mL","PA0428":"㎍RE/100g","PA0429":"mg/100g","PA0430":"mg/100g","PA0431":"mg/100g","PA0432":"mg/100g","PA0433":"㎍/100g","PA0434":"mgα-TE/100g","PA0436":"g/100mL","PA0437":"g/100mL","PA0438":"kcal/100mL","PA0439":"g/100mL","PA0440":"g/100mL","PA0441":"g/100mL","PA0442":"g/100mL","PA0443":"g/100mL","PA0444":"g/100mL","PA0445":"mg/100mL","PA0446":"mg/100mL","PA0447":"g/100mL","PA0448":"㎍RE/100mL","PA0449":"mg/100mL","PA0450":"mg/100mL","PA0451":"mg/100mL","PA0452":"mg/100mL","PA0453":"mg/100mL","PA0454":"㎍/100mL","PA0455":"mg/100mL","PA0456":"㎍/100mL","PA0457":"mgα-TE/100mL","PA0458":"mg/100mL","PA0459":"mg/100mL","PA0460":"mg/100g","PA0461":"mg/100mL","PA0462":"mg/100g","PA0463":"mgNE/100g","PA0464":"mg/100mL","PA0465":"mg/100g","PA0466":"mg/100mL","PA0467":"mg/100g","PA0468":"㎍/100g/100mL","PA0469":"mg/100mL","PA0470":"mg/100g","PA0471":"㎍RE/100g","PA0472":"mg/kg","PA0473":"mg/100mL","PA0474":"mg/kg","PA0475":"mg/kg","PA0476":"mg/L","PA0477":"mg/100mL","PA0478":"mg/100g","PA0479":"mg/100mL","PA0480":"mg/100mL","PA0481":"mg/100mL","PA0482":"mg/100mL","PA0483":"mg/100mL","PA0484":"g/100mL","PA0485":"g/100g","PA0486":"g/100mL","PA0487":"g/100g","PA0488":"g/100mL","PA0489":"㎍/100mL","PA0490":"㎍/100kcal","PA0491":"g/100g","PA0492":"g/100g","PA0493":"g/100g","PA0494":"g/100g","PA0495":"g/100g","PA0496":"g/100g","PA0497":"g/100g","PA0498":"g/100g","PA0499":"g/100g","PA0500":"g/100g","PA0501":"g/100g","PA0502":"g/100mL","PA0503":"g/100mL","PA0504":"g/100mL","PA0505":"g/100mL","PA0506":"g/100mL","PA0507":"g/kg"};
+var PA_UNITS = {"PA0005":"mg/kg","PA0006":"ppm","PA0007":"%","PA0008":"%","PA0009":"%","PA0010":"%","PA0011":"%","PA0012":"%","PA0013":"CFU/g","PA0014":"CFU/g","PA0015":"CFU/g","PA0016":"CFU/mL","PA0020":"CFU/g","PA0021":"CFU/mL","PA0022":"CFU/100㎠","PA0023":"CFU/plate,15min","PA0024":"CFU/측정면적","PA0025":"CFU/plate,25min","PA0026":"CFU/mL","PA0027":"CFU/g","PA0029":"CFU/g","PA0030":"CFU/mL","PA0031":"CFU/㎠","PA0032":"CFU/plate,15min","PA0033":"CFU/측정면적","PA0034":"음성/250mL","PA0035":"CFU/g","PA0036":"CFU/g","PA0037":"MPN/g","PA0038":"CFU/g","PA0039":"CFU/mL","PA0041":"음성/50mL","PA0043":"CFU/g","PA0044":"CFU/mL","PA0045":"CFU/100㎠","PA0046":"CFU/plate,15min","PA0047":"CFU/측정면적","PA0048":"MPN/100mL","PA0049":"MPN/50mL","PA0050":"CFU/50mL","PA0051":"MPN/50mL","PA0052":"CFU/50mL","PA0053":"CFU/mL","PA0054":"CFU/g","PA0059":"음성/250mL","PA0062":"CFU/g","PA0063":"CFU/mL","PA0064":"CFU/측정면적","PA0065":"CFU/plate,15min","PA0066":"CFU/mL","PA0067":"CFU/g","PA0069":"CFU/g","PA0070":"CFU/mL","PA0071":"CFU/측정면적","PA0073":"CFU/mL","PA0074":"CFU/g","PA0078":"CFU/mL","PA0079":"CFU/g","PA0081":"CFU/mL","PA0082":"CFU/g","PA0084":"CFU/g","PA0085":"CFU/mL","PA0086":"CFU/측정면적","PA0088":"CFU/mL","PA0089":"CFU/g","PA0092":"음성/250mL","PA0099":"CFU/g","PA0100":"CFU/측정면적","PA0101":"CFU/mL","PA0102":"CFU/plate,15min","PA0103":"CFU/mL","PA0104":"CFU/g","PA0110":"CFU/g","PA0111":"CFU/mL","PA0112":"CFU/mL","PA0113":"CFU/g","PA0114":"CFU/g","PA0115":"CFU/g","PA0116":"CFU/mL","PA0117":"%","PA0119":"CFU/g","PA0120":"CFU/mL","PA0121":"CFU/g","PA0127":"음성/25g","PA0128":"음성/25g","PA0129":"음성/25g","PA0130":"음성/25g","PA0131":"음성/25g","PA0132":"음성/25g","PA0133":"meq/kg","PA0134":"mL","PA0135":"%","PA0136":"mL","PA0137":"%","PA0139":"%","PA0140":"%","PA0141":"mg/100g","PA0142":"%","PA0143":"g/100mL","PA0144":"%","PA0145":"mg KOH/g","PA0146":"mg/g","PA0147":"g/100g","PA0148":"meq/kg","PA0149":"㎍/kg","PA0152":"%","PA0153":"g/kg","PA0154":"g/kg","PA0155":"g/kg","PA0156":"g/kg","PA0157":"g/kg","PA0158":"g/kg","PA0159":"g/kg","PA0160":"g/kg","PA0161":"g/kg","PA0162":"g/kg","PA0164":"g/kg","PA0167":"g/kg","PA0168":"g/kg","PA0169":"g/kg","PA0170":"g/kg","PA0171":"g/kg","PA0172":"g/kg","PA0173":"g/kg","PA0174":"g/kg","PA0175":"g/kg","PA0176":"g/kg","PA0177":"g/kg","PA0178":"g/kg","PA0179":"g/kg","PA0180":"g/kg","PA0181":"g/kg","PA0182":"g/kg","PA0183":"g/kg","PA0184":"%","PA0185":"%","PA0186":"g/100g","PA0187":"g/100g","PA0188":"%","PA0189":"%","PA0190":"g/100mL","PA0191":"%","PA0192":"%","PA0198":"%","PA0199":"mg/kg","PA0200":"mg%","PA0201":"%","PA0202":"%","PA0203":"w/v%","PA0204":"%","PA0205":"%","PA0206":"%","PA0207":"%","PA0208":"%","PA0209":"%","PA0210":"㎍/kg","PA0211":"㎍/kg","PA0212":"㎍/kg","PA0213":"㎍/kg","PA0214":"㎍/kg","PA0215":"㎍/kg","PA0216":"㎍/kg","PA0217":"㎍/kg","PA0218":"㎍/kg","PA0219":"mg/kg","PA0220":"㎍/kg","PA0221":"mg/kg","PA0222":"㎍/kg","PA0223":"mg/kg","PA0225":"mg/L","PA0226":"mg/mL","PA0227":"mg/kg","PA0228":"v/v%","PA0229":"%","PA0230":"mg/100mL","PA0231":"w/v%","PA0232":"w/w%","PA0233":"mg/g","PA0234":"mg/100g","PA0235":"mg/100mL","PA0236":"mg/kg","PA0237":"mg/L","PA0238":"mg/mL","PA0239":"mg/kg","PA0240":"mg/100g","PA0241":"mg/kg","PA0242":"mcg/kg","PA0243":"mg/kg","PA0244":"mg/kg","PA0245":"mg/kg","PA0246":"mg/kg","PA0247":"mg/kg","PA0248":"mcg/kg","PA0249":"mg/kg","PA0250":"mcg/kg","PA0251":"mg/100g","PA0252":"mg/kg","PA0253":"mg/L","PA0254":"mg/kg","PA0255":"mg/kg","PA0256":"mcg/kg","PA0257":"mcg/kg","PA0258":"mg/100g","PA0259":"mg/kg","PA0260":"mg/100g","PA0261":"mg/kg","PA0262":"mg/g","PA0263":"mg/g","PA0264":"mg/100g","PA0265":"mg/kg","PA0266":"mg/100g","PA0267":"mg/100g","PA0268":"㎍/100g","PA0269":"㎍/100g","PA0270":"mg/kg","PA0271":"mg/100g","PA0272":"mg/kg","PA0273":"mg/100g","PA0274":"㎍/g","PA0275":"㎍/100g","PA0276":"mg/kg","PA0277":"㎍/kg","PA0278":"mg/g","PA0279":"mg/kg","PA0280":"mg/100g","PA0281":"mg/100g","PA0282":"mg/g","PA0283":"mg/kg","PA0284":"mg/100g","PA0285":"mg/kg","PA0286":"mg/g","PA0287":"㎍/g","PA0288":"㎍/100g","PA0289":"%","PA0290":"mg/100g","PA0291":"㎍/g","PA0292":"%","PA0293":"mg/kg","PA0294":"%","PA0295":"%","PA0296":"%","PA0297":"%","PA0298":"%","PA0299":"g/100g","PA0300":"g/100g","PA0301":"g/100g","PA0302":"g/100mL","PA0303":"g/100mL","PA0304":"g/100g","PA0305":"mg/g","PA0306":"mg/kg","PA0307":"mg/g","PA0308":"%","PA0309":"%","PA0310":"%","PA0311":"g/100g","PA0312":"%","PA0313":"g/100g","PA0314":"%","PA0315":"%","PA0316":"g/100g","PA0317":"g/100g","PA0318":"g/100mL","PA0319":"g/100g","PA0320":"g/100g","PA0321":"g/100g","PA0322":"mg/L","PA0323":"%","PA0324":"mg/L","PA0325":"mg/L","PA0326":"mg/L","PA0327":"mg/L","PA0328":"mg/kg","PA0329":"g/kg","PA0330":"mg/kg","PA0331":"mg/g","PA0332":"mg/g","PA0333":"mg/g","PA0334":"mg/g","PA0335":"mg/g","PA0336":"%","PA0337":"mg/g","PA0341":"g/100g","PA0342":"%","PA0345":"g/100g","PA0346":"mg/g","PA0347":"%","PA0348":"mg/kg","PA0349":"mg/kg","PA0350":"kg/cm2","PA0351":"mg/L","PA0352":"mg/100g","PA0354":"%","PA0364":"g","PA0370":"㎍/100g","PA0371":"㎍/100mL","PA0372":"mg/kg","PA0373":"mg/kg","PA0374":"mg/kg","PA0375":"mg/kg","PA0376":"mg/kg","PA0377":"mg/kg","PA0378":"mg/kg","PA0379":"mg/kg","PA0380":"mg/kg","PA0381":"mg/kg","PA0382":"g/kg","PA0383":"g","PA0384":"mg/kg","PA0385":"mg/kg","PA0392":"mg/kg","PA0393":"mg/kg","PA0397":"CFU/g","PA0398":"CFU/mL","PA0399":"CFU/g","PA0400":"CFU/측정면적","PA0402":"CFU/g","PA0403":"CFU/mL","PA0405":"mg/100g","PA0406":"CFU/g","PA0407":"CFU/표면면적","PA0408":"CFU/mL","PA0410":"CFU/mL","PA0411":"CFU/g","PA0413":"%","PA0414":"KJ/100g","PA0415":"%","PA0416":"%","PA0417":"kcal/100g","PA0418":"g/100g","PA0419":"g/100g","PA0420":"g/100g","PA0421":"g/100g","PA0422":"g/100g","PA0423":"g/100g","PA0424":"mg/100g","PA0425":"mg/100g","PA0426":"g/100g","PA0427":"g/100mL","PA0428":"㎍RE/100g","PA0429":"mg/100g","PA0430":"mg/100g","PA0431":"mg/100g","PA0432":"mg/100g","PA0433":"㎍/100g","PA0434":"mgα-TE/100g","PA0436":"g/100mL","PA0437":"g/100mL","PA0438":"kcal/100mL","PA0439":"g/100mL","PA0440":"g/100mL","PA0441":"g/100mL","PA0442":"g/100mL","PA0443":"g/100mL","PA0444":"g/100mL","PA0445":"mg/100mL","PA0446":"mg/100mL","PA0447":"g/100mL","PA0448":"㎍RE/100mL","PA0449":"mg/100mL","PA0450":"mg/100mL","PA0451":"mg/100mL","PA0452":"mg/100mL","PA0453":"mg/100mL","PA0454":"㎍/100mL","PA0455":"mg/100mL","PA0456":"㎍/100mL","PA0457":"mgα-TE/100mL","PA0458":"mg/100mL","PA0459":"mg/100mL","PA0460":"mg/100g","PA0461":"mg/100mL","PA0462":"mg/100g","PA0463":"mgNE/100g","PA0464":"mg/100mL","PA0465":"mg/100g","PA0466":"mg/100mL","PA0467":"mg/100g","PA0468":"㎍/100g/100mL","PA0469":"mg/100mL","PA0470":"mg/100g","PA0471":"㎍RE/100g","PA0472":"mg/kg","PA0473":"mg/100mL","PA0474":"mg/kg","PA0475":"mg/kg","PA0476":"mg/L","PA0477":"mg/100mL","PA0478":"mg/100g","PA0479":"mg/100mL","PA0480":"mg/100mL","PA0481":"mg/100mL","PA0482":"mg/100mL","PA0483":"mg/100mL","PA0484":"g/100mL","PA0485":"g/100g","PA0486":"g/100mL","PA0487":"g/100g","PA0488":"g/100mL","PA0489":"㎍/100mL","PA0490":"㎍/100kcal","PA0491":"g/100g","PA0492":"g/100g","PA0493":"g/100g","PA0494":"g/100g","PA0495":"g/100g","PA0496":"g/100g","PA0497":"g/100g","PA0498":"g/100g","PA0499":"g/100g","PA0500":"g/100g","PA0501":"g/100g","PA0502":"g/100mL","PA0503":"g/100mL","PA0504":"g/100mL","PA0505":"g/100mL","PA0506":"g/100mL","PA0507":"g/kg"};
+
+var PA_FEES = {"PA0001":0,"PA0002":5500,"PA0003":5500,"PA0004":14300,"PA0005":20900,"PA0006":20900,"PA0007":15400,"PA0008":15400,"PA0009":15400,"PA0010":15400,"PA0011":15400,"PA0012":15400,"PA0013":30800,"PA0014":30800,"PA0015":30800,"PA0016":30800,"PA0017":49500,"PA0018":49500,"PA0019":49500,"PA0020":49500,"PA0021":49500,"PA0022":49500,"PA0023":49500,"PA0024":49500,"PA0025":49500,"PA0026":49500,"PA0027":49500,"PA0028":49500,"PA0029":49500,"PA0030":49500,"PA0031":49500,"PA0032":49500,"PA0033":49500,"PA0034":49500,"PA0035":49500,"PA0036":49500,"PA0037":49500,"PA0038":49500,"PA0039":49500,"PA0040":49500,"PA0041":49500,"PA0042":49500,"PA0043":49500,"PA0044":49500,"PA0045":49500,"PA0046":49500,"PA0047":49500,"PA0048":49500,"PA0049":49500,"PA0050":49500,"PA0051":49500,"PA0052":49500,"PA0053":49500,"PA0054":49500,"PA0055":49500,"PA0056":49500,"PA0057":49500,"PA0058":49500,"PA0059":49500,"PA0060":49500,"PA0061":49500,"PA0062":49500,"PA0063":49500,"PA0064":49500,"PA0065":49500,"PA0066":49500,"PA0067":49500,"PA0068":49500,"PA0069":49500,"PA0070":49500,"PA0071":49500,"PA0072":49500,"PA0073":49500,"PA0074":49500,"PA0075":49500,"PA0076":49500,"PA0077":49500,"PA0078":49500,"PA0079":49500,"PA0080":49500,"PA0081":49500,"PA0082":49500,"PA0083":49500,"PA0084":49500,"PA0085":49500,"PA0086":49500,"PA0087":49500,"PA0088":49500,"PA0089":49500,"PA0090":49500,"PA0091":49500,"PA0092":49500,"PA0093":49500,"PA0094":49500,"PA0095":49500,"PA0096":49500,"PA0097":49500,"PA0098":49500,"PA0099":49500,"PA0100":49500,"PA0101":49500,"PA0102":49500,"PA0103":49500,"PA0104":49500,"PA0105":49500,"PA0106":49500,"PA0107":49500,"PA0108":49500,"PA0109":49500,"PA0110":49500,"PA0111":49500,"PA0112":49500,"PA0113":49500,"PA0114":49500,"PA0115":49500,"PA0116":49500,"PA0117":29700,"PA0118":14300,"PA0119":49500,"PA0120":49500,"PA0121":49500,"PA0122":33000,"PA0123":33000,"PA0124":29700,"PA0125":33000,"PA0126":33000,"PA0127":44000,"PA0128":44000,"PA0129":44000,"PA0130":44000,"PA0131":44000,"PA0132":44000,"PA0133":71500,"PA0134":33000,"PA0135":33000,"PA0136":33000,"PA0137":33000,"PA0138":22000,"PA0139":33000,"PA0140":33000,"PA0141":33000,"PA0142":33000,"PA0143":33000,"PA0144":33000,"PA0145":46200,"PA0146":46200,"PA0147":53900,"PA0148":71500,"PA0149":88000,"PA0150":44000,"PA0151":33000,"PA0152":26400,"PA0153":44000,"PA0154":44000,"PA0155":44000,"PA0156":44000,"PA0157":44000,"PA0158":44000,"PA0159":44000,"PA0160":44000,"PA0161":44000,"PA0162":44000,"PA0163":44000,"PA0164":44000,"PA0165":44000,"PA0166":44000,"PA0167":44000,"PA0168":44000,"PA0169":44000,"PA0170":44000,"PA0171":44000,"PA0172":44000,"PA0173":44000,"PA0174":44000,"PA0175":44000,"PA0176":44000,"PA0177":44000,"PA0178":44000,"PA0179":44000,"PA0180":44000,"PA0181":44000,"PA0182":44000,"PA0183":44000,"PA0184":33000,"PA0185":33000,"PA0186":33000,"PA0187":33000,"PA0188":33000,"PA0189":33000,"PA0190":33000,"PA0191":33000,"PA0192":33000,"PA0193":33000,"PA0194":33000,"PA0195":28600,"PA0196":46200,"PA0197":33000,"PA0198":33000,"PA0199":49500,"PA0200":33000,"PA0201":33000,"PA0202":33000,"PA0203":33000,"PA0204":33000,"PA0205":33000,"PA0206":33000,"PA0207":33000,"PA0208":33000,"PA0209":33000,"PA0210":88000,"PA0211":88000,"PA0212":88000,"PA0213":88000,"PA0214":88000,"PA0215":88000,"PA0216":88000,"PA0217":88000,"PA0218":88000,"PA0219":49500,"PA0220":88000,"PA0221":49500,"PA0222":88000,"PA0223":88000,"PA0224":31900,"PA0225":46200,"PA0226":46200,"PA0227":49500,"PA0228":33000,"PA0229":33000,"PA0230":33000,"PA0231":33000,"PA0232":33000,"PA0233":46200,"PA0234":33000,"PA0235":33000,"PA0236":49500,"PA0237":46200,"PA0238":46200,"PA0239":49500,"PA0240":49500,"PA0241":49500,"PA0242":49500,"PA0243":49500,"PA0244":49500,"PA0245":49500,"PA0246":49500,"PA0247":49500,"PA0248":49500,"PA0249":49500,"PA0250":49500,"PA0251":49500,"PA0252":49500,"PA0253":49500,"PA0254":49500,"PA0255":49500,"PA0256":49500,"PA0257":49500,"PA0258":49500,"PA0259":49500,"PA0260":49500,"PA0261":49500,"PA0262":49500,"PA0263":49500,"PA0264":49500,"PA0265":49500,"PA0266":49500,"PA0267":49500,"PA0268":49500,"PA0269":49500,"PA0270":49500,"PA0271":49500,"PA0272":49500,"PA0273":49500,"PA0274":49500,"PA0275":49500,"PA0276":49500,"PA0277":49500,"PA0278":49500,"PA0279":49500,"PA0280":49500,"PA0281":49500,"PA0282":49500,"PA0283":49500,"PA0284":49500,"PA0285":49500,"PA0286":49500,"PA0287":49500,"PA0288":49500,"PA0289":33000,"PA0290":49500,"PA0291":49500,"PA0292":33000,"PA0293":49500,"PA0294":33000,"PA0295":33000,"PA0296":33000,"PA0297":33000,"PA0298":33000,"PA0299":33000,"PA0300":33000,"PA0301":33000,"PA0302":33000,"PA0303":33000,"PA0304":33000,"PA0305":33000,"PA0306":33000,"PA0307":33000,"PA0308":33000,"PA0309":33000,"PA0310":33000,"PA0311":33000,"PA0312":33000,"PA0313":33000,"PA0314":33000,"PA0315":33000,"PA0316":33000,"PA0317":33000,"PA0318":33000,"PA0319":33000,"PA0320":33000,"PA0321":33000,"PA0322":33000,"PA0323":33000,"PA0324":33000,"PA0325":33000,"PA0326":33000,"PA0327":33000,"PA0328":49500,"PA0329":44000,"PA0330":49500,"PA0331":33000,"PA0332":33000,"PA0333":33000,"PA0334":33000,"PA0335":33000,"PA0336":33000,"PA0337":33000,"PA0338":20900,"PA0339":20900,"PA0340":14300,"PA0341":33000,"PA0342":33000,"PA0343":46200,"PA0344":14300,"PA0345":33000,"PA0346":33000,"PA0347":33000,"PA0348":49500,"PA0349":49500,"PA0350":22000,"PA0351":33000,"PA0352":33000,"PA0353":14300,"PA0354":33000,"PA0355":14300,"PA0356":38500,"PA0357":38500,"PA0358":38500,"PA0359":38500,"PA0360":38500,"PA0361":38500,"PA0362":38500,"PA0363":38500,"PA0364":5500,"PA0365":33000,"PA0366":33000,"PA0367":33000,"PA0368":33000,"PA0369":14300,"PA0370":88000,"PA0371":88000,"PA0372":88000,"PA0373":88000,"PA0374":88000,"PA0375":88000,"PA0376":88000,"PA0377":88000,"PA0378":88000,"PA0379":88000,"PA0380":88000,"PA0381":88000,"PA0382":88000,"PA0383":14300,"PA0384":88000,"PA0385":88000,"PA0386":33000,"PA0387":33000,"PA0388":33000,"PA0389":33000,"PA0390":33000,"PA0391":33000,"PA0392":88000,"PA0393":88000,"PA0394":49500,"PA0395":99000,"PA0396":108900,"PA0397":49500,"PA0398":49500,"PA0399":49500,"PA0400":49500,"PA0401":49500,"PA0402":49500,"PA0403":49500,"PA0404":33000,"PA0405":33000,"PA0406":49500,"PA0407":49500,"PA0408":49500,"PA0409":33000,"PA0410":49500,"PA0411":49500,"PA0412":77000,"PA0413":33000,"PA0414":33000,"PA0415":33000,"PA0416":33000,"PA0417":33000,"PA0418":33000,"PA0419":33000,"PA0420":33000,"PA0421":33000,"PA0422":33000,"PA0423":33000,"PA0424":33000,"PA0425":33000,"PA0426":33000,"PA0427":33000,"PA0428":33000,"PA0429":33000,"PA0430":33000,"PA0431":33000,"PA0432":33000,"PA0433":33000,"PA0434":33000,"PA0435":429000,"PA0436":33000,"PA0437":33000,"PA0438":33000,"PA0439":33000,"PA0440":33000,"PA0441":33000,"PA0442":33000,"PA0443":33000,"PA0444":33000,"PA0445":33000,"PA0446":33000,"PA0447":33000,"PA0448":33000,"PA0449":33000,"PA0450":33000,"PA0451":33000,"PA0452":33000,"PA0453":33000,"PA0454":33000,"PA0455":33000,"PA0456":33000,"PA0457":33000,"PA0458":33000,"PA0459":33000,"PA0460":33000,"PA0461":33000,"PA0462":33000,"PA0463":33000,"PA0464":33000,"PA0465":33000,"PA0466":33000,"PA0467":33000,"PA0468":33000,"PA0469":33000,"PA0470":33000,"PA0471":33000,"PA0472":33000,"PA0473":33000,"PA0474":33000,"PA0475":33000,"PA0476":33000,"PA0477":33000,"PA0478":33000,"PA0479":33000,"PA0480":33000,"PA0481":33000,"PA0482":33000,"PA0483":33000,"PA0484":33000,"PA0485":33000,"PA0486":33000,"PA0487":33000,"PA0488":33000,"PA0489":33000,"PA0490":33000,"PA0491":33000,"PA0492":33000,"PA0493":33000,"PA0494":33000,"PA0495":33000,"PA0496":33000,"PA0497":33000,"PA0498":33000,"PA0499":33000,"PA0500":33000,"PA0501":33000,"PA0502":33000,"PA0503":33000,"PA0504":33000,"PA0505":33000,"PA0506":33000,"PA0507":33000};
 
 var logEl = document.getElementById('log');
 function log(msg) { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
 
+// 1. mfds_test_items에서 PA 항목 단위 업데이트
 async function runUpdate() {
+  document.getElementById('btnRun').disabled = true;
   var db = firebase.firestore();
   var codes = Object.keys(PA_UNITS);
-  log('업데이트 대상: ' + codes.length + '건');
+  log('=== 단위 업데이트 시작 (' + codes.length + '건) ===');
 
-  // 먼저 PA 항목이 실제로 존재하는지 확인
-  log('PA 항목 존재 확인 중...');
-  var testSnap = await db.collection('mfds_test_items').where('시험항목코드', '==', 'PA0005').get();
-  log('PA0005 검색 결과: ' + testSnap.size + '건');
-  if (testSnap.size > 0) {
-    testSnap.forEach(function(doc) {
-      var d = doc.data();
-      log('  문서ID: ' + doc.id + ', 한글명: ' + d['한글명'] + ', 현재 단위: ' + (d['단위'] || '없음'));
-    });
-  } else {
-    // 문서ID가 코드인 경우 직접 접근 시도
-    log('where 검색 실패, 문서ID로 직접 접근 시도...');
-    var directDoc = await db.collection('mfds_test_items').doc('PA0005').get();
-    if (directDoc.exists) {
-      var dd = directDoc.data();
-      log('  문서ID PA0005 발견! 한글명: ' + dd['한글명'] + ', 시험항목코드: ' + dd['시험항목코드']);
-      log('  → 문서ID 방식으로 업데이트합니다.');
-      await updateByDocId(db, codes);
-      return;
-    } else {
-      log('  ❌ 문서ID PA0005도 없음');
-      log('  전체 컬렉션에서 PA로 시작하는 항목 검색...');
-      var allSnap = await db.collection('mfds_test_items').orderBy('시험항목코드').startAt('PA').endAt('PA\uf8ff').limit(3).get();
-      log('  PA* 검색 결과: ' + allSnap.size + '건');
-      allSnap.forEach(function(doc) {
-        log('    ' + doc.id + ' → ' + JSON.stringify(doc.data()).substring(0, 100));
-      });
-    }
-  }
-  log('');
-  log('=== where 방식으로 업데이트 시작 ===');
+  // 전체 PA 문서를 한번에 로드
+  log('PA 항목 전체 로드 중...');
+  var allSnap = await db.collection('mfds_test_items').get();
+  var docMap = {};
+  allSnap.forEach(function(doc) {
+    var data = doc.data();
+    var code = (data['시험항목코드'] || '').toUpperCase();
+    if (code.indexOf('PA') === 0) docMap[code] = doc.ref;
+  });
+  log('PA 문서 ' + Object.keys(docMap).length + '건 발견');
 
   var batch = db.batch();
-  var batchCount = 0;
-  var totalUpdated = 0;
-  var notFound = 0;
-
+  var cnt = 0, total = 0;
   for (var i = 0; i < codes.length; i++) {
     var code = codes[i];
-    var unit = PA_UNITS[code];
-
-    // mfds_test_items에서 해당 코드 찾기
-    var snap = await db.collection('mfds_test_items').where('시험항목코드', '==', code).get();
-    if (snap.empty) {
-      log('  ❌ ' + code + ' 미발견');
-      notFound++;
-      continue;
-    }
-
-    snap.forEach(function(doc) {
-      batch.update(doc.ref, { '단위': unit });
-      batchCount++;
-      totalUpdated++;
-    });
-
-    // batch 500건 제한
-    if (batchCount >= 450) {
+    var ref = docMap[code];
+    if (!ref) continue;
+    batch.update(ref, { '단위': PA_UNITS[code] });
+    cnt++; total++;
+    if (cnt >= 450) {
       await batch.commit();
-      log('  ✅ ' + totalUpdated + '건 커밋');
-      batch = db.batch();
-      batchCount = 0;
+      log('  ✅ ' + total + '건 커밋');
+      batch = db.batch(); cnt = 0;
     }
   }
-
-  if (batchCount > 0) {
-    await batch.commit();
-    log('  ✅ ' + totalUpdated + '건 커밋');
-  }
-
-  log('');
-  log('=== 완료 ===');
-  log('업데이트: ' + totalUpdated + '건');
-  log('미발견: ' + notFound + '건');
+  if (cnt > 0) { await batch.commit(); log('  ✅ 최종 ' + total + '건 커밋'); }
+  log('=== 단위 업데이트 완료: ' + total + '건 ===');
 }
 
-async function updateByDocId(db, codes) {
-  log('문서ID 방식 업데이트 시작...');
-  var batch = db.batch();
-  var batchCount = 0;
-  var totalUpdated = 0;
-  var notFound = 0;
+// 2. settings/refFeeMapping에서 PA 항목 수수료 업데이트
+async function runFeeUpdate() {
+  var db = firebase.firestore();
+  log('=== 수수료 업데이트 시작 ===');
+  var doc = await db.collection('settings').doc('refFeeMapping').get();
+  if (!doc.exists) { log('❌ refFeeMapping 문서 없음'); return; }
+  var items = doc.data().items || [];
+  log('기존 항목: ' + items.length + '건');
 
-  for (var i = 0; i < codes.length; i++) {
-    var code = codes[i];
-    var unit = PA_UNITS[code];
-    var ref = db.collection('mfds_test_items').doc(code);
-    var doc = await ref.get();
-    if (!doc.exists) {
-      notFound++;
-      if (notFound <= 5) log('  ❌ ' + code + ' 미발견');
-      continue;
+  var updated = 0;
+  items.forEach(function(item) {
+    var code = (item.testItemCode || '').toUpperCase();
+    if (PA_FEES[code] !== undefined) {
+      item.fee = PA_FEES[code];
+      updated++;
     }
-    batch.update(ref, { '단위': unit });
-    batchCount++;
-    totalUpdated++;
-
-    if (batchCount >= 450) {
-      await batch.commit();
-      log('  ✅ ' + totalUpdated + '건 커밋');
-      batch = db.batch();
-      batchCount = 0;
+    if (PA_UNITS[code]) {
+      item.unit = PA_UNITS[code];
     }
-  }
+  });
 
-  if (batchCount > 0) {
-    await batch.commit();
-    log('  ✅ 최종 ' + totalUpdated + '건 커밋');
-  }
-
-  log('');
-  log('=== 문서ID 방식 완료 ===');
-  log('업데이트: ' + totalUpdated + '건');
-  log('미발견: ' + notFound + '건');
+  await db.collection('settings').doc('refFeeMapping').update({ items: items });
+  log('✅ 수수료 업데이트: ' + updated + '건');
+  log('=== 수수료 업데이트 완료 ===');
 }
 </script>
 </body>
