@@ -37135,29 +37135,63 @@ async function executeExpiryImport() {
   _pBundleItems[bk] = [];
   _pBundleUnits[bk] = {};
 
-  // 자가품질위탁검사용 시험항목에서 코드 매칭
+  // 자가품질위탁검사용 시험항목 + mfdsTemplates에서 코드/단위 매칭
   if (!_mfdsTestItems || _mfdsTestItems.length === 0) {
     await MFDS_CODES.loadTestItems();
   }
 
+  // mfdsTemplates에서 단위 매핑 구축 (코드 → 단위)
+  var tmplUnitMap = {};
+  var tmplData = typeof mfdsTemplateData !== 'undefined' ? mfdsTemplateData : (typeof MFDS_TEMPLATES !== 'undefined' ? MFDS_TEMPLATES : []);
+  tmplData.forEach(function(tmpl) {
+    (tmpl.testItems || []).forEach(function(ti) {
+      if (ti.testItemCode && ti.unit) tmplUnitMap[ti.testItemCode] = ti.unit;
+    });
+  });
+
+  // 수수료 매핑 (코드 → 수수료)
+  var tmplFeeMap = {};
+  tmplData.forEach(function(tmpl) {
+    (tmpl.testItems || []).forEach(function(ti) {
+      if (ti.testItemCode && ti.fee && !tmplFeeMap[ti.testItemCode]) {
+        tmplFeeMap[ti.testItemCode] = ti.fee;
+      }
+    });
+  });
+
   var matched = 0, unmatched = [];
   d.items.forEach(function(itemName) {
-    // 이름으로 매칭 (정확 → 부분)
+    // 1) mfdsTestItems에서 정확 매칭
     var found = _mfdsTestItems.find(function(t) {
       var hn = (t['한글명'] || '').split('||')[0].trim();
       return hn === itemName;
     });
+    // 2) 부분 매칭
     if (!found) {
-      // 부분 매칭
       found = _mfdsTestItems.find(function(t) {
         var hn = (t['한글명'] || '').split('||')[0].trim();
         return hn.indexOf(itemName) >= 0 || itemName.indexOf(hn) >= 0;
       });
     }
+    // 3) mfdsTemplates에서 이름 매칭
+    if (!found) {
+      tmplData.forEach(function(tmpl) {
+        if (found) return;
+        (tmpl.testItems || []).forEach(function(ti) {
+          if (found) return;
+          var tn = (ti.testItemName || '').split('||')[0].trim();
+          if (tn === itemName || tn.indexOf(itemName) >= 0 || itemName.indexOf(tn) >= 0) {
+            found = { '시험항목코드': ti.testItemCode, '한글명': ti.testItemName, '단위': ti.unit };
+          }
+        });
+      });
+    }
     if (found) {
       var code = found['시험항목코드'];
       _pBundleItems[bk].push(code);
-      if (found['단위']) _pBundleUnits[bk][code] = found['단위'];
+      // 단위: mfdsTemplates 우선 → mfdsTestItems 폴백
+      var unit = tmplUnitMap[code] || found['단위'] || '';
+      if (unit) _pBundleUnits[bk][code] = unit;
       matched++;
     } else {
       unmatched.push(itemName);
