@@ -398,7 +398,10 @@ const GRADE_DEFAULTS = {
         thresholds: [1, 2, 3, 5]
     },
     // 4. 결제 신뢰도 (15점) — 신호등 규칙 연동
-    payment: { scores: [3, 6, 9, 12, 15] },
+    payment: {
+      scores: [3, 6, 9, 12, 15],
+      conditions: ['🔴 위험 (미수금 최장)', '🟠 경고', '🟡 주의', '🔵 양호', '🟢 정상 (미수금 없음)']
+    },
     // 5. 담당부서 (5점)
     department: {
         scores: [1, 3, 5],
@@ -635,9 +638,9 @@ function addDynRow(key, score, condition) {
     var maxScore = catEl ? +catEl.value : 100;
     var tr = document.createElement('tr');
     tr.innerHTML =
-      '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '"></td>' +
+      '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '" oninput="syncCatMaxFromScores(\'' + key + '\')"></td>' +
       '<td><input type="text" value="' + (condition || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력"></td>' +
-      '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove()" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
+      '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove();syncCatMaxFromScores(\'' + key + '\')" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
     tbody.appendChild(tr);
 }
 
@@ -662,15 +665,14 @@ function collectDynRows(key) {
 function addDynRowExt(key, score, threshold) {
     var tbody = document.getElementById('dyn-' + key);
     if (!tbody) return;
-    // 카테고리 번호 매핑
     var catMap = { rev: 1, freq: 2, dur: 3, pay: 4 };
     var catEl = document.getElementById('cat-max-' + (catMap[key] || 1));
     var maxScore = catEl ? +catEl.value : 100;
     var tr = document.createElement('tr');
     tr.innerHTML =
-      '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '"></td>' +
+      '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '" oninput="syncCatMaxFromScores(\'' + key + '\')"></td>' +
       '<td><input type="text" value="' + (threshold || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력"></td>' +
-      '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove()" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
+      '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove();syncCatMaxFromScores(\'' + key + '\')" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
     tbody.appendChild(tr);
 }
 
@@ -681,6 +683,21 @@ function renderDynRowsExt(key, scores, conditions) {
     var len = Math.max((scores || []).length, (conditions || []).length);
     for (var i = 0; i < len; i++) {
       addDynRowExt(key, (scores || [])[i] || 0, (conditions || [])[i] || '');
+    }
+}
+
+/* 하위 점수 변경 시 배점(최고점) 자동 갱신 */
+function syncCatMaxFromScores(key) {
+    var catMap = { rev: 1, freq: 2, dur: 3, pay: 4, dept: 5, rcpt: 6, move: 7, sample: 8 };
+    var catNum = catMap[key];
+    if (!catNum) return;
+    var scoreEls = document.querySelectorAll('.dyn-score-' + key);
+    var maxVal = 0;
+    scoreEls.forEach(function(el) { if (+el.value > maxVal) maxVal = +el.value; });
+    var catEl = document.getElementById('cat-max-' + catNum);
+    if (catEl && maxVal > 0) {
+      catEl.value = maxVal;
+      updateGradeTotalScore();
     }
 }
 
