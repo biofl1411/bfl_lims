@@ -4609,6 +4609,13 @@ function selectRefBundle(bundleKey) {
     var tbody = document.getElementById('inspection-items-tbody');
     if (!tbody) return;
 
+    // ★ 묶음 중복 방지: 이미 동일 묶음이 추가되어 있으면 차단
+    var existingBundleRow = tbody.querySelector('tr[data-test-code="BUNDLE_' + bundleKey + '"]');
+    if (existingBundleRow) {
+        showToast(bundleName + ' 묶음이 이미 추가되어 있습니다', 'warning');
+        return;
+    }
+
     // 빈 안내 행 제거
     var emptyRow = document.getElementById('ref-test-empty-row');
     if (emptyRow) emptyRow.remove();
@@ -4692,6 +4699,30 @@ function selectRefBundle(bundleKey) {
 
     saveSampleToArray();
     updateFeeSummary();
+
+    // ★ 다른 시료에도 동일 묶음 적용 확인
+    if (_sampleData.length > 1) {
+        var applyAll = confirm('다른 시료(' + (_sampleData.length - 1) + '건)에도 동일 묶음을 추가하시겠습니까?');
+        if (applyAll) {
+            var currentItems = [];
+            tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) {
+                currentItems.push({
+                    testCode: tr.getAttribute('data-test-code') || '',
+                    itemName: tr.getAttribute('data-item-key') || '',
+                    fee: parseInt(tr.getAttribute('data-fee') || '0', 10),
+                    unit: tr.getAttribute('data-unit') || '',
+                    packageFee: parseInt(tr.getAttribute('data-package-fee') || '0', 10),
+                    bundleKey: tr.getAttribute('data-bundle-key') || ''
+                });
+            });
+            for (var oi = 0; oi < _sampleData.length; oi++) {
+                if (oi === _currentSampleIdx) continue;
+                _sampleData[oi]._savedTestItems = JSON.parse(JSON.stringify(currentItems));
+                _sampleData[oi]._refTestItems = JSON.parse(JSON.stringify(currentItems));
+            }
+            showToast('전체 시료(' + (_sampleData.length - 1) + '건)에 동일 묶음 적용 완료');
+        }
+    }
 }
 
 // ============================================================================
@@ -7505,10 +7536,22 @@ async function saveReceipt() {
                                 changes.push('[시료' + (si2+1) + ' ' + sf[1] + '] ' + (ov || '(없음)') + ' → ' + (nv || '(없음)'));
                             }
                         });
-                        // 시험항목 수 비교
-                        var oti = (os2.testItems || os2.refTestItems || []).length;
-                        var nti = (ns2.testItems || ns2.refTestItems || []).length;
-                        if (oti !== nti) changes.push('[시료' + (si2+1) + ' 시험항목] ' + oti + '건 → ' + nti + '건');
+                        // 시험항목 상세 비교
+                        var oldTI = os2.testItems || os2.refTestItems || [];
+                        var newTI = ns2.testItems || ns2.refTestItems || [];
+                        if (oldTI.length !== newTI.length) {
+                            changes.push('[시료' + (si2+1) + ' 시험항목] ' + oldTI.length + '건 → ' + newTI.length + '건');
+                        }
+                        // 추가된 항목
+                        var oldCodes = {};
+                        oldTI.forEach(function(t) { oldCodes[t.testCode] = t.itemName || t.testCode; });
+                        var newCodes = {};
+                        newTI.forEach(function(t) { newCodes[t.testCode] = t.itemName || t.testCode; });
+                        var addedItems = [], removedItems = [];
+                        Object.keys(newCodes).forEach(function(c) { if (!oldCodes[c]) addedItems.push(newCodes[c]); });
+                        Object.keys(oldCodes).forEach(function(c) { if (!newCodes[c]) removedItems.push(oldCodes[c]); });
+                        if (addedItems.length > 0) changes.push('[시료' + (si2+1) + ' 항목추가] ' + addedItems.join(', '));
+                        if (removedItems.length > 0) changes.push('[시료' + (si2+1) + ' 항목삭제] ' + removedItems.join(', '));
                     }
 
                     if (changes.length > 0) {
