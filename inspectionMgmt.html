@@ -34824,10 +34824,14 @@ function buildFeePurposeMenu() {
     purposeFees[p] = (purposeFees[p] || 0) + (item.수수료 || 0);
   });
   // P 배열의 활성 검사목적 + customFeePurposes도 포함 (항목 0건이어도 메뉴에 표시)
+  // 단, 삭제된 검사목적은 제외
+  var _deletedFeePurposes = JSON.parse(localStorage.getItem('bfl_deleted_fee_purposes') || '[]');
   P.filter(p => p.o).forEach(pp => {
+    if (_deletedFeePurposes.indexOf(pp.n) >= 0) return; // 삭제된 목적 건너뛰기
     if (purposeCounts[pp.n] === undefined) { purposeCounts[pp.n] = 0; purposeFees[pp.n] = 0; }
   });
   customFeePurposes.forEach(cp => {
+    if (_deletedFeePurposes.indexOf(cp) >= 0) return;
     if (purposeCounts[cp] === undefined) { purposeCounts[cp] = 0; purposeFees[cp] = 0; }
   });
   // 정렬: 전체 → 자가품질위탁검사용 → P 배열 순서 → 나머지
@@ -34971,6 +34975,9 @@ function confirmDeletePurpose(action) {
   // 공통 후처리
   const cpIdx = customFeePurposes.indexOf(purpose);
   if (cpIdx >= 0) customFeePurposes.splice(cpIdx, 1);
+  // 삭제 목록에 추가 (P 배열에서 다시 나타나지 않도록)
+  var delList = JSON.parse(localStorage.getItem('bfl_deleted_fee_purposes') || '[]');
+  if (delList.indexOf(purpose) < 0) { delList.push(purpose); localStorage.setItem('bfl_deleted_fee_purposes', JSON.stringify(delList)); }
   if (currentFeePurpose === purpose) currentFeePurpose = '전체';
   closeModal('mDelPurpose');
   updateFeePurposeSelectOptions();
