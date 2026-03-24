@@ -50,7 +50,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 .cp-field.grow{flex:1;min-width:0}
 .cp-lbl{font-size:10px;color:#94a3b8;font-weight:500;white-space:nowrap;line-height:1}
 .cp-val{display:flex;align-items:center;gap:3px}
-.cp-inp{height:26px;padding:0 7px;border:1px solid #d0d5dd;border-radius:5px;font-size:12px;font-family:inherit;background:#fff;min-width:0}
+.cp-inp{height:26px;padding:0 7px;border:1px solid #d0d5dd;border-radius:5px;font-size:12px;font-family:inherit;background:#fff;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-inp:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 2px rgba(102,126,234,.15)}
 .cp-inp.ro{background:#f1f5f9;color:#475569}
 .cp-inp.allocated{background:#d1fae5;border-color:#34d399;font-weight:600;font-size:11px}
@@ -161,7 +161,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 .f-row.ca{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}
 .f-grp{display:flex;flex-direction:column;gap:2px}
 .f-grp label{font-size:10px;color:#64748b;font-weight:500;white-space:nowrap}
-.f-grp input,.f-grp select,.f-grp textarea{height:26px;padding:0 7px;border:1px solid #d0d5dd;border-radius:5px;font-size:12px;font-family:inherit;background:#fff;width:100%}
+.f-grp input,.f-grp select,.f-grp textarea{height:26px;padding:0 7px;border:1px solid #d0d5dd;border-radius:5px;font-size:12px;font-family:inherit;background:#fff;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .f-grp input:focus,.f-grp select:focus,.f-grp textarea:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 2px rgba(102,126,234,.1)}
 .f-grp input[readonly],.f-grp input:disabled,.f-grp select:disabled{background:#f1f5f9;color:#64748b}
 .f-grp textarea{height:auto;resize:vertical;padding:4px 7px}
@@ -7434,25 +7434,82 @@ async function saveReceipt() {
                             }
                         });
                     }
+                    // ===== 수정이력: 모든 필드 구체적 비교 =====
                     var changes = [];
-                    var checkFields = [
-                        ['companyName','거래처'], ['testPurpose','검사목적'], ['testField','시험분야'],
-                        ['receiptDate','접수일'], ['processingDeadline','처리기한'], ['urgent','긴급여부'],
-                        ['salesRep','담당자'], ['status','상태']
+                    var allCheckFields = [
+                        // 상단 헤더
+                        ['testField','시험분야'], ['testPurpose','검사목적'], ['receiptDate','접수일'],
+                        ['status','상태'], ['urgent','긴급여부'], ['urgentTime','긴급시간'], ['processingDeadline','처리기한'],
+                        // 업체정보
+                        ['companyName','거래처'], ['licNo','인허가번호'], ['licBizForm','인허가분야'],
+                        ['salesRep','담당자'], ['companyPhone','전화'], ['companyFax','팩스'],
+                        ['companyMobile','휴대폰'], ['companyAddress','주소'],
+                        // 성적서 발송
+                        ['reportFaxNo','발송팩스'], ['reportEmail','발송이메일'],
+                        // 지부/라벨
+                        ['branchId','지부ID'], ['branchName','지부명'],
+                        // 청구서
+                        ['billCompany','청구업체명'], ['bizNo','사업자번호'], ['ceo','대표자'],
+                        ['billName','청구담당자'], ['billPhone','청구전화'], ['billEmail','청구이메일'],
+                        ['billFax','청구팩스'], ['billMobile','청구휴대폰'],
+                        // 수수료
+                        ['feeTotal','수수료총계'], ['discountRate','할인율'], ['discountAmount','할인금액'],
+                        ['payMethod','결제방법'],
+                        // 검사정보
+                        ['relatedLaw','관련법규'], ['documentNo','문서번호'],
+                        // 공지
+                        ['noticeMemo','공지메모'], ['noticeRemark','공지비고']
                     ];
-                    checkFields.forEach(function(f) {
-                        var oldVal = oldData[f[0]] || '';
-                        var newVal = data[f[0]] || '';
-                        if (oldVal !== newVal) changes.push(f[1] + ': ' + (oldVal || '없음') + ' → ' + (newVal || '없음'));
+                    allCheckFields.forEach(function(f) {
+                        var oldVal = (oldData[f[0]] != null ? String(oldData[f[0]]) : '');
+                        var newVal = (data[f[0]] != null ? String(data[f[0]]) : '');
+                        if (oldVal !== newVal && (oldVal || newVal)) {
+                            changes.push('[' + f[1] + '] ' + (oldVal || '(없음)') + ' → ' + (newVal || '(없음)'));
+                        }
                     });
+                    // 배열 필드 비교
+                    var arrFields = [
+                        ['reportSend','성적서발송방법'], ['mailAddrTypes','우편주소유형'],
+                        ['faxTypes','팩스유형'], ['emailCc','이메일참조']
+                    ];
+                    arrFields.forEach(function(f) {
+                        var oldArr = (oldData[f[0]] || []).join(',');
+                        var newArr = (data[f[0]] || []).join(',');
+                        if (oldArr !== newArr) changes.push('[' + f[1] + '] ' + (oldArr || '(없음)') + ' → ' + (newArr || '(없음)'));
+                    });
+                    // 라벨 비교
+                    var oldLabels = (oldData.labels || []).map(function(l){return l.name||'';}).join(',');
+                    var newLabels = (data.labels || []).map(function(l){return l.name||'';}).join(',');
+                    if (oldLabels !== newLabels) changes.push('[라벨] ' + (oldLabels || '(없음)') + ' → ' + (newLabels || '(없음)'));
                     // 시료 수 변경
-                    var oldSamples = (oldData.samples || []).length;
-                    var newSamples = (data.samples || []).length;
-                    if (oldSamples !== newSamples) changes.push('시료수: ' + oldSamples + ' → ' + newSamples);
-                    // 시험항목 수 변경
-                    var oldItems = (oldData.samples || []).reduce(function(s,r){return s+(r.testItems||[]).length;},0);
-                    var newItems = (data.samples || []).reduce(function(s,r){return s+(r.testItems||[]).length;},0);
-                    if (oldItems !== newItems) changes.push('시험항목: ' + oldItems + '건 → ' + newItems + '건');
+                    var oldSampleCnt = (oldData.samples || []).length;
+                    var newSampleCnt = (data.samples || []).length;
+                    if (oldSampleCnt !== newSampleCnt) changes.push('[시료수] ' + oldSampleCnt + ' → ' + newSampleCnt);
+                    // 시료별 상세 비교
+                    var sampleFields = [
+                        ['productName','제품명'], ['reportNo','보고번호'], ['foodType','검체유형'],
+                        ['sampleAmount','포장단위'], ['sampleAmountUnit','단위'], ['sampleCount','검체수'],
+                        ['sampleReceiveMethod','시료접수'], ['receiptFormType','접수형태'],
+                        ['transportStatus','운반상태'], ['noticeRequired','공지여부'],
+                        ['manufactureDate','제조일자'], ['expiryDate','소비기한'], ['expiryDays','소비기한(일수)'],
+                        ['lotNo','롯트번호'], ['sampleLocation','시료위치'], ['sampleBoxNo','박스번호']
+                    ];
+                    var maxSamples = Math.max(oldSampleCnt, newSampleCnt);
+                    for (var si2 = 0; si2 < maxSamples; si2++) {
+                        var os2 = (oldData.samples || [])[si2] || {};
+                        var ns2 = (data.samples || [])[si2] || {};
+                        sampleFields.forEach(function(sf) {
+                            var ov = (os2[sf[0]] != null ? String(os2[sf[0]]) : '');
+                            var nv = (ns2[sf[0]] != null ? String(ns2[sf[0]]) : '');
+                            if (ov !== nv && (ov || nv)) {
+                                changes.push('[시료' + (si2+1) + ' ' + sf[1] + '] ' + (ov || '(없음)') + ' → ' + (nv || '(없음)'));
+                            }
+                        });
+                        // 시험항목 수 비교
+                        var oti = (os2.testItems || os2.refTestItems || []).length;
+                        var nti = (ns2.testItems || ns2.refTestItems || []).length;
+                        if (oti !== nti) changes.push('[시료' + (si2+1) + ' 시험항목] ' + oti + '건 → ' + nti + '건');
+                    }
 
                     if (changes.length > 0) {
                         var editLog = oldData.editLog || [];
