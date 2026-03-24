@@ -2460,6 +2460,75 @@ async function loadReceiptForEdit(docId) {
         if (faxEl) faxEl.value = data.reportFaxNo || '';
         var emailEl = document.getElementById('report-email');
         if (emailEl) emailEl.value = data.reportEmail || '';
+        // 성적서 발송 추가 필드
+        if (data.mailAddrTypes) {
+            data.mailAddrTypes.forEach(function(v) {
+                var cb = document.querySelector('input[name="mail-addr-type"][value="' + v + '"]');
+                if (cb) cb.checked = true;
+            });
+        }
+        var mzEl = document.getElementById('mail-zipcode');
+        if (mzEl) mzEl.value = data.mailZipcode || '';
+        var ma1El = document.getElementById('mail-addr1');
+        if (ma1El) ma1El.value = data.mailAddr1 || '';
+        var ma2El = document.getElementById('mail-addr2');
+        if (ma2El) ma2El.value = data.mailAddr2 || '';
+        if (data.faxTypes) {
+            data.faxTypes.forEach(function(v) {
+                var cb = document.querySelector('input[name="fax-type"][value="' + v + '"]');
+                if (cb) cb.checked = true;
+            });
+        }
+        if (data.emailCc && data.emailCc.length > 0) {
+            // emailCc는 UI가 동적이므로 전역 변수에 저장
+            window._editEmailCc = data.emailCc;
+        }
+
+        // 청구서 추가 필드
+        var bfEl = document.getElementById('bill-fax');
+        if (bfEl) bfEl.value = data.billFax || '';
+        var bmEl = document.getElementById('bill-mobile');
+        if (bmEl) bmEl.value = data.billMobile || '';
+
+        // 팀별 메모 (hidden)
+        var memoFields = { 'memo-customer': 'memoCustomer', 'memo-quality': 'memoQuality', 'memo-finance': 'memoFinance', 'memo-marketing': 'memoMarketing', 'memo-sales': 'memoSales' };
+        Object.keys(memoFields).forEach(function(elId) {
+            var el = document.getElementById(elId);
+            if (el) el.value = data[memoFields[elId]] || '';
+        });
+
+        // 접수 공지
+        if (data.selectedNotices) window._editSelectedNotices = data.selectedNotices;
+        var nrEl = document.getElementById('notice-remark');
+        if (nrEl) nrEl.value = data.noticeRemark || '';
+        var nmEl = document.getElementById('notice-memo-text');
+        if (nmEl) nmEl.value = data.noticeMemo || '';
+
+        // 수수료/결제 (hidden 필드에 보관 — 수정 시 보호용)
+        window._editFeeData = {
+            feeOriginal: data.feeOriginal || 0,
+            feeTotal: data.feeTotal || 0,
+            discountRate: data.discountRate || 0,
+            discountAmount: data.discountAmount || 0,
+            discountFinalPrice: data.discountFinalPrice || 0,
+            itemDiscounts: data.itemDiscounts || [],
+            payMethod: data.payMethod || '',
+            payCardDate: data.payCardDate || '',
+            payDepositor: data.payDepositor || '',
+            payBankAccount: data.payBankAccount || '',
+            payCounterBank: data.payCounterBank || '',
+            payDate: data.payDate || '',
+            payments: data.payments || []
+        };
+
+        // 검사정보
+        var rlEl = document.getElementById('related-law');
+        if (rlEl) rlEl.value = data.relatedLaw || '';
+        var dnEl = document.getElementById('document-no');
+        if (dnEl) dnEl.value = data.documentNo || '';
+
+        // 기존 첨부파일 보관 (수정 시 보호용)
+        window._editExistingFiles = data.files || null;
 
         // 시료 데이터
         var samples = data.samples || [];
@@ -7252,6 +7321,28 @@ async function saveReceipt() {
         var data = collectReceiptData();
         data.status = document.getElementById('status').value || '접수중';
         data.files = collectFileData();
+        // 편집 모드: 새 파일이 없으면 기존 파일 보존
+        if (window._editDocId && window._editExistingFiles) {
+            if (!data.files || Object.keys(data.files).length === 0) {
+                data.files = window._editExistingFiles;
+            } else {
+                // 기존 파일과 병합 (새 파일이 있는 슬롯만 덮어쓰기)
+                var merged = Object.assign({}, window._editExistingFiles, data.files);
+                data.files = merged;
+            }
+        }
+        // 편집 모드: 수수료/결제 데이터 보호
+        if (window._editDocId && window._editFeeData) {
+            var fd = window._editFeeData;
+            if (!data.feeTotal && fd.feeTotal) data.feeTotal = fd.feeTotal;
+            if (!data.feeOriginal && fd.feeOriginal) data.feeOriginal = fd.feeOriginal;
+            if ((!data.itemDiscounts || data.itemDiscounts.length === 0) && fd.itemDiscounts && fd.itemDiscounts.length > 0) data.itemDiscounts = fd.itemDiscounts;
+            if (!data.payMethod && fd.payMethod) data.payMethod = fd.payMethod;
+            if ((!data.payments || data.payments.length === 0) && fd.payments && fd.payments.length > 0) data.payments = fd.payments;
+            ['payCardDate','payDepositor','payBankAccount','payCounterBank','payDate','discountRate','discountAmount','discountFinalPrice'].forEach(function(k) {
+                if (!data[k] && fd[k]) data[k] = fd[k];
+            });
+        }
         // 편집 모드: 기존 문서와 병합 (빈 값이 기존 값을 덮어쓰지 않도록)
         if (window._editDocId) {
             data.id = window._editDocId;
@@ -7259,14 +7350,30 @@ async function saveReceipt() {
                 var oldDoc = await db.collection('receipts').doc(window._editDocId).get();
                 if (oldDoc.exists) {
                     var oldData = oldDoc.data();
-                    // 빈 값 제거: 새 데이터에서 빈 문자열인 필드는 기존 값 유지
+                    // 빈 값 제거: 새 데이터에서 빈/초기값인 필드는 기존 값 유지
                     Object.keys(data).forEach(function(k) {
-                        if (k === 'id' || k === 'editLog' || k === 'files' || k === 'status') return; // 항상 덮어쓰기
-                        if (k === 'samples') return; // 아래에서 별도 처리
-                        if (data[k] === '' || data[k] === null || data[k] === undefined) {
-                            if (oldData[k] !== undefined && oldData[k] !== '' && oldData[k] !== null) {
-                                data[k] = oldData[k];
-                            }
+                        if (k === 'id' || k === 'editLog' || k === 'status') return; // 항상 덮어쓰기
+                        if (k === 'samples' || k === 'files') return; // 별도 처리 (위에서 이미 병합됨)
+                        var newVal = data[k];
+                        var oldVal = oldData[k];
+                        // 빈 문자열/null/undefined → 기존 값 유지
+                        if (newVal === '' || newVal === null || newVal === undefined) {
+                            if (oldVal !== undefined && oldVal !== '' && oldVal !== null) data[k] = oldVal;
+                            return;
+                        }
+                        // 빈 배열 → 기존 배열 유지
+                        if (Array.isArray(newVal) && newVal.length === 0 && Array.isArray(oldVal) && oldVal.length > 0) {
+                            data[k] = oldVal;
+                            return;
+                        }
+                        // 빈 객체 → 기존 객체 유지
+                        if (typeof newVal === 'object' && !Array.isArray(newVal) && newVal !== null && Object.keys(newVal).length === 0 && oldVal && Object.keys(oldVal).length > 0) {
+                            data[k] = oldVal;
+                            return;
+                        }
+                        // 숫자 0 → 기존 값이 있으면 유지 (수수료 등)
+                        if (newVal === 0 && typeof oldVal === 'number' && oldVal > 0) {
+                            data[k] = oldVal;
                         }
                     });
 
