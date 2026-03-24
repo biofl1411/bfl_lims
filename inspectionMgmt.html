@@ -33396,10 +33396,14 @@ async function loadAndRenderRefFee() {
     // Allergen(RT-PCR) → X2, Allergen(ELISA) → X3 항목 자동 등록 (2026-03-03)
     registerAllergenRefFeeItems();
 
-    // 분류 인덱스 빌드 (빠른 검색용)
+    // 분류 인덱스 빌드 (빠른 검색용, PA/PB 독립 카운트)
     _refFeeCategoryIndex = {};
     _refFeeData.forEach(function(m) {
-      var prefix = (m.testItemCode || '').charAt(0).toUpperCase();
+      var code = (m.testItemCode || '').toUpperCase();
+      var prefix;
+      if (code.indexOf('PA') === 0) prefix = 'PA';
+      else if (code.indexOf('PB') === 0) prefix = 'PB';
+      else prefix = code.charAt(0);
       if (!_refFeeCategoryIndex[prefix]) _refFeeCategoryIndex[prefix] = 0;
       _refFeeCategoryIndex[prefix]++;
     });
@@ -33569,17 +33573,26 @@ function renderRefFeeTable() {
 
   var filtered = _refFeeData;
 
-  // 분류 필터
+  // 분류 필터 (PA/PB는 2글자 접두사)
   if (_refFeeCategory !== 'all') {
-    filtered = filtered.filter(function(m) {
-      return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
-    });
-    // 소분류 필터 (단일 또는 다중)
-    var activeSubs = Object.keys(_refFeeSubSelections);
-    if (activeSubs.length > 0) {
+    var catF = _refFeeCategory;
+    if (catF === 'PA' || catF === 'PB') {
       filtered = filtered.filter(function(m) {
-        return _refFeeSubSelections[(m.testItemCode || '').charAt(1)];
+        return (m.testItemCode || '').toUpperCase().indexOf(catF) === 0;
       });
+    } else {
+      filtered = filtered.filter(function(m) {
+        var code = (m.testItemCode || '').toUpperCase();
+        if (catF === 'P') return code.charAt(0) === 'P' && code.indexOf('PA') !== 0 && code.indexOf('PB') !== 0;
+        return code.charAt(0) === catF;
+      });
+      // 소분류 필터 (단일 또는 다중)
+      var activeSubs = Object.keys(_refFeeSubSelections);
+      if (activeSubs.length > 0) {
+        filtered = filtered.filter(function(m) {
+          return _refFeeSubSelections[(m.testItemCode || '').charAt(1)];
+        });
+      }
     }
   }
   if (query) {
