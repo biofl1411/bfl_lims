@@ -5958,16 +5958,40 @@ async function updateFeeSummary() {
     var currentPurpose = document.getElementById('test-purpose').value || '';
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
 
-    // 모든 모드: 시험항목 테이블 data-fee 합산 (패키지수수료 우선)
+    // 모든 모드: 시험항목 테이블 data-fee 합산 (묶음 수수료 + 개별 수수료)
     var tbody = document.getElementById('inspection-items-tbody');
-    var packageFee = 0;
     if (tbody) {
+        var bundleFees = {};  // 묶음별 수수료 { bundleKey: fee }
+        var bundleItemFees = {};  // 묶음별 개별 항목 합계
+        var individualFee = 0;  // 묶음 밖 개별 항목
+
         var rows = tbody.querySelectorAll('tr[data-fee]');
         rows.forEach(function(tr) {
-            grandTotal += parseInt(tr.getAttribute('data-fee') || '0', 10);
-            if (!packageFee) packageFee = parseInt(tr.getAttribute('data-package-fee') || '0', 10);
+            var fee = parseInt(tr.getAttribute('data-fee') || '0', 10);
+            var bundleKey = tr.getAttribute('data-bundle-key') || '';
+            var bundleFee = parseInt(tr.getAttribute('data-package-fee') || '0', 10);
+
+            if (bundleKey && bundleFee > 0) {
+                // 묶음에 속한 항목
+                bundleFees[bundleKey] = bundleFee;
+                bundleItemFees[bundleKey] = (bundleItemFees[bundleKey] || 0) + fee;
+            } else if (bundleFee > 0 && !bundleKey) {
+                // 구 방식: data-package-fee만 있는 경우 (하위 호환)
+                bundleFees['_legacy'] = bundleFee;
+                bundleItemFees['_legacy'] = (bundleItemFees['_legacy'] || 0) + fee;
+            } else {
+                // 묶음 밖 개별 항목
+                individualFee += fee;
+            }
         });
-        if (packageFee > 0) grandTotal = packageFee;
+
+        // 묶음별: 묶음 수수료 우선, 없으면 개별 합계
+        var bundleTotal = 0;
+        Object.keys(bundleFees).forEach(function(k) {
+            bundleTotal += bundleFees[k] > 0 ? bundleFees[k] : (bundleItemFees[k] || 0);
+        });
+        // 묶음에 속하지 않은 개별 합계도 합산
+        grandTotal = bundleTotal + individualFee;
     }
     // MFDS 기준규격 수수료 합산 (공전규격 추가 항목)
     grandTotal += (window._mfdsFeeTotal || 0);
