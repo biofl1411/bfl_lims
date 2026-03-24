@@ -7225,14 +7225,22 @@ async function saveReceipt() {
         var data = collectReceiptData();
         data.status = document.getElementById('status').value || '접수중';
         data.files = collectFileData();
-        // 편집 모드: 기존 문서 ID 유지 + 수정이력 기록
+        // 편집 모드: 기존 문서와 병합 (빈 값이 기존 값을 덮어쓰지 않도록)
         if (window._editDocId) {
             data.id = window._editDocId;
-            // 수정이력: 기존 데이터와 비교하여 변경사항 기록
             try {
                 var oldDoc = await db.collection('receipts').doc(window._editDocId).get();
                 if (oldDoc.exists) {
                     var oldData = oldDoc.data();
+                    // 빈 값 제거: 새 데이터에서 빈 문자열인 필드는 기존 값 유지
+                    Object.keys(data).forEach(function(k) {
+                        if (k === 'id' || k === 'editLog' || k === 'samples' || k === 'files' || k === 'status') return; // 항상 덮어쓰기
+                        if (data[k] === '' || data[k] === null || data[k] === undefined) {
+                            if (oldData[k] !== undefined && oldData[k] !== '' && oldData[k] !== null) {
+                                data[k] = oldData[k]; // 기존 값 유지
+                            }
+                        }
+                    });
                     var changes = [];
                     var checkFields = [
                         ['companyName','거래처'], ['testPurpose','검사목적'], ['testField','시험분야'],
