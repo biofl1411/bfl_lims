@@ -475,6 +475,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
+<script src="js/expiry-food-types.js"></script>
 <script src="js/mfds-fee-mapping.js"></script>
 <script src="js/firestore-helpers.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -799,6 +800,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <div style="padding:10px 14px;background:#f3e8ff;border-bottom:1px solid #e0d4f5;display:flex;justify-content:space-between;align-items:center;">
             <span id="p-bundle-title" style="font-size:13px;font-weight:700;color:#5b21b6;">묶음 목록</span>
             <button onclick="createPBundle()" class="p-act-btn p-act-add" style="padding:2px 8px;font-size:10px;">＋ 묶음</button>
+            <button onclick="openExpiryFoodTypeImport()" class="p-act-btn" style="padding:2px 8px;font-size:10px;background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;">📋 식품유형</button>
           </div>
           <div id="p-bundle-list" style="flex:1;overflow-y:auto;padding:6px;"></div>
         </div>
@@ -37023,6 +37025,147 @@ function applyBundleUnit(code, unit) {
   var modal = document.getElementById('mEditUnit');
   if (modal) modal.remove();
   showToast(unit ? '단위 설정: ' + unit : '단위 해제', 'success');
+}
+
+// ===== 소비기한 식품유형 임포트 =====
+function openExpiryFoodTypeImport() {
+  if (!_mfdsTestSubFilter || !_pRefSub3Filter) {
+    showToast('sub3 칩을 먼저 선택하세요', 'warning'); return;
+  }
+  if (typeof EXPIRY_FOOD_TYPES === 'undefined' || !EXPIRY_FOOD_TYPES.length) {
+    showToast('식품유형 데이터가 없습니다', 'error'); return;
+  }
+
+  var data = EXPIRY_FOOD_TYPES;
+  var html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="mExpiryImport" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:#fff;border-radius:12px;padding:20px;width:720px;max-width:95vw;height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<div><h3 style="margin:0;font-size:15px;">📋 식품유형 임포트</h3>'
+    + '<span style="font-size:11px;color:#1565c0">(' + data.length + '건)</span></div>'
+    + '<button onclick="document.getElementById(\'mExpiryImport\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">✕</button></div>'
+    + '<input id="expiry-ft-search" placeholder="식품유형 검색 (초성검색 가능)..." oninput="filterExpiryFoodTypes()" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px">'
+    + '<div style="display:flex;gap:6px;margin-bottom:8px;font-size:10px;color:#666;padding:0 4px">'
+    + '<span style="flex:2">식품유형</span><span style="flex:1">카테고리</span><span style="flex:1">보관온도</span><span style="flex:2">단서조항</span><span style="width:50px">선택</span></div>'
+    + '<div id="expiry-ft-list" style="flex:1;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px"></div>'
+    + '<div style="margin-top:8px;padding:8px;background:#f8f9fa;border-radius:8px">'
+    + '<div style="font-size:11px;color:#666;margin-bottom:4px">선택된 식품유형</div>'
+    + '<div id="expiry-ft-selected" style="min-height:24px;font-size:12px;color:#999">식품유형을 선택하세요</div></div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">'
+    + '<button onclick="document.getElementById(\'mExpiryImport\').remove()" style="padding:8px 16px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">취소</button>'
+    + '<button onclick="executeExpiryImport()" style="padding:8px 16px;border:none;background:#1565c0;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">묶음 생성</button></div>'
+    + '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  window._expirySelectedIdx = null;
+  filterExpiryFoodTypes();
+}
+
+function filterExpiryFoodTypes() {
+  var q = (document.getElementById('expiry-ft-search') || {}).value || '';
+  q = q.toLowerCase().trim();
+  var list = document.getElementById('expiry-ft-list');
+  if (!list) return;
+
+  var filtered = EXPIRY_FOOD_TYPES.map(function(d, i) { return { d: d, i: i }; });
+  if (q) {
+    // 초성 검색 지원
+    filtered = filtered.filter(function(o) {
+      var name = (o.d.foodType + ' ' + o.d.storage + ' ' + o.d.proviso).toLowerCase();
+      return name.indexOf(q) >= 0;
+    });
+  }
+
+  var html = '';
+  filtered.forEach(function(o) {
+    var d = o.d;
+    var idx = o.i;
+    var isSelected = window._expirySelectedIdx === idx;
+    html += '<div onclick="selectExpiryFoodType(' + idx + ')" style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;background:' + (isSelected ? '#e3f2fd' : '#fff') + '">'
+      + '<span style="flex:2;font-weight:600">' + d.foodType + '</span>'
+      + '<span style="flex:1;color:#666">' + (d.category || '-') + '</span>'
+      + '<span style="flex:1;color:#666">' + (d.storage || '-') + '</span>'
+      + '<span style="flex:2;color:#888;font-size:11px">' + (d.proviso || '-') + '</span>'
+      + '<button onclick="event.stopPropagation();selectExpiryFoodType(' + idx + ')" style="width:50px;padding:3px 8px;border:1px solid ' + (isSelected ? '#1565c0' : '#ddd') + ';background:' + (isSelected ? '#1565c0' : '#fff') + ';color:' + (isSelected ? '#fff' : '#333') + ';border-radius:4px;font-size:10px;cursor:pointer">' + (isSelected ? '선택됨' : '선택') + '</button>'
+      + '</div>';
+  });
+  if (filtered.length === 0) html = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">검색 결과 없음</div>';
+  list.innerHTML = html;
+}
+
+function selectExpiryFoodType(idx) {
+  window._expirySelectedIdx = idx;
+  var d = EXPIRY_FOOD_TYPES[idx];
+  var selEl = document.getElementById('expiry-ft-selected');
+  if (selEl) {
+    selEl.innerHTML = '<div style="color:#1565c0;font-weight:600">' + d.foodType
+      + ' <span style="font-weight:400;color:#666">(' + (d.storage || '') + ' / ' + (d.proviso || '-') + ')</span></div>'
+      + '<div style="margin-top:4px;font-size:11px;color:#333">검사항목: ' + d.items.join(', ') + '</div>'
+      + '<div style="margin-top:2px;font-size:10px;color:#999">' + d.items.length + '개 항목</div>';
+  }
+  filterExpiryFoodTypes(); // 선택 상태 갱신
+}
+
+async function executeExpiryImport() {
+  if (window._expirySelectedIdx == null) { showToast('식품유형을 선택하세요', 'warning'); return; }
+  var d = EXPIRY_FOOD_TYPES[window._expirySelectedIdx];
+  var subKey = _mfdsTestSubFilter;
+  var sub3Key = _pRefSub3Filter;
+
+  // 묶음 이름 생성
+  var bundleName = d.foodType;
+  if (d.storage) bundleName += ' (' + d.storage + ')';
+  if (d.proviso) bundleName += ' ' + d.proviso;
+
+  // 묶음 키 자동 할당
+  var nk = subKey + '_' + sub3Key;
+  if (!_pBundleNames[nk]) _pBundleNames[nk] = {};
+  var existingKeys = Object.keys(_pBundleNames[nk]).map(Number).filter(function(n) { return !isNaN(n); });
+  var nextKey = existingKeys.length > 0 ? Math.max.apply(null, existingKeys) + 1 : 1;
+  _pBundleNames[nk][String(nextKey)] = bundleName;
+
+  var bk = nk + '_' + nextKey;
+  _pBundleItems[bk] = [];
+  _pBundleUnits[bk] = {};
+
+  // 자가품질위탁검사용 시험항목에서 코드 매칭
+  if (!_mfdsTestItems || _mfdsTestItems.length === 0) {
+    await MFDS_CODES.loadTestItems();
+  }
+
+  var matched = 0, unmatched = [];
+  d.items.forEach(function(itemName) {
+    // 이름으로 매칭 (정확 → 부분)
+    var found = _mfdsTestItems.find(function(t) {
+      var hn = (t['한글명'] || '').split('||')[0].trim();
+      return hn === itemName;
+    });
+    if (!found) {
+      // 부분 매칭
+      found = _mfdsTestItems.find(function(t) {
+        var hn = (t['한글명'] || '').split('||')[0].trim();
+        return hn.indexOf(itemName) >= 0 || itemName.indexOf(hn) >= 0;
+      });
+    }
+    if (found) {
+      var code = found['시험항목코드'];
+      _pBundleItems[bk].push(code);
+      if (found['단위']) _pBundleUnits[bk][code] = found['단위'];
+      matched++;
+    } else {
+      unmatched.push(itemName);
+    }
+  });
+
+  await savePBundleData();
+  _pBundleSelected = String(nextKey);
+  renderPBundles();
+  renderPBundleDetail();
+
+  var modal = document.getElementById('mExpiryImport');
+  if (modal) modal.remove();
+
+  var msg = '묶음 "' + bundleName + '" 생성 완료 (' + matched + '/' + d.items.length + '개 매칭)';
+  if (unmatched.length > 0) msg += '\n미매칭: ' + unmatched.join(', ');
+  showToast(msg, unmatched.length > 0 ? 'warning' : 'success');
 }
 
 // 묶음 생성 (P1-01 아래 P1-01-1, P1-01-2... 4단계)
