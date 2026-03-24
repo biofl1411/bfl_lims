@@ -576,6 +576,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="js/grade-calculator.js"></script>
 
 <script src="js/sidebar.js"></script>
 <script>
@@ -608,19 +609,7 @@ var COLUMNS = [
     return '<td class="center"><span class="tl tl-' + (c.trafficLight||'blue') + '"></span></td>';
   }},
   { key:'grade', label:'등급', defaultVisible:true, render:function(c){
-    var g = c.grade || 'C';
-    var t = {
-      'VIP':'<span class="tag tag-vip">VIP</span>',
-      'A':'<span class="tag tag-a">A</span>',
-      'B':'<span class="tag tag-b">B</span>',
-      'C':'<span class="tag tag-c">C</span>',
-      'D':'<span class="tag" style="background:#f3e5f5;color:#7b1fa2">D</span>',
-      'F':'<span class="tag" style="background:#f5f5f5;color:#616161">F</span>'
-    };
-    var scoreDetail = c.gradeScoreDetail || '';
-    var totalScore = c.gradeScore != null ? ' (' + c.gradeScore + '점)' : '';
-    var tooltip = scoreDetail ? ' title="' + scoreDetail.replace(/"/g,'&quot;') + '"' : '';
-    return '<td style="position:relative;cursor:' + (tooltip ? 'help' : 'default') + '"' + tooltip + '>' + (t[g] || t['C']) + '<span style="font-size:9px;color:#999;display:block">' + totalScore + '</span></td>';
+    return '<td>' + gradeRenderBadge(c.grade || 'F', c.gradeScore, c.gradeScoreDetail) + '</td>';
   }},
   { key:'company', label:'회사명', defaultVisible:true, render:function(c){ return '<td><strong>'+(c.company||'')+'</strong></td>'; }},
   { key:'repName', label:'대표자', defaultVisible:true, render:function(c){ return '<td>'+(c.repName||'-')+'</td>'; }},
@@ -832,12 +821,11 @@ async function loadList() {
   // ── 데이터 로드 ──
   var allCustomers = await getCustomers();
 
-  // ── 등급 실시간 계산 ──
+  // ── 등급 실시간 계산 (공통 모듈) ──
   try {
-    var rules = await loadGradeRulesForCalc();
     for (var gi = 0; gi < allCustomers.length; gi++) {
       var gc = allCustomers[gi];
-      var gr = await calcCompanyGrade(gc, []);
+      var gr = await gradeCalcCompany(gc, {});
       gc.grade = gr.grade;
       gc.gradeScore = gr.score;
       gc.gradeScoreDetail = gr.detail;

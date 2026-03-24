@@ -129,6 +129,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="js/grade-calculator.js"></script>
 <script src="js/toast.js"></script>
 <script src="js/sidebar.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -231,11 +232,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                     <button class="dp-tab-btn" data-tab="sample" onclick="switchDpTab('sample')">시료정보</button>
                     <button class="dp-tab-btn" data-tab="fee" onclick="switchDpTab('fee')">수수료/결제</button>
                     <button class="dp-tab-btn" data-tab="memo" onclick="switchDpTab('memo')">메모</button>
+                    <button class="dp-tab-btn" data-tab="editlog" onclick="switchDpTab('editlog')">수정이력</button>
                 </div>
                 <div class="dp-tab-pane active" id="dp-tab-basic"></div>
                 <div class="dp-tab-pane" id="dp-tab-sample"></div>
                 <div class="dp-tab-pane" id="dp-tab-fee"></div>
                 <div class="dp-tab-pane" id="dp-tab-memo"></div>
+                <div class="dp-tab-pane" id="dp-tab-editlog"></div>
             </div>
         </div>
     </div>
@@ -1018,10 +1021,7 @@ function renderTable() {
                     val = '<span class="tl tl-' + val + '" data-tooltip="' + tipText + '"></span>';
                 } else { val = '-'; }
             } else if (col.key === 'grade') {
-                if (val) {
-                    var g = val.toLowerCase();
-                    val = '<span class="tag tag-' + g + '">' + val + '</span>';
-                } else { val = '-'; }
+                val = gradeRenderBadge(val || 'C', null, null);
             } else if (col.key === 'feeSupply' || col.key === 'feeVat' || col.key === 'feeTotal') {
                 val = val ? Number(val).toLocaleString() + '원' : '-';
             } else if (col.key === 'urgent') {
@@ -1263,7 +1263,7 @@ function openDetailPanel(id, sampleIdx) {
     var tagCls = r.status === '접수완료' ? 'tag-complete' : r.status === '접수중' ? 'tag-inprogress' : 'tag-waiting';
     statusHtml += '<span class="tag ' + tagCls + '">' + (r.status || '') + '</span>';
     if (r.trafficLight) statusHtml += ' <span class="tl tl-' + r.trafficLight + '"></span> ' + (tlLabels[r.trafficLight] || '');
-    if (r.grade) statusHtml += ' <span class="tag tag-' + r.grade.toLowerCase() + '">' + r.grade + '</span>';
+    if (r.grade) statusHtml += ' ' + gradeRenderBadge(r.grade, null, null);
     if (r.urgent === '긴급' || r.urgent === 'Y') statusHtml += ' <span style="color:#e53935;font-weight:700">⚡긴급</span>';
     document.getElementById('dp-status-row').innerHTML = statusHtml;
 
@@ -1375,6 +1375,24 @@ function openDetailPanel(id, sampleIdx) {
             '<textarea class="dp-memo-area" readonly>' + (teamMemo[team] || '') + '</textarea></div>';
     });
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
+
+    // 수정이력 탭
+    var editLog = r.editLog || [];
+    var logHtml = '';
+    if (editLog.length === 0) {
+        logHtml = '<div style="text-align:center;color:#94a3b8;padding:20px;font-size:12px">수정 이력이 없습니다</div>';
+    } else {
+        logHtml = '<div style="max-height:400px;overflow-y:auto">';
+        editLog.slice().reverse().forEach(function(log, idx) {
+            logHtml += '<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:11px">' +
+                '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
+                '<strong style="color:#1565c0">' + (log.who || '알 수 없음') + '</strong>' +
+                '<span style="color:#94a3b8">' + (log.date || '') + '</span></div>' +
+                '<div style="color:#374151">' + (log.detail || '').replace(/\n/g, '<br>') + '</div></div>';
+        });
+        logHtml += '</div>';
+    }
+    document.getElementById('dp-tab-editlog').innerHTML = logHtml;
 
     // 기본 탭 활성화
     switchDpTab('basic');

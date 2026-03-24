@@ -250,6 +250,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="js/grade-calculator.js"></script>
 </head>
 <body>
 
@@ -2073,28 +2074,7 @@ var COLUMNS = [
     return '<td class="center"><span class="tl tl-' + tl + '" data-tooltip="' + tipText + '"></span></td>';
   }},
   { key:'grade', label:'등급', defaultVisible:true, render:function(c){
-    var custKey = c.id || (c.company || '').trim();
-    var stats = _companyReceiptStats[custKey] || {};
-    var tl = _companyTrafficLight[custKey] || 'green';
-    var si = calcCustomerScore(c, stats, tl);
-    var d = si.detail;
-    var tip = '총점: ' + si.total + '/105\n'
-      + d.revenue.label + ': ' + d.revenue.score + '/' + d.revenue.max + ' (' + d.revenue.value + ')\n'
-      + d.frequency.label + ': ' + d.frequency.score + '/' + d.frequency.max + ' (' + d.frequency.value + ')\n'
-      + d.duration.label + ': ' + d.duration.score + '/' + d.duration.max + ' (' + d.duration.value + ')\n'
-      + d.payment.label + ': ' + d.payment.score + '/' + d.payment.max + ' (' + d.payment.value + ')\n'
-      + d.department.label + ': ' + d.department.score + '/' + d.department.max + ' (' + d.department.value + ')\n'
-      + d.receiptType.label + ': ' + d.receiptType.score + '/' + d.receiptType.max + ' (' + d.receiptType.value + ')';
-    var g = si.grade;
-    var t = {
-      'VIP':'<span class="tag tag-vip" data-tooltip="' + tip + '">VIP</span>',
-      'A':'<span class="tag tag-a" data-tooltip="' + tip + '">A</span>',
-      'B':'<span class="tag tag-b" data-tooltip="' + tip + '">B</span>',
-      'C':'<span class="tag tag-c" data-tooltip="' + tip + '">C</span>',
-      'D':'<span class="tag" style="background:#f3e5f5;color:#7b1fa2" data-tooltip="' + tip + '">D</span>',
-      'F':'<span class="tag" style="background:#f5f5f5;color:#616161" data-tooltip="' + tip + '">F</span>'
-    };
-    return '<td>' + (t[g] || t['F']) + '</td>';
+    return '<td>' + gradeRenderBadge(c._calcGrade || 'F', c._calcScore, c._calcDetail) + '</td>';
   }},
   { key:'company', label:'회사명', defaultVisible:true, render:function(c){ return '<td><strong>'+(c.company||'')+'</strong></td>'; }},
   { key:'repName', label:'대표자', defaultVisible:true, render:function(c){ return '<td>'+(c.repName||'-')+'</td>'; }},
@@ -2523,14 +2503,10 @@ function copyContactToTax() {
 var _custSearchQuery = '';
 
 async function loadCustomers() {
-  // 사용자 이름→부서 매핑 + 등급 규칙 캐싱
-  try { await loadUserDeptMap(); } catch(e) {}
-  try {
-    _cachedGradeRules = await loadGradeRulesFromFirestore();
-  } catch(e) {
-    console.warn('등급 규칙 Firestore 로드 실패, 로컬 폴백:', e.message);
-    _cachedGradeRules = getGradeRules();
-  }
+  // 등급 규칙 + 사용자 매핑 로드 (공통 모듈)
+  try { await gradeCalcLoadRules(); await gradeCalcLoadUserDeptMap(); } catch(e) {}
+  _cachedGradeRules = _gradeCalcCache.rules || getGradeRules();
+  _cachedSignalRules = JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || getSignalRules();
   _cachedSignalRules = JSON.parse(localStorage.getItem('bfl_signal_rules') || 'null') || getSignalRules();
 
   var thead = document.getElementById('customerThead');
@@ -2560,6 +2536,20 @@ async function loadCustomers() {
     await loadReceiptDataForCompanies(allCustomers);
   } catch(e) {
     console.warn('접수 데이터 기반 계산 실패:', e.message);
+  }
+
+  // ── 등급 실시간 계산 (공통 모듈) ──
+  for (var gi = 0; gi < allCustomers.length; gi++) {
+    try {
+      var gc = allCustomers[gi];
+      var custKey = gc.id || (gc.company || '').trim();
+      var gStats = _companyReceiptStats[custKey] || {};
+      gStats.trafficLight = _companyTrafficLight[custKey] || 'green';
+      var gr = await gradeCalcCompany(gc, gStats);
+      gc._calcGrade = gr.grade;
+      gc._calcScore = gr.score;
+      gc._calcDetail = gr.detail;
+    } catch(e) { allCustomers[gi]._calcGrade = 'F'; allCustomers[gi]._calcScore = 0; }
   }
 
   // ── 검색 필터 ──

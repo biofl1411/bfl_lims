@@ -7225,20 +7225,64 @@ async function saveReceipt() {
         var data = collectReceiptData();
         data.status = document.getElementById('status').value || '접수중';
         data.files = collectFileData();
-        // 편집 모드: 기존 문서 ID 유지
+        // 편집 모드: 기존 문서 ID 유지 + 수정이력 기록
         if (window._editDocId) {
             data.id = window._editDocId;
+            // 수정이력: 기존 데이터와 비교하여 변경사항 기록
+            try {
+                var oldDoc = await db.collection('receipts').doc(window._editDocId).get();
+                if (oldDoc.exists) {
+                    var oldData = oldDoc.data();
+                    var changes = [];
+                    var checkFields = [
+                        ['companyName','거래처'], ['testPurpose','검사목적'], ['testField','시험분야'],
+                        ['receiptDate','접수일'], ['processingDeadline','처리기한'], ['urgent','긴급여부'],
+                        ['salesRep','담당자'], ['status','상태']
+                    ];
+                    checkFields.forEach(function(f) {
+                        var oldVal = oldData[f[0]] || '';
+                        var newVal = data[f[0]] || '';
+                        if (oldVal !== newVal) changes.push(f[1] + ': ' + (oldVal || '없음') + ' → ' + (newVal || '없음'));
+                    });
+                    // 시료 수 변경
+                    var oldSamples = (oldData.samples || []).length;
+                    var newSamples = (data.samples || []).length;
+                    if (oldSamples !== newSamples) changes.push('시료수: ' + oldSamples + ' → ' + newSamples);
+                    // 시험항목 수 변경
+                    var oldItems = (oldData.samples || []).reduce(function(s,r){return s+(r.testItems||[]).length;},0);
+                    var newItems = (data.samples || []).reduce(function(s,r){return s+(r.testItems||[]).length;},0);
+                    if (oldItems !== newItems) changes.push('시험항목: ' + oldItems + '건 → ' + newItems + '건');
+
+                    if (changes.length > 0) {
+                        var editLog = oldData.editLog || [];
+                        editLog.push({
+                            date: new Date().toISOString().slice(0,16).replace('T',' '),
+                            who: window._currentUser || '사용자',
+                            detail: changes.join('\n')
+                        });
+                        data.editLog = editLog;
+                    } else {
+                        data.editLog = oldData.editLog || [];
+                    }
+                }
+            } catch(logErr) { console.warn('수정이력 기록 실패:', logErr.message); }
         }
         await fsSaveReceipt(data);
         // 업체별 발송방법 저장
         saveCompanyReportSendPrefs();
         // OCR 보정 사전 수집 (OCR 원본 vs 사용자 수정 비교)
         try { await collectOcrCorrections(data); } catch(ocrErr) { console.warn('[OCR보정] 수집 오류:', ocrErr); }
-        showToast('✅ 저장되었습니다!');
+
+        if (window._editDocId) {
+            showToast('✅ 수정 저장 완료!');
+            setTimeout(function() { location.href = 'receiptStatus.html'; }, 1500);
+        } else {
+            showToast('✅ 저장되었습니다!');
+        }
         isModified = false;
         btn.classList.remove('modified');
         btn.textContent = '💾 저장';
-        document.getElementById('status').value = '접수중';
+        document.getElementById('status').value = data.status || '접수중';
     } catch(err) {
         console.error('저장 실패:', err);
         showToast('저장 중 오류가 발생했습니다.', 'error');
