@@ -33232,7 +33232,9 @@ var REF_CODE_CATEGORIES = {
   H: { name: '이물/곰팡이', color: '#78909c', majorNo: '2014001008' },
   I: { name: '질병검사', color: '#5c6bc0', majorNo: '2014001009' },
   X: { name: '기타', color: '#f4511e', majorNo: '2014001010' },
-  P: { name: '참고용', color: '#7c4dff', majorNo: '' }
+  P: { name: '참고용', color: '#7c4dff', majorNo: '' },
+  PA: { name: '참고용(식품)', color: '#1565c0', majorNo: '', virtual: true, parentCat: 'P', subKey: 'A' },
+  PB: { name: '참고용(축산)', color: '#e65100', majorNo: '', virtual: true, parentCat: 'P', subKey: 'B' }
 };
 
 // 소분류 체계 (코드 두번째 자리)
@@ -35704,12 +35706,21 @@ function renderTestItemCatChips(show) {
     return;
   }
 
-  // 건수 집계
+  // 건수 집계 (PA/PB 가상 카테고리 포함)
   var catCounts = {};
   var totalCnt = 0;
   (_mfdsTestItems || []).forEach(function(t) {
-    var p = (t['시험항목코드'] || '').charAt(0).toUpperCase();
+    var code = (t['시험항목코드'] || '').toUpperCase();
+    var p = code.charAt(0);
     if (p) { catCounts[p] = (catCounts[p] || 0) + 1; totalCnt++; }
+    // PA/PB 가상 카테고리: P코드의 두번째 자리가 A 또는 B (16진수)
+    if (p === 'P' && code.length >= 2) {
+      var sub = code.charAt(1).toUpperCase();
+      // 소분류 A=10, B=11 (16진수) → 코드 PA..., PB...
+      // 실제로는 REF_SUB_CATEGORIES의 키로 판별
+      if (sub === 'A') catCounts['PA'] = (catCounts['PA'] || 0) + 1;
+      else if (sub === 'B') catCounts['PB'] = (catCounts['PB'] || 0) + 1;
+    }
   });
 
   // "전체" 칩
@@ -35773,11 +35784,43 @@ function renderTestItemSubChips() {
 }
 
 function toggleTestItemCat(letter) {
+  // PA/PB 가상 카테고리 처리
+  var cat = REF_CODE_CATEGORIES[letter];
+  if (cat && cat.virtual && cat.parentCat) {
+    var parent = cat.parentCat;
+    var subKey = cat.subKey;
+    var idx = _editTestItemCats.indexOf(letter);
+    if (idx >= 0) {
+      // 해제: PA/PB 제거, P + 소분류도 정리
+      _editTestItemCats.splice(idx, 1);
+      var pIdx = _editTestItemCats.indexOf(parent);
+      if (pIdx >= 0) _editTestItemCats.splice(pIdx, 1);
+      delete _editTestItemSubs[parent];
+      delete _editTestItemSubs[letter];
+    } else {
+      // 선택: P + 소분류 A/B 설정
+      // 다른 PA/PB 해제
+      ['PA','PB'].forEach(function(vk) { var vi = _editTestItemCats.indexOf(vk); if (vi >= 0) _editTestItemCats.splice(vi, 1); });
+      var pIdx2 = _editTestItemCats.indexOf(parent);
+      if (pIdx2 >= 0) _editTestItemCats.splice(pIdx2, 1);
+      _editTestItemCats.push(letter);
+      _editTestItemCats.push(parent);
+      _editTestItemSubs[parent] = [subKey];
+    }
+    renderTestItemCatChips(true);
+    return;
+  }
+  // 일반 카테고리
   var idx = _editTestItemCats.indexOf(letter);
   if (idx >= 0) {
     _editTestItemCats.splice(idx, 1);
     delete _editTestItemSubs[letter];
   } else {
+    // P 선택 시 PA/PB 해제
+    if (letter === 'P') {
+      ['PA','PB'].forEach(function(vk) { var vi = _editTestItemCats.indexOf(vk); if (vi >= 0) _editTestItemCats.splice(vi, 1); });
+      delete _editTestItemSubs['P'];
+    }
     _editTestItemCats.push(letter);
   }
   renderTestItemCatChips(true);
