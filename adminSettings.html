@@ -194,11 +194,6 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:4px 12px" onclick="addDynRow('move')">+ 행 추가</button>
       </div>
 
-      <div class="card" id="card-sample">
-        <div class="card-title">8️⃣ 시료접수 <span style="color:#2563eb;font-size:13px;font-weight:400;margin-left:8px">배점: <input type="number" id="cat-max-8" value="5" min="1" max="100" class="rule-input" style="width:50px" onchange="updateGradeTotalScore()">점</span></div>
-        <table class="tbl"><thead><tr><th style="width:80px">점수</th><th>조건</th><th style="width:40px"></th></tr></thead><tbody id="dyn-sample"></tbody></table>
-        <button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:4px 12px" onclick="addDynRow('sample')">+ 행 추가</button>
-      </div>
 
       <div class="btn-group" style="margin-bottom:24px">
         <button class="btn btn-primary" onclick="saveGradeRules()">💾 전체 저장</button>
@@ -369,8 +364,8 @@ async function resetSignalRules() {
 // 등급 규칙 (복합 점수 방식 — 6개 항목 총 105점)
 // ============================================================================
 const GRADE_DEFAULTS = {
-    // 항목별 최대 배점 (8개)
-    categoryMaxScores: [40, 25, 15, 15, 5, 5, 5, 5],
+    // 항목별 최대 배점 (7개)
+    categoryMaxScores: [40, 25, 15, 15, 5, 5, 5],
     // 등급 기준 (동적 배열)
     grades: [
       { name: 'VIP', label: '최우수 고객', color: '#ef4444', min: 90 },
@@ -417,11 +412,6 @@ const GRADE_DEFAULTS = {
         scores: [3, 5],
         conditions: ['일반물류', '바이오물류']
     },
-    // 8. 시료접수 (5점)
-    sampleReceipt: {
-        scores: [1, 3, 4, 5],
-        conditions: ['택배', '방문접수', '내방접수', '홈페이지접수']
-    }
 };
 
 // 등급 규칙 필드 ID 매핑
@@ -439,9 +429,7 @@ const GRADE_FIELD_IDS = {
     rcptScores:      ['rcpt-s1', 'rcpt-s2', 'rcpt-s3'],
     rcptConditions:  ['rcpt-c1', 'rcpt-c2', 'rcpt-c3'],
     moveScores:      ['move-s1', 'move-s2'],
-    moveConditions:  ['move-c1', 'move-c2'],
-    sampleScores:    ['sample-s1', 'sample-s2', 'sample-s3', 'sample-s4'],
-    sampleConditions:['sample-c1', 'sample-c2', 'sample-c3', 'sample-c4']
+    moveConditions:  ['move-c1', 'move-c2']
 };
 
 async function loadGradeRules() {
@@ -527,8 +515,6 @@ async function loadGradeRules() {
     renderDynRows('rcpt', rcpt.scores, rcpt.conditions);
     const move = saved.sampleMove || GRADE_DEFAULTS.sampleMove;
     renderDynRows('move', move.scores, move.conditions);
-    const sample = saved.sampleReceipt || GRADE_DEFAULTS.sampleReceipt;
-    renderDynRows('sample', sample.scores, sample.conditions);
     // 연동 표시 업데이트
     updateGradeDisplays();
 }
@@ -536,7 +522,7 @@ async function loadGradeRules() {
 async function saveGradeRules() {
     var gradesList = collectGradeRows();
     const rules = {
-        categoryMaxScores: [1,2,3,4,5,6,7,8].map(i => +(document.getElementById('cat-max-' + i) || {}).value || 0),
+        categoryMaxScores: [1,2,3,4,5,6,7].map(i => +(document.getElementById('cat-max-' + i) || {}).value || 0),
         grades: gradesList,
         // 하위 호환
         gradeThresholds: {
@@ -550,8 +536,7 @@ async function saveGradeRules() {
         payment: collectDynRows('pay'),
         department: collectDynRows('dept'),
         receiptType: collectDynRows('rcpt'),
-        sampleMove: collectDynRows('move'),
-        sampleReceipt: collectDynRows('sample')
+        sampleMove: collectDynRows('move')
     };
     try {
         await fsSaveSettings('gradeRules', rules);
@@ -622,7 +607,7 @@ function collectGradeRows() {
 
 function updateGradeTotalScore() {
     var total = 0;
-    for (var i = 1; i <= 8; i++) {
+    for (var i = 1; i <= 7; i++) {
       var el = document.getElementById('cat-max-' + i);
       total += el ? (+el.value || 0) : 0;
     }
@@ -634,9 +619,8 @@ function updateGradeTotalScore() {
 // 5~8번 항목별 선택 옵션 (접수등록 연동)
 var _gradeCondOptions = {
     dept: [],  // Firestore users에서 동적 로드
-    rcpt: ['홈페이지접수', '내방접수', '방문접수', '택배접수'],
+    rcpt: ['일반', '홈페이지'],
     move: ['바이오물류', '일반물류', '자가운송', '퀵서비스'],
-    sample: ['홈페이지접수', '내방접수', '방문접수', '택배']
 };
 
 async function loadDeptOptions() {
