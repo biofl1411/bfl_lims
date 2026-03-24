@@ -2,6 +2,7 @@
 <html>
 <head><meta charset="UTF-8"><title>PA 단위+수수료 업데이트</title>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 </head>
@@ -18,8 +19,19 @@ var PA_FEES = {"PA0001":0,"PA0002":5500,"PA0003":5500,"PA0004":14300,"PA0005":20
 var logEl = document.getElementById('log');
 function log(msg) { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
 
+async function waitForAuth() {
+  return new Promise(function(resolve) {
+    var unsub = firebase.auth().onAuthStateChanged(function(user) {
+      unsub();
+      if (user) { log('로그인 확인: ' + user.email); resolve(true); }
+      else { log('로그인 필요 — 메인 페이지에서 로그인 후 다시 시도하세요.'); resolve(false); }
+    });
+  });
+}
+
 // 1. mfds_test_items에서 PA 항목 단위 업데이트
 async function runUpdate() {
+  if (!(await waitForAuth())) return;
   document.getElementById('btnRun').disabled = true;
   var db = firebase.firestore();
   var codes = Object.keys(PA_UNITS);
@@ -56,6 +68,7 @@ async function runUpdate() {
 
 // 2. settings/refFeeMapping에서 PA 항목 수수료 업데이트
 async function runFeeUpdate() {
+  if (!(await waitForAuth())) return;
   var db = firebase.firestore();
   log('=== 수수료 업데이트 시작 ===');
   var doc = await db.collection('settings').doc('refFeeMapping').get();
