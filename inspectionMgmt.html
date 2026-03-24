@@ -30756,7 +30756,8 @@ function renderTemplates() {
       var gk = _tmplFeeGroupMap[ti.testItemCode] || ti.testItemCode;
       var isDup = _tmplRowFeeCharged[gk] && ti.fee > 0;
       if (ti.fee > 0) _tmplRowFeeCharged[gk] = true;
-      var feeHtml = ti.fee ? (isDup ? '<span style="color:#ccc;font-size:10px;" title="동일 시험항목 그룹 — 수수료 1회만 부과">0원 <s style="color:#bbb">' + ti.fee.toLocaleString() + '</s></span>' : ti.fee.toLocaleString() + '원') : '-';
+      var displayFee = isDup ? 0 : (ti.fee || 0);
+      var feeHtml = displayFee > 0 ? displayFee.toLocaleString() + '원' : (isDup ? '<span style="color:#ccc" title="동시분석 — 수수료 1회만 부과">0원</span>' : '-');
       html += '<tr style="border-top:1px solid #f0f0f0;">';
       html += '<td style="padding:6px 8px;color:#999;">' + (j + 1) + '</td>';
       html += '<td style="padding:6px 8px;font-weight:500;">' + ti.testItemName + (ti.proviso ? ' <span style="color:#e65100;font-size:10px;">(' + ti.proviso + ')</span>' : '') + '</td>';
@@ -30802,7 +30803,13 @@ function downloadTmplFeeExcel() {
   var detailRows = [];
 
   data.forEach(function(tmpl) {
-    var totalFee = tmpl.testItems.reduce(function(s, ti) { return s + (ti.fee || 0); }, 0);
+    // 동시분석 그룹 중복 제거한 합계
+    var _sumFeeCharged = {};
+    var totalFee = 0;
+    tmpl.testItems.forEach(function(ti) {
+      var gk = feeGroupMap[ti.testItemCode] || ti.testItemCode;
+      if (!_sumFeeCharged[gk]) { totalFee += (ti.fee || 0); if (ti.fee > 0) _sumFeeCharged[gk] = true; }
+    });
 
     // 동시분석 그룹 비고 생성용: 같은 식품유형 내 코드 목록 수집
     var feeGroupMap = {'B60016':'preservative','B60095':'preservative','B60019':'antioxidant','B60117':'antioxidant','B10001':'heavy_metal_Pb_Cd','B10007':'heavy_metal_Pb_Cd','B30004':'aflatoxin','B30005':'aflatoxin','B30013':'aflatoxin','B30015':'aflatoxin','B30016':'aflatoxin','B30017':'aflatoxin'};
@@ -30820,18 +30827,22 @@ function downloadTmplFeeExcel() {
       }
     });
 
+    var _excelFeeCharged = {};
     tmpl.testItems.forEach(function(ti) {
-      var fee = ti.fee || 0;
+      var gk = feeGroupMap[ti.testItemCode] || ti.testItemCode;
+      var isDup = _excelFeeCharged[gk] && (ti.fee || 0) > 0;
+      if ((ti.fee || 0) > 0) _excelFeeCharged[gk] = true;
+      var fee = isDup ? 0 : (ti.fee || 0);
       var supply = Math.round(fee / 1.1);
       var vat = fee - supply;
       // 비고: 동시분석 그룹이면 같은 그룹 내 다른 항목명 표시
       var remark = '';
-      var gk = feeGroupMap[ti.testItemCode];
-      if (gk && groupMembers[gk] && groupMembers[gk].length > 1) {
-        var others = groupMembers[gk].filter(function(n) { return n !== ti.testItemName; });
-        // 중복 제거
+      var gkName = feeGroupMap[ti.testItemCode];
+      if (gkName && groupMembers[gkName] && groupMembers[gkName].length > 1) {
+        var others = groupMembers[gkName].filter(function(n) { return n !== ti.testItemName; });
         others = others.filter(function(v, i, a) { return a.indexOf(v) === i; });
-        remark = groupNames[gk] + ' 동시분석 (' + others.join(', ') + ' 포함) — 수수료 1회';
+        remark = groupNames[gkName] + ' 동시분석 (' + others.join(', ') + ' 포함)';
+        if (isDup) remark += ' — 수수료 0원 (1회만 부과)';
       }
       detailRows.push({
         '식품유형': tmpl.templateName,
