@@ -2045,6 +2045,14 @@ async function saveDetailEdit() {
     });
   }
 
+  // 등급 재계산 후 저장
+  try {
+    var gr = await gradeCalcCompany(cust, {});
+    cust.grade = gr.grade;
+    cust.gradeScore = gr.score;
+    cust.gradeScoreDetail = gr.detail;
+  } catch(e) {}
+
   await fsSaveCompany(Object.assign({id: _detailCustId}, cust));
 
   // UI 복원 (readonly)
@@ -2249,6 +2257,14 @@ async function saveCustomer() {
     regDate: new Date().toISOString().slice(0, 10),
     changeLog: []
   };
+
+  // 등급 자동 계산
+  try {
+    var gr = await gradeCalcCompany(cust, {});
+    cust.grade = gr.grade;
+    cust.gradeScore = gr.score;
+    cust.gradeScoreDetail = gr.detail;
+  } catch(e) { cust.grade = 'F'; cust.gradeScore = 0; }
 
   // Firestore에 저장
   try {
@@ -3712,207 +3728,42 @@ document.addEventListener('DOMContentLoaded', function() {
   }, 3000);
 });
 
-/* ===== 등급 자동 산출 (8개 항목 점수 합산) ===== */
-var _gradeRulesCache = null;
+/* ===== 등급 자동 산출 — js/grade-calculator.js 공통 모듈 사용 ===== */
+/* 레거시 함수 제거됨 — 모든 등급 계산은 js/grade-calculator.js의 gradeCalcCompany() 사용 */
 
-var _userDeptMap = null; // 사용자 이름 → 부서 매핑
+// ↓ 아래 레거시 함수들은 삭제됨 (loadUserDeptMap ~ calcCompanyGrade)
+// 대체: gradeCalcCompany(company, stats) in js/grade-calculator.js
+var __legacyRemoved = true; // 마커
 
-async function loadUserDeptMap() {
-  if (_userDeptMap) return _userDeptMap;
-  _userDeptMap = {};
-  try {
-    var users = await fsGetUsers();
-    (users || []).forEach(function(u) {
-      var name = u.name || u['아이디'] || '';
-      var dept = u.department || u['부서명'] || '';
-      if (name && dept) _userDeptMap[name] = dept;
-    });
-  } catch(e) { console.warn('사용자 부서 매핑 로드 실패:', e.message); }
-  return _userDeptMap;
-}
-
-function resolveDept(salesRep) {
-  // salesRep이 부서명이면 그대로, 사람 이름이면 부서로 변환
-  if (!salesRep || !_userDeptMap) return salesRep;
-  // 부서명 직접 매칭 확인 (팀/부/실/과로 끝나면 부서명)
-  if (/(팀|부|실|과|사업부|센터)$/.test(salesRep)) return salesRep;
-  // 사용자 이름→부서 매핑
-  return _userDeptMap[salesRep] || salesRep;
-}
-
-async function loadGradeRulesForCalc() {
-  if (_gradeRulesCache) return _gradeRulesCache;
-  await loadUserDeptMap();
-  try {
-    var r = await fsGetSettings('gradeRules');
-    if (r && r.grades) { _gradeRulesCache = r; return r; }
-  } catch(e) {}
-  // 기본값
-  _gradeRulesCache = {
-    grades: [
-      { name:'VIP', min:90 }, { name:'A', min:70 }, { name:'B', min:50 },
-      { name:'C', min:30 }, { name:'D', min:15 }, { name:'F', min:0 }
-    ],
-    department: { scores:[1,3,5], conditions:['지사','고객관리','고객지원팀, 마케팅사업부'] },
-    receiptType: { scores:[3,5], conditions:['일반','홈페이지'] },
-    sampleMove: { scores:[3,5], conditions:['일반물류','바이오물류'] },
-    sampleReceipt: { scores:[1,2,3,4,5], conditions:['일반물류','택배','방문','내방','바이오물류'] },
-    payment: { scores:[3,6,9,12,15], conditions:['위험','경고','주의','양호','정상'] },
-    categoryMaxScores: [40,25,15,15,5,5,5,5]
-  };
-  return _gradeRulesCache;
-}
-
-function calcScoreForCondition(ruleObj, value) {
-  if (!ruleObj || !value) return { score: 0, max: 0, matched: '' };
-  var scores = ruleObj.scores || [];
-  var conds = ruleObj.conditions || [];
-  var maxScore = scores.length ? Math.max.apply(null, scores) : 0;
-  var normalize = function(s) { return (s||'').replace(/[\s,·]/g,'').toLowerCase(); };
-  var nVal = normalize(value);
-  if (!nVal) return { score: 0, max: maxScore, matched: '없음' };
-
-  // 높은 점수부터 매칭 (최고점 우선)
-  var sorted = conds.map(function(c, i) { return { cond: c, score: scores[i] || 0, idx: i }; })
-    .sort(function(a, b) { return b.score - a.score; });
-
-  for (var i = 0; i < sorted.length; i++) {
-    var nCond = normalize(sorted[i].cond);
-    // 콤마로 구분된 여러 조건 지원 (예: "고객지원팀, 마케팅사업부")
-    var parts = sorted[i].cond.split(/[,，]/).map(function(p) { return normalize(p); });
-    for (var j = 0; j < parts.length; j++) {
-      if (!parts[j]) continue;
-      // 정확 매칭
-      if (parts[j] === nVal) return { score: sorted[i].score, max: maxScore, matched: sorted[i].cond };
-      // 포함 매칭 (부서 계층: "마케팅사업부" → "마케팅팀" 매칭)
-      // 조건의 핵심 키워드 추출 (끝의 팀/부/실/과 제거)
-      var coreVal = nVal.replace(/(팀|부|실|과|사업부|센터)$/, '');
-      var coreCond = parts[j].replace(/(팀|부|실|과|사업부|센터)$/, '');
-      if (coreVal && coreCond && (coreVal.indexOf(coreCond) >= 0 || coreCond.indexOf(coreVal) >= 0)) {
-        return { score: sorted[i].score, max: maxScore, matched: sorted[i].cond + ' (하위매칭)' };
-      }
-    }
-  }
-  return { score: 0, max: maxScore, matched: '미매칭: ' + value };
-}
-
-function calcTrafficLightScore(rules, tlColor) {
-  var pay = rules.payment || {};
-  var scores = pay.scores || [3,6,9,12,15];
-  var conds = pay.conditions || ['위험','경고','주의','양호','정상'];
-  var colorMap = { green: '정상', blue: '양호', yellow: '주의', orange: '경고', red: '위험' };
-  var label = colorMap[tlColor] || '정상';
-  for (var i = 0; i < conds.length; i++) {
-    if (conds[i].indexOf(label) >= 0) return { score: scores[i] || 0, max: Math.max.apply(null, scores), matched: label };
-  }
-  return { score: scores[scores.length - 1] || 0, max: Math.max.apply(null, scores), matched: label };
-}
-
-function determineGrade(rules, totalScore) {
-  var grades = (rules.grades || []).slice().sort(function(a,b){ return b.min - a.min; });
-  for (var i = 0; i < grades.length; i++) {
-    if (totalScore >= grades[i].min) return grades[i].name;
-  }
-  return grades.length ? grades[grades.length - 1].name : 'F';
-}
-
-async function calcCompanyGrade(company, receipts) {
-  var rules = await loadGradeRulesForCalc();
-  var details = [];
-  var total = 0;
-
-  // 4. 결제 신뢰도 (신호등)
-  var tlResult = calcTrafficLightScore(rules, company.trafficLight || 'blue');
-  total += tlResult.score;
-  details.push('결제신뢰도: ' + tlResult.score + '/' + tlResult.max + ' (' + tlResult.matched + ')');
-
-  // 5. 담당부서 (영업담당이 사람 이름이면 부서로 변환)
-  var salesRep = company.salesRep || '';
-  var deptName = resolveDept(salesRep);
-  var deptResult = calcScoreForCondition(rules.department, deptName);
-  total += deptResult.score;
-  details.push('담당부서: ' + deptResult.score + '/' + deptResult.max + ' (' + (salesRep ? salesRep + (deptName !== salesRep ? '→' + deptName : '') : '없음') + ')');
-
-  // 6. 접수형태 — 접수 데이터에서 가장 많은 형태
-  var formType = '';
-  if (receipts && receipts.length > 0) {
-    var formCount = {};
-    receipts.forEach(function(r) { var f = r.접수형태 || r.receiptForm || ''; if (f) formCount[f] = (formCount[f]||0) + 1; });
-    var maxForm = Object.keys(formCount).sort(function(a,b){ return formCount[b]-formCount[a]; })[0];
-    formType = maxForm || '';
-  }
-  var rcptResult = calcScoreForCondition(rules.receiptType, formType);
-  total += rcptResult.score;
-  details.push('접수형태: ' + rcptResult.score + '/' + rcptResult.max + ' (' + (formType || '없음') + ')');
-
-  // 7. 시료이동 — 접수 데이터에서
-  var moveType = '';
-  if (receipts && receipts.length > 0) {
-    var moveCount = {};
-    receipts.forEach(function(r) { var m = r.시료이동 || r.sampleMove || ''; if (m) moveCount[m] = (moveCount[m]||0) + 1; });
-    var maxMove = Object.keys(moveCount).sort(function(a,b){ return moveCount[b]-moveCount[a]; })[0];
-    moveType = maxMove || '';
-  }
-  var moveResult = calcScoreForCondition(rules.sampleMove, moveType);
-  total += moveResult.score;
-  details.push('시료이동: ' + moveResult.score + '/' + moveResult.max + ' (' + (moveType || '없음') + ')');
-
-  // 8. 시료접수
-  var sampleType = '';
-  if (receipts && receipts.length > 0) {
-    var sCount = {};
-    receipts.forEach(function(r) { var s = r.시료접수 || r.sampleReceive || ''; if (s) sCount[s] = (sCount[s]||0) + 1; });
-    var maxS = Object.keys(sCount).sort(function(a,b){ return sCount[b]-sCount[a]; })[0];
-    sampleType = maxS || '';
-  }
-  var sampleResult = calcScoreForCondition(rules.sampleReceipt, sampleType);
-  total += sampleResult.score;
-  details.push('시료접수: ' + sampleResult.score + '/' + sampleResult.max + ' (' + (sampleType || '없음') + ')');
-
-  // 1~3: 매출/빈도/기간은 접수 데이터 필요 (현재 없으면 0)
-  details.unshift('매출: 0 (데이터 없음)');
-  details.unshift('빈도: 0 (데이터 없음)');
-  details.unshift('기간: 0 (데이터 없음)');
-
-  var grade = determineGrade(rules, total);
-  return { grade: grade, score: total, detail: details.join('\n') };
-}
-
-// 등록/수정 폼에서 자동 산출
+// 등록/수정 폼에서 자동 산출 (공통 모듈)
 async function autoCalcGrade() {
   var salesRep = (document.getElementById('regSalesRep') || {}).value || '';
-  var tl = 'blue'; // 신규는 기본 파랑
-  var company = { salesRep: salesRep, trafficLight: tl };
-  var result = await calcCompanyGrade(company, []);
+  var company = { salesRep: salesRep, trafficLight: 'blue' };
+  var result = await gradeCalcCompany(company, {});
   document.getElementById('regGrade').value = result.grade;
-  showToast('등급 자동 산출: ' + result.grade + ' (' + result.score + '점)\n' + result.detail.split('\n').join(', '));
+  showToast('등급 자동 산출: ' + result.grade + ' (' + result.score + '점)');
 }
 
-// 목록에서 일괄 등급 재계산
+// 목록에서 일괄 등급 재계산 + Firestore 저장 (공통 모듈)
 async function recalcAllGrades() {
-  if (!confirm('전체 업체 등급을 재계산합니다. 계속할까요?')) return;
+  if (!confirm('전체 업체 등급을 재계산하고 저장합니다. 계속할까요?')) return;
   showToast('등급 재계산 시작...');
-  var rules = await loadGradeRulesForCalc();
   var customers = allCustomers || [];
   var updated = 0;
   for (var i = 0; i < customers.length; i++) {
     var c = customers[i];
-    var result = await calcCompanyGrade(c, []);
-    {  // 항상 업데이트
-      c.grade = result.grade;
-      c.gradeScore = result.score;
-      c.gradeScoreDetail = result.detail;
-      try {
-        await db.collection('companies').doc(c._id || c.id).update({
-          grade: result.grade,
-          gradeScore: result.score,
-          gradeScoreDetail: result.detail
-        });
-        updated++;
-      } catch(e) { console.warn('등급 업데이트 실패:', c.company, e.message); }
-    }
+    var result = await gradeCalcCompany(c, {});
+    c.grade = result.grade;
+    c.gradeScore = result.score;
+    c.gradeScoreDetail = result.detail;
+    try {
+      await db.collection('companies').doc(c._id || c.id).update({
+        grade: result.grade, gradeScore: result.score, gradeScoreDetail: result.detail
+      });
+      updated++;
+    } catch(e) {}
   }
-  showToast('등급 재계산 완료: ' + updated + '건 업데이트');
+  showToast('등급 재계산 완료: ' + updated + '건 저장');
   await loadList();
 }
 </script>
