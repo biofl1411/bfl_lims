@@ -214,30 +214,29 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </table>
       </div>
 
-      <!-- 5. 담당부서 (5점) -->
-      <div class="card">
+      <!-- 5~8: 동적 행 추가/삭제 가능한 항목 -->
+      <div class="card" id="card-dept">
         <div class="card-title">5️⃣ 담당부서 <span style="color:#2563eb;font-size:13px;font-weight:400;margin-left:8px">배점: <input type="number" id="cat-max-5" value="5" min="1" max="100" class="rule-input" style="width:50px" onchange="updateGradeTotalScore()">점</span></div>
-        <table class="tbl">
-          <thead><tr><th style="width:80px">점수</th><th>부서</th></tr></thead>
-          <tbody>
-            <tr><td><input type="number" id="dept-s3" value="5" min="0" max="5" class="rule-input"></td><td><input type="text" id="dept-c3" value="고객지원팀, 마케팅사업부" class="rule-text-input" readonly style="background:#f3f4f6"></td></tr>
-            <tr><td><input type="number" id="dept-s2" value="3" min="0" max="5" class="rule-input"></td><td><input type="text" id="dept-c2" value="고객관리" class="rule-text-input" readonly style="background:#f3f4f6"></td></tr>
-            <tr><td><input type="number" id="dept-s1" value="1" min="0" max="5" class="rule-input"></td><td><input type="text" id="dept-c1" value="지사" class="rule-text-input" readonly style="background:#f3f4f6"></td></tr>
-          </tbody>
-        </table>
+        <table class="tbl"><thead><tr><th style="width:80px">점수</th><th>조건</th><th style="width:40px"></th></tr></thead><tbody id="dyn-dept"></tbody></table>
+        <button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:4px 12px" onclick="addDynRow('dept')">+ 행 추가</button>
       </div>
 
-      <!-- 6. 접수형태 (5점) — 신규 -->
-      <div class="card">
+      <div class="card" id="card-rcpt">
         <div class="card-title">6️⃣ 접수형태 <span style="color:#2563eb;font-size:13px;font-weight:400;margin-left:8px">배점: <input type="number" id="cat-max-6" value="5" min="1" max="100" class="rule-input" style="width:50px" onchange="updateGradeTotalScore()">점</span></div>
-        <table class="tbl">
-          <thead><tr><th style="width:80px">점수</th><th>접수 방법</th></tr></thead>
-          <tbody>
-            <tr><td><input type="number" id="rcpt-s3" value="5" min="0" max="5" class="rule-input"></td><td><input type="text" id="rcpt-c3" value="홈페이지접수" class="rule-text-input"></td></tr>
-            <tr><td><input type="number" id="rcpt-s2" value="3" min="0" max="5" class="rule-input"></td><td><input type="text" id="rcpt-c2" value="방문접수" class="rule-text-input"></td></tr>
-            <tr><td><input type="number" id="rcpt-s1" value="1" min="0" max="5" class="rule-input"></td><td><input type="text" id="rcpt-c1" value="택배접수" class="rule-text-input"></td></tr>
-          </tbody>
-        </table>
+        <table class="tbl"><thead><tr><th style="width:80px">점수</th><th>조건</th><th style="width:40px"></th></tr></thead><tbody id="dyn-rcpt"></tbody></table>
+        <button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:4px 12px" onclick="addDynRow('rcpt')">+ 행 추가</button>
+      </div>
+
+      <div class="card" id="card-move">
+        <div class="card-title">7️⃣ 시료 이동 <span style="color:#2563eb;font-size:13px;font-weight:400;margin-left:8px">배점: <input type="number" id="cat-max-7" value="5" min="1" max="100" class="rule-input" style="width:50px" onchange="updateGradeTotalScore()">점</span></div>
+        <table class="tbl"><thead><tr><th style="width:80px">점수</th><th>조건</th><th style="width:40px"></th></tr></thead><tbody id="dyn-move"></tbody></table>
+        <button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:4px 12px" onclick="addDynRow('move')">+ 행 추가</button>
+      </div>
+
+      <div class="card" id="card-sample">
+        <div class="card-title">8️⃣ 시료접수 <span style="color:#2563eb;font-size:13px;font-weight:400;margin-left:8px">배점: <input type="number" id="cat-max-8" value="5" min="1" max="100" class="rule-input" style="width:50px" onchange="updateGradeTotalScore()">점</span></div>
+        <table class="tbl"><thead><tr><th style="width:80px">점수</th><th>조건</th><th style="width:40px"></th></tr></thead><tbody id="dyn-sample"></tbody></table>
+        <button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:4px 12px" onclick="addDynRow('sample')">+ 행 추가</button>
       </div>
 
       <div class="btn-group" style="margin-bottom:24px">
@@ -409,8 +408,8 @@ async function resetSignalRules() {
 // 등급 규칙 (복합 점수 방식 — 6개 항목 총 105점)
 // ============================================================================
 const GRADE_DEFAULTS = {
-    // 항목별 최대 배점
-    categoryMaxScores: [40, 25, 15, 15, 5, 5],
+    // 항목별 최대 배점 (8개)
+    categoryMaxScores: [40, 25, 15, 15, 5, 5, 5, 5],
     // 등급 기준 점수
     gradeThresholds: { vip: 90, a: 70, b: 50 },
     // 1. 연간 매출액 (40점)
@@ -435,10 +434,20 @@ const GRADE_DEFAULTS = {
         scores: [1, 3, 5],
         conditions: ['지사', '고객관리', '고객지원팀, 마케팅사업부']
     },
-    // 6. 접수형태 (5점) — 신규
+    // 6. 접수형태 (5점)
     receiptType: {
         scores: [1, 3, 5],
         conditions: ['택배접수', '방문접수', '홈페이지접수']
+    },
+    // 7. 시료 이동 (5점)
+    sampleMove: {
+        scores: [3, 5],
+        conditions: ['일반물류', '바이오물류']
+    },
+    // 8. 시료접수 (5점)
+    sampleReceipt: {
+        scores: [1, 3, 4, 5],
+        conditions: ['택배', '방문접수', '내방접수', '홈페이지접수']
     }
 };
 
@@ -455,7 +464,11 @@ const GRADE_FIELD_IDS = {
     deptScores:      ['dept-s1', 'dept-s2', 'dept-s3'],
     deptConditions:  ['dept-c1', 'dept-c2', 'dept-c3'],
     rcptScores:      ['rcpt-s1', 'rcpt-s2', 'rcpt-s3'],
-    rcptConditions:  ['rcpt-c1', 'rcpt-c2', 'rcpt-c3']
+    rcptConditions:  ['rcpt-c1', 'rcpt-c2', 'rcpt-c3'],
+    moveScores:      ['move-s1', 'move-s2'],
+    moveConditions:  ['move-c1', 'move-c2'],
+    sampleScores:    ['sample-s1', 'sample-s2', 'sample-s3', 'sample-s4'],
+    sampleConditions:['sample-c1', 'sample-c2', 'sample-c3', 'sample-c4']
 };
 
 async function loadGradeRules() {
@@ -466,7 +479,7 @@ async function loadGradeRules() {
     } catch(e) { console.warn('Firestore 등급 규칙 로드 실패, 기본값 사용:', e.message); }
     // 항목별 최대 배점
     const catMax = saved.categoryMaxScores || GRADE_DEFAULTS.categoryMaxScores;
-    for (var ci = 0; ci < 6; ci++) {
+    for (var ci = 0; ci < 8; ci++) {
       var cmEl = document.getElementById('cat-max-' + (ci + 1));
       if (cmEl) cmEl.value = catMax[ci] || GRADE_DEFAULTS.categoryMaxScores[ci];
     }
@@ -491,16 +504,15 @@ async function loadGradeRules() {
     // 결제 신뢰도
     const pay = saved.payment || GRADE_DEFAULTS.payment;
     pay.scores.forEach((v, i) => document.getElementById(GRADE_FIELD_IDS.payScores[i]).value = v);
-    // 담당부서 (기존 contract → department 마이그레이션)
+    // 5~8번: 동적 행 렌더링
     const dept = saved.department || GRADE_DEFAULTS.department;
-    dept.scores.forEach((v, i) => document.getElementById(GRADE_FIELD_IDS.deptScores[i]).value = v);
-    const deptCond = dept.conditions || GRADE_DEFAULTS.department.conditions;
-    deptCond.forEach((v, i) => document.getElementById(GRADE_FIELD_IDS.deptConditions[i]).value = v);
-    // 접수형태 (신규)
+    renderDynRows('dept', dept.scores, dept.conditions);
     const rcpt = saved.receiptType || GRADE_DEFAULTS.receiptType;
-    rcpt.scores.forEach((v, i) => document.getElementById(GRADE_FIELD_IDS.rcptScores[i]).value = v);
-    const rcptCond = rcpt.conditions || GRADE_DEFAULTS.receiptType.conditions;
-    rcptCond.forEach((v, i) => document.getElementById(GRADE_FIELD_IDS.rcptConditions[i]).value = v);
+    renderDynRows('rcpt', rcpt.scores, rcpt.conditions);
+    const move = saved.sampleMove || GRADE_DEFAULTS.sampleMove;
+    renderDynRows('move', move.scores, move.conditions);
+    const sample = saved.sampleReceipt || GRADE_DEFAULTS.sampleReceipt;
+    renderDynRows('sample', sample.scores, sample.conditions);
     // 연동 표시 업데이트
     updateGradeDisplays();
 }
@@ -528,14 +540,10 @@ async function saveGradeRules() {
         payment: {
             scores: GRADE_FIELD_IDS.payScores.map(id => +document.getElementById(id).value)
         },
-        department: {
-            scores: GRADE_FIELD_IDS.deptScores.map(id => +document.getElementById(id).value),
-            conditions: GRADE_FIELD_IDS.deptConditions.map(id => document.getElementById(id).value)
-        },
-        receiptType: {
-            scores: GRADE_FIELD_IDS.rcptScores.map(id => +document.getElementById(id).value),
-            conditions: GRADE_FIELD_IDS.rcptConditions.map(id => document.getElementById(id).value)
-        }
+        department: collectDynRows('dept'),
+        receiptType: collectDynRows('rcpt'),
+        sampleMove: collectDynRows('move'),
+        sampleReceipt: collectDynRows('sample')
     };
     try {
         await fsSaveSettings('gradeRules', rules);
@@ -557,12 +565,41 @@ async function resetGradeRules() {
 // 매출액 카드의 연동 표시 (예: "~ 10,000 만원") 업데이트
 function updateGradeTotalScore() {
     var total = 0;
-    for (var i = 1; i <= 6; i++) {
+    for (var i = 1; i <= 8; i++) {
       var el = document.getElementById('cat-max-' + i);
       total += el ? (+el.value || 0) : 0;
     }
     var span = document.getElementById('grade-total-score');
     if (span) span.textContent = total;
+}
+
+/* ===== 동적 행 추가/삭제 (5~8번 항목) ===== */
+function addDynRow(key, score, condition) {
+    var tbody = document.getElementById('dyn-' + key);
+    if (!tbody) return;
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><input type="number" value="' + (score || 0) + '" min="0" max="100" class="rule-input dyn-score-' + key + '"></td>' +
+      '<td><input type="text" value="' + (condition || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력"></td>' +
+      '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove()" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
+    tbody.appendChild(tr);
+}
+
+function renderDynRows(key, scores, conditions) {
+    var tbody = document.getElementById('dyn-' + key);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    var len = Math.max((scores || []).length, (conditions || []).length);
+    for (var i = 0; i < len; i++) {
+      addDynRow(key, (scores || [])[i] || 0, (conditions || [])[i] || '');
+    }
+}
+
+function collectDynRows(key) {
+    var scores = [], conditions = [];
+    document.querySelectorAll('.dyn-score-' + key).forEach(function(el) { scores.push(+el.value || 0); });
+    document.querySelectorAll('.dyn-cond-' + key).forEach(function(el) { conditions.push(el.value || ''); });
+    return { scores: scores, conditions: conditions };
 }
 
 function updateGradeDisplays() {
