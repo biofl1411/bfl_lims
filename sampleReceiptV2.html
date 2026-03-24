@@ -6106,11 +6106,34 @@ function loadSampleFromArray(idx) {
         textEl.style.display = 'none';
     }
 
-    // 시험항목 복원: 저장된 항목이 있으면 무조건 복원
-    if (obj._savedTestItems && obj._savedTestItems.length > 0) {
-        restoreRefTestItems(obj._savedTestItems);
-    } else if (obj._refTestItems && obj._refTestItems.length > 0) {
-        restoreRefTestItems(obj._refTestItems);
+    // 시험항목 복원
+    var savedItems = obj._savedTestItems || obj._refTestItems || [];
+    if (savedItems.length > 0) {
+        // 현재 검사목적 모드와 항목 코드 일치 여부 확인
+        var validItems = savedItems;
+        if (_currentItemSource === 'mfdsTestItems' || _isRefTestMode) {
+            // mfdsTestItems 모드: P코드 항목만 유효 (B/C코드 = 자가품질위탁검사용 항목은 제외)
+            var filtered = savedItems.filter(function(it) {
+                var code = (it.testCode || '').toUpperCase();
+                return code.charAt(0) === 'P' || code.indexOf('BUNDLE_') === 0;
+            });
+            // P코드가 하나도 없으면 이전 검사목적 항목 → 표시 안 함
+            if (filtered.length === 0 && savedItems.some(function(it) { return (it.testCode||'').charAt(0) !== 'P'; })) {
+                validItems = [];
+            } else if (filtered.length > 0) {
+                validItems = filtered;
+            }
+        } else if (_currentItemSource === 'mfdsTemplates') {
+            // mfdsTemplates 모드: B/C코드 항목만 유효 (P코드 = 다른 목적 항목은 제외)
+            var filtered2 = savedItems.filter(function(it) {
+                var code = (it.testCode || '').toUpperCase();
+                return code.charAt(0) !== 'P' || code.indexOf('BUNDLE_') === 0;
+            });
+            if (filtered2.length > 0) validItems = filtered2;
+        }
+        if (validItems.length > 0) {
+            restoreRefTestItems(validItems);
+        }
     } else if (_currentItemSource === 'mfdsTemplates') {
         // 자가품질위탁검사용만 식품유형 기반 로드
         var foodType = obj['food-type-value'] || '';
