@@ -445,6 +445,7 @@ const GRADE_FIELD_IDS = {
 };
 
 async function loadGradeRules() {
+    await loadDeptOptions(); // 부서 목록 먼저 로드
     var saved = GRADE_DEFAULTS;
     try {
         var fsData = await fsGetSettings('gradeRules');
@@ -630,18 +631,75 @@ function updateGradeTotalScore() {
 }
 
 /* ===== 동적 행 추가/삭제 (5~8번 항목) ===== */
+// 5~8번 항목별 선택 옵션 (접수등록 연동)
+var _gradeCondOptions = {
+    dept: [],  // Firestore users에서 동적 로드
+    rcpt: ['홈페이지접수', '내방접수', '방문접수', '택배접수'],
+    move: ['바이오물류', '일반물류', '자가운송', '퀵서비스'],
+    sample: ['홈페이지접수', '내방접수', '방문접수', '택배']
+};
+
+async function loadDeptOptions() {
+    try {
+        var users = await fsGetUsers();
+        var deptSet = {};
+        (users || []).forEach(function(u) {
+            var d = u.department || u['부서명'] || '';
+            if (d) deptSet[d] = true;
+        });
+        _gradeCondOptions.dept = Object.keys(deptSet).sort();
+    } catch(e) { console.warn('부서 목록 로드 실패:', e.message); }
+}
+
 function addDynRow(key, score, condition) {
     var tbody = document.getElementById('dyn-' + key);
     if (!tbody) return;
     var catMap = { dept: 5, rcpt: 6, move: 7, sample: 8 };
     var catEl = document.getElementById('cat-max-' + (catMap[key] || 5));
     var maxScore = catEl ? +catEl.value : 100;
+    var options = _gradeCondOptions[key] || [];
+    var hasOptions = options.length > 0;
+
+    var condHtml;
+    if (hasOptions) {
+      var selHtml = '<select class="rule-text-input dyn-cond-' + key + '" style="flex:1">';
+      selHtml += '<option value="">선택</option>';
+      options.forEach(function(opt) {
+        selHtml += '<option value="' + opt + '"' + (opt === condition ? ' selected' : '') + '>' + opt + '</option>';
+      });
+      selHtml += '<option value="__custom__">직접 입력</option>';
+      selHtml += '</select>';
+      var customVal = (condition && options.indexOf(condition) < 0) ? condition : '';
+      selHtml += '<input type="text" class="rule-text-input dyn-cond-custom-' + key + '" value="' + customVal + '" placeholder="직접 입력" style="flex:1;display:' + (customVal ? 'block' : 'none') + '">';
+      condHtml = '<div style="display:flex;gap:4px">' + selHtml + '</div>';
+    } else {
+      condHtml = '<input type="text" value="' + (condition || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력">';
+    }
+
     var tr = document.createElement('tr');
     tr.innerHTML =
       '<td><input type="number" value="' + (score || 0) + '" min="0" max="' + maxScore + '" class="rule-input dyn-score-' + key + '" oninput="syncCatMaxFromScores(\'' + key + '\')"></td>' +
-      '<td><input type="text" value="' + (condition || '') + '" class="rule-text-input dyn-cond-' + key + '" placeholder="조건 입력"></td>' +
+      '<td>' + condHtml + '</td>' +
       '<td><button class="btn-remove" onclick="this.closest(\'tr\').remove();syncCatMaxFromScores(\'' + key + '\')" title="삭제" style="color:#ef4444;border:none;background:none;cursor:pointer;font-size:16px;font-weight:700">×</button></td>';
     tbody.appendChild(tr);
+
+    // select 변경 시 직접 입력 토글
+    if (hasOptions) {
+      var sel = tr.querySelector('select.dyn-cond-' + key);
+      var customInput = tr.querySelector('.dyn-cond-custom-' + key);
+      if (sel && customInput) {
+        // 기존값이 옵션에 없으면 직접입력 모드
+        if (condition && options.indexOf(condition) < 0 && condition !== '') {
+          sel.value = '__custom__';
+          customInput.style.display = 'block';
+          customInput.value = condition;
+        }
+        sel.onchange = function() {
+          customInput.style.display = this.value === '__custom__' ? 'block' : 'none';
+          if (this.value !== '__custom__') customInput.value = '';
+        };
+      }
+    }
 }
 
 function renderDynRows(key, scores, conditions) {
@@ -657,7 +715,19 @@ function renderDynRows(key, scores, conditions) {
 function collectDynRows(key) {
     var scores = [], conditions = [];
     document.querySelectorAll('.dyn-score-' + key).forEach(function(el) { scores.push(+el.value || 0); });
-    document.querySelectorAll('.dyn-cond-' + key).forEach(function(el) { conditions.push(el.value || ''); });
+    var rows = document.querySelectorAll('#dyn-' + key + ' tr');
+    rows.forEach(function(tr) {
+      var sel = tr.querySelector('select.dyn-cond-' + key);
+      var customInput = tr.querySelector('.dyn-cond-custom-' + key);
+      var textInput = tr.querySelector('input.dyn-cond-' + key);
+      if (sel) {
+        // select 모드
+        var val = sel.value === '__custom__' ? (customInput ? customInput.value : '') : sel.value;
+        conditions.push(val || '');
+      } else if (textInput) {
+        conditions.push(textInput.value || '');
+      }
+    });
     return { scores: scores, conditions: conditions };
 }
 
