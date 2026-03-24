@@ -92,6 +92,8 @@ function gradeCalcThreshold(ruleObj, val) {
   var scores = ruleObj.scores || [0];
   var thresholds = ruleObj.thresholds || [];
   var maxS = scores.length ? Math.max.apply(null, scores) : 0;
+  // 값이 0이면 무조건 0점 (접수 데이터 없음)
+  if (!val || val <= 0) return { score: 0, max: maxS };
   if (thresholds.length > 0) {
     var sc = scores[0] || 0;
     for (var i = thresholds.length - 1; i >= 0; i--) {
