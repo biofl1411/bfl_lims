@@ -496,12 +496,13 @@ window.isTestItemActiveGlobal = MFDS_CODES.isActive;
  * @param {Array} allItems - 전체 시험항목 배열
  * @returns {Array} 매칭된 항목 (최대 50건)
  */
-MFDS_CODES.searchTestItems = function(query, allItems) {
-  if (!query || query.length < 1) return allItems.slice(0, 50);
+MFDS_CODES.searchTestItems = function(query, allItems, maxResults) {
+  var limit = maxResults || 200;
+  if (!query || query.length < 1) return allItems.slice(0, limit);
   var q = query.toLowerCase();
   var results = [];
 
-  for (var i = 0; i < allItems.length && results.length < 50; i++) {
+  for (var i = 0; i < allItems.length && results.length < limit; i++) {
     var item = allItems[i];
     var code = (item['시험항목코드'] || '').toLowerCase();
     var name = (item['한글명'] || '').toLowerCase();
