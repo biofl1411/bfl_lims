@@ -2668,7 +2668,17 @@ function simCalc(ci) {
       var factor = Math.pow(10, dp);
       if (rule.mode === 'floor') ruleResult = Math.floor(ruleResult * factor) / factor;
       else if (rule.mode === 'ceil') ruleResult = Math.ceil(ruleResult * factor) / factor;
-      else ruleResult = Math.round(ruleResult * factor) / factor;
+      else {
+        // 오사오입 (banker's rounding): 끝자리 5일 때 앞자리 짝수면 내림, 홀수면 올림
+        var shifted = ruleResult * factor;
+        var floored = Math.floor(shifted);
+        var diff = shifted - floored;
+        if (Math.abs(diff - 0.5) < 1e-9) {
+          ruleResult = (floored % 2 === 0 ? floored : floored + 1) / factor;
+        } else {
+          ruleResult = Math.round(shifted) / factor;
+        }
+      }
     });
     var lastRule = rules[rules.length - 1] || { decimal: 2 };
     var ruleStr = ruleResult.toFixed(lastRule.decimal != null ? lastRule.decimal : 2);
