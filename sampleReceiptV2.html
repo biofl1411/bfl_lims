@@ -4427,11 +4427,19 @@ function searchRightItems(query) {
     var tbody = document.getElementById('inspection-items-tbody');
     if (tbody) tbody.querySelectorAll('tr[data-test-code]').forEach(function(tr) { addedCodes.add(tr.getAttribute('data-test-code')); });
 
-    var html = '';
+    // 멀티 선택 모드
+    if (!window._rightItemPending) window._rightItemPending = new Set();
+
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;border-bottom:1px solid #eee;background:#fafafa;position:sticky;top:0;z-index:1">'
+      + '<span style="font-size:10px;color:#667085" id="right-item-sel-count">' + window._rightItemPending.size + '건 선택</span>'
+      + '<button type="button" onclick="addPendingRightItems()" style="padding:2px 10px;border:none;border-radius:4px;background:#6941C6;color:#fff;font-size:11px;cursor:pointer;font-weight:600"' + (window._rightItemPending.size === 0 ? ' disabled style="padding:2px 10px;border:none;border-radius:4px;background:#ccc;color:#fff;font-size:11px;cursor:default;font-weight:600"' : '') + '>선택 항목 추가</button>'
+      + '</div>';
+
     results.forEach(function(item) {
         var code = item['시험항목코드'] || '';
         var name = item['한글명'] || '';
         var isAdded = addedCodes.has(code);
+        var isPending = window._rightItemPending.has(code);
         var displayName = name, displayCode = code;
         if (query) {
             var safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -4442,9 +4450,10 @@ function searchRightItems(query) {
         var feeInfo = _refFeeMap ? _refFeeMap[code] : null;
         var fee = (feeInfo && feeInfo.fee > 0) ? feeInfo.fee : getFeeByCode(code, name);
         var feeHtml = fee > 0 ? '<span style="font-size:10px;color:#6941C6;font-weight:600;margin-left:auto">' + fee.toLocaleString() + '원</span>' : '';
-        var clickAction = isAdded ? 'removeRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')' : 'selectRefTestItem(\'' + code.replace(/'/g, "\\'") + '\')';
-        html += '<div class="autocomplete-item" style="padding:5px 10px;font-size:12px;cursor:pointer;' + (isAdded ? 'opacity:0.4;' : '') + '" onclick="' + clickAction + ';searchRightItems(document.getElementById(\'right-item-search\').value)">'
+        var bgColor = isPending ? '#f0ebff' : (isAdded ? '#f9f9f9' : '#fff');
+        html += '<div class="autocomplete-item" style="padding:5px 10px;font-size:12px;cursor:pointer;background:' + bgColor + ';' + (isAdded ? 'opacity:0.4;' : '') + '" onclick="toggleRightItemPending(\'' + code.replace(/'/g, "\\'") + '\',' + (isAdded?'true':'false') + ')">'
           + '<div style="display:flex;align-items:center;gap:6px">'
+          + '<input type="checkbox"' + (isPending ? ' checked' : '') + (isAdded ? ' disabled' : '') + ' style="accent-color:#6941C6;pointer-events:none;flex-shrink:0" />'
           + '<span style="font-family:monospace;font-size:10px;color:#1565c0;background:#e3f2fd;padding:1px 4px;border-radius:3px">' + displayCode + '</span>'
           + '<span style="font-weight:500">' + displayName + '</span>'
           + (item['단위'] ? '<span style="font-size:9px;color:#667085;background:#f2f4f7;padding:1px 4px;border-radius:3px">' + item['단위'] + '</span>' : '')
@@ -4458,6 +4467,29 @@ function searchRightItems(query) {
 
     list.innerHTML = html;
     list.style.display = 'block';
+}
+
+/** 멀티 선택 토글 */
+function toggleRightItemPending(code, isAdded) {
+    if (isAdded) return; // 이미 추가된 항목은 무시
+    if (!window._rightItemPending) window._rightItemPending = new Set();
+    if (window._rightItemPending.has(code)) window._rightItemPending.delete(code);
+    else window._rightItemPending.add(code);
+    // 드롭다운 갱신 (검색어 유지)
+    var q = document.getElementById('right-item-search');
+    searchRightItems(q ? q.value : '');
+}
+
+/** 선택된 항목 일괄 추가 */
+function addPendingRightItems() {
+    if (!window._rightItemPending || window._rightItemPending.size === 0) return;
+    var codes = Array.from(window._rightItemPending);
+    codes.forEach(function(code) { selectRefTestItem(code); });
+    window._rightItemPending.clear();
+    // 드롭다운 갱신
+    var q = document.getElementById('right-item-search');
+    searchRightItems(q ? q.value : '');
+    showToast(codes.length + '건 항목 추가');
 }
 
 // 이전 호환 — 기존 코드에서 호출되는 함수
