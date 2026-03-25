@@ -33427,7 +33427,11 @@ async function previewExcelUpload(input) {
     document.getElementById('excel-upload-btn').disabled = false;
 
     // 미리보기 테이블
+    // prefix = 카테고리 + 소분류 (예: E6, PA, X1)
     var prefix = _excelUploadCat;
+    if (_excelUploadSub && _excelUploadCat.length === 1) {
+      prefix = _excelUploadCat + _excelUploadSub;
+    }
     var existingCodes = {};
     (_mfdsTestItems || []).forEach(function(t) {
       var c = (t['시험항목코드'] || '').toUpperCase();
@@ -33478,8 +33482,11 @@ async function executeExcelUpload() {
   btn.textContent = '업로드 중...';
 
   var prefix = _excelUploadCat;
-  var catDef = REF_CODE_CATEGORIES[prefix];
-  var catName = catDef ? catDef.name : prefix;
+  if (_excelUploadSub && _excelUploadCat.length === 1) {
+    prefix = _excelUploadCat + _excelUploadSub;
+  }
+  var catDef = REF_CODE_CATEGORIES[_excelUploadCat];
+  var catName = catDef ? catDef.name : _excelUploadCat;
   var overwrite = document.getElementById('excel-upload-overwrite').checked;
 
   // 기존 코드 번호 파악
@@ -33495,8 +33502,12 @@ async function executeExcelUpload() {
   });
 
   // 분류 정보
-  var classification = prefix;
-  var groupName = catName;
+  var classification = _excelUploadCat;
+  var subName = '';
+  if (_excelUploadSub && REF_SUB_CATEGORIES[_excelUploadCat]) {
+    subName = REF_SUB_CATEGORIES[_excelUploadCat][_excelUploadSub] || '';
+  }
+  var groupName = catName + (subName ? ' > ' + subName : '');
 
   try {
     var batch = db.batch();
