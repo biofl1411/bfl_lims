@@ -33714,7 +33714,7 @@ function renderRefFeeTable() {
     var testItemRef = _mfdsTestItems ? _mfdsTestItems.find(function(t) { return t['시험항목코드'] === code; }) : null;
     var korName = testItemRef ? (testItemRef['한글명'] || '') : (m.itemName || '');
     var engName = testItemRef ? (testItemRef['영문명'] || '') : (m.engName || '');
-    var unitVal = m.unit || '';
+    var unitVal = m.unit || (testItemRef ? (testItemRef['단위'] || '') : '');
     html += '<td style="padding:7px 4px;color:var(--txt)">';
     html += '<input type="text" value="' + korName.replace(/"/g, '&quot;') + '" data-code="' + code + '" ';
     html += 'onchange="updateRefItemName(this)" ';
@@ -33738,8 +33738,9 @@ function renderRefFeeTable() {
     html += '</td>';
     html += '<td style="padding:7px 6px;text-align:center"><input type="checkbox"' + (isActive ? ' checked' : '') + ' data-code="' + code + '" onchange="refFeeToggleActive(this)" title="' + (isActive ? '활성' : '비활성') + '" style="accent-color:#43a047;"></td>';
     html += '<td style="padding:7px 10px;text-align:right">';
-    html += '<input type="number" value="' + fee + '" data-code="' + code + '" ';
-    html += 'onchange="updateRefFee(this)" ';
+    html += '<input type="text" value="' + (fee > 0 ? fee.toLocaleString() : '0') + '" data-code="' + code + '" ';
+    html += 'onfocus="this.value=this.value.replace(/,/g,\'\')" ';
+    html += "onblur=\"var v=parseInt(this.value.replace(/,/g,''))||0;this.value=v.toLocaleString();updateRefFee(this,v)\" ";
     html += 'style="width:100px;text-align:right;padding:4px 8px;border:1px solid var(--bdr);border-radius:4px;font-size:13px;">';
     html += '</td>';
     html += '<td style="padding:7px 10px;color:var(--sub);font-size:12px;">';
@@ -33766,9 +33767,9 @@ function renderRefFeeTable() {
   updateRefFeeBulkBar();
 }
 
-function updateRefFee(input) {
+function updateRefFee(input, directVal) {
   var code = input.getAttribute('data-code');
-  var newFee = parseInt(input.value) || 0;
+  var newFee = typeof directVal === 'number' ? directVal : (parseInt(String(input.value).replace(/,/g, '')) || 0);
   if (_refFeeData) {
     var item = _refFeeData.find(function(m) { return m.testItemCode === code; });
     if (item) item.fee = newFee;
