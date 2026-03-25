@@ -2688,6 +2688,29 @@ function simCalc(ci) {
     h += '<span style="font-size:12px;font-weight:600;color:#0c4a6e">' + (calc.label || '결과') + ' (' + unit + '):</span>';
     h += '<span style="font-family:monospace;font-size:13px;font-weight:700;color:#0369a1">' + rawStr + '</span></div>';
 
+    // 규칙적용값 저장 (다음 계산에서 참조)
+    if (!window._simCalcResults) window._simCalcResults = {};
+    window._simCalcResults[ci] = { raw: result, rule: ruleResult, ruleStr: ruleStr, label: calc.label || '', unit: unit };
+
+    // 다음 계산의 변수에 자동 대입 (이전 계산 결과 참조)
+    for (var nci = ci + 1; nci < d.calcs.length; nci++) {
+      var nextCalc = d.calcs[nci];
+      var nextVars = nextCalc.formula ? _simParseVars(nextCalc.formula) : [];
+      nextVars.forEach(function(v) {
+        var vLow = v.toLowerCase();
+        var labelLow = (calc.label || '').toLowerCase();
+        // 변수명이 이전 계산의 label을 포함하거나, 'Result'로 끝나는 경우
+        if (vLow.indexOf(labelLow) >= 0 || vLow === labelLow + 'result' || vLow === labelLow.replace(/[^a-z]/g,'') + 'result') {
+          var el = document.getElementById('sim-' + nci + '-' + v);
+          if (el && (!el.value || parseFloat(el.value) === 0)) {
+            el.value = ruleStr;
+            el.style.background = '#f0fdf4';
+            el.title = '규칙적용 ' + (calc.label || '') + ' 값 자동 반영';
+          }
+        }
+      });
+    }
+
     // 규칙적용값
     h += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">';
     h += '<span style="font-size:12px;font-weight:600;color:#166534">규칙적용 ' + (calc.label || '결과') + ' (' + unit + '):</span>';
