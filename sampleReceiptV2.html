@@ -4471,11 +4471,11 @@ function searchRightItems(query) {
 
 /** 멀티 선택 토글 */
 function toggleRightItemPending(code, isAdded) {
-    if (isAdded) return; // 이미 추가된 항목은 무시
+    if (isAdded) return;
     if (!window._rightItemPending) window._rightItemPending = new Set();
     if (window._rightItemPending.has(code)) window._rightItemPending.delete(code);
     else window._rightItemPending.add(code);
-    // 드롭다운 갱신 (검색어 유지)
+    window._rightDropdownKeepOpen = true;
     var q = document.getElementById('right-item-search');
     searchRightItems(q ? q.value : '');
 }
@@ -4486,7 +4486,7 @@ function addPendingRightItems() {
     var codes = Array.from(window._rightItemPending);
     codes.forEach(function(code) { selectRefTestItem(code); });
     window._rightItemPending.clear();
-    // 드롭다운 갱신
+    window._rightDropdownKeepOpen = true;
     var q = document.getElementById('right-item-search');
     searchRightItems(q ? q.value : '');
     showToast(codes.length + '건 항목 추가');
@@ -4671,12 +4671,13 @@ function toggleRightCatFilter(cat) {
 
 // 오른쪽 드롭다운 외부 클릭 시 닫기
 document.addEventListener('click', function(e) {
+    if (window._rightDropdownKeepOpen) { window._rightDropdownKeepOpen = false; return; }
     var wrap = document.getElementById('right-item-search-wrap');
     if (wrap && !wrap.contains(e.target)) {
         var dd1 = document.getElementById('right-bundle-dropdown');
         var dd2 = document.getElementById('right-item-dropdown');
         if (dd1) dd1.style.display = 'none';
-        if (dd2) dd2.style.display = 'none';
+        if (dd2) { dd2.style.display = 'none'; window._rightItemPending = new Set(); }
     }
 });
 
