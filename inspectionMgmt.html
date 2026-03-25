@@ -33287,43 +33287,55 @@ function getRefCodeCategoryBadge(code) {
   return '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;background:' + cat.color + ';white-space:nowrap;">' + label + '</span>';
 }
 
-// PA/PB 항목 → 참고용매핑에 자동 등록 (mfds_test_items에서 가져옴)
+// PA/PB 항목 → 참고용매핑에 동기화 (mfds_test_items + refFeeMapping 수수료)
 async function registerPAPBRefFeeItems() {
   if (!_refFeeData) return;
-  // 이미 PA 항목이 있는지 확인
-  var hasPAItems = _refFeeData.some(function(m) {
-    return (m.testItemCode || '').toUpperCase().indexOf('PA') === 0;
-  });
-  var hasPBItems = _refFeeData.some(function(m) {
-    return (m.testItemCode || '').toUpperCase().indexOf('PB') === 0;
-  });
-  if (hasPAItems && hasPBItems) return; // 이미 등록됨
 
   var testItems = await MFDS_CODES.loadTestItems();
+
+  // refFeeMapping에서 수수료 로드
+  var feeMapping = {};
+  try {
+    var feeDoc = await db.collection('settings').doc('refFeeMapping').get();
+    if (feeDoc.exists) feeMapping = (feeDoc.data() || {}).mapping || {};
+  } catch(e) {}
+
   var existingCodes = {};
   _refFeeData.forEach(function(m) { existingCodes[(m.testItemCode || '').toUpperCase()] = true; });
 
-  var added = 0;
+  var added = 0, updated = 0;
   testItems.forEach(function(ti) {
     var code = (ti['시험항목코드'] || '').toUpperCase();
     var prefix2 = code.substring(0, 2);
     if (prefix2 !== 'PA' && prefix2 !== 'PB') return;
-    if (existingCodes[code]) return;
+    var fm = feeMapping[code] || {};
+    var fee = fm.fee || 0;
+    var unit = ti['단위'] || fm.unit || '';
+
+    if (existingCodes[code]) {
+      // 기존 항목 수수료/단위 업데이트
+      var existing = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code; });
+      if (existing) {
+        if (fee > 0 && existing.fee !== fee) { existing.fee = fee; updated++; }
+        if (unit && !existing.unit) { existing.unit = unit; }
+      }
+      return;
+    }
     _refFeeData.push({
       testItemCode: code,
       itemName: ti['한글명'] || '',
       engName: ti['영문명'] || '',
-      unit: ti['단위'] || '',
-      fee: 0,
+      unit: unit,
+      fee: fee,
       note: ''
     });
     existingCodes[code] = true;
     added++;
   });
 
-  if (added > 0) {
+  if (added > 0 || updated > 0) {
     _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
-    console.log('[참고용수수료] PA/PB 항목 ' + added + '건 자동 등록');
+    console.log('[참고용수수료] PA/PB: 추가 ' + added + '건, 수수료갱신 ' + updated + '건');
   }
 }
 
