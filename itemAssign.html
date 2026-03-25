@@ -440,11 +440,15 @@ td {
         <div class="toolbar-row">
           <div class="filter-group">
             <div class="filter-label">분야</div>
-            <div class="filter-chips">
+            <div class="filter-chips" id="division-chips">
               <button class="filter-chip active" onclick="filterByDivision('전체')">전체</button>
               <button class="filter-chip" onclick="filterByDivision('식품')">🍱 식품</button>
               <button class="filter-chip" onclick="filterByDivision('축산')">🥩 축산</button>
             </div>
+          </div>
+          <div class="filter-group">
+            <div class="filter-label">카테고리</div>
+            <div class="filter-chips" id="cat-chips" style="flex-wrap:wrap;gap:4px;"></div>
           </div>
 
           <div class="filter-group" style="margin-left: auto;">
@@ -474,12 +478,14 @@ td {
           <table>
             <thead>
               <tr>
-                <th style="width: 50px;"><input type="checkbox" id="select-all" onchange="toggleSelectAll()"></th>
-                <th style="width: 60px;">No.</th>
-                <th style="width: 80px;">분야</th>
+                <th style="width: 40px;"><input type="checkbox" id="select-all" onchange="toggleSelectAll()"></th>
+                <th style="width: 50px;">No.</th>
+                <th style="width: 80px;">코드</th>
+                <th style="width: 70px;">분야</th>
                 <th>항목명</th>
+                <th style="width: 80px;">단위</th>
                 <th style="width: 250px;">담당자</th>
-                <th style="width: 100px;">작업</th>
+                <th style="width: 80px;">작업</th>
               </tr>
             </thead>
             <tbody id="table-body">
@@ -572,8 +578,27 @@ td {
   </div>
 </div>
 
+<script src="js/mfds-api.js"></script>
 <script>
-const MANAGERS = [
+// 담당자 목록 — Firestore users에서 동적 로드
+var MANAGERS = [];
+async function loadManagersFromFirestore() {
+  try {
+    var snap = await db.collection('users').get();
+    MANAGERS = [];
+    snap.docs.forEach(function(d) {
+      var u = d.data();
+      if (u.name && u.department) {
+        MANAGERS.push({ id: u.name, name: u.name, team: u.department, position: u.position || '' });
+      }
+    });
+    MANAGERS.sort(function(a,b) { return a.name.localeCompare(b.name, 'ko'); });
+    console.log('[항목배정] 담당자 ' + MANAGERS.length + '명 로드');
+  } catch(e) { console.warn('담당자 로드 실패:', e); }
+}
+
+// 기존 하드코딩 — 폴백용
+const MANAGERS_FALLBACK = [
   {
     "id": "권혜원",
     "name": "권혜원",
@@ -774,6 +799,23 @@ const MANAGERS = [
   }
 ];
 
+// 카테고리 정의 (검사관리 시험항목 탭과 동일)
+var REF_CATS = {
+  'A': { name: '이화학', color: '#e65100' },
+  'B': { name: '중금속/유해물질', color: '#d32f2f' },
+  'C': { name: '미생물', color: '#388e3c' },
+  'D': { name: '기생충', color: '#5d4037' },
+  'E': { name: '잔류농약', color: '#f57c00' },
+  'F': { name: '동물용의약품', color: '#0288d1' },
+  'G': { name: 'GMO', color: '#7b1fa2' },
+  'H': { name: '이물/곰팡이', color: '#455a64' },
+  'I': { name: '질병검사', color: '#c62828' },
+  'X': { name: '기타', color: '#616161' },
+  'P': { name: '참고용', color: '#6a1b9a' },
+  'PA': { name: '참고용(식품)', color: '#1565c0' },
+  'PB': { name: '참고용(축산)', color: '#e65100' }
+};
+
 // --- 축산 검체유형 목록 (54개) ---
 const 축산_검체유형 = ["소시지","중류소시지","발효소시지","소시지(결고제품)","햄","프레스햄","건조햄","햄(결고제품)","베이컨","식육조제품","식육조제냉장제품","식육조제냉동제품","양념육","분쇄가공육제품","식육추출가공품","건조저장육류","갈비","포장육","유가공품","가공유류","강화우유","강화유유유","강화우우유","농축유류","발효유류","유산균음료","유산균음료(기능성표시식품)","가공치즈","가공치즈(축산물즉석판매제품)","자연치즈","치즈","치즈(결고제품)","분유류","조제유류","영아용조제식","성장기용조제식","영아용조제유","유음료류","발효유류(레토르트)","버터류","가공버터","버터","아이스크림류","아이스크림","아이스밀크","아이스크림믹스","샤베트","아이스크림믹스(분말)","아이스크림믹스(액상)","동물성유지류","알가공품","난황액","난백액","전란액"];
 
@@ -782,81 +824,49 @@ function getDivision(foodType) {
   return 축산_검체유형.includes(foodType) ? '축산' : '식품';
 }
 
-// --- Firestore API 데이터 로드 ---
-let apiDataCache = {};
-async function loadApiDataFromFirestore(serviceId) {
-  if (apiDataCache[serviceId] && apiDataCache[serviceId].length > 0) return apiDataCache[serviceId];
-  try {
-    var metaDoc = await db.collection('api_data').doc(serviceId).collection('meta').doc('info').get();
-    if (!metaDoc.exists) return [];
-    var batchCount = metaDoc.data().batchCount || 0;
-    var allItems = [];
-    for (var i = 0; i < batchCount; i++) {
-      var bDoc = await db.collection('api_data').doc(serviceId).collection('batches').doc('batch_' + i).get();
-      if (bDoc.exists && bDoc.data().items) allItems = allItems.concat(bDoc.data().items);
-    }
-    apiDataCache[serviceId] = allItems;
-    return allItems;
-  } catch(e) { console.warn('API 데이터 로드 실패:', serviceId, e); return []; }
+// --- mfds_test_items에서 시험항목 로드 ---
+function getItemCategory(code) {
+  if (!code) return '';
+  var c2 = code.substring(0, 2).toUpperCase();
+  if (c2 === 'PA' || c2 === 'PB') return c2;
+  return code.charAt(0).toUpperCase();
 }
 
-// --- API 데이터 → 중복 제거된 항목 변환 ---
-function buildUniqueItems(apiData) {
-  var seen = new Map();
-  var idx = 0;
-  apiData.forEach(function(r) {
-    var itemName = (r.TESTITM_NM || '').trim();
-    if (!itemName || seen.has(itemName)) return;
-    var prdName = r.PRDLST_CD_NM || '';
-    seen.set(itemName, {
-      id: 'A' + (++idx),
-      division: getDivision(prdName),
-      item: itemName,
-      manager: null,
-      team: null
-    });
-  });
-  return Array.from(seen.values());
+function getItemDivision(code) {
+  var cat = getItemCategory(code);
+  if (cat === 'PB') return '축산';
+  return '식품';
 }
 
-// --- ILAB 데이터에서 항목→담당자 매핑 로드 ---
-async function loadIlabManagerMap() {
-  try {
-    // foodTypesIlab은 개별 문서 구조 (ilab_0, ilab_1, ...)
-    var snap = await db.collection('foodTypesIlab').get();
-    var map = {};
-    snap.docs.forEach(function(d) {
-      var r = d.data();
-      var name = (r['항목명'] || '').trim();
-      var mgr = (r['항목담당자'] || '').trim();
-      if (name && mgr && !map[name]) {
-        map[name] = mgr;
-      }
-    });
-    console.log('[항목배정] ILAB 담당자 매핑: ' + Object.keys(map).length + '건');
-    return map;
-  } catch(e) { console.warn('ILAB 담당자 매핑 로드 실패:', e); return {}; }
-}
-
-// --- Firestore 배정 데이터 저장/로드 ---
+// --- Firestore 배정 데이터 저장/로드 (코드 기반) ---
 async function loadSavedAssignments() {
   try {
     var doc = await db.collection('itemAssignments').doc('data').get();
-    return doc.exists ? (doc.data().assignments || {}) : {};
-  } catch(e) { console.warn('배정 데이터 로드 실패:', e); return {}; }
+    if (!doc.exists) return {};
+    var data = doc.data();
+    // 코드 기반 신규 + 이름 기반 구버전 둘 다 지원
+    var byCode = data.assignmentsByCode || {};
+    var byName = data.assignments || {};
+    return { byCode: byCode, byName: byName };
+  } catch(e) { console.warn('배정 데이터 로드 실패:', e); return { byCode: {}, byName: {} }; }
 }
 
 async function saveAssignmentsToFirestore() {
-  var assignments = {};
+  var assignmentsByCode = {};
+  var assignments = {}; // 이름 기반 호환용
   allItems.forEach(function(item) {
     if (item.manager) {
-      assignments[item.item] = { manager: item.manager, team: item.team };
+      assignmentsByCode[item.code] = { manager: item.manager, team: item.team };
+      if (!assignments[item.item]) {
+        assignments[item.item] = { manager: item.manager, team: item.team };
+      }
     }
   });
   await db.collection('itemAssignments').doc('data').set({
+    assignmentsByCode: assignmentsByCode,
     assignments: assignments,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    count: Object.keys(assignments).length
+    count: Object.keys(assignmentsByCode).length
   });
 }
 
@@ -870,60 +880,104 @@ let currentFilters = {
   search: ''
 };
 
-// 초기화 (Firestore에서 API 데이터 로드)
+// 카테고리 필터
+var currentCatFilter = '전체';
+
+function buildCatChips() {
+  var counts = {};
+  allItems.forEach(function(item) {
+    var cat = item.category;
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+  var container = document.getElementById('cat-chips');
+  if (!container) return;
+  var html = '<button class="filter-chip' + (currentCatFilter === '전체' ? ' active' : '') + '" onclick="filterByCat(\'전체\')" style="font-size:11px;padding:4px 8px;">전체 ' + allItems.length + '</button>';
+  var order = ['A','B','C','D','E','F','G','H','I','X','P','PA','PB'];
+  order.forEach(function(cat) {
+    if (!counts[cat]) return;
+    var info = REF_CATS[cat] || { name: cat, color: '#999' };
+    html += '<button class="filter-chip' + (currentCatFilter === cat ? ' active' : '') + '" onclick="filterByCat(\'' + cat + '\')" style="font-size:11px;padding:4px 8px;border-color:' + info.color + ';' + (currentCatFilter === cat ? 'background:' + info.color + ';color:#fff;' : 'color:' + info.color + ';') + '">' + info.name + ' ' + counts[cat] + '</button>';
+  });
+  container.innerHTML = html;
+}
+
+function filterByCat(cat) {
+  currentCatFilter = cat;
+  buildCatChips();
+  filterData();
+}
+
+// 초기화 (mfds_test_items 기반)
 async function init() {
-  // 로딩 표시
   var tbody = document.getElementById('table-body');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#888;">⏳ 데이터 로드 중...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#888;">⏳ 시험항목 로드 중...</td></tr>';
 
   await waitForFirebase();
 
-  // I2580 API 데이터 로드
-  var apiData = await loadApiDataFromFirestore('I2580');
+  // 1. 담당자 로드 (Firestore users)
+  await loadManagersFromFirestore();
+  if (MANAGERS.length === 0) MANAGERS = MANAGERS_FALLBACK;
 
-  // ILAB 데이터에서 항목→담당자 매핑 로드
-  var ilabMgrMap = await loadIlabManagerMap();
+  // 2. 시험항목 로드 (mfds_test_items)
+  var testItems = await MFDS_CODES.loadTestItems();
 
-  // 중복 제거된 항목 목록 생성
-  allItems = buildUniqueItems(apiData);
-
-  // 1단계: ILAB 담당자 매핑 적용 (기본 매핑)
-  allItems.forEach(function(item) {
-    if (ilabMgrMap[item.item]) {
-      var mgrName = ilabMgrMap[item.item];
-      var mgrObj = MANAGERS.find(function(m) { return m.name === mgrName; });
-      item.manager = mgrName;
-      item.team = mgrObj ? mgrObj.team : null;
-    }
+  // 3. 활성 항목만 필터링 → allItems 구성
+  allItems = [];
+  testItems.forEach(function(ti) {
+    var code = ti['시험항목코드'] || '';
+    var used = ti['사용여부'];
+    if (used === false || used === 'N' || used === 'n') return; // 비활성화 항목 제외
+    if (!code) return;
+    var cat = getItemCategory(code);
+    allItems.push({
+      id: code,
+      code: code,
+      category: cat,
+      division: getItemDivision(code),
+      item: ti['한글명'] || '',
+      engName: ti['영문명'] || '',
+      unit: ti['단위'] || '',
+      alias: ti['별칭'] || '',
+      manager: null,
+      team: null
+    });
   });
+  allItems.sort(function(a,b) { return a.code.localeCompare(b.code); });
 
-  // 2단계: 수동 저장된 배정 정보로 덮어쓰기 (사용자가 직접 변경한 것 우선)
+  // 4. 저장된 배정 로드 (코드 기반 우선, 이름 기반 폴백)
   var saved = await loadSavedAssignments();
   allItems.forEach(function(item) {
-    if (saved[item.item]) {
-      item.manager = saved[item.item].manager;
-      item.team = saved[item.item].team;
+    // 코드 기반 매칭 (우선)
+    if (saved.byCode && saved.byCode[item.code]) {
+      item.manager = saved.byCode[item.code].manager;
+      item.team = saved.byCode[item.code].team;
+    }
+    // 이름 기반 폴백 (구버전 호환)
+    else if (saved.byName && saved.byName[item.item]) {
+      item.manager = saved.byName[item.item].manager;
+      item.team = saved.byName[item.item].team;
     }
   });
 
-  loadManagers();
+  loadManagerDropdowns();
+  buildCatChips();
   filterData();
   updateStats();
-  renderTable();
-  console.log('[항목배정] 로드 완료: ' + allItems.length + '개 항목 (중복 제거)');
+  console.log('[항목배정] 로드 완료: ' + allItems.length + '개 활성 시험항목');
 }
 
-// 담당자 로드
-function loadManagers() {
-  const selects = ['bulk-manager', 'team-manager'];
-  selects.forEach(id => {
-    const select = document.getElementById(id);
+// 담당자 드롭다운 로드
+function loadManagerDropdowns() {
+  var selects = ['bulk-manager', 'team-manager'];
+  selects.forEach(function(id) {
+    var select = document.getElementById(id);
     if (select) {
-      MANAGERS.forEach(m => {
-        const option = document.createElement('option');
-        option.value = m.name;
-        option.textContent = `${m.name} ${m.position} (${m.team})`;
-        select.appendChild(option);
+      select.innerHTML = '<option value="">-- 담당자 선택 --</option>';
+      MANAGERS.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.name;
+        opt.textContent = m.name + ' ' + m.position + ' (' + m.team + ')';
+        select.appendChild(opt);
       });
     }
   });
@@ -954,22 +1008,27 @@ function updateFilterButtons(type, value) {
 }
 
 function filterData() {
-  const searchText = document.getElementById('search-input').value.toLowerCase();
+  var searchText = (document.getElementById('search-input').value || '').toLowerCase();
   currentFilters.search = searchText;
-  
-  filteredItems = allItems.filter(item => {
+
+  filteredItems = allItems.filter(function(item) {
     // 분야 필터
-    if (currentFilters.division !== '전체' && item.division !== currentFilters.division) {
-      return false;
-    }
-    
+    if (currentFilters.division !== '전체' && item.division !== currentFilters.division) return false;
+
+    // 카테고리 필터
+    if (currentCatFilter !== '전체' && item.category !== currentCatFilter) return false;
+
     // 상태 필터
     if (currentFilters.status === '배정' && !item.manager) return false;
     if (currentFilters.status === '미배정' && item.manager) return false;
-    
-    // 검색 (항목명)
+
+    // 검색 (코드 + 항목명 + 영문명 + 별칭)
     if (currentFilters.search) {
-      if (!item.item.toLowerCase().includes(currentFilters.search)) {
+      var q = currentFilters.search;
+      if (!(item.code || '').toLowerCase().includes(q) &&
+          !(item.item || '').toLowerCase().includes(q) &&
+          !(item.engName || '').toLowerCase().includes(q) &&
+          !(item.alias || '').toLowerCase().includes(q)) {
         return false;
       }
     }
@@ -983,40 +1042,47 @@ function filterData() {
 
 // 테이블 렌더링
 function renderTable() {
-  const tbody = document.getElementById('table-body');
-  
-  tbody.innerHTML = filteredItems.map((item, idx) => {
-    const isSelected = selectedIds.has(item.id);
-    const isUnassigned = !item.manager;
-    const rowClass = isSelected ? 'selected' : (isUnassigned ? 'unassigned' : '');
-    
-    return `
-      <tr class="${rowClass}">
-        <td><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect('${item.id}')"></td>
-        <td style="text-align: center; color: var(--gray-600);">${idx + 1}</td>
-        <td>
-          <span class="badge badge-${item.division === '축산' ? 'warning' : 'primary'}">
-            ${item.division === '축산' ? '🥩' : '🍱'} ${item.division}
-          </span>
-        </td>
-        <td style="font-weight: 500;">${item.item}</td>
-        <td>
-          <select class="manager-select ${isUnassigned ? 'unassigned' : ''}" 
-                  onchange="assignManager('${item.id}', this.value)">
-            <option value="">-- 담당자 선택 --</option>
-            ${MANAGERS.map(m => `
-              <option value="${m.name}" ${item.manager === m.name ? 'selected' : ''}>
-                ${m.name} ${m.position} (${m.team})
-              </option>
-            `).join('')}
-          </select>
-        </td>
-        <td style="text-align: center;">
-          <button class="btn btn-sm btn-outline" onclick="showHistory('${item.id}')">📅</button>
-        </td>
-      </tr>
-    `;
+  var tbody = document.getElementById('table-body');
+  if (!tbody) return;
+
+  if (filteredItems.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#888;">검색 결과가 없습니다</td></tr>';
+    return;
+  }
+
+  // 최대 500건 표시
+  var display = filteredItems.slice(0, 500);
+  var mgrOptions = MANAGERS.map(function(m) {
+    return '<option value="' + m.name + '">' + m.name + ' ' + m.position + ' (' + m.team + ')</option>';
   }).join('');
+
+  tbody.innerHTML = display.map(function(item, idx) {
+    var isSelected = selectedIds.has(item.id);
+    var isUnassigned = !item.manager;
+    var rowClass = isSelected ? 'selected' : (isUnassigned ? 'unassigned' : '');
+    var catInfo = REF_CATS[item.category] || { name: item.category, color: '#999' };
+
+    return '<tr class="' + rowClass + '">'
+      + '<td><input type="checkbox" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(\'' + item.id + '\')"></td>'
+      + '<td style="text-align:center;color:var(--gray-600);font-size:11px;">' + (idx + 1) + '</td>'
+      + '<td style="font-family:monospace;font-size:11px;color:' + catInfo.color + ';font-weight:600;">' + item.code + '</td>'
+      + '<td><span class="badge badge-' + (item.division === '축산' ? 'warning' : 'primary') + '" style="font-size:10px;">'
+        + (item.division === '축산' ? '🥩' : '🍱') + ' ' + item.division + '</span></td>'
+      + '<td style="font-weight:500;">' + item.item
+        + (item.unit ? ' <span style="color:#888;font-size:11px;font-weight:400;">(' + item.unit + ')</span>' : '')
+        + '</td>'
+      + '<td style="color:#666;font-size:11px;">' + (item.unit || '-') + '</td>'
+      + '<td><select class="manager-select ' + (isUnassigned ? 'unassigned' : '') + '" onchange="assignManager(\'' + item.id + '\', this.value)">'
+        + '<option value="">-- 담당자 선택 --</option>'
+        + mgrOptions.replace('value="' + item.manager + '"', 'value="' + item.manager + '" selected')
+      + '</select></td>'
+      + '<td style="text-align:center;"><button class="btn btn-sm btn-outline" onclick="showHistory(\'' + item.id + '\')" style="font-size:10px;padding:2px 6px;">📅</button></td>'
+    + '</tr>';
+  }).join('');
+
+  if (filteredItems.length > 500) {
+    tbody.innerHTML += '<tr><td colspan="8" style="text-align:center;padding:12px;background:#fffde7;color:#f57f17;font-size:12px;">⚠ ' + filteredItems.length + '건 중 500건만 표시중 — 검색 또는 카테고리 필터를 사용하세요</td></tr>';
+  }
 }
 
 // 선택 토글
@@ -1039,18 +1105,32 @@ function toggleSelectAll() {
   renderTable();
 }
 
-// 담당자 배정
+// 담당자 배정 + 동일 명칭 확인
 function assignManager(itemId, managerName) {
-  const item = allItems.find(i => i.id === itemId);
-  if (item) {
-    const manager = MANAGERS.find(m => m.name === managerName);
-    item.manager = managerName;
-    item.team = manager ? manager.team : null;
-    
-    updateStats();
-    renderTable();
-    showAlert('success', `${item.item}에 ${managerName} 담당자를 배정했습니다.`);
+  var item = allItems.find(function(i) { return i.id === itemId; });
+  if (!item) return;
+  var manager = MANAGERS.find(function(m) { return m.name === managerName; });
+  item.manager = managerName;
+  item.team = manager ? manager.team : null;
+
+  // 동일 명칭 다른 코드 항목 찾기
+  var sameNameItems = allItems.filter(function(i) {
+    return i.item === item.item && i.id !== item.id && i.manager !== managerName;
+  });
+
+  if (sameNameItems.length > 0 && managerName) {
+    var names = sameNameItems.map(function(i) { return i.code + '(' + (i.unit || '-') + ')'; }).join(', ');
+    if (confirm('동일 항목명 "' + item.item + '"이(가) ' + sameNameItems.length + '건 더 있습니다.\n' + names + '\n\n동일하게 ' + managerName + '을(를) 배정하시겠습니까?')) {
+      sameNameItems.forEach(function(i) {
+        i.manager = managerName;
+        i.team = manager ? manager.team : null;
+      });
+    }
   }
+
+  updateStats();
+  renderTable();
+  showAlert('success', item.item + '(' + item.code + ')에 ' + (managerName || '미배정') + ' 배정');
 }
 
 // 통계 업데이트
