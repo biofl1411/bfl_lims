@@ -2698,14 +2698,18 @@ function simCalc(ci) {
       var nextVars = nextCalc.formula ? _simParseVars(nextCalc.formula) : [];
       nextVars.forEach(function(v) {
         var vLow = v.toLowerCase();
-        var labelLow = (calc.label || '').toLowerCase();
-        // 변수명이 이전 계산의 label을 포함하거나, 'Result'로 끝나는 경우
-        if (vLow.indexOf(labelLow) >= 0 || vLow === labelLow + 'result' || vLow === labelLow.replace(/[^a-z]/g,'') + 'result') {
+        var labelLow = (calc.label || '').toLowerCase().replace(/[\s()]/g, '');
+        // 매칭 조건: Result가 포함된 변수, 또는 이전 label 포함, 또는 결과값/결과 포함
+        var isResultVar = vLow.indexOf('result') >= 0 || vLow.indexOf('결과') >= 0;
+        var isLabelMatch = labelLow && vLow.indexOf(labelLow) >= 0;
+        if (isResultVar || isLabelMatch) {
           var el = document.getElementById('sim-' + nci + '-' + v);
           if (el && (!el.value || parseFloat(el.value) === 0)) {
             el.value = ruleStr;
             el.style.background = '#f0fdf4';
-            el.title = '규칙적용 ' + (calc.label || '') + ' 값 자동 반영';
+            el.title = '규칙적용 ' + (calc.label || '') + ' 값 (' + ruleStr + ') 자동 반영';
+            // 다음 계산도 자동 재계산
+            setTimeout(function() { simCalc(nci); }, 100);
           }
         }
       });
