@@ -782,8 +782,9 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
     <div style="display:flex;align-items:center;gap:6px;padding:0 16px 6px;flex-wrap:wrap;">
       <div id="mfds-test-sub-chips" style="display:flex;flex-wrap:wrap;gap:5px;flex:1"></div>
       <div id="mfds-p-actions" style="display:none;flex-shrink:0;gap:4px;align-items:center;">
-        <button onclick="createPRefSubChip()" class="p-act-btn p-act-add" title="새 소분류 칩 추가">＋ 칩 추가</button>
-        <button onclick="deletePRefSubChip()" class="p-act-btn p-act-del" title="선택한 칩 삭제">✕ 칩 삭제</button>
+        <button onclick="addSubChip()" class="p-act-btn p-act-add" title="새 소분류 칩 추가">＋ 칩 추가</button>
+        <button onclick="deleteSubChip()" class="p-act-btn p-act-del" title="선택한 칩 삭제">✕ 칩 삭제</button>
+        <button onclick="moveItemToSubChip()" class="p-act-btn" style="border-color:#1565c0;color:#1565c0;" title="선택 항목 소분류 이동">↗ 항목 이동</button>
         <span style="width:1px;height:16px;background:#ddd;margin:0 2px"></span>
         <button onclick="openMoveToP()" class="p-act-btn p-act-move" title="다른 분야 항목을 P참고용으로 이동">📦 항목 이동</button>
         <button onclick="sortPRefItems('name')" class="p-act-btn p-act-sort" title="이름순 정렬">가나다↕</button>
@@ -36366,11 +36367,21 @@ function renderMfdsTestItems() {
     MFDS_CODES.loadItemMappings(),
     MFDS_CODES.loadUnits(),
     firebase.firestore().collection('settings').doc('pRefSubCategories').get(),
-    firebase.firestore().collection('settings').doc('pRefSub3Categories').get()
+    firebase.firestore().collection('settings').doc('pRefSub3Categories').get(),
+    firebase.firestore().collection('settings').doc('subCategories').get()
   ]).then(function(results) {
     _mfdsTestItems = results[0];
     _mfdsItemMappings = results[1];
     _mfdsUnits = results[2];
+    // 범용 소분류 데이터 복원 (P 제외)
+    var subDoc = results[5];
+    if (subDoc && subDoc.exists) {
+      var subData = subDoc.data();
+      Object.keys(subData).forEach(function(cat) {
+        if (cat === 'P') return;
+        REF_SUB_CATEGORIES[cat] = subData[cat];
+      });
+    }
     // P참고용 커스텀 소분류 + usedKeys 복원
     var pDoc = results[3];
     if (pDoc.exists) {
@@ -36537,12 +36548,12 @@ function renderMfdsTestSubChips() {
       var code = (item['시험항목코드'] || '').toUpperCase();
       if (code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === s) cnt++;
     });
-    var dblClick = (_mfdsTestCatFilter === 'P') ? ' ondblclick="event.stopPropagation();renamePRefSubChip(\'' + s + '\')"' : '';
+    var dblClick = ' ondblclick="event.stopPropagation();renameSubChip(\'' + _mfdsTestCatFilter + '\',\'' + s + '\')"';
     html += '<button type="button" onclick="setMfdsTestSubCategory(\'' + s + '\')"' + dblClick + ' ' +
       'style="padding:3px 9px;border-radius:10px;border:1px solid ' + (isActive ? cat.color : '#bbb') + ';' +
       'background:' + (isActive ? cat.color : '#f5f5f5') + ';color:' + (isActive ? '#fff' : '#555') + ';' +
       'font-size:11px;cursor:pointer;transition:all .15s;" ' +
-      'title="' + _mfdsTestCatFilter + s + 'xxxx (' + cnt + '건)' + (_mfdsTestCatFilter === 'P' ? ' — 더블클릭으로 이름 수정' : '') + '">' +
+      'title="' + _mfdsTestCatFilter + s + 'xxxx (' + cnt + '건) — 더블클릭으로 이름 수정">' +
       s + ' ' + subs[s] + ' <span style="opacity:.6;">' + cnt + '</span></button>';
   });
   container.innerHTML = html;
@@ -36559,9 +36570,9 @@ function setMfdsTestCategory(cat) {
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
-  // P참고용 선택 시 액션 버튼 표시
+  // 카테고리 선택 시 액션 버튼 표시 (all 제외 모든 카테고리)
   var pActions = document.getElementById('mfds-p-actions');
-  if (pActions) pActions.style.display = (_mfdsTestCatFilter === 'P') ? 'flex' : 'none';
+  if (pActions) pActions.style.display = (_mfdsTestCatFilter !== 'all' && _mfdsTestCatFilter !== 'PA' && _mfdsTestCatFilter !== 'PB') ? 'flex' : 'none';
   // P 해제 시 묶음 패널 숨기고 테이블 복원
   var bundlePanel = document.getElementById('p-bundle-panel');
   var tableArea = document.querySelector('#panel-test-items > div[style*="overflow-x"]');
@@ -36668,6 +36679,138 @@ function createPRefSub3Chip() {
 }
 
 // ══ P참고용: 소분류 칩 이름 수정 (더블클릭) ══
+// ══ 범용 소분류 칩 이름 수정 ══
+function renameSubChip(catPrefix, key) {
+  if (catPrefix === 'P') { renamePRefSubChip(key); return; }
+  var subs = REF_SUB_CATEGORIES[catPrefix] || {};
+  var oldName = subs[key] || '';
+  var newName = prompt(catPrefix + key + ' 소분류 이름 수정:', oldName);
+  if (newName === null || !newName.trim() || newName.trim() === oldName) return;
+  newName = newName.trim();
+  var existing = Object.values(subs);
+  if (existing.indexOf(newName) >= 0) { showToast("'" + newName + "' 이미 존재합니다", 'warning'); return; }
+  REF_SUB_CATEGORIES[catPrefix][key] = newName;
+  saveAllSubCategories();
+  renderMfdsTestSubChips();
+  showToast(catPrefix + key + ' → "' + newName + '" 이름 변경 완료', 'success');
+}
+
+// ══ 범용 소분류 칩 추가 ══
+function addSubChip() {
+  var cat = _mfdsTestCatFilter;
+  if (!cat || cat === 'all' || cat === 'PA' || cat === 'PB') return;
+  if (cat === 'P') { createPRefSubChip(); return; }
+  var subs = REF_SUB_CATEGORIES[cat] || {};
+  var name = prompt(cat + ' 소분류 추가 (이름 입력):');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+  if (Object.values(subs).indexOf(name) >= 0) { showToast("'" + name + "' 이미 존재합니다", 'warning'); return; }
+  // 다음 키 생성 (숫자 1~9, 그 다음 A~Z)
+  var usedKeys = Object.keys(subs);
+  var newKey = null;
+  for (var n = 1; n <= 9; n++) {
+    if (usedKeys.indexOf(String(n)) < 0) { newKey = String(n); break; }
+  }
+  if (!newKey) {
+    var alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (var a = 0; a < alpha.length; a++) {
+      if (usedKeys.indexOf(alpha[a]) < 0) { newKey = alpha[a]; break; }
+    }
+  }
+  if (!newKey) { showToast('키가 부족합니다', 'error'); return; }
+  if (!REF_SUB_CATEGORIES[cat]) REF_SUB_CATEGORIES[cat] = {};
+  REF_SUB_CATEGORIES[cat][newKey] = name;
+  saveAllSubCategories();
+  renderMfdsTestSubChips();
+  showToast(cat + newKey + ' "' + name + '" 추가 완료', 'success');
+}
+
+// ══ 범용 소분류 칩 삭제 ══
+function deleteSubChip() {
+  var cat = _mfdsTestCatFilter;
+  var sub = _mfdsTestSubFilter;
+  if (!cat || !sub || cat === 'all' || cat === 'PA' || cat === 'PB') { showToast('삭제할 소분류를 선택하세요', 'warning'); return; }
+  if (cat === 'P') { deletePRefSubChip(); return; }
+  var subs = REF_SUB_CATEGORIES[cat] || {};
+  var name = subs[sub] || sub;
+  // 소속 항목 수 확인
+  var cnt = 0;
+  (_mfdsTestItems || []).forEach(function(item) {
+    var code = (item['시험항목코드'] || '').toUpperCase();
+    if (code.charAt(0) === cat && code.charAt(1) === sub) cnt++;
+  });
+  if (cnt > 0) {
+    if (!confirm('"' + name + '" 소분류에 ' + cnt + '건의 항목이 있습니다.\n삭제하면 항목의 소분류가 해제됩니다. 계속하시겠습니까?')) return;
+  } else {
+    if (!confirm('"' + name + '" 소분류를 삭제하시겠습니까?')) return;
+  }
+  delete REF_SUB_CATEGORIES[cat][sub];
+  _mfdsTestSubFilter = null;
+  saveAllSubCategories();
+  renderMfdsTestSubChips();
+  applyMfdsTestFilters();
+  _mfdsTestPage = 0;
+  renderMfdsTestTable();
+  showToast(cat + sub + ' "' + name + '" 삭제 완료', 'success');
+}
+
+// ══ 항목 이동 (소분류 변경) ══
+function moveItemToSubChip() {
+  var cat = _mfdsTestCatFilter;
+  if (!cat || cat === 'all' || cat === 'PA' || cat === 'PB') return;
+  // 체크된 항목 수집
+  var checked = document.querySelectorAll('#mfds-test-item-tbody input.mfds-test-check:checked');
+  if (!checked || checked.length === 0) { showToast('이동할 항목을 선택하세요', 'warning'); return; }
+  var codes = [];
+  checked.forEach(function(cb) { if (cb.dataset.code) codes.push(cb.dataset.code); });
+  if (codes.length === 0) return;
+  // 대상 소분류 선택
+  var subs = REF_SUB_CATEGORIES[cat] || {};
+  var options = Object.keys(subs).map(function(k) { return k + ' ' + subs[k]; }).join('\n');
+  var target = prompt(codes.length + '건 항목을 이동할 소분류 키를 입력하세요:\n\n' + options);
+  if (!target || !target.trim()) return;
+  target = target.trim().charAt(0).toUpperCase();
+  if (!subs[target]) { showToast('존재하지 않는 소분류입니다: ' + target, 'warning'); return; }
+  // Firestore에서 항목의 코드 변경 (2번째 글자 변경)
+  var batch = db.batch();
+  var moved = 0;
+  codes.forEach(function(oldCode) {
+    var newCode = oldCode.charAt(0) + target + oldCode.substring(2);
+    if (newCode === oldCode) return;
+    var item = _mfdsTestItems.find(function(t) { return t['시험항목코드'] === oldCode; });
+    if (!item) return;
+    // 기존 문서 삭제 + 새 문서 생성
+    batch.delete(db.collection('mfds_test_items').doc(oldCode));
+    var newData = Object.assign({}, item);
+    newData['시험항목코드'] = newCode;
+    batch.set(db.collection('mfds_test_items').doc(newCode), newData);
+    // 메모리 업데이트
+    item['시험항목코드'] = newCode;
+    moved++;
+  });
+  if (moved > 0) {
+    batch.commit().then(function() {
+      applyMfdsTestFilters();
+      _mfdsTestPage = 0;
+      renderMfdsTestTable();
+      renderMfdsTestSubChips();
+      showToast(moved + '건 항목을 ' + cat + target + ' ' + subs[target] + '(으)로 이동 완료', 'success');
+    }).catch(function(e) { showToast('이동 실패: ' + e.message, 'error'); });
+  }
+}
+
+// ══ 소분류 데이터 Firestore 저장 (P 제외 전체) ══
+function saveAllSubCategories() {
+  var data = {};
+  Object.keys(REF_SUB_CATEGORIES).forEach(function(cat) {
+    if (cat === 'P') return; // P는 별도 저장 (savePRefSubCategories)
+    data[cat] = REF_SUB_CATEGORIES[cat];
+  });
+  db.collection('settings').doc('subCategories').set(data, { merge: true })
+    .then(function() { console.log('[소분류] 저장 완료'); })
+    .catch(function(e) { console.error('[소분류] 저장 실패:', e); });
+}
+
 function renamePRefSubChip(key) {
   var oldName = (REF_SUB_CATEGORIES['P'] || {})[key] || '';
   var newName = prompt('P' + key + ' 소분류 이름 수정:', oldName);
@@ -38471,6 +38614,7 @@ function renderMfdsTestTable() {
     var isP = code.charAt(0) === 'P';
     var pDelBtn = isP ? '<span class="p-del-x" onclick="deletePRefItem(\'' + code.replace(/'/g, "\\'") + '\')" title="삭제">×</span>' : '';
     html += '<tr class="mfds-test-row" style="border-bottom:1px solid #f0f0f0;transition:background 0.15s;' + rowOpacity + '">'
+      + '<td style="padding:4px 6px;text-align:center;width:24px;"><input type="checkbox" class="mfds-test-check" data-code="' + code + '" style="accent-color:#1565c0;"></td>'
       + '<td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#1565c0;white-space:nowrap;">' + pDelBtn + code + '</td>'
       + '<td style="padding:8px 12px;">' + getRefCodeCategoryBadge(code) + '</td>'
       + '<td style="padding:8px 12px;font-weight:500;">' + name + '</td>'
