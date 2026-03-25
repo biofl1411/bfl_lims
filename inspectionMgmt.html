@@ -790,6 +790,51 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <button onclick="sortPRefItems('name')" class="p-act-btn p-act-sort" title="이름순 정렬">가나다↕</button>
         <button onclick="sortPRefItems('code')" class="p-act-btn p-act-sort" title="코드순 정렬">코드↕</button>
       </div>
+      <!-- 엑셀 업로드 버튼 (모든 카테고리) -->
+      <div id="mfds-excel-upload-actions" style="display:none;flex-shrink:0;gap:4px;align-items:center;">
+        <button onclick="openExcelUploadModal()" class="p-act-btn" style="border-color:#e65100;color:#e65100;font-weight:600;" title="엑셀 파일로 시험항목 일괄 등록">📥 엑셀 업로드</button>
+      </div>
+    </div>
+    <!-- 엑셀 업로드 모달 -->
+    <div id="excel-upload-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:12px;width:90vw;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+          <h3 id="excel-upload-title" style="margin:0;font-size:16px;">📥 엑셀 시험항목 업로드</h3>
+          <button onclick="closeExcelUploadModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">&times;</button>
+        </div>
+        <div style="padding:16px 20px;overflow-y:auto;flex:1;">
+          <!-- 파일 선택 -->
+          <div id="excel-upload-step1">
+            <div style="border:2px dashed #c4b5fd;border-radius:8px;padding:24px;text-align:center;background:#faf5ff;cursor:pointer;" onclick="document.getElementById('excel-upload-file').click()">
+              <div style="font-size:32px;margin-bottom:8px;">📄</div>
+              <div style="font-weight:600;color:#7c4dff;">엑셀 파일을 선택하세요</div>
+              <div style="font-size:12px;color:#999;margin-top:4px;">PA/PB 형식: 순번, 카테고리, 한글명, 영문명, 수수료, 비고, 단위 ...</div>
+              <input type="file" id="excel-upload-file" accept=".xlsx,.xls" style="display:none" onchange="previewExcelUpload(this)">
+            </div>
+            <div id="excel-upload-info" style="margin-top:12px;display:none;">
+              <div style="display:flex;gap:12px;align-items:center;padding:8px 12px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;">
+                <span style="font-size:18px;">✅</span>
+                <div style="flex:1;">
+                  <div id="excel-upload-filename" style="font-weight:600;"></div>
+                  <div id="excel-upload-stats" style="font-size:12px;color:#666;"></div>
+                </div>
+                <button onclick="document.getElementById('excel-upload-file').value='';document.getElementById('excel-upload-info').style.display='none';document.getElementById('excel-upload-preview').innerHTML='';" style="background:none;border:none;color:#999;cursor:pointer;font-size:16px;">✕</button>
+              </div>
+            </div>
+          </div>
+          <!-- 미리보기 테이블 -->
+          <div id="excel-upload-preview" style="margin-top:12px;max-height:400px;overflow-y:auto;"></div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" id="excel-upload-overwrite"> 기존 항목 덮어쓰기 (단위/수수료 업데이트)</label>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="closeExcelUploadModal()" style="padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;">취소</button>
+            <button id="excel-upload-btn" onclick="executeExcelUpload()" disabled style="padding:8px 20px;border:none;border-radius:6px;background:#7c4dff;color:#fff;cursor:pointer;font-weight:600;">📥 업로드 실행</button>
+          </div>
+        </div>
+      </div>
     </div>
     <!-- P참고용 3단계 서브칩 (P1-01, P1-02...) -->
     <div id="mfds-p-sub3-chips" style="display:none;flex-wrap:wrap;gap:5px;padding:0 16px 6px;align-items:center;"></div>
@@ -33288,6 +33333,231 @@ function getRefCodeCategoryBadge(code) {
   return '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;background:' + cat.color + ';white-space:nowrap;">' + label + '</span>';
 }
 
+// ═══ 엑셀 시험항목 업로드 ═══
+var _excelUploadData = [];
+var _excelUploadCat = '';
+var _excelUploadSub = '';
+
+function openExcelUploadModal() {
+  _excelUploadCat = _editTestItemCats.length > 0 ? _editTestItemCats[0] : '';
+  var subKeys = _excelUploadCat ? Object.keys(_editTestItemSubs[_excelUploadCat] || {}) : [];
+  _excelUploadSub = subKeys.length > 0 ? subKeys[0] : '';
+  var catName = _excelUploadCat;
+  var catDef = REF_CODE_CATEGORIES[_excelUploadCat];
+  if (catDef) catName = catDef.name;
+  var subName = '';
+  if (_excelUploadSub && REF_SUB_CATEGORIES[_excelUploadCat]) {
+    subName = ' > ' + (_excelUploadSub + ' ' + (REF_SUB_CATEGORIES[_excelUploadCat][_excelUploadSub] || ''));
+  }
+  document.getElementById('excel-upload-title').textContent = '📥 엑셀 시험항목 업로드 — ' + catName + subName;
+  document.getElementById('excel-upload-file').value = '';
+  document.getElementById('excel-upload-info').style.display = 'none';
+  document.getElementById('excel-upload-preview').innerHTML = '';
+  document.getElementById('excel-upload-btn').disabled = true;
+  _excelUploadData = [];
+  document.getElementById('excel-upload-modal').style.display = 'flex';
+}
+
+function closeExcelUploadModal() {
+  document.getElementById('excel-upload-modal').style.display = 'none';
+  _excelUploadData = [];
+}
+
+async function previewExcelUpload(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+
+  // SheetJS 로드
+  if (!window.XLSX) {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+    document.head.appendChild(s);
+    await new Promise(function(r) { s.onload = r; });
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wb = XLSX.read(e.target.result, { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (rows.length < 2) { showToast('데이터가 없습니다', 'warning'); return; }
+
+    // 헤더 분석 — PA/PB 엑셀 형식 (순번, 카테고리, 한글명, 영문명, 수수료, 비고, 단위...)
+    var headers = rows[0].map(function(h) { return String(h || '').trim(); });
+    var nameIdx = -1, engIdx = -1, feeIdx = -1, unitIdx = -1;
+
+    // 컬럼 자동 감지
+    headers.forEach(function(h, i) {
+      var hl = h.toLowerCase();
+      if (hl.indexOf('한글') >= 0 || hl.indexOf('검사항목') >= 0 || hl.indexOf('항목명') >= 0 || hl === '한글명') nameIdx = i;
+      if (hl.indexOf('영문') >= 0 || hl.indexOf('english') >= 0) engIdx = i;
+      if (hl.indexOf('수수료') >= 0 || hl.indexOf('fee') >= 0 || hl.indexOf('금액') >= 0 || hl.indexOf('단가') >= 0) feeIdx = i;
+      if (hl.indexOf('단위') >= 0 || hl.indexOf('unit') >= 0) unitIdx = i;
+    });
+
+    // PA/PB 형식 폴백 (3번째=한글명, 4번째=영문명, 5번째=수수료, 7번째=단위)
+    if (nameIdx < 0) nameIdx = 2;
+    if (engIdx < 0) engIdx = 3;
+    if (feeIdx < 0) feeIdx = 4;
+    if (unitIdx < 0) unitIdx = 6;
+
+    // 데이터 파싱
+    var items = [];
+    for (var r = 1; r < rows.length; r++) {
+      var row = rows[r];
+      var name = String(row[nameIdx] || '').trim();
+      if (!name) continue;
+      var eng = engIdx >= 0 ? String(row[engIdx] || '').trim() : '';
+      var fee = 0;
+      try { fee = parseInt(parseFloat(row[feeIdx]) || 0); } catch(e) {}
+      var unit = unitIdx >= 0 ? String(row[unitIdx] || '').trim() : '';
+      items.push({ name: name, eng: eng, fee: fee, unit: unit });
+    }
+
+    _excelUploadData = items;
+
+    // 파일 정보
+    document.getElementById('excel-upload-filename').textContent = file.name;
+    var hasFee = items.filter(function(i) { return i.fee > 0; }).length;
+    var hasUnit = items.filter(function(i) { return i.unit; }).length;
+    document.getElementById('excel-upload-stats').textContent = items.length + '건 항목 / 수수료 ' + hasFee + '건 / 단위 ' + hasUnit + '건';
+    document.getElementById('excel-upload-info').style.display = 'block';
+    document.getElementById('excel-upload-btn').disabled = false;
+
+    // 미리보기 테이블
+    var prefix = _excelUploadCat;
+    var existingCodes = {};
+    (_mfdsTestItems || []).forEach(function(t) {
+      var c = (t['시험항목코드'] || '').toUpperCase();
+      if (c.startsWith(prefix)) existingCodes[c] = true;
+    });
+    var nextNum = 1;
+    Object.keys(existingCodes).forEach(function(c) {
+      var n = parseInt(c.substring(prefix.length));
+      if (n >= nextNum) nextNum = n + 1;
+    });
+
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="background:#f8f9fa;position:sticky;top:0;">';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;width:30px">No</th>';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;width:70px">코드</th>';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;">한글명</th>';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;">영문명</th>';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;width:70px">단위</th>';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;width:80px;text-align:right">수수료</th>';
+    html += '<th style="padding:6px 8px;border:1px solid #e5e7eb;width:60px">상태</th>';
+    html += '</tr></thead><tbody>';
+
+    items.forEach(function(item, idx) {
+      var code = prefix + String(nextNum + idx).padStart(4, '0');
+      var isExist = existingCodes[code];
+      var statusColor = isExist ? '#f59e0b' : '#22c55e';
+      var statusText = isExist ? '덮어쓰기' : '신규';
+      html += '<tr>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;color:#999;text-align:center;">' + (idx + 1) + '</td>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;font-family:monospace;color:#7c4dff;font-size:11px;">' + code + '</td>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;font-weight:500;">' + item.name + '</td>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;color:#666;font-size:11px;">' + item.eng + '</td>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;color:#1565c0;font-size:11px;">' + item.unit + '</td>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;text-align:right;color:#e65100;">' + (item.fee > 0 ? item.fee.toLocaleString() + '원' : '-') + '</td>';
+      html += '<td style="padding:4px 8px;border:1px solid #eee;text-align:center;"><span style="font-size:10px;padding:1px 6px;border-radius:8px;background:' + statusColor + '22;color:' + statusColor + ';font-weight:600;">' + statusText + '</span></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('excel-upload-preview').innerHTML = html;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function executeExcelUpload() {
+  if (!_excelUploadData || _excelUploadData.length === 0) return;
+  var btn = document.getElementById('excel-upload-btn');
+  btn.disabled = true;
+  btn.textContent = '업로드 중...';
+
+  var prefix = _excelUploadCat;
+  var catDef = REF_CODE_CATEGORIES[prefix];
+  var catName = catDef ? catDef.name : prefix;
+  var overwrite = document.getElementById('excel-upload-overwrite').checked;
+
+  // 기존 코드 번호 파악
+  var existingCodes = {};
+  (_mfdsTestItems || []).forEach(function(t) {
+    var c = (t['시험항목코드'] || '').toUpperCase();
+    if (c.startsWith(prefix)) existingCodes[c] = true;
+  });
+  var nextNum = 1;
+  Object.keys(existingCodes).forEach(function(c) {
+    var n = parseInt(c.substring(prefix.length));
+    if (n >= nextNum) nextNum = n + 1;
+  });
+
+  // 분류 정보
+  var classification = prefix;
+  var groupName = catName;
+
+  try {
+    var batch = db.batch();
+    var bc = 0;
+    var added = 0, updated = 0;
+    var feeBatch = {};
+
+    for (var i = 0; i < _excelUploadData.length; i++) {
+      var item = _excelUploadData[i];
+      var code = prefix + String(nextNum + i).padStart(4, '0');
+      var isExist = existingCodes[code];
+
+      if (isExist && !overwrite) continue;
+
+      var docRef = db.collection('mfds_test_items').doc(code);
+      var docData = {
+        '시험항목코드': code,
+        '한글명': item.name,
+        '영문명': item.eng || '',
+        '단위': item.unit || '',
+        '별칭': '',
+        '사용여부': true,
+        '분류': classification,
+        '시험항목그룹명': groupName
+      };
+      batch.set(docRef, docData, { merge: true });
+      feeBatch[code] = { fee: item.fee || 0, unit: item.unit || '', enabled: true };
+
+      if (isExist) updated++; else added++;
+      bc++;
+      if (bc >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        bc = 0;
+      }
+    }
+    if (bc > 0) await batch.commit();
+
+    // refFeeMapping 업데이트
+    var feeDocRef = db.collection('settings').doc('refFeeMapping');
+    var feeDoc = await feeDocRef.get();
+    var mapping = (feeDoc.exists ? feeDoc.data() : {}).mapping || {};
+    Object.keys(feeBatch).forEach(function(code) {
+      mapping[code] = feeBatch[code];
+    });
+    await feeDocRef.set({ mapping: mapping }, { merge: true });
+
+    // 캐시 갱신
+    _mfdsTestItems = await MFDS_CODES.loadTestItems(true);
+
+    showToast('✅ ' + prefix + ' 업로드 완료: 신규 ' + added + '건, 업데이트 ' + updated + '건');
+    closeExcelUploadModal();
+    applyMfdsTestFilters();
+
+  } catch (err) {
+    console.error('엑셀 업로드 실패:', err);
+    showToast('❌ 업로드 실패: ' + err.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '📥 업로드 실행';
+}
+
 // PA/PB 항목 → 참고용매핑에 동기화 (mfds_test_items + refFeeMapping 수수료)
 async function registerPAPBRefFeeItems() {
   if (!_refFeeData) return;
@@ -35883,6 +36153,12 @@ function renderTestItemSubChips() {
     });
   });
   c2.innerHTML = html;
+
+  // 엑셀 업로드 버튼 표시 (소분류가 있는 카테고리에서)
+  var excelActions = document.getElementById('mfds-excel-upload-actions');
+  if (excelActions) {
+    excelActions.style.display = (_editTestItemCats.length > 0) ? 'flex' : 'none';
+  }
 }
 
 function toggleTestItemCat(letter) {
