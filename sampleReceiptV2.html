@@ -6320,20 +6320,7 @@ function saveSampleToArray() {
 
     _sampleData[_currentSampleIdx] = obj;
 
-    // 1번 시료(index 0)에서 공유 필드를 다른 시료에 전파
-    if (_currentSampleIdx === 0) {
-        var labelChipsHtml = '';
-        var lc = document.getElementById('label-inline-chips');
-        if (lc) labelChipsHtml = lc.innerHTML;
-        for (var si = 1; si < _sampleData.length; si++) {
-            if (!_sampleData[si]) _sampleData[si] = {};
-            _sharedFieldIds.forEach(function(fid) {
-                // 다른 시료에 값이 아직 없으면 1번 시료 값 적용
-                if (!_sampleData[si][fid]) _sampleData[si][fid] = obj[fid] || '';
-            });
-            if (!_sampleData[si]._labelChipsHtml) _sampleData[si]._labelChipsHtml = labelChipsHtml;
-        }
-    }
+    // 공유 필드 자동 전파 제거 — selectInline/applySharedToOtherSamples에서 confirm 후 수동 적용
 }
 
 function loadSampleFromArray(idx) {
@@ -8974,11 +8961,34 @@ function selectInline(type, val, color, bg, border) {
     if (type === 'notice') {
         var memoBox = document.getElementById('notice-memo-box');
         if (memoBox) memoBox.style.display = (val === '메모') ? '' : 'none';
-        // 접수공지 박스 표시/숨김
         var noticeSection = document.getElementById('receipt-notice-section');
         if (noticeSection) noticeSection.style.display = (val === '아니요') ? 'none' : '';
         if (val === '예' && typeof loadNoticeTemplate === 'function') loadNoticeTemplate();
     }
+    // 다른 시료에도 적용 확인
+    applySharedToOtherSamples();
+}
+
+/** 공유 필드(시료접수/접수형태/운반상태/공지여부/지부/라벨)를 다른 시료에 적용 */
+function applySharedToOtherSamples() {
+    if (_sampleData.length <= 1) return;
+    // 현재 시료 먼저 저장
+    saveSampleToArray();
+    var otherCount = _sampleData.length - 1;
+    if (!confirm('다른 시료(' + otherCount + '건)에도 동일하게 적용하시겠습니까?')) return;
+    var cur = _sampleData[_currentSampleIdx] || {};
+    var labelChipsHtml = '';
+    var lc = document.getElementById('label-inline-chips');
+    if (lc) labelChipsHtml = lc.innerHTML;
+    for (var si = 0; si < _sampleData.length; si++) {
+        if (si === _currentSampleIdx) continue;
+        if (!_sampleData[si]) _sampleData[si] = {};
+        _sharedFieldIds.forEach(function(fid) {
+            _sampleData[si][fid] = cur[fid] || '';
+        });
+        _sampleData[si]._labelChipsHtml = labelChipsHtml;
+    }
+    showToast('전체 시료에 동일 설정 적용 완료');
 }
 // OCR 등 외부에서 hidden input 값 설정 후 UI 동기화
 function syncInlineUI(type) {
