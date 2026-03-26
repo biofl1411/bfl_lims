@@ -312,6 +312,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="js/firebase-init.js"></script>
 <script src="js/mfds-codes.js"></script>
+<script src="js/sub-chip-fee.js"></script>
 <script src="js/mfds-fee-mapping.js"></script>
 <script src="js/mfds_templates.js?v=20260227"></script>
 <script src="js/firestore-helpers.js"></script>
@@ -4109,88 +4110,12 @@ function searchBundles(query) {
     return results;
 }
 
-// ═══ 소분류 수수료 규칙 (inspectionMgmt 시험항목 탭에서 설정) ═══
+// ═══ 소분류 수수료 규칙 — 공통 모듈(js/sub-chip-fee.js) 래퍼 ═══
 var _subChipFees = null;
-
-async function loadSubChipFees() {
-    try {
-        var doc = await db.collection('settings').doc('subChipFees').get();
-        if (doc.exists) {
-            var data = doc.data() || {};
-            // 이전 형식(숫자) → 새 형식 마이그레이션
-            Object.keys(data).forEach(function(k) {
-                if (typeof data[k] === 'number') {
-                    data[k] = { mode: 'bundle', rules: [{ items: 0, fee: data[k], maxAdd: 0 }] };
-                }
-            });
-            _subChipFees = data;
-        } else {
-            _subChipFees = {};
-        }
-    } catch(e) { _subChipFees = {}; }
-}
-
-/**
- * 소분류 수수료 규칙으로 총 수수료 계산
- * @param {string} subKey - 소분류 키 (예: 'X2', 'E6')
- * @param {number} itemCount - 해당 소분류 항목 수
- * @returns {number|null} 규칙 적용 수수료 (규칙 없으면 null)
- */
-function calcSubChipFee(subKey, itemCount) {
-    if (!_subChipFees || !_subChipFees[subKey]) return null;
-    var data = _subChipFees[subKey];
-    var rules = data.rules || [];
-    if (rules.length === 0) return null;
-    var r1 = rules[0];
-    if (!r1 || r1.fee <= 0) return null;
-
-    if (data.mode === 'item') {
-        // 항목(개별) 모드: 항목당 × 항목수
-        return r1.fee * itemCount;
-    }
-    // 묶음(세트) 모드: 1규칙 = 기본 수수료
-    var total = r1.fee;
-    var baseItems = r1.items || itemCount; // items=0이면 전체
-    var remaining = Math.max(0, itemCount - baseItems);
-
-    // 다단계 규칙 적용
-    for (var i = 1; i < rules.length && remaining > 0; i++) {
-        var rule = rules[i];
-        var maxAdd = rule.maxAdd || Infinity;
-        var apply = Math.min(remaining, maxAdd);
-        total += apply * (rule.fee || 0);
-        remaining -= apply;
-    }
-    return total;
-}
-
-/**
- * 소분류 규칙의 최대 허용 항목 수 반환
- * @returns {number} 최대 항목 수 (규칙 없으면 Infinity)
- */
-function getSubChipMaxItems(subKey) {
-    if (!_subChipFees || !_subChipFees[subKey]) return Infinity;
-    var data = _subChipFees[subKey];
-    var rules = data.rules || [];
-    if (rules.length === 0 || !rules[0] || rules[0].fee <= 0) return Infinity;
-    if (data.mode === 'item') return Infinity; // 항목(개별) 모드는 제한 없음
-    var max = rules[0].items || 0;
-    for (var i = 1; i < rules.length; i++) {
-        max += rules[i].maxAdd || 0;
-    }
-    return max || Infinity;
-}
-
-/**
- * 시험항목코드에서 소분류 키 추출 (예: X20003 → 'X2', E60001 → 'E6')
- */
-function getSubChipKey(testItemCode) {
-    if (!testItemCode || testItemCode.length < 2) return '';
-    var code = testItemCode.toUpperCase();
-    // PA/PB 코드는 소분류 규칙 대상 아님 (묶음 수수료 사용)
-    if (code.startsWith('PA') || code.startsWith('PB')) return '';
-    // 첫 글자(대분류) + 두번째 글자(소분류 번호)
-    return code.charAt(0) + code.charAt(1);
+async function loadSubChipFees() { _subChipFees = await SUB_CHIP_FEE.load(); }
+function calcSubChipFee(subKey, itemCount) { return SUB_CHIP_FEE.calc(subKey, itemCount); }
+function getSubChipMaxItems(subKey) { return SUB_CHIP_FEE.maxItems(subKey); }
+function getSubChipKey(testItemCode) { return SUB_CHIP_FEE.getKey(testItemCode);
 }
 
 // ═══ 참고용 수수료 맵 ═══
