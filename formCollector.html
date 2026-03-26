@@ -2135,7 +2135,7 @@ async function callClaudeRefine(memo) {
   if (!raw) throw new Error('응답에 텍스트 없음');
 
   var jsonStr = raw.text.replace(/```json|```/g, '').trim();
-  return JSON.parse(jsonStr);
+  return safeJsonParse(jsonStr);
 }
 
 function mergeAnalysis(existing, refined) {
@@ -2268,7 +2268,7 @@ async function callClaude(textContext) {
 
   var body = {
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 6000,
+    max_tokens: 16384,
     messages: [{
       role: 'user',
       content: [
@@ -2299,7 +2299,51 @@ async function callClaude(textContext) {
   if (!raw) throw new Error('Claude 응답에 텍스트 없음');
 
   var jsonStr = raw.text.replace(/```json|```/g, '').trim();
-  return JSON.parse(jsonStr);
+  return safeJsonParse(jsonStr);
+}
+
+function safeJsonParse(text) {
+  text = text.trim();
+  try { return JSON.parse(text); } catch(e1) {
+    console.warn('[JSON복구] 1차 파싱 실패:', e1.message);
+  }
+  // 잘린 문자열 복구
+  var inStr = false, escaped = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (c === '\\') { escaped = true; continue; }
+    if (c === '"') inStr = !inStr;
+  }
+  if (inStr) text += '"';
+  // 불완전한 마지막 항목 제거
+  var openB = 0, openA = 0;
+  for (var j = 0; j < text.length; j++) {
+    if (text[j] === '{') openB++; else if (text[j] === '}') openB--;
+    if (text[j] === '[') openA++; else if (text[j] === ']') openA--;
+  }
+  if (openB > 0 || openA > 0) {
+    var cutPos = text.lastIndexOf('},');
+    if (cutPos < 0) cutPos = text.lastIndexOf('],');
+    if (cutPos > 0) {
+      text = text.substring(0, cutPos + 1);
+      openB = 0; openA = 0;
+      for (var k = 0; k < text.length; k++) {
+        if (text[k] === '{') openB++; else if (text[k] === '}') openB--;
+        if (text[k] === '[') openA++; else if (text[k] === ']') openA--;
+      }
+    }
+    for (var m = 0; m < openA; m++) text += ']';
+    for (var n = 0; n < openB; n++) text += '}';
+  }
+  try {
+    var result = JSON.parse(text);
+    console.log('[JSON복구] 성공 — 잘린 JSON 복구됨');
+    return result;
+  } catch(e2) {
+    console.error('[JSON복구] 최종 실패:', e2.message);
+    throw new Error('JSON 파싱 실패: ' + e2.message.substring(0, 100));
+  }
 }
 
 function guessType(nm) {
