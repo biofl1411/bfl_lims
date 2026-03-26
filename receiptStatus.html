@@ -22,7 +22,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .filter-bar input,.filter-bar select{padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit}
 
 /* 테이블 */
-.tbl{width:100%;border-collapse:collapse;font-size:12px;user-select:none;-webkit-user-select:none}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
 .tbl th{background:#f8f9fb;padding:10px 8px;text-align:left;font-weight:600;color:#344054;border-bottom:2px solid #e2e6ed;white-space:nowrap;cursor:grab;user-select:none;position:sticky;top:0;z-index:1}
 .tbl th:active{cursor:grabbing}
 .tbl th:hover{background:#eef0f4}
@@ -572,12 +572,70 @@ var _currentDetailRecord = null; // 현재 상세 패널 레코드
 var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
 
 // ============================================================================
+// ═══ 소분류 수수료 규칙 적용 (시험항목 패널용) ═══
+function _getSubChipKey(code) {
+    if (!code || code.length < 2) return '';
+    var c = code.toUpperCase();
+    if (c.startsWith('PA') || c.startsWith('PB')) return '';
+    return c.charAt(0) + c.charAt(1);
+}
+function _applySubChipFeesToItems(items) {
+    var fees = window._subChipFees || {};
+    if (!Object.keys(fees).length) return;
+    // 소분류별 항목 수 집계
+    var counts = {};
+    items.forEach(function(it) {
+        var sk = _getSubChipKey(it.testItemCode || '');
+        if (sk && fees[sk]) counts[sk] = (counts[sk] || 0) + 1;
+    });
+    // 소분류별 규칙 수수료 배열 생성
+    var feeArrays = {};
+    Object.keys(counts).forEach(function(sk) {
+        var data = fees[sk]; if (!data || !data.rules || !data.rules.length) return;
+        var rules = data.rules, arr = [];
+        if (data.mode === 'item') {
+            for (var n = 0; n < counts[sk]; n++) arr.push(rules[0].fee || 0);
+        } else {
+            var r1 = rules[0], base = r1.items || counts[sk];
+            for (var n = 0; n < Math.min(base, counts[sk]); n++) arr.push(n === 0 ? (r1.fee || 0) : 0);
+            var rem = Math.max(0, counts[sk] - base);
+            for (var i = 1; i < rules.length && rem > 0; i++) {
+                var maxAdd = rules[i].maxAdd || Infinity, apply = Math.min(rem, maxAdd);
+                for (var n = 0; n < apply; n++) arr.push(rules[i].fee || 0);
+                rem -= apply;
+            }
+        }
+        var maxItems = r1.items || 0;
+        for (var i = 1; i < rules.length; i++) maxItems += rules[i].maxAdd || 0;
+        feeArrays[sk] = { fees: arr, maxItems: maxItems || Infinity };
+    });
+    // 항목에 규칙 수수료 매핑
+    var idxMap = {};
+    items.forEach(function(it) {
+        var sk = _getSubChipKey(it.testItemCode || '');
+        if (!sk || !feeArrays[sk]) return;
+        var si = idxMap[sk] = (idxMap[sk] || 0);
+        idxMap[sk]++;
+        var info = feeArrays[sk];
+        if (si < info.fees.length) {
+            it._displayFee = info.fees[si];
+        } else {
+            it._displayFee = 0; it._feeOver = true;
+        }
+    });
+}
+
 // 데이터 로드
 // ============================================================================
 async function loadReceipts() {
     document.getElementById('loading').style.display = '';
     document.getElementById('receipt-tbody').innerHTML = '';
     try {
+        // 소분류 수수료 규칙 로드
+        try {
+            var scfDoc = await db.collection('settings').doc('subChipFees').get();
+            window._subChipFees = scfDoc.exists ? scfDoc.data() : {};
+        } catch(e) { window._subChipFees = {}; }
         // 거래처 데이터 로드 → 복합 매칭 맵 구축 (인허가 기준)
         var companies = [];
         try { companies = await fsGetCompanies({ limit: 5000 }); } catch(e) { console.warn('거래처 로드 실패:', e); }
@@ -1886,7 +1944,9 @@ function loadComparePanel(side, id, sampleIdx) {
             countEl.textContent = '(0건)';
             return;
         }
-        var totalFee    = merged.reduce(function(s, it) { return s + (Number(it.fee) || 0); }, 0);
+        // 소분류 수수료 규칙 적용
+        _applySubChipFeesToItems(merged);
+        var totalFee    = merged.reduce(function(s, it) { return s + (Number(it._displayFee) || Number(it.fee) || 0); }, 0);
         var judgedCount = merged.filter(function(it) { return it.judgmentResult; }).length;
         totalEl.textContent = totalFee.toLocaleString() + '원';
         countEl.textContent = '(' + judgedCount + '/' + merged.length + '건 판정완료)';
@@ -1923,7 +1983,9 @@ function loadComparePanel(side, id, sampleIdx) {
                 html += '<span style="color:#bbb;font-size:11px">-</span>';
             }
             html += '</td>';
-            html += '<td style="padding:7px 10px;font-size:12px;color:#5f6b7a;text-align:right;white-space:nowrap">' + (it.fee ? Number(it.fee).toLocaleString()+'원' : '-') + '</td>';
+            var dispFee = it._displayFee !== undefined ? it._displayFee : (it.fee || 0);
+            var feeColor = it._feeOver ? '#dc2626' : it._displayFee !== undefined ? '#15803d' : '#5f6b7a';
+            html += '<td style="padding:7px 10px;font-size:12px;color:' + feeColor + ';font-weight:' + (it._displayFee !== undefined ? '600' : '400') + ';text-align:right;white-space:nowrap">' + (it._feeOver ? '초과' : dispFee ? Number(dispFee).toLocaleString()+'원' : '-') + '</td>';
             html += '</tr>';
         });
         html += '</tbody></table></div>';
