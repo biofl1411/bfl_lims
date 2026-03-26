@@ -6259,37 +6259,88 @@ function getSampleNo(idx) {
     return rno + '-' + sno;
 }
 
+// ═══ 시료 다중 선택 (Shift+클릭: 일괄 적용 대상) ═══
+var _linkedSamples = new Set(); // 현재 시료와 함께 변경될 시료 인덱스
+
 function renderSampleNav() {
     var count = _sampleData.length;
     var tabs = document.getElementById('sample-nav-tabs');
     var html = '';
     for (var i = 0; i < count; i++) {
         var active = (i === _currentSampleIdx);
-        html += '<button type="button" onclick="switchSample(' + i + ')" style="' +
-            'padding:5px 12px;border-radius:6px;font-size:12px;font-weight:' + (active ? '700' : '500') + ';' +
-            'border:1px solid ' + (active ? '#6941C6' : '#d0d5dd') + ';' +
-            'background:' + (active ? '#6941C6' : '#fff') + ';' +
-            'color:' + (active ? '#fff' : '#344054') + ';' +
-            'cursor:pointer;white-space:nowrap">' +
-            getSampleNo(i) + '</button>';
+        var linked = _linkedSamples.has(i);
+        var bg = active ? '#6941C6' : linked ? '#dbeafe' : '#fff';
+        var border = active ? '#6941C6' : linked ? '#3b82f6' : '#d0d5dd';
+        var color = active ? '#fff' : linked ? '#1d4ed8' : '#344054';
+        var weight = (active || linked) ? '700' : '500';
+        html += '<button type="button" onclick="onSampleTabClick(event,' + i + ')" style="' +
+            'padding:5px 12px;border-radius:6px;font-size:12px;font-weight:' + weight + ';' +
+            'border:2px solid ' + border + ';' +
+            'background:' + bg + ';color:' + color + ';' +
+            'cursor:pointer;white-space:nowrap;transition:all .15s;position:relative">' +
+            (linked ? '🔗 ' : '') + getSampleNo(i) + '</button>';
     }
     tabs.innerHTML = html;
     document.getElementById('sample-nav-prev').disabled = (_currentSampleIdx <= 0);
     document.getElementById('sample-nav-next').disabled = (_currentSampleIdx >= count - 1);
     var rno = document.getElementById('receipt-no').value || '';
     var sno = String(_currentSampleIdx + 1).padStart(3, '0');
-    document.getElementById('sample-label').textContent = '📌 ' + (rno ? rno.replace(/-\d+$/, '-' + sno) : '시료 #' + sno);
-    // 1개일 때 네비 숨김
+    var linkedLabel = _linkedSamples.size > 0 ? ' + ' + _linkedSamples.size + '개 연결' : '';
+    document.getElementById('sample-label').textContent = '📌 ' + (rno ? rno.replace(/-\d+$/, '-' + sno) : '시료 #' + sno) + linkedLabel;
     document.getElementById('sample-nav').style.display = (count <= 1) ? 'none' : 'flex';
+}
+
+function onSampleTabClick(event, idx) {
+    if (event.shiftKey && idx !== _currentSampleIdx) {
+        // Shift+클릭: 연결 토글
+        if (_linkedSamples.has(idx)) {
+            _linkedSamples.delete(idx);
+        } else {
+            _linkedSamples.add(idx);
+        }
+        renderSampleNav();
+        showToast(_linkedSamples.size > 0
+            ? '연결 시료: ' + _linkedSamples.size + '개 (좌측 필드 변경 시 함께 적용)'
+            : '시료 연결 해제', 'info');
+    } else {
+        // 일반 클릭: 시료 전환
+        switchSample(idx);
+    }
 }
 
 function switchSample(idx) {
     if (idx < 0 || idx >= _sampleData.length || idx === _currentSampleIdx) return;
     saveSampleToArray();
     _currentSampleIdx = idx;
+    _linkedSamples.clear(); // 시료 전환 시 연결 해제
     loadSampleFromArray(idx);
     renderSampleNav();
     updateFeeSummary();
+}
+
+/** 연결된 시료에 현재 좌측 패널 공유 필드 동기화 */
+function syncLinkedSamples() {
+    if (_linkedSamples.size === 0) return;
+    saveSampleToArray();
+    var cur = _sampleData[_currentSampleIdx] || {};
+    var syncFields = [
+        'urgent-value','urgent-time','urgent-ampm',
+        'manufacture-date','expiry-date','expiry-days','lot-no',
+        'sample-amount','sample-amount-unit','sample-count',
+        'sample-receive-method','receipt-form-type','transport-status','notice-required',
+        'receipt-branch-input','receipt-branch','remarks'
+    ];
+    var labelChipsHtml = '';
+    var lc = document.getElementById('label-inline-chips');
+    if (lc) labelChipsHtml = lc.innerHTML;
+
+    _linkedSamples.forEach(function(si) {
+        if (!_sampleData[si]) _sampleData[si] = {};
+        syncFields.forEach(function(fid) {
+            _sampleData[si][fid] = cur[fid] || '';
+        });
+        _sampleData[si]._labelChipsHtml = labelChipsHtml;
+    });
 }
 
 function saveSampleToArray() {
@@ -8968,30 +9019,8 @@ function selectInline(type, val, color, bg, border) {
         if (noticeSection) noticeSection.style.display = (val === '아니요') ? 'none' : '';
         if (val === '예' && typeof loadNoticeTemplate === 'function') loadNoticeTemplate();
     }
-    // 다른 시료에도 적용 확인
-    applySharedToOtherSamples();
-}
-
-/** 공유 필드(시료접수/접수형태/운반상태/공지여부/지부/라벨)를 다른 시료에 적용 */
-function applySharedToOtherSamples() {
-    if (_sampleData.length <= 1) return;
-    // 현재 시료 먼저 저장
-    saveSampleToArray();
-    var otherCount = _sampleData.length - 1;
-    if (!confirm('다른 시료(' + otherCount + '건)에도 동일하게 적용하시겠습니까?')) return;
-    var cur = _sampleData[_currentSampleIdx] || {};
-    var labelChipsHtml = '';
-    var lc = document.getElementById('label-inline-chips');
-    if (lc) labelChipsHtml = lc.innerHTML;
-    for (var si = 0; si < _sampleData.length; si++) {
-        if (si === _currentSampleIdx) continue;
-        if (!_sampleData[si]) _sampleData[si] = {};
-        _sharedFieldIds.forEach(function(fid) {
-            _sampleData[si][fid] = cur[fid] || '';
-        });
-        _sampleData[si]._labelChipsHtml = labelChipsHtml;
-    }
-    showToast('전체 시료에 동일 설정 적용 완료');
+    // 연결된 시료에 자동 동기화
+    syncLinkedSamples();
 }
 // OCR 등 외부에서 hidden input 값 설정 후 UI 동기화
 function syncInlineUI(type) {
@@ -9079,23 +9108,8 @@ function selectUrgentInline(val) {
     document.getElementById('urgent-picker').style.display = 'none';
     var timeInline = document.getElementById('urgent-time-inline');
     if (timeInline) timeInline.style.display = (val === '시간긴급') ? 'inline-flex' : 'none';
-    // 다른 시료에도 적용 확인
-    if (_sampleData.length > 1) {
-        saveSampleToArray();
-        var otherCount = _sampleData.length - 1;
-        if (confirm('다른 시료(' + otherCount + '건)에도 긴급여부 "' + val + '"을 적용하시겠습니까?')) {
-            var timeVal = document.getElementById('urgent-time')?.value || '';
-            var ampmVal = document.getElementById('urgent-ampm')?.value || '';
-            for (var si = 0; si < _sampleData.length; si++) {
-                if (si === _currentSampleIdx) continue;
-                if (!_sampleData[si]) _sampleData[si] = {};
-                _sampleData[si]['urgent-value'] = val;
-                _sampleData[si]['urgent-time'] = timeVal;
-                _sampleData[si]['urgent-ampm'] = ampmVal;
-            }
-            showToast('전체 시료에 긴급 "' + val + '" 적용');
-        }
-    }
+    // 연결된 시료에 자동 동기화
+    syncLinkedSamples();
 }
 document.addEventListener('click', function(e) {
     var p = document.getElementById('urgent-picker');
