@@ -4486,9 +4486,21 @@ function searchRightItems(query) {
     // 멀티 선택 모드
     if (!window._rightItemPending) window._rightItemPending = new Set();
 
+    // 미추가 항목 코드 수집 (전체선택용)
+    var selectableCodes = [];
+    results.forEach(function(item) {
+        var c = item['시험항목코드'] || '';
+        if (c && !addedCodes.has(c)) selectableCodes.push(c);
+    });
+    window._rightSelectableCodes = selectableCodes;
+
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;border-bottom:1px solid #eee;background:#fafafa;position:sticky;top:0;z-index:1">'
+      + '<div style="display:flex;align-items:center;gap:6px">'
       + '<span style="font-size:10px;color:#667085" id="right-item-sel-count">' + window._rightItemPending.size + '건 선택</span>'
-      + '<button type="button" onclick="addPendingRightItems()" style="padding:2px 10px;border:none;border-radius:4px;background:#6941C6;color:#fff;font-size:11px;cursor:pointer;font-weight:600"' + (window._rightItemPending.size === 0 ? ' disabled style="padding:2px 10px;border:none;border-radius:4px;background:#ccc;color:#fff;font-size:11px;cursor:default;font-weight:600"' : '') + '>선택 항목 추가</button>'
+      + '<button type="button" onclick="rightSelectAll()" style="padding:1px 6px;border:1px solid #d0d5dd;border-radius:4px;background:#fff;color:#344054;font-size:10px;cursor:pointer">전체선택</button>'
+      + '<button type="button" onclick="rightDeselectAll()" style="padding:1px 6px;border:1px solid #d0d5dd;border-radius:4px;background:#fff;color:#344054;font-size:10px;cursor:pointer">선택해제</button>'
+      + '</div>'
+      + '<button type="button" onclick="addPendingRightItems()" style="padding:2px 10px;border:none;border-radius:4px;background:' + (window._rightItemPending.size > 0 ? '#6941C6' : '#ccc') + ';color:#fff;font-size:11px;cursor:' + (window._rightItemPending.size > 0 ? 'pointer' : 'default') + ';font-weight:600"' + (window._rightItemPending.size === 0 ? ' disabled' : '') + '>선택 항목 추가</button>'
       + '</div>';
 
     results.forEach(function(item) {
@@ -4526,6 +4538,18 @@ function searchRightItems(query) {
 }
 
 /** 멀티 선택 토글 */
+function rightSelectAll() {
+    if (!window._rightItemPending) window._rightItemPending = new Set();
+    (window._rightSelectableCodes || []).forEach(function(c) { window._rightItemPending.add(c); });
+    window._rightDropdownKeepOpen = true;
+    searchRightItems(document.getElementById('right-item-search').value || '');
+}
+function rightDeselectAll() {
+    if (window._rightItemPending) window._rightItemPending.clear();
+    window._rightDropdownKeepOpen = true;
+    searchRightItems(document.getElementById('right-item-search').value || '');
+}
+
 function toggleRightItemPending(code, isAdded) {
     if (isAdded) return;
     if (!window._rightItemPending) window._rightItemPending = new Set();
