@@ -2450,7 +2450,13 @@ function buildMicroForm(analyzed) {
     + (rule.c !== undefined ? ', c=' + rule.c : '')
     + (rule.m !== undefined ? ', m=' + Number(rule.m).toLocaleString() : '')
     + (rule.M !== undefined ? ', M=' + Number(rule.M).toLocaleString() : '')
-    + ' ' + (rule.unit || 'CFU/g') + '</div>';
+    + ' ' + (rule.unit || 'CFU/g')
+    + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">'
+    + '<span style="font-size:10px;background:#f0fdf4;border:0.5px solid #86efac;padding:1px 6px;border-radius:3px;color:#15803d">■ 유효(15~300)</span>'
+    + '<span style="font-size:10px;background:#fffbeb;border:0.5px solid #fcd34d;padding:1px 6px;border-radius:3px;color:#92400e">■ 15미만</span>'
+    + '<span style="font-size:10px;background:#fff7ed;border:0.5px solid #fb923c;padding:1px 6px;border-radius:3px;color:#c2410c">■ 300초과</span>'
+    + '<span style="font-size:10px;background:#f3f4f6;border:0.5px solid #d1d5db;padding:1px 6px;border-radius:3px;color:#6b7280">■ ND</span>'
+    + '</div></div>';
   h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 130) + 'px">';
   h += '<thead><tr><th rowspan="2" style="background:#1e3a8a;color:#fff;padding:6px 8px;border:0.5px solid #1e40af;width:72px;text-align:center">희석배수</th>';
   for (var n = 1; n <= nCount; n++) h += '<th colspan="3" style="background:#1e3a8a;color:#fff;padding:5px;border:0.5px solid #1e40af;text-align:center">n' + n + '</th>';
@@ -2465,8 +2471,8 @@ function buildMicroForm(analyzed) {
   MICRO_DILUTIONS.forEach(function(dil, di) {
     h += '<tr><td style="background:#f9fafb;padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">1:' + dil.toLocaleString() + '</td>';
     for (var n = 1; n <= nCount; n++) {
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-0" oninput="mcCalcAll(' + nCount + ',' + ruleJson + ')" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-1" oninput="mcCalcAll(' + nCount + ',' + ruleJson + ')" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-0" oninput="mcUpdateRange(' + n + ',' + di + ');mcCalcAll(' + nCount + ',' + ruleJson + ')" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-1" oninput="mcUpdateRange(' + n + ',' + di + ');mcCalcAll(' + nCount + ',' + ruleJson + ')" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
       h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="checkbox" id="mc-nd-' + n + '-' + di + '" onchange="mcToggleND(' + n + ',' + di + ',' + nCount + ',' + ruleJson + ')" style="width:13px;height:13px"></td>';
     }
     h += '</tr>';
@@ -2482,6 +2488,20 @@ function buildMicroForm(analyzed) {
     + '<div style="font-size:14px;font-weight:500" id="mc-judge-text">집락수 입력 후 자동 판정</div>'
     + '<div style="font-size:11px;color:#6b7280;margin-top:2px" id="mc-judge-sub"></div></div></div>';
   return h;
+}
+
+function mcUpdateRange(n, di) {
+  var nd = (document.getElementById('mc-nd-'+n+'-'+di)||{}).checked;
+  [0,1].forEach(function(p) {
+    var inp = document.getElementById('mc-'+n+'-'+di+'-'+p);
+    if (!inp || nd) return;
+    var v = inp.value;
+    if (v === '') { inp.style.background=''; inp.style.borderColor=''; return; }
+    var num = Number(v);
+    if (num >= 15 && num <= 300) { inp.style.background='#f0fdf4'; inp.style.borderColor='#86efac'; }
+    else if (num < 15) { inp.style.background='#fffbeb'; inp.style.borderColor='#fcd34d'; }
+    else { inp.style.background='#fff7ed'; inp.style.borderColor='#fb923c'; }
+  });
 }
 
 function mcToggleND(n, di, nCount, rule) {
@@ -2507,7 +2527,46 @@ function mcRound2(n) {
 }
 
 function mcCalcOne(n) {
+  // 전체 케이스 판별
+  var allOver300 = true, allUnder15 = true, hasAnyValue = false;
   var firstDi = -1;
+  MICRO_DILUTIONS.forEach(function(dil, di) {
+    var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
+    if (nd) return;
+    [0,1].forEach(function(p) {
+      var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
+      if (v === '') return;
+      var num = Number(v);
+      if (isNaN(num)) return;
+      hasAnyValue = true;
+      if (num <= 300) allOver300 = false;
+      if (num >= 15) allUnder15 = false;
+    });
+  });
+  if (!hasAnyValue) return null;
+
+  // 300 초과 케이스 — 밀집평판법
+  if (allOver300) {
+    var closestVal = null, closestDi = -1;
+    MICRO_DILUTIONS.forEach(function(dil, di) {
+      var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
+      if (nd) return;
+      [0,1].forEach(function(p) {
+        var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
+        if (v === '') return;
+        var num = Number(v);
+        if (isNaN(num)) return;
+        if (closestVal === null || Math.abs(num - 300) < Math.abs(closestVal - 300)) {
+          closestVal = num; closestDi = di;
+        }
+      });
+    });
+    if (closestDi < 0) return null;
+    var raw = closestVal * MICRO_DILUTIONS[closestDi];
+    return { sigmaC: closestVal, denom: 1, raw: Math.round(raw), final: mcRound2(raw), warning: 'over300' };
+  }
+
+  // 유효범위(15~300) 첫번째 희석배수 찾기
   MICRO_DILUTIONS.forEach(function(dil, di) {
     if (firstDi >= 0) return;
     var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
@@ -2516,6 +2575,8 @@ function mcCalcOne(n) {
     var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
     if (mcInRange(v0) || mcInRange(v1)) firstDi = di;
   });
+
+  // 전 평판 15 미만 케이스
   if (firstDi === -1) {
     for (var di = 0; di < MICRO_DILUTIONS.length; di++) {
       var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
@@ -2532,8 +2593,10 @@ function mcCalcOne(n) {
     });
     if (n1 === 0) return null;
     var raw = (sigC / n1) * MICRO_DILUTIONS[firstDi];
-    return { sigmaC: sigC, raw: Math.round(raw), final: mcRound2(raw) };
+    return { sigmaC: sigC, raw: Math.round(raw), final: mcRound2(raw), warning: allUnder15 ? 'under15' : '' };
   }
+
+  // 정상 케이스
   var sigmaC = 0, n1p = 0, n2p = 0;
   [0,1].forEach(function(p) {
     var nd = (document.getElementById('mc-nd-'+n+'-'+firstDi)||{}).checked;
@@ -2556,13 +2619,23 @@ function mcCalcOne(n) {
 
 function mcCalcAll(nCount, rule) {
   var m = rule.m || 10000, M = rule.M || 50000, c = rule.c !== undefined ? rule.c : 2;
-  var results = [], warnCount = 0, failCount = 0;
+  var results = [], calcs = [], warnCount = 0, failCount = 0, over300Count = 0;
   for (var n = 1; n <= nCount; n++) {
     var calc = mcCalcOne(n);
+    calcs.push(calc);
     var el = document.getElementById('mc-result-' + n);
     if (el) {
-      el.textContent = calc ? calc.final.toLocaleString() + ' CFU/g' : '-';
-      el.style.color = !calc ? '#9ca3af' : calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+      if (!calc) {
+        el.textContent = '-'; el.style.color = '#9ca3af'; el.title = '';
+      } else if (calc.warning === 'over300') {
+        el.innerHTML = calc.final.toLocaleString() + ' <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px;vertical-align:middle">300초과</span>';
+        el.style.color = '#c2410c'; el.title = '전 평판 300 초과 — 밀집평판법 적용';
+        over300Count++;
+      } else {
+        el.textContent = calc.final.toLocaleString() + ' CFU/g';
+        el.style.color = calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+        el.title = '';
+      }
     }
     if (calc) { results.push(calc.final); if (calc.final > M) failCount++; else if (calc.final > m) warnCount++; }
     else results.push(null);
@@ -2580,7 +2653,10 @@ function mcCalcAll(nCount, rule) {
   icon.textContent = pass ? '✓' : '✗'; icon.style.color = pass ? '#15803d' : '#dc2626';
   text.textContent = pass ? '적합' : '부적합'; text.style.color = pass ? '#15803d' : '#dc2626';
   var resStr = results.map(function(r,i){ return r !== null ? 'n'+(i+1)+'='+r.toLocaleString() : null; }).filter(Boolean).join(', ');
-  sub.textContent = resStr + (failCount > 0 ? ' | M초과 '+failCount+'건' : '') + (warnCount > c ? ' | m초과 '+warnCount+'건>c('+c+')' : '');
+  sub.textContent = resStr
+    + (over300Count > 0 ? ' | 300초과(밀집평판법) '+over300Count+'건' : '')
+    + (failCount > 0 ? ' | M초과 '+failCount+'건' : '')
+    + (warnCount > c ? ' | m초과 '+warnCount+'건>c('+c+')' : '');
   window._microCalcResults = { results: results, pass: pass, resStr: resStr };
 }
 
