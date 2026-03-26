@@ -5505,17 +5505,36 @@ function recalcInspectionTable() {
         if (ruleFee !== null) subChipFeeApplied[sk] = ruleFee;
     });
 
-    // 소분류별 항목당 분배 수수료 계산 (표시용)
-    var subChipPerItem = {};  // { 'X2': { perFee: 66000, overIdx: 4 }, ... }
+    // 소분류별 항목 순서에 따른 개별 수수료 배열 생성 (규칙 순서대로)
+    var subChipItemFees = {};  // { 'X2': [165000, 33000, 33000, 33000], ... }
     Object.keys(subChipFeeApplied).forEach(function(sk) {
-        var cnt = subChipCounts[sk];
+        var data = _subChipFees[sk];
+        var rules = data.rules || [];
+        var fees = [];
         var maxItems = getSubChipMaxItems(sk);
-        var validCnt = Math.min(cnt, maxItems);
-        var perFee = validCnt > 0 ? Math.round(subChipFeeApplied[sk] / validCnt) : 0;
-        subChipPerItem[sk] = { perFee: perFee, maxItems: maxItems, total: subChipFeeApplied[sk] };
+        if (data.mode === 'item') {
+            // 항목(개별) 모드: 모든 항목 동일 수수료
+            for (var n = 0; n < subChipCounts[sk]; n++) fees.push(rules[0].fee || 0);
+        } else {
+            // 묶음(세트) 모드: 1규칙 기본 항목들 + 다단계 추가 규칙
+            var r1 = rules[0];
+            var baseItems = r1.items || subChipCounts[sk];
+            for (var n = 0; n < Math.min(baseItems, subChipCounts[sk]); n++) {
+                fees.push(n === 0 ? (r1.fee || 0) : 0);  // 1규칙 수수료는 첫 항목에만
+            }
+            var remaining = Math.max(0, subChipCounts[sk] - baseItems);
+            for (var i = 1; i < rules.length && remaining > 0; i++) {
+                var rule = rules[i];
+                var maxAdd = rule.maxAdd || Infinity;
+                var apply = Math.min(remaining, maxAdd);
+                for (var n = 0; n < apply; n++) fees.push(rule.fee || 0);
+                remaining -= apply;
+            }
+        }
+        subChipItemFees[sk] = { fees: fees, maxItems: maxItems };
     });
 
-    // 소분류별 현재 인덱스 추적 (초과 항목 판별)
+    // 소분류별 현재 인덱스 추적
     var subChipIdx = {};
 
     rows.forEach(function(row, idx) {
@@ -5532,12 +5551,14 @@ function recalcInspectionTable() {
                 var sk = getSubChipKey(code);
                 if (sk && subChipFeeApplied[sk] !== undefined) {
                     // 소분류 규칙 적용 항목
-                    subChipIdx[sk] = (subChipIdx[sk] || 0) + 1;
-                    var info = subChipPerItem[sk];
+                    var si = subChipIdx[sk] = (subChipIdx[sk] || 0);
+                    subChipIdx[sk]++;
+                    var info = subChipItemFees[sk];
                     var feeCell = row.querySelector('td:last-child');
                     if (feeCell) {
-                        if (subChipIdx[sk] <= info.maxItems) {
-                            feeCell.textContent = info.perFee.toLocaleString() + '원';
+                        if (si < info.fees.length) {
+                            var itemFee = info.fees[si];
+                            feeCell.textContent = itemFee.toLocaleString() + '원';
                             feeCell.style.color = '#15803d';
                             feeCell.style.fontWeight = '600';
                         } else {
