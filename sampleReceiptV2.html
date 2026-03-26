@@ -4409,19 +4409,47 @@ function selectRefTestItem(testItemCode) {
 var _rightActiveCat = '';
 var _rightFilteredCache = null; // 검사목적 범위로 사전 필터링된 항목 캐시
 
-// ★ 묶음 검색 (좌측)
+// ★ 묶음 검색 (좌측) — P묶음 + 소분류 묶음(수수료 규칙)
 function searchRightBundles(query) {
     var list = document.getElementById('right-bundle-dropdown');
     if (!list) return;
 
     var bundleResults = searchBundlesFiltered(query);
-    if (bundleResults.length === 0) {
-        list.innerHTML = '<div style="padding:12px;color:#999;font-size:11px;text-align:center">' + (query ? '검색 결과 없음' : '묶음 없음') + '</div>';
-        list.style.display = 'block';
-        return;
-    }
-
     var html = '';
+
+    // 소분류 묶음 (subChipFees에 등록된 소분류) 추가
+    var scFees = SUB_CHIP_FEE.getFees();
+    var q = (query || '').toLowerCase();
+    Object.keys(scFees).forEach(function(sk) {
+        var data = scFees[sk];
+        if (!data || !data.rules || !data.rules.length || data.rules[0].fee <= 0) return;
+        var cat = sk.charAt(0), sub = sk.charAt(1);
+        var subName = (_REF_SUBCAT_NAMES[sk] || sk);
+        var catName = (_REF_CAT_NAMES[cat] || cat);
+        var fullName = catName + ' > ' + subName;
+        // 검색 필터
+        if (q && fullName.toLowerCase().indexOf(q) < 0 && sk.toLowerCase().indexOf(q) < 0) return;
+        // 현재 검사목적 범위 확인
+        if (_currentTestItemCats && _currentTestItemCats.length > 0 && _currentTestItemCats.indexOf(cat) < 0) return;
+        // 항목 수 집계
+        var cnt = 0;
+        (_rightFilteredCache || []).forEach(function(t) {
+            var code = (t['시험항목코드'] || '').toUpperCase();
+            if (code.charAt(0) + code.charAt(1) === sk) cnt++;
+        });
+        if (cnt === 0) return;
+        var fee = data.mode === 'bundle' ? data.rules[0].fee : 0;
+        var feeLabel = fee > 0 ? '<span style="font-size:10px;color:#16a34a;font-weight:600;margin-left:auto">' + fee.toLocaleString() + '원</span>' : '';
+        var color = _REF_CAT_COLORS[cat] || '#64748b';
+        html += '<div class="autocomplete-item" style="padding:6px 10px;font-size:12px;background:#f0fdf4;cursor:pointer;border-left:3px solid ' + color + '" onclick="selectSubChipBundle(\'' + sk + '\');closeRightBundleDropdown()">'
+          + '<div style="display:flex;align-items:center;gap:6px">'
+          + '<span style="font-family:monospace;font-size:9px;color:' + color + ';background:#f0f9ff;padding:1px 4px;border-radius:3px;font-weight:600">' + sk + '</span>'
+          + '<span style="font-weight:600;font-size:11px;color:#15803d">' + fullName + '</span>'
+          + '<span style="font-size:9px;color:#999">' + cnt + '개</span>'
+          + feeLabel + '</div></div>';
+    });
+
+    // P코드 묶음
     bundleResults.forEach(function(b) {
         var safeKey = b.key.replace(/'/g, "\\'");
         var feeLabel = b.fee > 0 ? '<span style="font-size:10px;color:#16a34a;font-weight:600;margin-left:auto">' + b.fee.toLocaleString() + '원</span>' : '';
@@ -4433,8 +4461,31 @@ function searchRightBundles(query) {
           + feeLabel + '</div></div>';
     });
 
-    list.innerHTML = html;
+    if (!html) {
+        list.innerHTML = '<div style="padding:12px;color:#999;font-size:11px;text-align:center">' + (query ? '검색 결과 없음' : '묶음 없음') + '</div>';
+    } else {
+        list.innerHTML = html;
+    }
     list.style.display = 'block';
+}
+
+/** 소분류 묶음 클릭 — 해당 소분류 전체 항목 일괄 추가 */
+function selectSubChipBundle(subKey) {
+    if (!_rightFilteredCache) return;
+    var items = _rightFilteredCache.filter(function(t) {
+        var code = (t['시험항목코드'] || '').toUpperCase();
+        return code.charAt(0) + code.charAt(1) === subKey;
+    });
+    if (items.length === 0) { showToast('항목 없음', 'warning'); return; }
+    var added = 0;
+    items.forEach(function(item) {
+        var code = item['시험항목코드'] || '';
+        selectRefTestItem(code);
+        added++;
+    });
+    recalcInspectionTable();
+    var subName = _REF_SUBCAT_NAMES[subKey] || subKey;
+    showToast(subName + ' ' + added + '건 일괄 추가', 'success');
 }
 
 function closeRightBundleDropdown() {
