@@ -1286,6 +1286,7 @@ async function doAnalyze() {
       textContext = buildTextComparisonSummary(comparison);
     }
     _lastAnalyzed = await callClaude(textContext);
+    _lastAnalyzed = normalizeMicroCalculations(_lastAnalyzed);
     var fc = (_lastAnalyzed.sections||[]).reduce(function(s,sec){return s+(sec.fields||[]).length;},0);
     pi(2,'done', fc+'개 필드 추출');
     pi(3,'idle','검증 대기');
@@ -1568,6 +1569,32 @@ function showReviewPanel(data) {
     '<div class="review-stat total">전체 필드: '+totalFields+'개</div>'+
     '<div class="review-stat ok">계산식: '+calcs.length+'개</div>'+
     (data.judgmentRule?'<div class="review-stat memo">판정기준: '+(data.judgmentRule.standardText||'')+'</div>':'');
+
+  // ★ 미생물 입력폼 삽입
+  var testBasisRv = (document.getElementById('inp-test-basis') || {}).value || '';
+  var isMicro = isMicroBiology(testBasisRv) || data.isMicroForm;
+  var microSec = document.getElementById('micro-input-section');
+  if (isMicro) {
+    if (!microSec) {
+      microSec = document.createElement('div');
+      microSec.id = 'micro-input-section';
+      microSec.style.cssText = 'margin-top:16px;padding:14px;border:1.5px solid #bfdbfe;border-radius:10px;background:#f8faff';
+      var microTitle = document.createElement('div');
+      microTitle.style.cssText = 'font-size:13px;font-weight:600;color:#1e3a8a;margin-bottom:10px';
+      microTitle.innerHTML = '🦠 미생물 집락수 입력 (모의 계산기)';
+      microSec.appendChild(microTitle);
+      var formDiv = document.createElement('div');
+      formDiv.id = 'micro-form-body';
+      microSec.appendChild(formDiv);
+      var rvSec = document.getElementById('rv-sections');
+      if (rvSec) rvSec.parentNode.insertBefore(microSec, rvSec.nextSibling);
+    }
+    microSec.style.display = '';
+    var formBody = document.getElementById('micro-form-body');
+    if (formBody) formBody.innerHTML = buildMicroForm(data);
+  } else if (microSec) {
+    microSec.style.display = 'none';
+  }
 
   // 텍스트 비교 그리드 렌더
   renderTextCompare();
@@ -1866,6 +1893,16 @@ async function doConfirmSave() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       createdAtStr: new Date().toLocaleString('ko-KR')
     };
+
+    // ★ 미생물 계산 결과 저장
+    var testBasisSave = (document.getElementById('inp-test-basis') || {}).value || '';
+    if (isMicroBiology(testBasisSave) || (_lastAnalyzed && _lastAnalyzed.isMicroForm)) {
+      row.isMicroForm = true;
+      row.microCalcResults = window._microCalcResults || null;
+      if (row.analyzed && row.analyzed.judgmentRule && !row.analyzed.judgmentRule.nCount) {
+        row.analyzed.judgmentRule.nCount = getMicroNCount(row.analyzed);
+      }
+    }
 
     await db.collection('formTemplates').doc(docId).set(row);
     pi(3,'done','저장 완료');
@@ -2283,7 +2320,21 @@ async function callClaude(textContext) {
     + '  "reagents": ["시약목록"]\n'
     + '}\n\n'
     + '## 최종 검증\n'
-    + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.'
+    + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.';
+
+  // ★ 미생물 전용 프롬프트 추가
+  var testBasisInp = (document.getElementById('inp-test-basis') || {}).value || '';
+  if (isMicroBiology(testBasisInp) || testType === '미생물') {
+    prompt += '\n\n## 미생물 시험법 전용 추출 지시\n'
+      + '이 양식은 미생물 표준평판법입니다. 아래를 반드시 추출하세요:\n'
+      + '1. n수 파악: 판정기준에서 "n=숫자" 추출\n'
+      + '2. judgmentRule에 미생물 전용 필드: nCount, c, m, M, standardText, unit\n'
+      + '3. isMicroForm: true 필드를 JSON 최상위에 추가\n'
+      + '4. calculations에 nCount만큼 세균수 계산식 정의 (bacteria_n1~bacteria_n5)\n'
+      + '5. 희석배수는 항상 5개: [10, 100, 1000, 10000, 100000]';
+  }
+
+  prompt += ''
     + (textContext ? '\n\n## 참고: PDF 텍스트 추출 비교 데이터\n아래는 PDF.js로 추출한 텍스트 좌표 비교입니다. 빈 양식에 없고 작성본에만 있는 텍스트가 입력값입니다. 이 데이터와 PDF 이미지를 교차 확인하여 누락 없이 추출하세요.\n\n' + textContext : '');
 
   var body = {
@@ -2364,6 +2415,190 @@ function safeJsonParse(text) {
     console.error('[JSON복구] 최종 실패:', e2.message);
     throw new Error('JSON 파싱 실패: ' + e2.message.substring(0, 100));
   }
+}
+
+/* ══════════════════════════════════════
+   미생물 표준평판법 전용 입력폼 + 모의 계산기
+   ══════════════════════════════════════ */
+var MICRO_DILUTIONS = [10, 100, 1000, 10000, 100000];
+
+function isMicroBiology(testBasis) {
+  if (!testBasis) return false;
+  var b = testBasis.trim();
+  return b.indexOf('미생물시험법') >= 0 || b.indexOf('일반시험법 4.') >= 0
+    || b.indexOf('제8.') >= 0 || b.indexOf('미생물') >= 0;
+}
+
+function getMicroNCount(analyzed) {
+  var rule = (analyzed || {}).judgmentRule || {};
+  var text = rule.standardText || rule.resultFieldId || '';
+  var m = text.match(/n\s*=\s*(\d+)/i);
+  if (m) return parseInt(m[1]);
+  if (rule.nCount) return rule.nCount;
+  var calcs = (analyzed || {}).calculations || [];
+  if (calcs.length >= 2 && calcs.some(function(c){ return c.sampleIndex; })) return calcs.length;
+  return 5;
+}
+
+function buildMicroForm(analyzed) {
+  var nCount = getMicroNCount(analyzed);
+  var rule = (analyzed || {}).judgmentRule || {};
+  var h = '';
+  h += '<div style="background:#eff6ff;border:0.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">'
+    + '<strong style="color:#1d4ed8">🦠 미생물 표준평판법</strong>'
+    + ' &nbsp;n=' + nCount
+    + (rule.c !== undefined ? ', c=' + rule.c : '')
+    + (rule.m !== undefined ? ', m=' + Number(rule.m).toLocaleString() : '')
+    + (rule.M !== undefined ? ', M=' + Number(rule.M).toLocaleString() : '')
+    + ' ' + (rule.unit || 'CFU/g') + '</div>';
+  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 130) + 'px">';
+  h += '<thead><tr><th rowspan="2" style="background:#1e3a8a;color:#fff;padding:6px 8px;border:0.5px solid #1e40af;width:72px;text-align:center">희석배수</th>';
+  for (var n = 1; n <= nCount; n++) h += '<th colspan="3" style="background:#1e3a8a;color:#fff;padding:5px;border:0.5px solid #1e40af;text-align:center">n' + n + '</th>';
+  h += '</tr><tr>';
+  for (var n = 1; n <= nCount; n++) {
+    h += '<th style="background:#374151;color:#fff;padding:4px;border:0.5px solid #4b5563;font-size:10px">평판1</th>';
+    h += '<th style="background:#374151;color:#fff;padding:4px;border:0.5px solid #4b5563;font-size:10px">평판2</th>';
+    h += '<th style="background:#1e40af;color:#bfdbfe;padding:4px;border:0.5px solid #1e40af;font-size:10px">ND</th>';
+  }
+  h += '</tr></thead><tbody>';
+  var ruleJson = JSON.stringify(rule).replace(/'/g, "\\'");
+  MICRO_DILUTIONS.forEach(function(dil, di) {
+    h += '<tr><td style="background:#f9fafb;padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">1:' + dil.toLocaleString() + '</td>';
+    for (var n = 1; n <= nCount; n++) {
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-0" oninput="mcCalcAll(' + nCount + ',' + ruleJson + ')" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-1" oninput="mcCalcAll(' + nCount + ',' + ruleJson + ')" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="checkbox" id="mc-nd-' + n + '-' + di + '" onchange="mcToggleND(' + n + ',' + di + ',' + nCount + ',' + ruleJson + ')" style="width:13px;height:13px"></td>';
+    }
+    h += '</tr>';
+  });
+  h += '<tr style="background:#f0fdf4"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center">채취량(g)</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="mc-w-' + n + '" placeholder="g" style="width:80px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+  h += '</tr>';
+  h += '<tr style="background:#eff6ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;font-size:10px;color:#1d4ed8;text-align:center">결과</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:5px;border:0.5px solid #e5e7eb;text-align:center;font-weight:500;font-size:13px" id="mc-result-' + n + '">-</td>';
+  h += '</tr></tbody></table></div>';
+  h += '<div id="mc-judge-box" style="margin-top:10px;padding:10px 14px;border-radius:8px;border:1.5px solid #86efac;background:#f0fdf4;display:flex;align-items:center;gap:10px">'
+    + '<span id="mc-judge-icon" style="font-size:20px">—</span><div>'
+    + '<div style="font-size:14px;font-weight:500" id="mc-judge-text">집락수 입력 후 자동 판정</div>'
+    + '<div style="font-size:11px;color:#6b7280;margin-top:2px" id="mc-judge-sub"></div></div></div>';
+  return h;
+}
+
+function mcToggleND(n, di, nCount, rule) {
+  var chk = document.getElementById('mc-nd-' + n + '-' + di);
+  var inp0 = document.getElementById('mc-' + n + '-' + di + '-0');
+  var inp1 = document.getElementById('mc-' + n + '-' + di + '-1');
+  if (!inp0 || !inp1) return;
+  if (chk && chk.checked) {
+    inp0.value = ''; inp0.disabled = true; inp0.style.background = '#f3f4f6';
+    inp1.value = ''; inp1.disabled = true; inp1.style.background = '#f3f4f6';
+  } else {
+    inp0.disabled = false; inp0.style.background = '';
+    inp1.disabled = false; inp1.style.background = '';
+  }
+  mcCalcAll(nCount, rule);
+}
+
+function mcInRange(v) { var n = Number(v); return v !== '' && !isNaN(n) && n >= 15 && n <= 300; }
+function mcRound2(n) {
+  if (!n || n <= 0 || isNaN(n)) return 0;
+  var mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
+  return Math.round(n / mag) * mag;
+}
+
+function mcCalcOne(n) {
+  var firstDi = -1;
+  MICRO_DILUTIONS.forEach(function(dil, di) {
+    if (firstDi >= 0) return;
+    var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
+    if (nd) return;
+    var v0 = (document.getElementById('mc-' + n + '-' + di + '-0') || {}).value || '';
+    var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
+    if (mcInRange(v0) || mcInRange(v1)) firstDi = di;
+  });
+  if (firstDi === -1) {
+    for (var di = 0; di < MICRO_DILUTIONS.length; di++) {
+      var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
+      if (nd) continue;
+      var v0 = (document.getElementById('mc-' + n + '-' + di + '-0') || {}).value || '';
+      var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
+      if (v0 !== '' || v1 !== '') { firstDi = di; break; }
+    }
+    if (firstDi === -1) return null;
+    var n1 = 0, sigC = 0;
+    [0,1].forEach(function(p) {
+      var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
+      if (v !== '' && !isNaN(Number(v))) { n1++; sigC += Number(v); }
+    });
+    if (n1 === 0) return null;
+    var raw = (sigC / n1) * MICRO_DILUTIONS[firstDi];
+    return { sigmaC: sigC, raw: Math.round(raw), final: mcRound2(raw) };
+  }
+  var sigmaC = 0, n1p = 0, n2p = 0;
+  [0,1].forEach(function(p) {
+    var nd = (document.getElementById('mc-nd-'+n+'-'+firstDi)||{}).checked;
+    var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
+    if (!nd && v !== '' && !isNaN(Number(v))) { n1p++; sigmaC += Number(v); }
+  });
+  var secDi = firstDi + 1;
+  if (secDi < MICRO_DILUTIONS.length) {
+    [0,1].forEach(function(p) {
+      var nd = (document.getElementById('mc-nd-'+n+'-'+secDi)||{}).checked;
+      var v = (document.getElementById('mc-'+n+'-'+secDi+'-'+p)||{}).value||'';
+      if (!nd && v !== '' && !isNaN(Number(v)) && mcInRange(v)) { n2p++; sigmaC += Number(v); }
+    });
+  }
+  if (n1p === 0) return null;
+  var denom = (1 * n1p) + (0.1 * n2p);
+  var raw = (sigmaC / denom) * MICRO_DILUTIONS[firstDi];
+  return { sigmaC: sigmaC, denom: denom, raw: Math.round(raw), final: mcRound2(raw) };
+}
+
+function mcCalcAll(nCount, rule) {
+  var m = rule.m || 10000, M = rule.M || 50000, c = rule.c !== undefined ? rule.c : 2;
+  var results = [], warnCount = 0, failCount = 0;
+  for (var n = 1; n <= nCount; n++) {
+    var calc = mcCalcOne(n);
+    var el = document.getElementById('mc-result-' + n);
+    if (el) {
+      el.textContent = calc ? calc.final.toLocaleString() + ' CFU/g' : '-';
+      el.style.color = !calc ? '#9ca3af' : calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+    }
+    if (calc) { results.push(calc.final); if (calc.final > M) failCount++; else if (calc.final > m) warnCount++; }
+    else results.push(null);
+  }
+  var box = document.getElementById('mc-judge-box');
+  var icon = document.getElementById('mc-judge-icon');
+  var text = document.getElementById('mc-judge-text');
+  var sub = document.getElementById('mc-judge-sub');
+  if (!box) return;
+  var hasResult = results.some(function(r){ return r !== null; });
+  if (!hasResult) { box.style.borderColor='#86efac'; box.style.background='#f0fdf4'; icon.textContent='—'; text.textContent='집락수 입력 후 자동 판정'; sub.textContent=''; return; }
+  var pass = (failCount === 0 && warnCount <= c);
+  box.style.borderColor = pass ? '#86efac' : '#fca5a5';
+  box.style.background = pass ? '#f0fdf4' : '#fef2f2';
+  icon.textContent = pass ? '✓' : '✗'; icon.style.color = pass ? '#15803d' : '#dc2626';
+  text.textContent = pass ? '적합' : '부적합'; text.style.color = pass ? '#15803d' : '#dc2626';
+  var resStr = results.map(function(r,i){ return r !== null ? 'n'+(i+1)+'='+r.toLocaleString() : null; }).filter(Boolean).join(', ');
+  sub.textContent = resStr + (failCount > 0 ? ' | M초과 '+failCount+'건' : '') + (warnCount > c ? ' | m초과 '+warnCount+'건>c('+c+')' : '');
+  window._microCalcResults = { results: results, pass: pass, resStr: resStr };
+}
+
+function normalizeMicroCalculations(analyzed) {
+  if (!analyzed || !analyzed.isMicroForm) return analyzed;
+  var nCount = getMicroNCount(analyzed);
+  var rule = analyzed.judgmentRule || {};
+  var hasProper = (analyzed.calculations || []).some(function(c){ return c.formula === 'microCalc(1)' || c.sampleIndex; });
+  if (hasProper) return analyzed;
+  analyzed.calculations = [];
+  for (var i = 1; i <= nCount; i++) {
+    analyzed.calculations.push({
+      id: 'bacteria_n'+i, label: '세균수'+i+' (CFU/g)', sampleIndex: i,
+      formula: 'microCalc('+i+')', formulaText: 'ΣC ÷ {(1×n1평판수)+(0.1×n2평판수)} × 첫번째희석배수',
+      unit: rule.unit||'CFU/g', decimalPlaces: 0, dilutions: MICRO_DILUTIONS
+    });
+  }
+  return analyzed;
 }
 
 function guessType(nm) {
