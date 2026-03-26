@@ -793,6 +793,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <!-- 엑셀 업로드 버튼 (모든 카테고리) -->
       <div id="mfds-excel-upload-actions" style="display:none;flex-shrink:0;gap:4px;align-items:center;">
         <button onclick="openExcelUploadModal()" class="p-act-btn" style="border-color:#e65100;color:#e65100;font-weight:600;" title="엑셀 파일로 시험항목 일괄 등록">📥 엑셀 업로드</button>
+        <button onclick="bulkDeleteTestItems()" class="p-act-btn p-act-del" title="선택한 항목 일괄 삭제" id="btn-bulk-delete-items" style="display:none">🗑️ <span id="bulk-del-items-count">0</span>건 삭제</button>
       </div>
     </div>
     <!-- 엑셀 업로드 모달 -->
@@ -876,6 +877,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
           <tr style="background:var(--bg);border-bottom:2px solid var(--bdr);position:sticky;top:0;z-index:1;">
+            <th style="padding:6px;text-align:center;width:30px;"><input type="checkbox" id="mfds-test-check-all" onchange="toggleAllTestChecks(this.checked)" style="accent-color:#1565c0"></th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;width:100px;">시험항목코드</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;">분류</th>
             <th style="padding:10px 12px;text-align:left;font-weight:600;">한글명</th>
@@ -37047,6 +37049,59 @@ function deleteSubChip() {
 }
 
 // ══ 항목 이동 (소분류 변경) ══
+// ═══ 전체 선택 / 일괄 삭제 ═══
+function toggleAllTestChecks(checked) {
+  document.querySelectorAll('#mfds-test-item-tbody input.mfds-test-check').forEach(function(cb) { cb.checked = checked; });
+  updateBulkDeleteItemsBtn();
+}
+function updateBulkDeleteItemsBtn() {
+  var checked = document.querySelectorAll('#mfds-test-item-tbody input.mfds-test-check:checked');
+  var btn = document.getElementById('btn-bulk-delete-items');
+  var cnt = document.getElementById('bulk-del-items-count');
+  if (btn) btn.style.display = checked.length > 0 ? 'inline-flex' : 'none';
+  if (cnt) cnt.textContent = checked.length;
+  var allCb = document.getElementById('mfds-test-check-all');
+  var all = document.querySelectorAll('#mfds-test-item-tbody input.mfds-test-check');
+  if (allCb) allCb.checked = all.length > 0 && checked.length === all.length;
+}
+async function bulkDeleteTestItems() {
+  var checked = Array.from(document.querySelectorAll('#mfds-test-item-tbody input.mfds-test-check:checked'));
+  if (!checked.length) return;
+  var codes = checked.map(function(cb) { return cb.dataset.code; }).filter(Boolean);
+  if (!confirm(codes.length + '건 시험항목을 삭제하시겠습니까?\n\n삭제된 항목은 복구할 수 없습니다.')) return;
+
+  showToast(codes.length + '건 삭제 중...', 'info');
+  var batch = db.batch();
+  var bc = 0;
+  codes.forEach(function(code) {
+    batch.delete(db.collection('mfds_test_items').doc(code));
+    bc++;
+    if (bc >= 400) { batch.commit(); batch = db.batch(); bc = 0; }
+  });
+  if (bc > 0) await batch.commit();
+
+  // refFeeMapping에서도 삭제
+  try {
+    var feeDoc = await db.collection('settings').doc('refFeeMapping').get();
+    if (feeDoc.exists) {
+      var mapping = (feeDoc.data() || {}).mapping || {};
+      var feeRemoved = 0;
+      codes.forEach(function(code) { if (mapping[code]) { delete mapping[code]; feeRemoved++; } });
+      if (feeRemoved > 0) await db.collection('settings').doc('refFeeMapping').set({ mapping: mapping });
+    }
+  } catch(e) {}
+
+  // 메모리에서 제거
+  var codeSet = {};
+  codes.forEach(function(c) { codeSet[c] = true; });
+  _mfdsTestItems = _mfdsTestItems.filter(function(t) { return !codeSet[t['시험항목코드']]; });
+  MFDS_CODES._testItemsCache = _mfdsTestItems;
+
+  showToast(codes.length + '건 삭제 완료', 'success');
+  renderMfdsTestItems();
+  renderMfdsTestCategoryChips();
+}
+
 function moveItemToSubChip() {
   var cat = _mfdsTestCatFilter;
   if (!cat || cat === 'all' || cat === 'PA' || cat === 'PB') return;
@@ -38907,7 +38962,7 @@ function renderMfdsTestTable() {
     var isP = code.charAt(0) === 'P';
     var pDelBtn = isP ? '<span class="p-del-x" onclick="deletePRefItem(\'' + code.replace(/'/g, "\\'") + '\')" title="삭제">×</span>' : '';
     html += '<tr class="mfds-test-row" style="border-bottom:1px solid #f0f0f0;transition:background 0.15s;' + rowOpacity + '">'
-      + '<td style="padding:4px 6px;text-align:center;width:24px;"><input type="checkbox" class="mfds-test-check" data-code="' + code + '" style="accent-color:#1565c0;"></td>'
+      + '<td style="padding:4px 6px;text-align:center;width:24px;"><input type="checkbox" class="mfds-test-check" data-code="' + code + '" onchange="updateBulkDeleteItemsBtn()" style="accent-color:#1565c0;"></td>'
       + '<td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#1565c0;white-space:nowrap;">' + pDelBtn + code + '</td>'
       + '<td style="padding:8px 12px;">' + getRefCodeCategoryBadge(code) + '</td>'
       + '<td style="padding:8px 12px;font-weight:500;">' + name + '</td>'
