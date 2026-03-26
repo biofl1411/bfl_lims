@@ -4070,6 +4070,17 @@ async function loadPBundleCache() {
             });
             console.log('[P소분류] 동적 로드:', Object.keys(_REF_SUBCAT_NAMES).length + '건');
         }
+        // 일반 대분류 소분류 이름 로드
+        var subDoc = await db.collection('settings').doc('subCategories').get();
+        if (subDoc.exists) {
+            var sData = subDoc.data();
+            Object.keys(sData).forEach(function(cat) {
+                if (typeof sData[cat] !== 'object') return;
+                Object.keys(sData[cat]).forEach(function(s) {
+                    _REF_SUBCAT_NAMES[cat + s] = sData[cat][s];
+                });
+            });
+        }
     } catch(e) {
         console.warn('[묶음] 로드 실패:', e.message);
         _pBundleCache = { names: {}, items: {}, fees: {}, units: {} };
@@ -4442,6 +4453,20 @@ function searchRightItems(query) {
 
     var results = MFDS_CODES.searchTestItems(query, _rightFilteredCache);
 
+    // 소분류 필터 적용
+    if (_rightActiveSub) {
+        results = results.filter(function(t) {
+            var code = (t['시험항목코드'] || '').toUpperCase();
+            return code.charAt(0) + code.charAt(1) === _rightActiveSub;
+        });
+    }
+    // 대분류 필터 적용
+    if (_rightActiveCat) {
+        results = results.filter(function(t) {
+            return (t['시험항목코드'] || '').charAt(0).toUpperCase() === _rightActiveCat;
+        });
+    }
+
     if (results.length === 0) {
         list.innerHTML = '<div style="padding:12px;color:#999;font-size:11px;text-align:center">검색 결과 없음</div>';
         list.style.display = 'block';
@@ -4632,7 +4657,30 @@ function buildRightCatChips(filtered) {
               + cat + ' ' + name + subText + ' ' + filtered.length + '건</span>';
         });
 
-        // 2) P 참고용이면 sub3 그룹을 가로 칩으로 표시, 클릭 시 하단에 묶음
+        // 2-a) 일반 대분류(E, F 등)의 소분류 칩 표시
+        _currentTestItemCats.forEach(function(cat) {
+            if (cat === 'P' || cat === 'PA' || cat === 'PB') return;
+            // 소분류별 건수 집계
+            var subCounts = {};
+            filtered.forEach(function(t) {
+                var code = (t['시험항목코드'] || '').toUpperCase();
+                if (code.charAt(0) !== cat) return;
+                var sub = code.charAt(1);
+                if (sub) subCounts[sub] = (subCounts[sub] || 0) + 1;
+            });
+            var subKeys = Object.keys(subCounts).sort();
+            if (subKeys.length <= 1) return; // 소분류 1개 이하면 칩 불필요
+            var color = _REF_CAT_COLORS[cat] || '#64748b';
+            subKeys.forEach(function(s) {
+                var subName = (_REF_SUBCAT_NAMES[cat + s] || s);
+                html += '<button type="button" onclick="filterRightBySub(\'' + cat + '\',\'' + s + '\')" '
+                  + 'style="padding:2px 8px;border-radius:10px;border:1.5px solid ' + color + ';background:#fafafa;color:#555;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s" '
+                  + 'data-rsub="' + cat + s + '">'
+                  + s + ' ' + subName + ' <span style="opacity:.6">' + subCounts[s] + '</span></button>';
+            });
+        });
+
+        // 2-b) P 참고용이면 sub3 그룹을 가로 칩으로 표시, 클릭 시 하단에 묶음
         //    PA/PB는 P와 별도 체계 — P의 소분류 칩 표시하지 않음
         var hasPOnly = _currentTestItemCats.indexOf('P') >= 0;
         var hasPAorPB = _currentTestItemCats.indexOf('PA') >= 0 || _currentTestItemCats.indexOf('PB') >= 0;
@@ -4677,6 +4725,23 @@ function buildRightCatChips(filtered) {
     }
 
     container.innerHTML = html;
+}
+
+var _rightActiveSub = ''; // 소분류 필터 (예: 'E6')
+function filterRightBySub(cat, sub) {
+    var key = cat + sub;
+    _rightActiveSub = (_rightActiveSub === key) ? '' : key;
+    // 칩 하이라이트
+    document.querySelectorAll('#right-cat-chips [data-rsub]').forEach(function(b) {
+        var sk = b.getAttribute('data-rsub');
+        var color = _REF_CAT_COLORS[sk.charAt(0)] || '#64748b';
+        if (sk === _rightActiveSub) {
+            b.style.background = color; b.style.color = '#fff';
+        } else {
+            b.style.background = '#fafafa'; b.style.color = '#555';
+        }
+    });
+    searchRightPanelItems(document.getElementById('right-item-search').value || '');
 }
 
 function toggleRightCatFilter(cat) {
