@@ -872,6 +872,20 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </div>
       </div>
     </div>
+    <!-- 소분류 묶음 수수료 바 -->
+    <div id="sub-chip-fee-bar" style="display:none;padding:8px 14px;margin-bottom:6px;border-radius:8px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #86efac;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span id="scf-chip-name" style="font-weight:600;font-size:13px;color:#15803d;"></span>
+        <span id="scf-item-count" style="font-size:11px;color:#6b7280;"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:11px;color:#374151;">묶음 수수료:</span>
+        <input type="text" id="scf-fee-input" placeholder="0" style="width:120px;height:28px;padding:0 8px;border:1.5px solid #86efac;border-radius:6px;font-size:14px;font-weight:600;color:#15803d;text-align:right;" oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',')">
+        <span style="font-size:12px;color:#6b7280;">원</span>
+        <button onclick="saveSubChipFeeFromBar()" style="padding:3px 10px;border:1px solid #15803d;border-radius:6px;background:#15803d;color:#fff;font-size:11px;cursor:pointer;font-weight:600;">저장</button>
+        <button onclick="clearSubChipFeeFromBar()" style="padding:3px 8px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;cursor:pointer;">해제</button>
+      </div>
+    </div>
     <!-- 시험항목 테이블 -->
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -36889,20 +36903,59 @@ async function saveSubChipFees() {
 
 function editSubChipFee(catKey, subKey) {
   event.stopPropagation();
-  var key = catKey + subKey;
-  var subName = (REF_SUB_CATEGORIES[catKey] || {})[subKey] || key;
-  var current = _subChipFees[key] || 0;
-  var input = prompt(subKey + ' ' + subName + ' 묶음 수수료 (원):\n\n현재: ' + (current ? current.toLocaleString() + '원' : '미설정'), current || '');
-  if (input === null) return;
-  var fee = parseInt(String(input).replace(/[^0-9]/g, '')) || 0;
-  if (fee > 0) {
-    _subChipFees[key] = fee;
-  } else {
-    delete _subChipFees[key];
+  // 소분류 선택 활성화 후 바에서 편집
+  _mfdsTestSubFilter = subKey;
+  renderMfdsTestSubChips();
+  applyMfdsTestFilters();
+  _mfdsTestPage = 0;
+  renderMfdsTestTable();
+  updateSubChipFeeBar();
+  // 포커스
+  setTimeout(function() { var inp = document.getElementById('scf-fee-input'); if (inp) inp.focus(); }, 100);
+}
+
+function updateSubChipFeeBar() {
+  var bar = document.getElementById('sub-chip-fee-bar');
+  if (!bar) return;
+  if (!_mfdsTestSubFilter || _mfdsTestCatFilter === 'all') {
+    bar.style.display = 'none';
+    return;
   }
+  var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
+  var subName = (REF_SUB_CATEGORIES[_mfdsTestCatFilter] || {})[_mfdsTestSubFilter] || key;
+  var cnt = 0;
+  _mfdsTestItems.forEach(function(item) {
+    var code = (item['시험항목코드'] || '').toUpperCase();
+    var catLen = _mfdsTestCatFilter.length;
+    if (code.substring(0, catLen) === _mfdsTestCatFilter && code.charAt(catLen) === _mfdsTestSubFilter) cnt++;
+  });
+  var fee = _subChipFees[key] || 0;
+
+  document.getElementById('scf-chip-name').textContent = _mfdsTestSubFilter + ' ' + subName;
+  document.getElementById('scf-item-count').textContent = cnt + '건 항목';
+  document.getElementById('scf-fee-input').value = fee > 0 ? fee.toLocaleString() : '';
+  bar.style.display = 'flex';
+}
+
+function saveSubChipFeeFromBar() {
+  var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
+  var input = document.getElementById('scf-fee-input');
+  var fee = parseInt(String(input.value).replace(/[^0-9]/g, '')) || 0;
+  if (fee > 0) _subChipFees[key] = fee;
+  else delete _subChipFees[key];
   saveSubChipFees();
   renderMfdsTestSubChips();
-  showToast(subKey + ' ' + subName + ': ' + (fee > 0 ? fee.toLocaleString() + '원' : '수수료 해제'), 'success');
+  updateSubChipFeeBar();
+  showToast(fee > 0 ? fee.toLocaleString() + '원 저장' : '수수료 해제', 'success');
+}
+
+function clearSubChipFeeFromBar() {
+  var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
+  delete _subChipFees[key];
+  saveSubChipFees();
+  document.getElementById('scf-fee-input').value = '';
+  renderMfdsTestSubChips();
+  showToast('수수료 해제', 'info');
 }
 
 function renderMfdsTestSubChips() {
@@ -36948,6 +37001,7 @@ function setMfdsTestCategory(cat) {
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
+  updateSubChipFeeBar();
   // 카테고리 선택 시 액션 버튼 표시 (all 제외 모든 카테고리)
   var pActions = document.getElementById('mfds-p-actions');
   if (pActions) pActions.style.display = (_mfdsTestCatFilter !== 'all' && _mfdsTestCatFilter !== 'PA' && _mfdsTestCatFilter !== 'PB') ? 'flex' : 'none';
@@ -36982,6 +37036,7 @@ function setMfdsTestSubCategory(sub) {
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
+  updateSubChipFeeBar();
 }
 
 // ══ P참고용: 신규 소분류 칩 생성 (순번제: P1, P2, ...) ══
