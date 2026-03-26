@@ -912,7 +912,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       </div>
 
       <div class="sec-title"><span class="sec-num">3</span> 경쟁사 동향</div>
-      <textarea id="diaryCompetitor" class="bottom-input yellow" style="margin-bottom:16px" placeholder="경쟁사 관련 특이사항&#10;예: A기관 미생물 단가 8% 인하, B기관 신규 서비스 런칭 등"></textarea>
+      <textarea id="diaryCompetitor" class="bottom-input yellow" placeholder="경쟁사 관련 특이사항&#10;예: A기관 미생물 단가 8% 인하, B기관 신규 서비스 런칭 등"></textarea>
+      <div style="margin-top:4px;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+        <label style="font-size:11px;color:#e65100;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="file" id="diaryCompetitorFile" multiple style="display:none" onchange="onCompetitorFileSelect(this)"><span style="border:1px solid #ffcc80;background:#fff3e0;padding:3px 10px;border-radius:4px">+ 팜플렛/자료 첨부</span></label>
+        <div id="diaryCompetitorFiles" style="display:flex;gap:4px;flex-wrap:wrap;font-size:10px"></div>
+      </div>
 
       <div class="sec-title"><span class="sec-num">4</span> 신규영업 활동</div>
       <textarea id="diaryNewSales" class="bottom-input" style="margin-bottom:16px" placeholder="신규 영업 활동 내용&#10;예: 하림그룹 식품안전팀 미팅 &mdash; 제안서 전달"></textarea>
@@ -4615,27 +4619,27 @@ function addDiaryCompanyCard(data) {
     methodOpts += '<option' + sel + '>' + m + '</option>';
   });
 
-  // 검사목적별 매출 테이블
+  // 검사목적별 매출 (4열 그리드, 접수취소 제외, 부가세 포함 입력)
   var savedPS = d.purposeSales || {};
-  var ptHtml = '<table class="pt"><thead><tr><th style="width:40%">검사목적</th><th style="width:30%">금액(원)</th><th>메모</th></tr></thead><tbody>';
-  if (_diaryPurposes.length === 0) {
-    ptHtml += '<tr><td colspan="3" style="text-align:center;color:#8892a4;font-size:11px;padding:12px">검사목적 관리에서 먼저 검사목적을 등록하세요.</td></tr>';
+  var filteredP = _diaryPurposes.filter(function(p) { return (p.n||'').indexOf('접수취소') === -1; });
+  var ptHtml = '';
+  if (filteredP.length === 0) {
+    ptHtml = '<div style="text-align:center;color:#8892a4;font-size:11px;padding:12px">검사목적 관리에서 먼저 검사목적을 등록하세요.</div>';
   } else {
-    _diaryPurposes.forEach(function(p,pi) {
+    ptHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">';
+    filteredP.forEach(function(p,pi) {
       var pn = p.n || '';
       var pColor = p.color || DIARY_PURPOSE_PALETTE[pi % DIARY_PURPOSE_PALETTE.length].color;
       var pTc = p.textColor || DIARY_PURPOSE_PALETTE[pi % DIARY_PURPOSE_PALETTE.length].textColor;
       var saved = savedPS[pn] || {};
       var amt = saved.amount || '';
-      var memo = saved.memo || '';
-      ptHtml += '<tr>';
-      ptHtml += '<td><span style="background:' + pColor + ';color:' + pTc + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">' + escHtml(pn) + '</span></td>';
-      ptHtml += '<td><input data-uid="' + uid + '" data-pn="' + escHtml(pn) + '" data-field="amount" value="' + amt + '" oninput="onDiaryAmtChange(this)" placeholder="0"></td>';
-      ptHtml += '<td><input data-uid="' + uid + '" data-pn="' + escHtml(pn) + '" data-field="memo" value="' + escHtml(memo) + '" style="text-align:left" placeholder="메모"></td>';
-      ptHtml += '</tr>';
+      ptHtml += '<div style="display:flex;flex-direction:column;gap:2px">';
+      ptHtml += '<span style="background:' + pColor + ';color:' + pTc + ';padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(pn) + '">' + escHtml(pn) + '</span>';
+      ptHtml += '<input data-uid="' + uid + '" data-pn="' + escHtml(pn) + '" data-field="amount" value="' + amt + '" oninput="onDiaryAmtChange(this)" placeholder="0" style="padding:4px 6px;border:1px solid #e2e6ed;border-radius:4px;font-size:11px;text-align:right;width:100%">';
+      ptHtml += '</div>';
     });
+    ptHtml += '</div>';
   }
-  ptHtml += '</tbody></table>';
   ptHtml += '<div id="dc-sub-' + uid + '" style="text-align:right;font-size:12px;font-weight:700;color:#1565c0;margin-top:6px"></div>';
 
   card.innerHTML =
@@ -4667,11 +4671,28 @@ function addDiaryCompanyCard(data) {
         '</div>' +
       '</div>' +
       '<div style="margin-bottom:8px">' +
-        '<label style="font-size:10px;color:#8892a4;display:block;margin-bottom:4px">\uac80\uc0ac\ubaa9\uc801\ubcc4 \ub9e4\ucd9c (\ubd80\uac00\uc138 \ubcc4\ub3c4)</label>' +
+        '<label style="font-size:10px;color:#8892a4;display:block;margin-bottom:4px">검사목적별 매출 (부가세 포함)</label>' +
         ptHtml +
       '</div>' +
-      '<div class="fg" style="margin:0"><label>\ud2b9\uc774\uc0ac\ud56d</label>' +
-        '<textarea id="dc-note-' + uid + '" placeholder="\ubc29\ubb38/\uc811\uc218 \uad00\ub828 \uba54\ubaa8" style="min-height:40px;font-size:12px">' + escHtml(d.note||'') + '</textarea>' +
+      // 특이사항 + 파일 첨부
+      '<div class="fg" style="margin:0"><label>특이사항</label>' +
+        '<textarea id="dc-note-' + uid + '" placeholder="방문/접수 관련 메모&#10;예: A 경쟁사 견적서 제공, 첨부 파일 참조" style="min-height:40px;font-size:12px">' + escHtml(d.note||'') + '</textarea>' +
+        '<div style="margin-top:4px;display:flex;align-items:center;gap:8px">' +
+          '<label style="font-size:11px;color:#1565c0;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="file" id="dc-file-' + uid + '" multiple style="display:none" onchange="onDiaryFileSelect(\'' + uid + '\',this)"><span style="border:1px solid #bbdefb;background:#e3f2fd;padding:3px 10px;border-radius:4px">+ 파일 첨부</span></label>' +
+          '<div id="dc-files-' + uid + '" style="display:flex;gap:4px;flex-wrap:wrap;font-size:10px"></div>' +
+        '</div>' +
+      '</div>' +
+      // 비교견적 토글
+      '<div style="margin-top:8px">' +
+        '<label style="font-size:11px;display:flex;align-items:center;gap:6px;cursor:pointer;color:#5f6b7a">' +
+          '<input type="checkbox" id="dc-compare-toggle-' + uid + '" onchange="toggleCompareQuote(\'' + uid + '\',this.checked)" style="accent-color:#1a73e8"' + (d.compareQuote?' checked':'') + '>' +
+          ' 비교견적 입력' +
+        '</label>' +
+        '<div id="dc-compare-' + uid + '" style="' + (d.compareQuote?'':'display:none;') + 'margin-top:6px;border:1px solid #e2e6ed;border-radius:8px;padding:10px;background:#fafbfc">' +
+          '<div style="display:grid;grid-template-columns:1fr 100px 100px 80px;gap:4px;font-size:10px;font-weight:600;color:#5f6b7a;margin-bottom:4px"><span>항목</span><span style="text-align:right">경쟁사 단가</span><span style="text-align:right">우리 단가</span><span style="text-align:right;color:#e53935">차액</span></div>' +
+          '<div id="dc-compare-rows-' + uid + '">' + buildCompareRows(uid, d.compareItems||[]) + '</div>' +
+          '<button onclick="addCompareRow(\'' + uid + '\')" style="margin-top:4px;font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:3px 10px;cursor:pointer">+ 항목 추가</button>' +
+        '</div>' +
       '</div>' +
     '</div>';
 
@@ -4745,6 +4766,73 @@ function refreshDiaryCardNums() {
   });
 }
 
+// ── 파일 첨부 ──
+var _diaryFiles = {}; // { uid: [File, ...] }
+function onDiaryFileSelect(uid, inp) {
+  if (!inp.files || !inp.files.length) return;
+  if (!_diaryFiles[uid]) _diaryFiles[uid] = [];
+  Array.from(inp.files).forEach(function(f) { _diaryFiles[uid].push(f); });
+  renderDiaryFiles(uid);
+  inp.value = '';
+}
+function renderDiaryFiles(uid) {
+  var el = document.getElementById('dc-files-' + uid);
+  if (!el) return;
+  var files = _diaryFiles[uid] || [];
+  el.innerHTML = files.map(function(f, i) {
+    return '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px">' +
+      escHtml(f.name) + ' <button onclick="_diaryFiles[\'' + uid + '\'].splice(' + i + ',1);renderDiaryFiles(\'' + uid + '\')" style="background:none;border:none;color:#e53935;cursor:pointer;font-size:12px;padding:0">✕</button></span>';
+  }).join('');
+}
+var _competitorFiles = [];
+function onCompetitorFileSelect(inp) {
+  if (!inp.files || !inp.files.length) return;
+  Array.from(inp.files).forEach(function(f) { _competitorFiles.push(f); });
+  var el = document.getElementById('diaryCompetitorFiles');
+  if (el) el.innerHTML = _competitorFiles.map(function(f, i) {
+    return '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px">' +
+      escHtml(f.name) + ' <button onclick="_competitorFiles.splice(' + i + ',1);onCompetitorFileSelect({files:[]})" style="background:none;border:none;color:#e53935;cursor:pointer;font-size:12px;padding:0">✕</button></span>';
+  }).join('');
+  inp.value = '';
+}
+
+// ── 비교견적 ──
+function toggleCompareQuote(uid, show) {
+  var el = document.getElementById('dc-compare-' + uid);
+  if (el) el.style.display = show ? '' : 'none';
+}
+function buildCompareRows(uid, items) {
+  if (!items || items.length === 0) items = [{ item:'', competitor:0, ours:0 }];
+  return items.map(function(r, i) {
+    var diff = (r.ours||0) - (r.competitor||0);
+    var diffColor = diff < 0 ? '#2e7d32' : diff > 0 ? '#e53935' : '#8892a4';
+    var diffText = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
+    return '<div style="display:grid;grid-template-columns:1fr 100px 100px 80px;gap:4px;margin-bottom:3px" data-compare-row>' +
+      '<input value="' + escHtml(r.item||'') + '" placeholder="항목명" data-cf="item" style="padding:4px 6px;border:1px solid #e2e6ed;border-radius:4px;font-size:11px">' +
+      '<input value="' + (r.competitor||'') + '" placeholder="0" data-cf="competitor" oninput="calcCompareRow(this)" style="padding:4px 6px;border:1px solid #e2e6ed;border-radius:4px;font-size:11px;text-align:right">' +
+      '<input value="' + (r.ours||'') + '" placeholder="0" data-cf="ours" oninput="calcCompareRow(this)" style="padding:4px 6px;border:1px solid #e2e6ed;border-radius:4px;font-size:11px;text-align:right">' +
+      '<span data-cf="diff" style="text-align:right;font-size:11px;font-weight:700;color:' + diffColor + ';padding:4px 2px">' + diffText + '</span>' +
+    '</div>';
+  }).join('');
+}
+function addCompareRow(uid) {
+  var container = document.getElementById('dc-compare-rows-' + uid);
+  if (!container) return;
+  container.insertAdjacentHTML('beforeend', buildCompareRows(uid, [{ item:'', competitor:0, ours:0 }]));
+}
+function calcCompareRow(inp) {
+  var row = inp.closest('[data-compare-row]');
+  if (!row) return;
+  var comp = Number(row.querySelector('[data-cf="competitor"]').value.replace(/,/g,'')) || 0;
+  var ours = Number(row.querySelector('[data-cf="ours"]').value.replace(/,/g,'')) || 0;
+  var diff = ours - comp;
+  var diffEl = row.querySelector('[data-cf="diff"]');
+  if (diffEl) {
+    diffEl.style.color = diff < 0 ? '#2e7d32' : diff > 0 ? '#e53935' : '#8892a4';
+    diffEl.textContent = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
+  }
+}
+
 // ── 매출 계산 ──
 function onDiaryAmtChange(inp) {
   var raw = inp.value.replace(/[^0-9]/g,'');
@@ -4793,9 +4881,10 @@ function updateDiarySumBlock() {
     var tc = (p && p.textColor) || DIARY_PURPOSE_PALETTE[(pi>=0?pi:0) % DIARY_PURPOSE_PALETTE.length].textColor;
     html += '<div class="sum-row"><span><span style="background:'+c+';color:'+tc+';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">'+escHtml(pn)+'</span></span><span style="font-weight:600">'+sums[pn].toLocaleString()+'\uc6d0</span></div>';
   });
-  html += '<div class="sum-total"><span>\ud569\uacc4</span><span>' + total.toLocaleString() + '\uc6d0</span></div>';
-  var vat = Math.round(total * 0.1);
-  html += '<div class="sum-vat">\ubd80\uac00\uc138 \ud3ec\ud568: ' + (total + vat).toLocaleString() + '\uc6d0</div>';
+  html += '<div class="sum-total"><span>합계 (부가세 포함)</span><span>' + total.toLocaleString() + '원</span></div>';
+  var supply = Math.round(total / 1.1);
+  var vat = total - supply;
+  html += '<div class="sum-vat">공급가액: ' + supply.toLocaleString() + '원 · 세액: ' + vat.toLocaleString() + '원</div>';
   block.innerHTML = html;
 }
 
@@ -4850,7 +4939,19 @@ function collectDiaryFormData(status) {
       region: addr ? addr.value : '',
       collectMethod: method ? method.value : '',
       purposeSales: ps,
-      note: note ? note.value : ''
+      note: note ? note.value : '',
+      compareQuote: !!(document.getElementById('dc-compare-toggle-' + uid) || {}).checked,
+      compareItems: (function() {
+        var items = [];
+        var rows = document.querySelectorAll('#dc-compare-rows-' + uid + ' [data-compare-row]');
+        rows.forEach(function(r) {
+          var item = (r.querySelector('[data-cf="item"]') || {}).value || '';
+          var comp = Number(((r.querySelector('[data-cf="competitor"]') || {}).value || '').replace(/,/g,'')) || 0;
+          var ours = Number(((r.querySelector('[data-cf="ours"]') || {}).value || '').replace(/,/g,'')) || 0;
+          if (item || comp || ours) items.push({ item: item, competitor: comp, ours: ours });
+        });
+        return items;
+      })()
     });
   });
 
