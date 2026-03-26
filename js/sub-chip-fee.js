@@ -127,11 +127,12 @@ var SUB_CHIP_FEE = (function() {
                 it._bundleGroup = sk;
             }
         });
-        // 소분류별 묶음 수수료 행 추가
+        // 소분류별 묶음 수수료 행을 맨 앞에 삽입
+        var bundleRows = [];
         Object.keys(counts).forEach(function(sk) {
             var totalFee = calc(sk, counts[sk]);
             if (totalFee === null) return;
-            items.push({
+            bundleRows.push({
                 testItemName: '📦 ' + sk + ' 묶음 수수료 (' + counts[sk] + '개 항목)',
                 testItemCode: 'SCF_' + sk,
                 testTeam: '-', testerName: '-', standard: '-', unit: '-',
@@ -141,6 +142,10 @@ var SUB_CHIP_FEE = (function() {
                 _isBundleRow: true
             });
         });
+        // 묶음 행을 배열 맨 앞에 삽입
+        for (var bi = bundleRows.length - 1; bi >= 0; bi--) {
+            items.unshift(bundleRows[bi]);
+        }
     }
 
     return {
