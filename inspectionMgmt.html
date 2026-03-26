@@ -872,19 +872,23 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         </div>
       </div>
     </div>
-    <!-- 소분류 묶음 수수료 바 -->
-    <div id="sub-chip-fee-bar" style="display:none;padding:8px 14px;margin-bottom:6px;border-radius:8px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #86efac;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:6px;">
+    <!-- 소분류 수수료 규칙 바 -->
+    <div id="sub-chip-fee-bar" style="display:none;padding:10px 14px;margin-bottom:6px;border-radius:8px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #86efac;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
         <span id="scf-chip-name" style="font-weight:600;font-size:13px;color:#15803d;"></span>
         <span id="scf-item-count" style="font-size:11px;color:#6b7280;"></span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+          <span style="font-size:10px;color:#6b7280;">수수료 방식:</span>
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid #86efac;" id="scf-mode-label">
+            <input type="checkbox" id="scf-mode-toggle" onchange="scfToggleMode()" style="accent-color:#15803d;width:14px;height:14px;">
+            <span id="scf-mode-text">묶음</span>
+          </label>
+          <button onclick="scfAddRule()" style="padding:2px 8px;border:1px solid #15803d;border-radius:6px;background:#15803d;color:#fff;font-size:11px;cursor:pointer;font-weight:600;">＋ 규칙 추가</button>
+          <button onclick="saveSubChipFeeFromBar()" style="padding:2px 10px;border:1px solid #15803d;border-radius:6px;background:#15803d;color:#fff;font-size:11px;cursor:pointer;font-weight:600;">💾 저장</button>
+          <button onclick="clearSubChipFeeFromBar()" style="padding:2px 8px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;cursor:pointer;">해제</button>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:11px;color:#374151;">묶음 수수료:</span>
-        <input type="text" id="scf-fee-input" placeholder="0" style="width:120px;height:28px;padding:0 8px;border:1.5px solid #86efac;border-radius:6px;font-size:14px;font-weight:600;color:#15803d;text-align:right;" oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',')">
-        <span style="font-size:12px;color:#6b7280;">원</span>
-        <button onclick="saveSubChipFeeFromBar()" style="padding:3px 10px;border:1px solid #15803d;border-radius:6px;background:#15803d;color:#fff;font-size:11px;cursor:pointer;font-weight:600;">저장</button>
-        <button onclick="clearSubChipFeeFromBar()" style="padding:3px 8px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;cursor:pointer;">해제</button>
-      </div>
+      <div id="scf-rules-container"></div>
     </div>
     <!-- 시험항목 테이블 -->
     <div style="overflow-x:auto;">
@@ -36888,12 +36892,22 @@ function renderMfdsTestCategoryChips() {
 }
 
 /** 소분류 필터 칩 렌더링 */
-var _subChipFees = {}; // { 'E6': 1200000, 'F1': 800000, ... }
+// 소분류 수수료 규칙: { 'E6': { mode:'bundle', rules:[{items:514, fee:1200000, maxAdd:0}] }, ... }
+var _subChipFees = {};
 
 async function loadSubChipFees() {
   try {
     var doc = await db.collection('settings').doc('subChipFees').get();
-    if (doc.exists) _subChipFees = doc.data() || {};
+    if (doc.exists) {
+      var data = doc.data() || {};
+      // 이전 형식(숫자) → 새 형식 마이그레이션
+      Object.keys(data).forEach(function(k) {
+        if (typeof data[k] === 'number') {
+          data[k] = { mode: 'bundle', rules: [{ items: 0, fee: data[k], maxAdd: 0 }] };
+        }
+      });
+      _subChipFees = data;
+    }
   } catch(e) {}
 }
 
@@ -36902,24 +36916,104 @@ async function saveSubChipFees() {
 }
 
 function editSubChipFee(catKey, subKey) {
-  event.stopPropagation();
-  // 소분류 선택 활성화 후 바에서 편집
+  if (event) event.stopPropagation();
   _mfdsTestSubFilter = subKey;
   renderMfdsTestSubChips();
   applyMfdsTestFilters();
   _mfdsTestPage = 0;
   renderMfdsTestTable();
   updateSubChipFeeBar();
-  // 포커스
-  setTimeout(function() { var inp = document.getElementById('scf-fee-input'); if (inp) inp.focus(); }, 100);
+}
+
+function scfToggleMode() {
+  var toggle = document.getElementById('scf-mode-toggle');
+  var text = document.getElementById('scf-mode-text');
+  var label = document.getElementById('scf-mode-label');
+  if (toggle.checked) {
+    text.textContent = '항목(개별)';
+    label.style.background = '#eff6ff'; label.style.borderColor = '#3b82f6'; label.style.color = '#1d4ed8';
+  } else {
+    text.textContent = '묶음(세트)';
+    label.style.background = '#f0fdf4'; label.style.borderColor = '#86efac'; label.style.color = '#15803d';
+  }
+}
+
+function scfRenderRules(rules, mode) {
+  var container = document.getElementById('scf-rules-container');
+  if (!container) return;
+  if (!rules || !rules.length) rules = [{ items: 0, fee: 0, maxAdd: 0 }];
+  var html = '';
+  rules.forEach(function(rule, i) {
+    var isFirst = (i === 0);
+    var bg = isFirst ? '#fff' : '#fefce8';
+    var border = isFirst ? '#86efac' : '#fcd34d';
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:4px;border-radius:6px;background:' + bg + ';border:1px solid ' + border + ';flex-wrap:wrap;" data-rule-idx="' + i + '">';
+    if (isFirst) {
+      html += '<span style="font-size:11px;font-weight:600;color:#15803d;min-width:50px;">1규칙</span>';
+      if (mode === 'bundle') {
+        html += '<span style="font-size:11px;color:#374151;">기본</span>';
+        html += '<input type="text" value="' + (rule.items || '') + '" onchange="scfRuleChanged()" style="width:50px;height:24px;padding:0 4px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;text-align:center;" placeholder="전체" data-field="items" data-idx="0">';
+        html += '<span style="font-size:11px;color:#374151;">개 항목 =</span>';
+      } else {
+        html += '<span style="font-size:11px;color:#374151;">항목당</span>';
+      }
+      html += '<input type="text" value="' + (rule.fee > 0 ? rule.fee.toLocaleString() : '') + '" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').replace(/\\B(?=(\\ d{3})+(?!\\d))/g,\',\')" style="width:110px;height:24px;padding:0 6px;border:1.5px solid #86efac;border-radius:4px;font-size:13px;font-weight:600;color:#15803d;text-align:right;" placeholder="0" data-field="fee" data-idx="0">';
+      html += '<span style="font-size:11px;color:#6b7280;">원</span>';
+    } else {
+      html += '<span style="font-size:11px;font-weight:600;color:#d97706;min-width:50px;">' + (i + 1) + '규칙</span>';
+      html += '<span style="font-size:11px;color:#374151;">추가 항목</span>';
+      html += '<input type="text" value="' + (rule.maxAdd || '') + '" style="width:40px;height:24px;padding:0 4px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;text-align:center;" placeholder="∞" data-field="maxAdd" data-idx="' + i + '">';
+      html += '<span style="font-size:11px;color:#374151;">건까지 개당</span>';
+      html += '<input type="text" value="' + (rule.fee > 0 ? rule.fee.toLocaleString() : '') + '" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').replace(/\\B(?=(\\d{3})+(?!\\d))/g,\',\')" style="width:90px;height:24px;padding:0 6px;border:1.5px solid #fcd34d;border-radius:4px;font-size:12px;font-weight:600;color:#d97706;text-align:right;" placeholder="0" data-field="fee" data-idx="' + i + '">';
+      html += '<span style="font-size:11px;color:#6b7280;">원</span>';
+      html += '<button onclick="scfRemoveRule(' + i + ')" style="padding:1px 6px;border:1px solid #fca5a5;border-radius:4px;background:#fef2f2;color:#dc2626;font-size:10px;cursor:pointer;">✕</button>';
+    }
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function scfAddRule() {
+  var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
+  var data = _subChipFees[key] || { mode: 'bundle', rules: [{ items: 0, fee: 0, maxAdd: 0 }] };
+  if (!data.rules) data.rules = [{ items: 0, fee: 0, maxAdd: 0 }];
+  data.rules.push({ items: 0, fee: 0, maxAdd: 50 });
+  _subChipFees[key] = data;
+  scfRenderRules(data.rules, data.mode);
+}
+
+function scfRemoveRule(idx) {
+  var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
+  var data = _subChipFees[key];
+  if (!data || !data.rules || idx === 0) return;
+  data.rules.splice(idx, 1);
+  scfRenderRules(data.rules, data.mode);
+}
+
+function scfCollectRules() {
+  var container = document.getElementById('scf-rules-container');
+  if (!container) return [];
+  var rules = [];
+  var divs = container.querySelectorAll('[data-rule-idx]');
+  var idxSet = new Set();
+  divs.forEach(function(div) { idxSet.add(div.getAttribute('data-rule-idx')); });
+  Array.from(idxSet).sort().forEach(function(idx) {
+    var rule = { items: 0, fee: 0, maxAdd: 0 };
+    container.querySelectorAll('[data-idx="' + idx + '"]').forEach(function(inp) {
+      var field = inp.getAttribute('data-field');
+      var val = parseInt(String(inp.value).replace(/[^0-9]/g, '')) || 0;
+      rule[field] = val;
+    });
+    rules.push(rule);
+  });
+  return rules;
 }
 
 function updateSubChipFeeBar() {
   var bar = document.getElementById('sub-chip-fee-bar');
   if (!bar) return;
   if (!_mfdsTestSubFilter || _mfdsTestCatFilter === 'all') {
-    bar.style.display = 'none';
-    return;
+    bar.style.display = 'none'; return;
   }
   var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
   var subName = (REF_SUB_CATEGORIES[_mfdsTestCatFilter] || {})[_mfdsTestSubFilter] || key;
@@ -36929,32 +37023,43 @@ function updateSubChipFeeBar() {
     var catLen = _mfdsTestCatFilter.length;
     if (code.substring(0, catLen) === _mfdsTestCatFilter && code.charAt(catLen) === _mfdsTestSubFilter) cnt++;
   });
-  var fee = _subChipFees[key] || 0;
+  var data = _subChipFees[key] || { mode: 'bundle', rules: [{ items: cnt, fee: 0, maxAdd: 0 }] };
+  if (!data.rules) data.rules = [{ items: cnt, fee: typeof data === 'number' ? data : 0, maxAdd: 0 }];
 
   document.getElementById('scf-chip-name').textContent = _mfdsTestSubFilter + ' ' + subName;
   document.getElementById('scf-item-count').textContent = cnt + '건 항목';
-  document.getElementById('scf-fee-input').value = fee > 0 ? fee.toLocaleString() : '';
-  bar.style.display = 'flex';
+
+  var toggle = document.getElementById('scf-mode-toggle');
+  toggle.checked = (data.mode === 'item');
+  scfToggleMode();
+
+  scfRenderRules(data.rules, data.mode);
+  bar.style.display = 'block';
 }
 
 function saveSubChipFeeFromBar() {
   var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
-  var input = document.getElementById('scf-fee-input');
-  var fee = parseInt(String(input.value).replace(/[^0-9]/g, '')) || 0;
-  if (fee > 0) _subChipFees[key] = fee;
-  else delete _subChipFees[key];
+  var mode = document.getElementById('scf-mode-toggle').checked ? 'item' : 'bundle';
+  var rules = scfCollectRules();
+  if (rules.length === 0) rules = [{ items: 0, fee: 0, maxAdd: 0 }];
+  var hasAnyFee = rules.some(function(r) { return r.fee > 0; });
+  if (hasAnyFee) {
+    _subChipFees[key] = { mode: mode, rules: rules };
+  } else {
+    delete _subChipFees[key];
+  }
   saveSubChipFees();
   renderMfdsTestSubChips();
   updateSubChipFeeBar();
-  showToast(fee > 0 ? fee.toLocaleString() + '원 저장' : '수수료 해제', 'success');
+  showToast(hasAnyFee ? '수수료 규칙 저장' : '수수료 해제', 'success');
 }
 
 function clearSubChipFeeFromBar() {
   var key = _mfdsTestCatFilter + _mfdsTestSubFilter;
   delete _subChipFees[key];
   saveSubChipFees();
-  document.getElementById('scf-fee-input').value = '';
   renderMfdsTestSubChips();
+  updateSubChipFeeBar();
   showToast('수수료 해제', 'info');
 }
 
