@@ -4165,6 +4165,23 @@ function calcSubChipFee(subKey, itemCount) {
 }
 
 /**
+ * 소분류 규칙의 최대 허용 항목 수 반환
+ * @returns {number} 최대 항목 수 (규칙 없으면 Infinity)
+ */
+function getSubChipMaxItems(subKey) {
+    if (!_subChipFees || !_subChipFees[subKey]) return Infinity;
+    var data = _subChipFees[subKey];
+    var rules = data.rules || [];
+    if (rules.length === 0 || !rules[0] || rules[0].fee <= 0) return Infinity;
+    if (data.mode === 'item') return Infinity; // 항목(개별) 모드는 제한 없음
+    var max = rules[0].items || 0;
+    for (var i = 1; i < rules.length; i++) {
+        max += rules[i].maxAdd || 0;
+    }
+    return max || Infinity;
+}
+
+/**
  * 시험항목코드에서 소분류 키 추출 (예: X20003 → 'X2', E60001 → 'E6')
  */
 function getSubChipKey(testItemCode) {
@@ -4413,6 +4430,23 @@ function selectRefTestItem(testItemCode) {
 
     // food-type-value 업데이트 (참고용 모드에서는 "참고용(기준규격외)" 저장)
     document.getElementById('food-type-value').value = '참고용(기준규격외)';
+
+    // 소분류 규칙 초과 경고
+    var sk = getSubChipKey(code);
+    if (sk) {
+        var maxItems = getSubChipMaxItems(sk);
+        if (maxItems < Infinity) {
+            var currentCount = 0;
+            tbody.querySelectorAll('tr[data-test-code]').forEach(function(r) {
+                var rc = r.getAttribute('data-test-code') || '';
+                if (getSubChipKey(rc) === sk) currentCount++;
+            });
+            if (currentCount > maxItems) {
+                var overCount = currentCount - maxItems;
+                showToast('⚠ 수수료 규칙 초과: ' + sk + ' 소분류 최대 ' + maxItems + '건, 현재 ' + currentCount + '건 (' + overCount + '건 초과)', 'warning');
+            }
+        }
+    }
 
     // 토스트
     showToast('시험항목 추가: ' + name + ' (' + code + ')', 'success');
@@ -5513,7 +5547,16 @@ function recalcInspectionTable() {
     if (bundleFeeTotal > 0) parts.push('묶음 ' + bundleFeeTotal.toLocaleString() + '원');
     if (subChipTotal > 0) parts.push('규칙 ' + subChipTotal.toLocaleString() + '원');
     if (individualFeeTotal > 0) parts.push('개별 ' + individualFeeTotal.toLocaleString() + '원');
+    // 소분류 규칙 초과 경고 수집
+    var overWarnings = [];
+    Object.keys(subChipCounts).forEach(function(sk) {
+        var maxItems = getSubChipMaxItems(sk);
+        if (maxItems < Infinity && subChipCounts[sk] > maxItems) {
+            overWarnings.push(sk + ' ' + (subChipCounts[sk] - maxItems) + '건 초과');
+        }
+    });
     var feeLabel = rows.length + '개 항목 / ' + (parts.length > 0 ? parts.join(' + ') + ' = ' + grandTotal.toLocaleString() + '원' : grandTotal.toLocaleString() + '원');
+    if (overWarnings.length > 0) feeLabel += ' ⚠ ' + overWarnings.join(', ');
     document.getElementById('inspection-items-summary').textContent = feeLabel;
     document.getElementById('inspection-items-tfoot').style.display = rows.length > 0 ? '' : 'none';
 
