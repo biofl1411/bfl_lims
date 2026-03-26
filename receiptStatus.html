@@ -175,6 +175,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <select id="filter-urgent" onchange="applyFilter()">
                 <option value="">전체 긴급</option>
                 <option value="Y">긴급만</option>
+                <option value="시간긴급">시간긴급</option>
+                <option value="미생물긴급">미생물긴급</option>
             </select>
             <select id="filter-traffic" onchange="applyFilter()">
                 <option value="">전체 신호등</option>
@@ -665,6 +667,9 @@ async function loadReceipts() {
                 row.feeSupply = feeSupply;
                 row.feeVat = feeVat;
                 row.feeTotal = ft;
+                // 시료별 긴급여부 (시료에 개별 설정이 있으면 우선)
+                var sampleUrgent = s['urgent-value'] || s.urgentValue || '';
+                if (sampleUrgent) row.urgent = sampleUrgent;
                 // 접수등록 누락 필드
                 row.testPurpose = r.testPurpose || '';
                 row.payMethod = r.payMethod || '';
@@ -724,7 +729,11 @@ function applyFilter() {
         if (field && r.testField !== field) return false;
         if (from && r.receiptDate < from) return false;
         if (to && r.receiptDate > to) return false;
-        if (urgentFilter && (r.urgent || '') !== urgentFilter && (urgentFilter === 'Y' && r.urgent !== '긴급' && r.urgent !== 'Y')) return false;
+        if (urgentFilter) {
+            var u = r.urgent || '';
+            if (urgentFilter === 'Y') { if (u !== '긴급' && u !== 'Y' && u !== '시간긴급' && u !== '미생물긴급') return false; }
+            else if (u !== urgentFilter) return false;
+        }
         if (trafficFilter && r.trafficLight !== trafficFilter) return false;
         if (repFilter && r.salesRep !== repFilter) return false;
         if (search) {
@@ -1027,7 +1036,10 @@ function renderTable() {
             } else if (col.key === 'feeSupply' || col.key === 'feeVat' || col.key === 'feeTotal') {
                 val = val ? Number(val).toLocaleString() + '원' : '-';
             } else if (col.key === 'urgent') {
-                val = (val === '긴급' || val === 'Y') ? '<span style="color:#e53935;font-weight:700">⚡긴급</span>' : '일반';
+                if (val === '시간긴급') val = '<span style="color:#e65100;font-weight:700">🔥시간</span>';
+                else if (val === '미생물긴급') val = '<span style="color:#8b5cf6;font-weight:700">🧫미생물</span>';
+                else if (val === '긴급' || val === 'Y') val = '<span style="color:#e53935;font-weight:700">⚡긴급</span>';
+                else val = '일반';
             } else if (col.key === 'reportSend') {
                 val = r.reportSendText || '';
             } else if (col.key === 'sampleTotalCount') {
@@ -1291,7 +1303,7 @@ function openDetailPanel(id, sampleIdx) {
         dpRow('시험분야', r.testField) +
         dpRow('검사목적', r.testPurpose) +
         dpRow('담당자', r.salesRep) +
-        dpRow('긴급여부', (r.urgent === '긴급' || r.urgent === 'Y') ? '긴급' : '일반') +
+        dpRow('긴급여부', r.urgent === '시간긴급' ? '🔥 시간긴급' : r.urgent === '미생물긴급' ? '🧫 미생물긴급' : (r.urgent === '긴급' || r.urgent === 'Y') ? '⚡ 긴급' : '일반') +
         dpRow('거래처', (r.companyName || '-') + (r.trafficLight ? ' ' + tlDisplay : '')) +
         dpRow('인허가번호', r.licNo) +
         dpRow('업종', r.licBizForm) +
