@@ -33390,20 +33390,73 @@ async function previewExcelUpload(input) {
     var headers = rows[0].map(function(h) { return String(h || '').trim(); });
     var nameIdx = -1, engIdx = -1, feeIdx = -1, unitIdx = -1;
 
-    // 컬럼 자동 감지
+    // 컬럼 자동 감지 (헤더명 기반)
     headers.forEach(function(h, i) {
-      var hl = h.toLowerCase();
-      if (hl.indexOf('한글') >= 0 || hl.indexOf('국문') >= 0 || hl.indexOf('검사항목') >= 0 || hl.indexOf('항목명') >= 0 || hl === '한글명' || hl === '국문명') nameIdx = i;
-      if (hl.indexOf('영문') >= 0 || hl.indexOf('english') >= 0) engIdx = i;
-      if (hl.indexOf('수수료') >= 0 || hl.indexOf('fee') >= 0 || hl.indexOf('금액') >= 0 || hl.indexOf('단가') >= 0) feeIdx = i;
-      if (hl.indexOf('단위') >= 0 || hl.indexOf('unit') >= 0) unitIdx = i;
+      var hl = h.toLowerCase().replace(/\s+/g, '');
+      if (nameIdx < 0 && (/한글|국문|항목명|검사항목|korean/.test(hl))) nameIdx = i;
+      if (engIdx < 0 && (/영문|english|engname/.test(hl))) engIdx = i;
+      if (feeIdx < 0 && (/수수료|fee|금액|단가|price/.test(hl))) feeIdx = i;
+      if (unitIdx < 0 && (/^단위$|^unit$/.test(hl))) unitIdx = i;
     });
 
-    // PA/PB 형식 폴백 (3번째=한글명, 4번째=영문명, 5번째=수수료, 7번째=단위)
+    // 헤더 감지 실패 시 → 데이터 첫 5행 분석으로 한글 컬럼 자동 판별
+    if (nameIdx < 0 && rows.length > 1) {
+      var korScores = {};
+      for (var ci = 0; ci < Math.min(headers.length, 10); ci++) korScores[ci] = 0;
+      for (var ri = 1; ri < Math.min(rows.length, 6); ri++) {
+        var row = rows[ri];
+        for (var ci = 0; ci < Math.min(row.length, 10); ci++) {
+          var val = String(row[ci] || '');
+          if (/[가-힣]/.test(val)) korScores[ci] = (korScores[ci] || 0) + 1;
+        }
+      }
+      // 한글 비율 가장 높은 컬럼 = 한글명
+      var maxKor = 0, maxKorIdx = -1;
+      for (var ci in korScores) {
+        if (korScores[ci] > maxKor) { maxKor = korScores[ci]; maxKorIdx = parseInt(ci); }
+      }
+      if (maxKorIdx >= 0 && maxKor >= 2) nameIdx = maxKorIdx;
+    }
+
+    // 영문명 자동 판별 (한글명 옆 컬럼 중 영문이 많은 것)
+    if (engIdx < 0 && nameIdx >= 0 && rows.length > 1) {
+      for (var ci = 0; ci < Math.min(headers.length, 10); ci++) {
+        if (ci === nameIdx) continue;
+        var engCount = 0;
+        for (var ri = 1; ri < Math.min(rows.length, 6); ri++) {
+          var val = String((rows[ri] || [])[ci] || '');
+          if (/[a-zA-Z]{3,}/.test(val) && !/[가-힣]/.test(val)) engCount++;
+        }
+        if (engCount >= 2) { engIdx = ci; break; }
+      }
+    }
+
+    // 단위 자동 판별 (mg/kg, %, CFU 등 패턴)
+    if (unitIdx < 0 && rows.length > 1) {
+      for (var ci = 0; ci < Math.min(headers.length, 10); ci++) {
+        if (ci === nameIdx || ci === engIdx) continue;
+        var unitCount = 0;
+        for (var ri = 1; ri < Math.min(rows.length, 6); ri++) {
+          var val = String((rows[ri] || [])[ci] || '');
+          if (/^(mg|µg|μg|mcg|g|kg|%|ppm|ppb|CFU|MPN|IU|mL|L)/.test(val)) unitCount++;
+        }
+        if (unitCount >= 2) { unitIdx = ci; break; }
+      }
+    }
+
+    // 최종 폴백
     if (nameIdx < 0) nameIdx = 2;
-    if (engIdx < 0) engIdx = 3;
-    if (feeIdx < 0) feeIdx = 4;
-    if (unitIdx < 0) unitIdx = 6;
+    if (engIdx < 0) engIdx = (nameIdx === 2) ? 3 : 2;
+    if (feeIdx < 0) feeIdx = -1;
+    if (unitIdx < 0) unitIdx = -1;
+    // 수수료/단위 없으면 나머지 컬럼에서 탐색
+    headers.forEach(function(h, i) {
+      if (i === nameIdx || i === engIdx) return;
+      if (feeIdx < 0) { var v = rows.length > 1 ? rows[1][i] : ''; if (typeof v === 'number' && v > 100) feeIdx = i; }
+      if (unitIdx < 0) { var v = String(rows.length > 1 ? (rows[1][i]||'') : ''); if (/mg|%|CFU|ppm/.test(v)) unitIdx = i; }
+    });
+
+    console.log('[엑셀업로드] 컬럼매핑: 한글=' + nameIdx + ', 영문=' + engIdx + ', 수수료=' + feeIdx + ', 단위=' + unitIdx + ', headers=' + JSON.stringify(headers));
 
     // 데이터 파싱
     var items = [];
