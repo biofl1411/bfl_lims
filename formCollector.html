@@ -592,7 +592,8 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
   <div class="card">
     <div class="ch">
       <div class="ct">📊 수집된 양식 현황</div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm" id="btn-bulk-delete" onclick="bulkDeleteCollected()" style="display:none;background:#ef4444;color:#fff;border:none;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer">🗑️ <span id="bulk-del-count">0</span>건 삭제</button>
         <button class="btn btn-out btn-sm" onclick="loadList()">🔃 새로고침</button>
         <button class="btn btn-ok btn-sm" onclick="openPromptModal()">💻 Claude Code 프롬프트</button>
       </div>
@@ -2461,6 +2462,7 @@ function renderList() {
     if (!fnHtml) fnHtml = '<span style="color:#94a3b8;font-size:10px">—</span>';
 
     return '<tr>'
+      +'<td style="text-align:center"><input type="checkbox" class="bulk-chk" data-idx="'+i+'" onchange="updateBulkDeleteBtn()"></td>'
       +'<td><span class="ftag" style="background:'+fc+'18;color:'+fc+'">'+( t.fieldName||'-')+'</span></td>'
       +'<td><span class="ptag">'+(t.purposeCode||'')+'</span>&nbsp;'+(t.purposeName||'-')+'</td>'
       +'<td><b>'+(t.representativeItem||t.itemName||'-')+'</b>'
@@ -2479,6 +2481,7 @@ function renderList() {
   }).join('');
   document.getElementById('tbl-wrap').innerHTML =
     '<table class="stbl"><thead><tr>'
+    +'<th style="width:30px;text-align:center"><input type="checkbox" id="bulk-chk-all" onchange="toggleAllBulkChk(this.checked)"></th>'
     +'<th>분야</th><th>검사목적</th><th>대표항목</th><th>📁 파일명 규칙</th>'
     +'<th>담당자</th><th>등록일시</th><th>상태</th><th>관리</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table>';
@@ -2595,6 +2598,39 @@ async function doDelete(i) {
   await db.collection('formTemplates').doc(t._id).delete();
   templates.splice(i,1); renderList(); updateCnts();
   toast('삭제됐습니다','ok');
+}
+
+/* ── 일괄 선택/삭제 ── */
+function toggleAllBulkChk(checked) {
+  document.querySelectorAll('.bulk-chk').forEach(function(cb) { cb.checked = checked; });
+  updateBulkDeleteBtn();
+}
+function updateBulkDeleteBtn() {
+  var checked = document.querySelectorAll('.bulk-chk:checked');
+  var btn = document.getElementById('btn-bulk-delete');
+  var cnt = document.getElementById('bulk-del-count');
+  if (btn) btn.style.display = checked.length > 0 ? '' : 'none';
+  if (cnt) cnt.textContent = checked.length;
+  // 전체 선택 체크박스 연동
+  var all = document.querySelectorAll('.bulk-chk');
+  var allCb = document.getElementById('bulk-chk-all');
+  if (allCb) allCb.checked = all.length > 0 && checked.length === all.length;
+}
+async function bulkDeleteCollected() {
+  var checked = Array.from(document.querySelectorAll('.bulk-chk:checked'));
+  if (!checked.length) return;
+  if (!confirm(checked.length + '건을 삭제하시겠습니까?')) return;
+  var indices = checked.map(function(cb) { return parseInt(cb.dataset.idx); }).sort(function(a,b){ return b-a; });
+  var batch = db.batch();
+  indices.forEach(function(i) {
+    if (templates[i] && templates[i]._id) {
+      batch.delete(db.collection('formTemplates').doc(templates[i]._id));
+    }
+  });
+  await batch.commit();
+  indices.forEach(function(i) { templates.splice(i, 1); });
+  renderList(); updateCnts();
+  toast(checked.length + '건 삭제 완료', 'ok');
 }
 
 /* =============================================================
