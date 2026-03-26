@@ -450,6 +450,12 @@ td {
             <div class="filter-label">카테고리</div>
             <div class="filter-chips" id="cat-chips" style="flex-wrap:wrap;gap:4px;"></div>
           </div>
+        </div>
+        <div class="toolbar-row" id="sub-chip-row" style="display:none;">
+          <div class="filter-group">
+            <div class="filter-label">소분류</div>
+            <div class="filter-chips" id="sub-chips" style="flex-wrap:wrap;gap:4px;"></div>
+          </div>
 
           <div class="filter-group" style="margin-left: auto;">
             <div class="filter-label">상태</div>
@@ -880,14 +886,36 @@ let currentFilters = {
   search: ''
 };
 
+// 소분류 정의 (검사관리 시험항목 탭과 동일)
+var REF_SUB_CATS = {
+  A: { 1: '일반이화학', 2: '영양성분', 3: '규격시험', 4: '기능성분', 5: '물성시험' },
+  B: { 1: '중금속', 2: '무기물/유해원소', 3: '곰팡이독소', 4: '가공오염물', 5: '의약품성분', 6: '식품첨가물', 7: '방사능', 8: '방사선', 9: '기구용기포장' },
+  C: { 1: '일반세균', 2: '병원성미생물', 3: '바이러스', 4: '기타미생물' },
+  D: { 1: '기생충' },
+  E: { 1: '살충제', 2: '살균제', 3: '제초제', 4: '성장조절제', 5: '기타농약' },
+  F: { 1: '항생제', 2: '항원충제', 3: '구충제', 4: '살충제', 5: '호르몬', 6: '진정제', 7: '소염제', 8: '항히스타민', 9: '기타', A: '추가' },
+  G: { 1: 'GMO' },
+  H: { 1: '곰팡이', 2: '기생충', 3: '이물', 4: '이물세부' },
+  I: { 1: '바이러스/화학', 2: '질병유형', 3: '기타' },
+  X: { 1: '기타', 2: 'RT-PCR', 3: 'Elisa' },
+  P: { 1: '이화학/일반', 2: '영양성분', 3: '미생물', 4: '중금속/유해물질', 5: '식품첨가물', 6: '곰팡이독소', 9: '기타' }
+};
+
+function getItemSubCategory(code) {
+  if (!code || code.length < 2) return '';
+  var cat = getItemCategory(code);
+  if (cat === 'PA' || cat === 'PB') return ''; // PA/PB는 소분류 없음
+  return code.charAt(1);
+}
+
 // 카테고리 필터
 var currentCatFilter = '전체';
+var currentSubFilter = '전체';
 
 function buildCatChips() {
   var counts = {};
   allItems.forEach(function(item) {
-    var cat = item.category;
-    counts[cat] = (counts[cat] || 0) + 1;
+    counts[item.category] = (counts[item.category] || 0) + 1;
   });
   var container = document.getElementById('cat-chips');
   if (!container) return;
@@ -899,11 +927,51 @@ function buildCatChips() {
     html += '<button class="filter-chip' + (currentCatFilter === cat ? ' active' : '') + '" onclick="filterByCat(\'' + cat + '\')" style="font-size:11px;padding:4px 8px;border-color:' + info.color + ';' + (currentCatFilter === cat ? 'background:' + info.color + ';color:#fff;' : 'color:' + info.color + ';') + '">' + info.name + ' ' + counts[cat] + '</button>';
   });
   container.innerHTML = html;
+  buildSubChips();
+}
+
+function buildSubChips() {
+  var row = document.getElementById('sub-chip-row');
+  var container = document.getElementById('sub-chips');
+  if (!row || !container) return;
+
+  var subs = REF_SUB_CATS[currentCatFilter];
+  if (!subs || currentCatFilter === '전체') {
+    row.style.display = 'none';
+    currentSubFilter = '전체';
+    return;
+  }
+
+  // 소분류별 건수
+  var subCounts = {};
+  var catItems = allItems.filter(function(i) { return i.category === currentCatFilter; });
+  catItems.forEach(function(i) {
+    var sub = getItemSubCategory(i.code);
+    if (sub) subCounts[sub] = (subCounts[sub] || 0) + 1;
+  });
+
+  var html = '<button class="filter-chip' + (currentSubFilter === '전체' ? ' active' : '') + '" onclick="filterBySub(\'전체\')" style="font-size:11px;padding:3px 7px;">전체 ' + catItems.length + '</button>';
+  Object.keys(subs).forEach(function(key) {
+    var name = subs[key];
+    var cnt = subCounts[key] || 0;
+    if (cnt === 0) return;
+    var catInfo = REF_CATS[currentCatFilter] || { color: '#999' };
+    html += '<button class="filter-chip' + (currentSubFilter === key ? ' active' : '') + '" onclick="filterBySub(\'' + key + '\')" style="font-size:11px;padding:3px 7px;border-color:' + catInfo.color + ';' + (currentSubFilter === key ? 'background:' + catInfo.color + ';color:#fff;' : 'color:' + catInfo.color + ';') + '">' + key + ' ' + name + ' ' + cnt + '</button>';
+  });
+  container.innerHTML = html;
+  row.style.display = '';
 }
 
 function filterByCat(cat) {
   currentCatFilter = cat;
+  currentSubFilter = '전체';
   buildCatChips();
+  filterData();
+}
+
+function filterBySub(sub) {
+  currentSubFilter = sub;
+  buildSubChips();
   filterData();
 }
 
@@ -1017,6 +1085,12 @@ function filterData() {
 
     // 카테고리 필터
     if (currentCatFilter !== '전체' && item.category !== currentCatFilter) return false;
+
+    // 소분류 필터
+    if (currentSubFilter !== '전체') {
+      var sub = getItemSubCategory(item.code);
+      if (sub !== currentSubFilter) return false;
+    }
 
     // 상태 필터
     if (currentFilters.status === '배정' && !item.manager) return false;
