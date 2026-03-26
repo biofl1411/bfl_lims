@@ -4384,8 +4384,10 @@ function selectRefTestItem(testItemCode) {
         }
     }
 
-    // 토스트
-    showToast('시험항목 추가: ' + name + ' (' + code + ')', 'success');
+    // 토스트 (묶음 일괄 추가 중이면 억제)
+    if (!window._suppressItemToast) {
+        showToast('시험항목 추가: ' + name + ' (' + code + ')', 'success');
+    }
 
     // 드롭다운 유지 + 목록 갱신 (추가됨 배지 업데이트)
     _refDropdownKeep = true;
@@ -4477,15 +4479,71 @@ function selectSubChipBundle(subKey) {
         return code.charAt(0) + code.charAt(1) === subKey;
     });
     if (items.length === 0) { showToast('항목 없음', 'warning'); return; }
+
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var emptyRow = document.getElementById('ref-test-empty-row');
+    if (emptyRow) emptyRow.remove();
+
+    // 묶음 수수료 조회
+    var bundleFee = SUB_CHIP_FEE.calc(subKey, items.length) || 0;
+    var subName = _REF_SUBCAT_NAMES[subKey] || subKey;
+    var bundleKey = 'SCF_' + subKey;
+
+    // 중복 체크
+    if (tbody.querySelector('tr[data-test-code="' + bundleKey + '"]')) {
+        showToast('이미 추가된 묶음: ' + subName, 'warning');
+        return;
+    }
+
+    // 개별 항목 추가 (수수료 0원, 토스트 억제)
+    window._suppressItemToast = true;
     var added = 0;
     items.forEach(function(item) {
         var code = item['시험항목코드'] || '';
-        selectRefTestItem(code);
+        if (tbody.querySelector('tr[data-test-code="' + code + '"]')) return; // 중복 스킵
+        var name = item['한글명'] || '';
+        var eng = item['영문명'] || '';
+        var rowCount = tbody.querySelectorAll('tr[data-test-code]').length;
+        var tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #eee';
+        tr.setAttribute('data-item-key', name);
+        tr.setAttribute('data-fee', '0');
+        tr.setAttribute('data-test-code', code);
+        tr.setAttribute('data-bundle-key', bundleKey);
+        tr.setAttribute('data-unit', '');
+        tr.innerHTML = '<td style="padding:8px 6px;text-align:center"><input type="checkbox" class="inspection-item-check" value="' + rowCount + '" onchange="onInspectionCheckChange()"></td>'
+            + '<td style="padding:8px 12px;color:#667085">' + (rowCount + 1) + '</td>'
+            + '<td style="padding:8px 12px;color:#344054;font-weight:500">' + name + (eng ? ' <span style="font-size:11px;color:#999">(' + eng + ')</span>' : '') + '</td>'
+            + '<td style="padding:8px 12px;font-family:monospace;color:#1565c0;font-size:12px">' + code + '</td>'
+            + '<td style="padding:8px 12px;color:#999;font-size:12px">-</td>'
+            + '<td style="padding:8px 12px;color:#999;font-size:12px">-</td>'
+            + '<td style="padding:8px 12px;text-align:right;color:#999;font-size:11px">-</td>';
+        tbody.appendChild(tr);
         added++;
     });
+    window._suppressItemToast = false;
+
+    // 묶음 수수료 행 추가 (P묶음과 동일 패턴)
+    if (bundleFee > 0) {
+        var pkgTr = document.createElement('tr');
+        pkgTr.style.borderBottom = '2px solid #c4b5fd';
+        pkgTr.style.background = '#faf5ff';
+        pkgTr.setAttribute('data-fee', bundleFee);
+        pkgTr.setAttribute('data-package-fee', bundleFee);
+        pkgTr.setAttribute('data-test-code', bundleKey);
+        pkgTr.setAttribute('data-item-key', subName + ' (묶음)');
+        pkgTr.innerHTML = '<td></td><td></td>'
+            + '<td colspan="4" style="padding:8px 12px;color:#15803d;font-weight:700;font-size:12px">📦 ' + subName + ' (' + added + '개 항목) 묶음 수수료</td>'
+            + '<td style="padding:8px 12px;text-align:right;color:#15803d;font-weight:700">' + bundleFee.toLocaleString() + '원</td>';
+        tbody.appendChild(pkgTr);
+    }
+
     recalcInspectionTable();
-    var subName = _REF_SUBCAT_NAMES[subKey] || subKey;
-    showToast(subName + ' ' + added + '건 일괄 추가', 'success');
+    document.getElementById('food-type-value').value = '참고용(기준규격외)';
+    saveSampleToArray();
+    updateFeeSummary();
+    showToast('📦 ' + subName + ' ' + added + '건 일괄 추가 · 묶음 수수료 ' + bundleFee.toLocaleString() + '원', 'success');
 }
 
 function closeRightBundleDropdown() {
