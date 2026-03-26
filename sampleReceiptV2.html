@@ -5505,6 +5505,19 @@ function recalcInspectionTable() {
         if (ruleFee !== null) subChipFeeApplied[sk] = ruleFee;
     });
 
+    // 소분류별 항목당 분배 수수료 계산 (표시용)
+    var subChipPerItem = {};  // { 'X2': { perFee: 66000, overIdx: 4 }, ... }
+    Object.keys(subChipFeeApplied).forEach(function(sk) {
+        var cnt = subChipCounts[sk];
+        var maxItems = getSubChipMaxItems(sk);
+        var validCnt = Math.min(cnt, maxItems);
+        var perFee = validCnt > 0 ? Math.round(subChipFeeApplied[sk] / validCnt) : 0;
+        subChipPerItem[sk] = { perFee: perFee, maxItems: maxItems, total: subChipFeeApplied[sk] };
+    });
+
+    // 소분류별 현재 인덱스 추적 (초과 항목 판별)
+    var subChipIdx = {};
+
     rows.forEach(function(row, idx) {
         var numCell = row.querySelector('td:nth-child(2)');
         if (numCell) numCell.textContent = idx + 1;
@@ -5515,11 +5528,22 @@ function recalcInspectionTable() {
         } else {
             var bk = row.getAttribute('data-bundle-key');
             if (!bk) {
-                // 소분류 규칙 적용 대상인지 확인
                 var code = row.getAttribute('data-test-code') || '';
                 var sk = getSubChipKey(code);
                 if (sk && subChipFeeApplied[sk] !== undefined) {
-                    // 소분류 규칙 적용 항목: 개별 합산에서 제외 (그룹 합계로 대체)
+                    // 소분류 규칙 적용 항목
+                    subChipIdx[sk] = (subChipIdx[sk] || 0) + 1;
+                    var info = subChipPerItem[sk];
+                    var feeCell = row.querySelector('td:last-child');
+                    if (feeCell) {
+                        if (subChipIdx[sk] <= info.maxItems) {
+                            feeCell.textContent = info.perFee.toLocaleString() + '원';
+                            feeCell.style.color = '#15803d';
+                            feeCell.style.fontWeight = '600';
+                        } else {
+                            feeCell.innerHTML = '<span style="color:#dc2626;font-weight:600">초과</span>';
+                        }
+                    }
                 } else {
                     individualFeeTotal += fee;
                 }
