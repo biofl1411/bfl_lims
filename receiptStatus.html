@@ -206,11 +206,15 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
     <!-- 바디 존 -->
     <div id="body-zone">
         <div id="table-zone">
-            <div id="table-scroll-wrap" style="overflow-x:auto">
+            <div id="table-scroll-wrap" style="overflow-x:hidden">
                 <table class="tbl" id="receipt-table">
                     <thead id="receipt-thead"></thead>
                     <tbody id="receipt-tbody"></tbody>
                 </table>
+            </div>
+            <!-- sticky 가로 스크롤바 -->
+            <div id="sticky-hscroll" style="position:sticky;bottom:0;z-index:10;overflow-x:auto;overflow-y:hidden;height:14px;background:#f0f0f0;border-top:1px solid #e2e6ed">
+                <div id="sticky-hscroll-inner" style="height:1px"></div>
             </div>
             <div id="loading" class="loading">데이터를 불러오는 중...</div>
             <div class="pagination" id="pagination"></div>
@@ -2022,6 +2026,29 @@ window.onload = function() {
     loadColumnSettings();
     loadColumnOrder();
     loadReceipts();
+    // sticky 가로 스크롤바 ↔ 테이블 동기화
+    (function() {
+        var wrap = document.getElementById('table-scroll-wrap');
+        var bar = document.getElementById('sticky-hscroll');
+        var inner = document.getElementById('sticky-hscroll-inner');
+        if (!wrap || !bar || !inner) return;
+        var syncing = false;
+        function syncWidth() { inner.style.width = wrap.scrollWidth + 'px'; }
+        bar.addEventListener('scroll', function() {
+            if (syncing) return; syncing = true;
+            wrap.scrollLeft = bar.scrollLeft;
+            syncing = false;
+        });
+        wrap.addEventListener('scroll', function() {
+            if (syncing) return; syncing = true;
+            bar.scrollLeft = wrap.scrollLeft;
+            syncing = false;
+        });
+        // 테이블 렌더링 후 너비 동기화
+        new MutationObserver(syncWidth).observe(wrap, { childList: true, subtree: true });
+        window.addEventListener('resize', syncWidth);
+        syncWidth();
+    })();
     // 기본 날짜 필터 (최근 30일)
     var now = new Date();
     var from = new Date(now);
