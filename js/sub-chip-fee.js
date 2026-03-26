@@ -108,9 +108,9 @@ var SUB_CHIP_FEE = (function() {
     }
 
     /**
-     * 시험항목 배열에 규칙 기반 수수료 매핑 (접수 현황용)
-     * 각 항목에 _displayFee, _feeOver 속성 추가
-     * @param {Array} items - testItemCode 필드가 있는 항목 배열
+     * 시험항목 배열에 규칙 기반 수수료 매핑
+     * 개별 항목은 _displayFee = 0, 소분류별 묶음 수수료 행을 배열 끝에 추가
+     * @param {Array} items - testItemCode 필드가 있는 항목 배열 (수정됨)
      */
     function applyToItems(items) {
         if (!_fees || !Object.keys(_fees).length) return;
@@ -119,24 +119,27 @@ var SUB_CHIP_FEE = (function() {
             var sk = getKey(it.testItemCode || '');
             if (sk && _fees[sk]) counts[sk] = (counts[sk] || 0) + 1;
         });
-        var feeArrays = {};
-        Object.keys(counts).forEach(function(sk) {
-            var info = buildItemFees(sk, counts[sk]);
-            if (info) feeArrays[sk] = info;
-        });
-        var idxMap = {};
+        // 개별 항목 수수료 → 0 (묶음 행에서 합산)
         items.forEach(function(it) {
             var sk = getKey(it.testItemCode || '');
-            if (!sk || !feeArrays[sk]) return;
-            var si = idxMap[sk] = (idxMap[sk] || 0);
-            idxMap[sk]++;
-            var info = feeArrays[sk];
-            if (si < info.fees.length) {
-                it._displayFee = info.fees[si];
-            } else {
+            if (sk && counts[sk]) {
                 it._displayFee = 0;
-                it._feeOver = true;
+                it._bundleGroup = sk;
             }
+        });
+        // 소분류별 묶음 수수료 행 추가
+        Object.keys(counts).forEach(function(sk) {
+            var totalFee = calc(sk, counts[sk]);
+            if (totalFee === null) return;
+            items.push({
+                testItemName: '📦 ' + sk + ' 묶음 수수료 (' + counts[sk] + '개 항목)',
+                testItemCode: 'SCF_' + sk,
+                testTeam: '-', testerName: '-', standard: '-', unit: '-',
+                markValue: '', judgmentResult: '',
+                fee: totalFee,
+                _displayFee: totalFee,
+                _isBundleRow: true
+            });
         });
     }
 
