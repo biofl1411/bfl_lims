@@ -36874,6 +36874,37 @@ function renderMfdsTestCategoryChips() {
 }
 
 /** 소분류 필터 칩 렌더링 */
+var _subChipFees = {}; // { 'E6': 1200000, 'F1': 800000, ... }
+
+async function loadSubChipFees() {
+  try {
+    var doc = await db.collection('settings').doc('subChipFees').get();
+    if (doc.exists) _subChipFees = doc.data() || {};
+  } catch(e) {}
+}
+
+async function saveSubChipFees() {
+  try { await db.collection('settings').doc('subChipFees').set(_subChipFees); } catch(e) {}
+}
+
+function editSubChipFee(catKey, subKey) {
+  event.stopPropagation();
+  var key = catKey + subKey;
+  var subName = (REF_SUB_CATEGORIES[catKey] || {})[subKey] || key;
+  var current = _subChipFees[key] || 0;
+  var input = prompt(subKey + ' ' + subName + ' 묶음 수수료 (원):\n\n현재: ' + (current ? current.toLocaleString() + '원' : '미설정'), current || '');
+  if (input === null) return;
+  var fee = parseInt(String(input).replace(/[^0-9]/g, '')) || 0;
+  if (fee > 0) {
+    _subChipFees[key] = fee;
+  } else {
+    delete _subChipFees[key];
+  }
+  saveSubChipFees();
+  renderMfdsTestSubChips();
+  showToast(subKey + ' ' + subName + ': ' + (fee > 0 ? fee.toLocaleString() + '원' : '수수료 해제'), 'success');
+}
+
 function renderMfdsTestSubChips() {
   var container = document.getElementById('mfds-test-sub-chips');
   if (!container) return;
@@ -36886,19 +36917,22 @@ function renderMfdsTestSubChips() {
   var html = '';
   Object.keys(subs).forEach(function(s) {
     var isActive = _mfdsTestSubFilter === s;
-    // 소분류 건수
     var cnt = 0;
     _mfdsTestItems.forEach(function(item) {
       var code = (item['시험항목코드'] || '').toUpperCase();
       if (code.charAt(0) === _mfdsTestCatFilter && code.charAt(1) === s) cnt++;
     });
+    var feeKey = _mfdsTestCatFilter + s;
+    var fee = _subChipFees[feeKey] || 0;
+    var feeBadge = fee > 0 ? ' <span style="background:#dcfce7;color:#15803d;font-size:9px;padding:1px 4px;border-radius:3px;font-weight:600">' + fee.toLocaleString() + '원</span>' : '';
     var dblClick = ' ondblclick="event.stopPropagation();renameSubChip(\'' + _mfdsTestCatFilter + '\',\'' + s + '\')"';
-    html += '<button type="button" onclick="setMfdsTestSubCategory(\'' + s + '\')"' + dblClick + ' ' +
+    var rightClick = ' oncontextmenu="event.preventDefault();editSubChipFee(\'' + _mfdsTestCatFilter + '\',\'' + s + '\')"';
+    html += '<button type="button" onclick="setMfdsTestSubCategory(\'' + s + '\')"' + dblClick + rightClick + ' ' +
       'style="padding:3px 9px;border-radius:10px;border:1px solid ' + (isActive ? cat.color : '#bbb') + ';' +
       'background:' + (isActive ? cat.color : '#f5f5f5') + ';color:' + (isActive ? '#fff' : '#555') + ';' +
       'font-size:11px;cursor:pointer;transition:all .15s;" ' +
-      'title="' + _mfdsTestCatFilter + s + 'xxxx (' + cnt + '건) — 더블클릭으로 이름 수정">' +
-      s + ' ' + subs[s] + ' <span style="opacity:.6;">' + cnt + '</span></button>';
+      'title="' + feeKey + 'xxxx (' + cnt + '건)' + (fee > 0 ? ' | 묶음수수료: ' + fee.toLocaleString() + '원' : '') + ' — 더블클릭:이름수정, 우클릭:수수료설정">' +
+      s + ' ' + subs[s] + ' <span style="opacity:.6;">' + cnt + '</span>' + feeBadge + '</button>';
   });
   container.innerHTML = html;
 }
@@ -39487,6 +39521,7 @@ function populateDynamicSelects() {
 // Firebase 인증 대기 후 초기화
 window.addEventListener('firebase-ready', async function() {
   await loadInspectionConfig();
+  await loadSubChipFees();
   init();
   populateDynamicSelects();
   if (!_inspectionDataLoaded.foodType && foodTypeData.length > 0) saveFoodTypesToFirestore();
@@ -39498,6 +39533,7 @@ window.addEventListener('firebase-ready', async function() {
 if (window._firebaseInitDone) {
   (async function() {
     await loadInspectionConfig();
+    await loadSubChipFees();
     init();
     populateDynamicSelects();
     if (!_inspectionDataLoaded.foodType && foodTypeData.length > 0) saveFoodTypesToFirestore();
