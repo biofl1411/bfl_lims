@@ -3567,7 +3567,7 @@ function updateInspectionMode(testPurpose) {
 
         // 데이터 미리 로드
         if (typeof MFDS_CODES !== 'undefined') {
-            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache(), buildRefFeeMap()]).then(function(r) {
+            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache(), buildRefFeeMap(), loadSubChipFees()]).then(function(r) {
                 _refTestItemsCache = r[0];
                 _rightFilteredCache = _filterTestItemsByCats(r[0]);
                 var searchEl = document.getElementById('right-item-search');
@@ -3628,7 +3628,7 @@ function updateInspectionMode(testPurpose) {
         _rightActiveCat = '';
 
         if (typeof MFDS_CODES !== 'undefined') {
-            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache(), buildRefFeeMap()]).then(function(r) {
+            Promise.all([MFDS_CODES.loadTestItems(), loadPBundleCache(), buildRefFeeMap(), loadSubChipFees()]).then(function(r) {
                 _refTestItemsCache = r[0];
                 _rightFilteredCache = _filterTestItemsByCats(r[0]);
                 var searchEl = document.getElementById('right-item-search');
@@ -4107,6 +4107,73 @@ function searchBundles(query) {
         });
     });
     return results;
+}
+
+// ═══ 소분류 수수료 규칙 (inspectionMgmt 시험항목 탭에서 설정) ═══
+var _subChipFees = null;
+
+async function loadSubChipFees() {
+    try {
+        var doc = await db.collection('settings').doc('subChipFees').get();
+        if (doc.exists) {
+            var data = doc.data() || {};
+            // 이전 형식(숫자) → 새 형식 마이그레이션
+            Object.keys(data).forEach(function(k) {
+                if (typeof data[k] === 'number') {
+                    data[k] = { mode: 'bundle', rules: [{ items: 0, fee: data[k], maxAdd: 0 }] };
+                }
+            });
+            _subChipFees = data;
+        } else {
+            _subChipFees = {};
+        }
+    } catch(e) { _subChipFees = {}; }
+}
+
+/**
+ * 소분류 수수료 규칙으로 총 수수료 계산
+ * @param {string} subKey - 소분류 키 (예: 'X2', 'E6')
+ * @param {number} itemCount - 해당 소분류 항목 수
+ * @returns {number|null} 규칙 적용 수수료 (규칙 없으면 null)
+ */
+function calcSubChipFee(subKey, itemCount) {
+    if (!_subChipFees || !_subChipFees[subKey]) return null;
+    var data = _subChipFees[subKey];
+    var rules = data.rules || [];
+    if (rules.length === 0) return null;
+    var r1 = rules[0];
+    if (!r1 || r1.fee <= 0) return null;
+
+    if (data.mode === 'item') {
+        // 항목(개별) 모드: 항목당 × 항목수
+        return r1.fee * itemCount;
+    }
+    // 묶음(세트) 모드: 1규칙 = 기본 수수료
+    var total = r1.fee;
+    var baseItems = r1.items || itemCount; // items=0이면 전체
+    var remaining = Math.max(0, itemCount - baseItems);
+
+    // 다단계 규칙 적용
+    for (var i = 1; i < rules.length && remaining > 0; i++) {
+        var rule = rules[i];
+        var maxAdd = rule.maxAdd || Infinity;
+        var apply = Math.min(remaining, maxAdd);
+        total += apply * (rule.fee || 0);
+        remaining -= apply;
+    }
+    return total;
+}
+
+/**
+ * 시험항목코드에서 소분류 키 추출 (예: X20003 → 'X2', E60001 → 'E6')
+ */
+function getSubChipKey(testItemCode) {
+    if (!testItemCode || testItemCode.length < 2) return '';
+    var code = testItemCode.toUpperCase();
+    // PA/PB 코드는 소분류 규칙 대상 아님 (묶음 수수료 사용)
+    if (code.startsWith('PA') || code.startsWith('PB')) return '';
+    // 첫 글자(대분류) + 두번째 글자(소분류 번호)
+    return code.charAt(0) + code.charAt(1);
 }
 
 // ═══ 참고용 수수료 맵 ═══
@@ -5380,6 +5447,30 @@ function recalcInspectionTable() {
     var total = 0;
     var bundleFeeTotal = 0;
     var individualFeeTotal = 0;
+
+    // ★ 소분류 규칙 적용: 소분류별 항목 수 집계
+    var subChipCounts = {};  // { 'X2': 3, 'E6': 5, ... }
+    var subChipRows = {};    // { 'X2': [row1, row2, ...], ... }
+    rows.forEach(function(row) {
+        var code = row.getAttribute('data-test-code') || '';
+        var bk = row.getAttribute('data-bundle-key') || '';
+        if (!bk && code) {  // 묶음 소속이 아닌 개별 항목만
+            var sk = getSubChipKey(code);
+            if (sk && _subChipFees && _subChipFees[sk]) {
+                subChipCounts[sk] = (subChipCounts[sk] || 0) + 1;
+                if (!subChipRows[sk]) subChipRows[sk] = [];
+                subChipRows[sk].push(row);
+            }
+        }
+    });
+
+    // 소분류 규칙이 적용되는 항목의 수수료 계산
+    var subChipFeeApplied = {};  // { 'X2': 255000, ... }
+    Object.keys(subChipCounts).forEach(function(sk) {
+        var ruleFee = calcSubChipFee(sk, subChipCounts[sk]);
+        if (ruleFee !== null) subChipFeeApplied[sk] = ruleFee;
+    });
+
     rows.forEach(function(row, idx) {
         var numCell = row.querySelector('td:nth-child(2)');
         if (numCell) numCell.textContent = idx + 1;
@@ -5387,18 +5478,32 @@ function recalcInspectionTable() {
         var pkgFee = parseInt(row.getAttribute('data-package-fee')) || 0;
         if (pkgFee > 0) {
             bundleFeeTotal += pkgFee;
-        } else if (!row.getAttribute('data-bundle-key') || !row.closest || fee > 0) {
-            // 묶음 소속이 아닌 개별 항목의 수수료
+        } else {
             var bk = row.getAttribute('data-bundle-key');
-            if (!bk) individualFeeTotal += fee;
+            if (!bk) {
+                // 소분류 규칙 적용 대상인지 확인
+                var code = row.getAttribute('data-test-code') || '';
+                var sk = getSubChipKey(code);
+                if (sk && subChipFeeApplied[sk] !== undefined) {
+                    // 소분류 규칙 적용 항목: 개별 합산에서 제외 (그룹 합계로 대체)
+                } else {
+                    individualFeeTotal += fee;
+                }
+            }
         }
         total += fee;
-        // 체크박스 value 업데이트
         var cb = row.querySelector('.inspection-item-check');
         if (cb) cb.value = idx;
     });
-    // 합계 = 묶음 세트수수료 합계 + 개별 항목 수수료 합계
-    var grandTotal = bundleFeeTotal + individualFeeTotal;
+
+    // 소분류 규칙 수수료 합산
+    var subChipTotal = 0;
+    Object.keys(subChipFeeApplied).forEach(function(sk) {
+        subChipTotal += subChipFeeApplied[sk];
+    });
+
+    // 합계 = 묶음 세트수수료 + 소분류 규칙 수수료 + 나머지 개별 수수료
+    var grandTotal = bundleFeeTotal + subChipTotal + individualFeeTotal;
     if (grandTotal === 0) grandTotal = total; // 폴백
     document.getElementById('inspection-items-total').textContent = grandTotal.toLocaleString() + '원';
     var supply = Math.round(grandTotal / 1.1);
@@ -5406,6 +5511,7 @@ function recalcInspectionTable() {
     document.getElementById('inspection-items-vat').textContent = (grandTotal - supply).toLocaleString() + '원';
     var parts = [];
     if (bundleFeeTotal > 0) parts.push('묶음 ' + bundleFeeTotal.toLocaleString() + '원');
+    if (subChipTotal > 0) parts.push('규칙 ' + subChipTotal.toLocaleString() + '원');
     if (individualFeeTotal > 0) parts.push('개별 ' + individualFeeTotal.toLocaleString() + '원');
     var feeLabel = rows.length + '개 항목 / ' + (parts.length > 0 ? parts.join(' + ') + ' = ' + grandTotal.toLocaleString() + '원' : grandTotal.toLocaleString() + '원');
     document.getElementById('inspection-items-summary').textContent = feeLabel;
@@ -6286,30 +6392,53 @@ async function updateFeeSummary() {
     var currentPurpose = document.getElementById('test-purpose').value || '';
     var currentField = document.querySelector('input[name="test-field"]:checked')?.value || '';
 
-    // 모든 모드: 시험항목 테이블 data-fee 합산 (묶음 수수료 + 개별 수수료)
+    // 모든 모드: 시험항목 테이블 data-fee 합산 (묶음 수수료 + 소분류 규칙 + 개별 수수료)
     var tbody = document.getElementById('inspection-items-tbody');
     if (tbody) {
         var bundleFees = {};  // 묶음별 수수료 { bundleKey: fee }
         var bundleItemFees = {};  // 묶음별 개별 항목 합계
         var individualFee = 0;  // 묶음 밖 개별 항목
 
+        // 소분류 규칙 적용: 소분류별 항목 수 집계
+        var subChipCounts = {};
         var rows = tbody.querySelectorAll('tr[data-fee]');
+        rows.forEach(function(tr) {
+            var code = tr.getAttribute('data-test-code') || '';
+            var bundleKey = tr.getAttribute('data-bundle-key') || '';
+            var bundleFee = parseInt(tr.getAttribute('data-package-fee') || '0', 10);
+            if (!bundleKey && !bundleFee && code) {
+                var sk = getSubChipKey(code);
+                if (sk && _subChipFees && _subChipFees[sk]) {
+                    subChipCounts[sk] = (subChipCounts[sk] || 0) + 1;
+                }
+            }
+        });
+        var subChipFeeApplied = {};
+        Object.keys(subChipCounts).forEach(function(sk) {
+            var ruleFee = calcSubChipFee(sk, subChipCounts[sk]);
+            if (ruleFee !== null) subChipFeeApplied[sk] = ruleFee;
+        });
+
         rows.forEach(function(tr) {
             var fee = parseInt(tr.getAttribute('data-fee') || '0', 10);
             var bundleKey = tr.getAttribute('data-bundle-key') || '';
             var bundleFee = parseInt(tr.getAttribute('data-package-fee') || '0', 10);
 
             if (bundleKey && bundleFee > 0) {
-                // 묶음에 속한 항목
                 bundleFees[bundleKey] = bundleFee;
                 bundleItemFees[bundleKey] = (bundleItemFees[bundleKey] || 0) + fee;
             } else if (bundleFee > 0 && !bundleKey) {
-                // 구 방식: data-package-fee만 있는 경우 (하위 호환)
                 bundleFees['_legacy'] = bundleFee;
                 bundleItemFees['_legacy'] = (bundleItemFees['_legacy'] || 0) + fee;
             } else {
-                // 묶음 밖 개별 항목
-                individualFee += fee;
+                // 소분류 규칙 적용 항목은 개별 합산에서 제외
+                var code = tr.getAttribute('data-test-code') || '';
+                var sk = getSubChipKey(code);
+                if (sk && subChipFeeApplied[sk] !== undefined) {
+                    // 소분류 규칙으로 처리됨 → 개별 합산 제외
+                } else {
+                    individualFee += fee;
+                }
             }
         });
 
@@ -6318,8 +6447,12 @@ async function updateFeeSummary() {
         Object.keys(bundleFees).forEach(function(k) {
             bundleTotal += bundleFees[k] > 0 ? bundleFees[k] : (bundleItemFees[k] || 0);
         });
-        // 묶음에 속하지 않은 개별 합계도 합산
-        grandTotal = bundleTotal + individualFee;
+        // 소분류 규칙 수수료 합산
+        var subChipTotal = 0;
+        Object.keys(subChipFeeApplied).forEach(function(sk) {
+            subChipTotal += subChipFeeApplied[sk];
+        });
+        grandTotal = bundleTotal + subChipTotal + individualFee;
     }
     // MFDS 기준규격 수수료 합산 (공전규격 추가 항목)
     grandTotal += (window._mfdsFeeTotal || 0);
