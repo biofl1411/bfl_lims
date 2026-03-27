@@ -4790,7 +4790,7 @@ function addDiaryCompanyCard(data) {
           ' 비교견적 입력' +
         '</label>' +
         '<div id="dc-compare-' + uid + '" style="' + (d.compareQuote?'':'display:none;') + 'margin-top:6px;border:1px solid #e2e6ed;border-radius:8px;padding:10px;background:#fafbfc">' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 28px;gap:6px;font-size:10px;font-weight:600;color:#5f6b7a;margin-bottom:4px"><span>항목</span><span style="text-align:right">경쟁사 (부가세포함)</span><span style="text-align:right">우리 (부가세포함)</span><span style="text-align:right;color:#e53935">차액</span><span></span></div>' +
+          '<div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr 0.8fr 1.2fr 1.2fr 28px;gap:4px;font-size:10px;font-weight:600;color:#5f6b7a;margin-bottom:4px"><span>항목</span><span style="text-align:right">경쟁사 (부가세포함)</span><span style="text-align:right">BFL (정가)</span><span style="text-align:center">할인율</span><span style="text-align:right">할인금액</span><span style="text-align:right;color:#e53935">차액</span><span></span></div>' +
           '<div id="dc-compare-rows-' + uid + '">' + buildCompareRows(uid, d.compareItems||[]) + '</div>' +
           '<button onclick="addCompareRow(\'' + uid + '\')" style="margin-top:4px;font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:3px 10px;cursor:pointer">+ 항목 추가</button>' +
           '<div style="margin-top:8px"><label style="font-size:10px;color:#5f6b7a;display:block;margin-bottom:3px">제안사항</label>' +
@@ -4905,24 +4905,53 @@ function toggleCompareQuote(uid, show) {
   if (el) el.style.display = show ? '' : 'none';
 }
 function buildCompareRows(uid, items) {
-  if (!items || items.length === 0) items = [{ item:'', competitor:0, ours:0 }];
-  return items.map(function(r, i) {
-    var diff = (r.ours||0) - (r.competitor||0);
-    var diffColor = diff < 0 ? '#2e7d32' : diff > 0 ? '#e53935' : '#8892a4';
+  if (!items || items.length === 0) items = [{ item:'', competitor:0, ours:0, discountRate:0 }];
+  var html = items.map(function(r, i) {
+    var ours = r.ours || 0;
+    var competitor = r.competitor || 0;
+    var discountRate = r.discountRate || 0;
+    var discountAmt = Math.round(ours * discountRate / 100);
+    var discountedPrice = ours - discountAmt;
+    var diff = competitor - discountedPrice;
+    var diffColor = diff > 0 ? '#e53935' : diff < 0 ? '#2e7d32' : '#8892a4';
     var diffText = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
-    return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 28px;gap:6px;margin-bottom:4px;align-items:center" data-compare-row>' +
+    return '<div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr 0.8fr 1.2fr 1.2fr 28px;gap:4px;margin-bottom:4px;align-items:center" data-compare-row>' +
       '<input value="' + escHtml(r.item||'') + '" placeholder="항목명" data-cf="item" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
-      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (r.competitor ? Number(r.competitor).toLocaleString() : '') + '" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
-      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (r.ours ? Number(r.ours).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (competitor ? Number(competitor).toLocaleString() : '') + '" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (ours ? Number(ours).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+      '<div style="display:flex;align-items:center;gap:2px"><input value="' + (discountRate || '') + '" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
+      '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:500;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">' + (discountAmt ? discountAmt.toLocaleString() : '-') + '</div>' +
       '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:' + diffColor + ';padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">' + diffText + '</div>' +
-      '<button onclick="this.closest(\'[data-compare-row]\').remove()" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
+      '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
     '</div>';
   }).join('');
+  // 총계 행
+  html += '<div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr 0.8fr 1.2fr 1.2fr 28px;gap:4px;margin-top:2px;padding-top:6px;border-top:2px solid #334155;align-items:center;font-weight:700;font-size:12px" data-compare-total>' +
+    '<span style="text-align:right;color:#334155">총계</span>' +
+    '<div data-cf="total-competitor" style="text-align:right;color:#5f6b7a;padding:6px 8px">-</div>' +
+    '<div data-cf="total-ours" style="text-align:right;color:#334155;padding:6px 8px">-</div>' +
+    '<span></span>' +
+    '<div data-cf="total-discount" style="text-align:right;color:#1565c0;padding:6px 8px">-</div>' +
+    '<div data-cf="total-diff" style="text-align:right;color:#e53935;padding:6px 8px">-</div>' +
+    '<span></span></div>';
+  return html;
 }
 function addCompareRow(uid) {
   var container = document.getElementById('dc-compare-rows-' + uid);
   if (!container) return;
-  container.insertAdjacentHTML('beforeend', buildCompareRows(uid, [{ item:'', competitor:0, ours:0 }]));
+  // 총계 행 앞에 새 행 삽입
+  var totalRow = container.querySelector('[data-compare-total]');
+  var newRow = '<div style="display:grid;grid-template-columns:2fr 1.5fr 1.5fr 0.8fr 1.2fr 1.2fr 28px;gap:4px;margin-bottom:4px;align-items:center" data-compare-row>' +
+    '<input value="" placeholder="항목명" data-cf="item" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
+    '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:500;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">-</div>' +
+    '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:#8892a4;padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">-</div>' +
+    '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
+  '</div>';
+  if (totalRow) totalRow.insertAdjacentHTML('beforebegin', newRow);
+  else container.insertAdjacentHTML('beforeend', newRow);
 }
 function fmtCompareInput(inp) {
   var raw = inp.value.replace(/[^0-9]/g,'');
@@ -4934,11 +4963,49 @@ function calcCompareRow(inp) {
   if (!row) return;
   var comp = Number(row.querySelector('[data-cf="competitor"]').value.replace(/,/g,'')) || 0;
   var ours = Number(row.querySelector('[data-cf="ours"]').value.replace(/,/g,'')) || 0;
-  var diff = ours - comp;
+  var rateEl = row.querySelector('[data-cf="discountRate"]');
+  var rate = rateEl ? (Number(rateEl.value) || 0) : 0;
+  var discountAmt = Math.round(ours * rate / 100);
+  var discountedPrice = ours - discountAmt;
+  var diff = comp - discountedPrice;
+
+  var discountAmtEl = row.querySelector('[data-cf="discountAmt"]');
+  if (discountAmtEl) discountAmtEl.textContent = discountAmt ? discountAmt.toLocaleString() : '-';
+
   var diffEl = row.querySelector('[data-cf="diff"]');
   if (diffEl) {
-    diffEl.style.color = diff < 0 ? '#2e7d32' : diff > 0 ? '#e53935' : '#8892a4';
+    diffEl.style.color = diff > 0 ? '#e53935' : diff < 0 ? '#2e7d32' : '#8892a4';
     diffEl.textContent = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
+  }
+  calcCompareTotal(inp);
+}
+function calcCompareTotal(el) {
+  var container = el.closest('[id^="dc-compare-rows-"]') || el.closest('[id^="dc-compare-"]');
+  if (!container) return;
+  var rows = container.querySelectorAll('[data-compare-row]');
+  var totalComp = 0, totalOurs = 0, totalDiscount = 0, totalDiff = 0;
+  rows.forEach(function(row) {
+    var c = Number((row.querySelector('[data-cf="competitor"]') || {value:''}).value.replace(/,/g,'')) || 0;
+    var o = Number((row.querySelector('[data-cf="ours"]') || {value:''}).value.replace(/,/g,'')) || 0;
+    var r = Number((row.querySelector('[data-cf="discountRate"]') || {value:''}).value) || 0;
+    var dAmt = Math.round(o * r / 100);
+    totalComp += c;
+    totalOurs += o;
+    totalDiscount += dAmt;
+    totalDiff += (c - (o - dAmt));
+  });
+  var total = container.querySelector('[data-compare-total]');
+  if (!total) return;
+  var tc = total.querySelector('[data-cf="total-competitor"]');
+  var to = total.querySelector('[data-cf="total-ours"]');
+  var td = total.querySelector('[data-cf="total-discount"]');
+  var tf = total.querySelector('[data-cf="total-diff"]');
+  if (tc) tc.textContent = totalComp ? totalComp.toLocaleString() + '원' : '-';
+  if (to) to.textContent = totalOurs ? totalOurs.toLocaleString() + '원' : '-';
+  if (td) td.textContent = totalDiscount ? totalDiscount.toLocaleString() + '원' : '-';
+  if (tf) {
+    tf.textContent = totalDiff === 0 ? '-' : (totalDiff > 0 ? '+' : '') + totalDiff.toLocaleString() + '원';
+    tf.style.color = totalDiff > 0 ? '#e53935' : totalDiff < 0 ? '#2e7d32' : '#8892a4';
   }
 }
 
@@ -5058,7 +5125,8 @@ function collectDiaryFormData(status) {
           var item = (r.querySelector('[data-cf="item"]') || {}).value || '';
           var comp = Number(((r.querySelector('[data-cf="competitor"]') || {}).value || '').replace(/,/g,'')) || 0;
           var ours = Number(((r.querySelector('[data-cf="ours"]') || {}).value || '').replace(/,/g,'')) || 0;
-          if (item || comp || ours) items.push({ item: item, competitor: comp, ours: ours });
+          var discountRate = Number(((r.querySelector('[data-cf="discountRate"]') || {}).value || '')) || 0;
+          if (item || comp || ours) items.push({ item: item, competitor: comp, ours: ours, discountRate: discountRate });
         });
         return items;
       })()
