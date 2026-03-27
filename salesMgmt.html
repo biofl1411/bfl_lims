@@ -5234,63 +5234,43 @@ function searchFssLive(q) {
 async function doFssSearch(q) {
   var res = document.getElementById('tmrNewSearchResult');
   if (!res) return;
-  res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">검색 중...</div>';
-
-  try {
-    // fss_businesses (식약처 인허가 데이터) — 업종 필터 + 업체명 검색
-    var bizFilter = (document.getElementById('tmrNewBizFilter') || {}).value || '';
-    var results = [];
+  var bizFilter = (document.getElementById('tmrNewBizFilter') || {}).value || '';
+  var source = fssAllData;
+  if (!source || source.length === 0) {
+    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">데이터 로드 중...</div>';
     try {
       var query = db.collection('fss_businesses');
-      if (bizFilter) {
-        // 복합 쿼리: 업종 + 업체명 prefix
-        query = query.where('induty_nm', '==', bizFilter)
-                     .where('bssh_nm', '>=', q)
-                     .where('bssh_nm', '<', q + '\uf8ff');
-      } else {
-        // 업종 미선택: 업체명만 검색
-        query = query.where('bssh_nm', '>=', q)
-                     .where('bssh_nm', '<', q + '\uf8ff');
-      }
-      var snap = await query.limit(30).get();
-      results = snap.docs.map(function(d) {
-        var data = d.data();
-        return { nm: data.bssh_nm||'', addr: data.locp_addr||'', biz: data.induty_nm||'', ceo: data.prsdnt_nm||'', tel: data.telno||'', sido: data.addr_sido||'', lcns: d.id, closed: data.clsbiz_dvs_nm||'' };
+      if (bizFilter) query = query.where('induty_nm', '==', bizFilter);
+      var snap = await query.get();
+      source = [];
+      snap.forEach(function(doc) {
+        var d = doc.data();
+        source.push({ nm: d.bssh_nm||'', addr: d.locp_addr||'', biz: d.induty_nm||'', ceo: d.prsdnt_nm||'', tel: d.telno||'', sido: d.addr_sido||'', sigungu: d.addr_sigungu||'', dong: d.addr_dong||'', lic: d.lcns_no||'' });
       });
-      // 폐업 업체 제외
-      results = results.filter(function(r) { return r.closed !== '폐업'; });
-    } catch(e) { console.log('fss_businesses 검색 실패, companies 폴백:', e.message); }
-
-    // fss 결과 없으면 companies 폴백
-    if (results.length === 0) {
-      var ql = q.toLowerCase();
-      results = _diaryCompanies.filter(function(c) {
-        return (c.name||'').toLowerCase().indexOf(ql) >= 0 || (c.addr||'').indexOf(ql) >= 0;
-      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '', tel: '', sido: '', lcns: '' }; });
-    }
-
-    if (results.length === 0) {
-      res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">"' + escHtml(q) + '" 검색 결과가 없습니다.</div>';
-      return;
-    }
-
-    var html = '';
-    results.forEach(function(r, i) {
-      var name = r.nm || '';
-      var biz = r.biz || '';
-      var addr = r.addr || '';
-      var ceo = r.ceo || '';
-      var tel = r.tel || '';
-      html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
-      html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-      html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(addr) + (ceo ? ' · 대표 ' + escHtml(ceo) : '') + (tel ? ' · ' + escHtml(tel) : '') + '</div></div>';
-      html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px">' + escHtml(biz||'\uc2dd\ud488') + '</span>';
-      html += '</div>';
-    });
-    res.innerHTML = html;
-  } catch(e) {
-    res.innerHTML = '<div style="padding:20px;text-align:center;color:#e53935;font-size:12px">\uac80\uc0c9 \uc2e4\ud328: ' + e.message + '</div>';
+      if (!fssAllData || fssAllData.length === 0) fssAllData = source;
+    } catch(e) { res.innerHTML = '<div style="padding:20px;text-align:center;color:#e53935">load fail</div>'; return; }
   }
+  var ql = q.toLowerCase();
+  var results = source.filter(function(r) {
+    if (bizFilter && r.biz !== bizFilter) return false;
+    return (r.nm||'').toLowerCase().indexOf(ql) >= 0;
+  });
+  if (results.length === 0) {
+    results = _diaryCompanies.filter(function(c) { return (c.name||'').toLowerCase().indexOf(ql) >= 0; }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '', tel: '' }; });
+  }
+  if (results.length === 0) { res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">"' + escHtml(q) + '" 검색 결과가 없습니다.</div>'; return; }
+  var limited = results.slice(0, 50);
+  var html = '';
+  limited.forEach(function(r) {
+    var name = r.nm || '';
+    html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect('' + escHtml(name).replace(/'/g,'&#39;') + '')">';
+    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
+    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · 대표 ' + escHtml(r.ceo) : '') + (r.tel ? ' · ' + escHtml(r.tel) : '') + '</div></div>';
+    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
+    html += '</div>';
+  });
+  if (results.length > 50) html += '<div style="text-align:center;padding:8px;font-size:11px;color:#8892a4">외 ' + (results.length - 50) + '건</div>';
+  res.innerHTML = html;
 }
 
 function confirmFssSelect(name) {
@@ -5351,63 +5331,86 @@ function renderSidoPanel() {
   renderBreadcrumb();
 }
 
-async function selectSido(sido) {
+function selectSido(sido) {
   _areaSido = sido; _areaSg = ''; _areaDong = '';
   renderBreadcrumb();
-  // 시군구 패널 대신 바로 해당 시도 업체 검색
-  ['sgPanel','dongPanel'].forEach(function(id) {
-    var el = document.getElementById(id); if (el) el.style.display = 'none';
-  });
+
+  // fssAllData 캐시에서 로컬 필터 (업체조회 fssFilterSido 동일 방식)
+  var results = [];
+  if (fssAllData && fssAllData.length > 0) {
+    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
+    results = fssAllData.filter(function(r) {
+      return r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0;
+    });
+  }
+
+  // 시군구 패널 표시 (regionData 활용)
+  var sgData = (typeof regionData !== 'undefined') ? (regionData[sido] || []) : [];
+  var sgPanel = document.getElementById('sgPanel');
+  var sgGrid = document.getElementById('sgGrid');
+  ['dongPanel'].forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+
+  if (sgData.length > 0 && sgPanel && sgGrid) {
+    sgPanel.style.display = '';
+    var sgHtml = '<button class="area-btn act" onclick="showAreaAllSido(\'' + sido + '\')" style="grid-column:span 2">' + sido + ' 전체 ' + results.length + '개 보기</button>';
+    sgData.forEach(function(sg) {
+      var cnt = results.filter(function(r) { return r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0; }).length;
+      var cls = cnt > 0 ? 'area-btn has' : 'area-btn';
+      sgHtml += '<button class="' + cls + '" onclick="selectSg(\'' + sido + '\',\'' + sg + '\')">' + sg + (cnt > 0 ? ' <span style="font-size:9px;color:#8892a4">(' + cnt + ')</span>' : '') + '</button>';
+    });
+    sgGrid.innerHTML = sgHtml;
+    document.getElementById('sidoPanel').style.display = 'none';
+  }
+
+  // 결과 패널은 시군구 선택 후 표시
+  var rPanel = document.getElementById('areaResultPanel');
+  if (rPanel) rPanel.style.display = 'none';
+}
+
+function showAreaAllSido(sido) {
+  var results = fssAllData ? fssAllData.filter(function(r) {
+    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
+    return r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0;
+  }) : [];
+  showTmrAreaResults(sido + ' 전체', results);
+}
+
+function selectSg(sido, sg) {
+  _areaSg = sg;
+  renderBreadcrumb();
+  var results = fssAllData ? fssAllData.filter(function(r) {
+    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
+    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
+  }) : [];
+  showTmrAreaResults(sido + ' ' + sg, results);
+}
+
+function showTmrAreaResults(title, results) {
   var rPanel = document.getElementById('areaResultPanel');
   var rTitle = document.getElementById('areaResultTitle');
   var rCount = document.getElementById('areaResultCount');
   var rList = document.getElementById('areaResultList');
   if (!rPanel || !rList) return;
   rPanel.style.display = '';
-  if (rTitle) rTitle.textContent = sido + ' 업체';
-  rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">검색 중...</div>';
+  if (rTitle) rTitle.textContent = title;
+  if (rCount) rCount.textContent = results.length + '건';
 
-  try {
-    var results = [];
-    // fss_businesses에서 시도 검색
-    try {
-      var snap = await db.collection('fss_businesses')
-        .where('addr_sido', '==', sido)
-        .limit(50)
-        .get();
-      results = snap.docs.map(function(d) {
-        var data = d.data();
-        return { nm: data.bssh_nm||'', addr: data.locp_addr||'', biz: data.induty_nm||'', ceo: data.prsdnt_nm||'', tel: data.telno||'' };
-      });
-    } catch(e) { console.log('지역 검색 실패:', e.message); }
-
-    // 결과 없으면 companies에서 주소 기반 필터
-    if (results.length === 0) {
-      results = _diaryCompanies.filter(function(c) {
-        return (c.addr||'').indexOf(sido) >= 0;
-      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '', tel: '' }; });
-    }
-
-    if (rCount) rCount.textContent = results.length + '건';
-
-    if (results.length === 0) {
-      rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">' + escHtml(sido) + ' 지역 업체가 없습니다.</div>';
-      return;
-    }
-
-    var html = '';
-    results.forEach(function(r) {
-      var name = r.nm || '';
-      html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
-      html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-      html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + '</div></div>';
-      html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px">' + escHtml(r.biz||'') + '</span>';
-      html += '</div>';
-    });
-    rList.innerHTML = html;
-  } catch(e) {
-    rList.innerHTML = '<div style="padding:20px;text-align:center;color:#e53935;font-size:12px">검색 실패</div>';
+  if (results.length === 0) {
+    rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">해당 지역 업체가 없습니다.</div>';
+    return;
   }
+  var limited = results.slice(0, 50);
+  var html = '';
+  limited.forEach(function(r) {
+    var name = r.nm || '';
+    html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
+    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
+    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · ' + escHtml(r.ceo) : '') + '</div></div>';
+    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
+    html += '</div>';
+  });
+  if (results.length > 50) html += '<div style="text-align:center;padding:8px;font-size:11px;color:#8892a4">외 ' + (results.length - 50) + '건</div>';
+  rList.innerHTML = html;
 }
 
 function renderBreadcrumb() {
