@@ -34409,13 +34409,23 @@ function getRefFeeFilteredItems() {
   var onlyActive = document.getElementById('ref-fee-only-active') && document.getElementById('ref-fee-only-active').checked;
   var filtered = _refFeeData;
   if (_refFeeCategory !== 'all') {
+    var catUpper = _refFeeCategory.toUpperCase();
+    var catLen = catUpper.length;
     filtered = filtered.filter(function(m) {
-      return (m.testItemCode || '').charAt(0).toUpperCase() === _refFeeCategory;
+      var code = (m.testItemCode || '').toUpperCase();
+      // PA/PB 등 2글자 카테고리
+      if (catLen >= 2) return code.substring(0, catLen) === catUpper;
+      // 1글자 카테고리: PA/PB 제외
+      if (code.charAt(0) !== catUpper) return false;
+      if (catUpper === 'P' && code.length >= 2 && /[A-Z]/.test(code.charAt(1))) return false;
+      return true;
     });
     var activeSubs = Object.keys(_refFeeSubSelections);
     if (activeSubs.length > 0) {
       filtered = filtered.filter(function(m) {
-        return _refFeeSubSelections[(m.testItemCode || '').charAt(1)];
+        var code = (m.testItemCode || '').toUpperCase();
+        var subIdx = catLen; // PA → 2번째, P → 1번째
+        return _refFeeSubSelections[code.charAt(subIdx)];
       });
     }
   }
@@ -34458,14 +34468,13 @@ function applyBulkFeeFiltered() {
   showToast(filtered.length + '건에 수수료 ' + amount.toLocaleString() + '원 일괄 적용 — Firestore 저장을 눌러주세요', 'info');
 }
 
-// 현재 필터 전체 선택
-/** 전체 선택 (모든 항목) */
+// 전체선택: 현재 필터 기준
 function refFeeSelectAll() {
-  if (!_refFeeData) return;
-  _refFeeData.forEach(function(m) { if (m.testItemCode) _refFeeSelected[m.testItemCode] = true; });
+  var filtered = getRefFeeFilteredItems();
+  filtered.forEach(function(m) { if (m.testItemCode) _refFeeSelected[m.testItemCode] = true; });
   syncRefFeeCheckboxes();
   updateRefFeeBulkBar();
-  showToast(_refFeeData.length + '건 전체 선택됨', 'info');
+  showToast(filtered.length + '건 선택됨', 'info');
 }
 
 function refFeeSelectFiltered() {
