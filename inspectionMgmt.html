@@ -34494,8 +34494,20 @@ function refFeeSelectFiltered() {
 // 대분류별 선택
 function refFeeSelectByCategory(prefix) {
   if (!_refFeeData) return;
-  var pLen = prefix.length;
-  var matched = _refFeeData.filter(function(m) { return (m.testItemCode || '').substring(0, pLen).toUpperCase() === prefix.toUpperCase(); });
+  var pUpper = prefix.toUpperCase();
+  var pLen = pUpper.length;
+  // P선택 시 PA/PB 제외 (독립 카테고리)
+  var matched = _refFeeData.filter(function(m) {
+    var code = (m.testItemCode || '').toUpperCase();
+    if (code.substring(0, pLen) !== pUpper) return false;
+    // 단일 문자 prefix(P, X 등)일 때, 2글자 prefix(PA, PB, XA 등)와 구분
+    if (pLen === 1 && code.length >= 2) {
+      var second = code.charAt(1);
+      // 두번째 글자가 영문이면 다른 카테고리 (PA, PB 등)
+      if (/[A-Z]/.test(second)) return false;
+    }
+    return true;
+  });
   var allSelected = matched.length > 0 && matched.every(function(m) { return _refFeeSelected[m.testItemCode]; });
   matched.forEach(function(m) {
     if (allSelected) { delete _refFeeSelected[m.testItemCode]; }
@@ -34511,9 +34523,13 @@ function refFeeSelectByCategory(prefix) {
 function refFeeSelectBySub(prefix, sub) {
   if (!_refFeeData) return;
   var subStr = String(sub);
+  var pUpper = prefix.toUpperCase();
   var matched = _refFeeData.filter(function(m) {
     var code = (m.testItemCode || '').toUpperCase();
-    return code.charAt(0) === prefix && code.charAt(1) === subStr;
+    // PA, PB 등 2글자 prefix 지원
+    if (pUpper.length >= 2) return code.substring(0, pUpper.length) === pUpper && code.charAt(pUpper.length) === subStr;
+    // 1글자 prefix: 두번째가 숫자인 것만 (PA/PB 제외)
+    return code.charAt(0) === pUpper && code.charAt(1) === subStr && /[0-9]/.test(subStr);
   });
   var allSelected = matched.length > 0 && matched.every(function(m) { return _refFeeSelected[m.testItemCode]; });
   matched.forEach(function(m) {
