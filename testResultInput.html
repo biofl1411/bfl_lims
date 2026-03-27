@@ -1733,32 +1733,51 @@ async function loadFormTemplates() {
   }
 }
 
-// 항목명 + 식품유형으로 양식 찾기 (식품유형 일치 우선, 없으면 null)
+// 항목명 + 식품유형으로 양식 찾기 (정확→부분→기본 순 매칭)
 function findFormTemplate(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return null;
   var name = itemName.trim();
   var ft = (sampleFoodType || '').trim();
+  var ftBase = ft.replace(/\(.*\)/, '').trim(); // "과자(밀봉,유탕,유처리)" → "과자"
+  var exact = null, partial = null, nameOnly = null;
   for (var i = 0; i < _formTemplatesList.length; i++) {
     var t = _formTemplatesList[i];
-    if (t.itemName === name && t.foodType === ft) {
-      var res = Object.assign({}, t.analyzed);
-      res._roundingRules = t.roundingRules || [{ decimal: 2, mode: 'round' }];
-      return res;
-    }
+    if (t.itemName !== name) continue;
+    var tft = (t.foodType || '').trim();
+    // 1순위: 정확 일치
+    if (tft === ft) { exact = t; break; }
+    // 2순위: 기본 식품유형 일치 ("과자" == "과자")
+    if (!partial && ftBase && tft === ftBase) partial = t;
+    // 3순위: 양식의 식품유형이 접수 식품유형에 포함 ("과자" in "과자(밀봉,유탕,유처리)")
+    if (!partial && tft && ft.indexOf(tft) === 0) partial = t;
+    // 4순위: 항목명만 일치 (식품유형 무관 폴백)
+    if (!nameOnly) nameOnly = t;
   }
-  return null;
+  var match = exact || partial || nameOnly;
+  if (!match) return null;
+  var res = Object.assign({}, match.analyzed);
+  res._roundingRules = match.roundingRules || [{ decimal: 2, mode: 'round' }];
+  return res;
 }
 
-// 항목명 + 식품유형으로 오버라이드(시험일지 수정값) 찾기
+// 항목명 + 식품유형으로 오버라이드(시험일지 수정값) 찾기 (정확→부분→기본 순)
 function findFormTemplateOverrides(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return {};
   var name = itemName.trim();
   var ft = (sampleFoodType || '').trim();
+  var ftBase = ft.replace(/\(.*\)/, '').trim();
+  var exact = null, partial = null, nameOnly = null;
   for (var i = 0; i < _formTemplatesList.length; i++) {
     var t = _formTemplatesList[i];
-    if (t.itemName === name && t.foodType === ft) return t.overrides || {};
+    if (t.itemName !== name) continue;
+    var tft = (t.foodType || '').trim();
+    if (tft === ft) { exact = t; break; }
+    if (!partial && ftBase && tft === ftBase) partial = t;
+    if (!partial && tft && ft.indexOf(tft) === 0) partial = t;
+    if (!nameOnly) nameOnly = t;
   }
-  return {};
+  var match = exact || partial || nameOnly;
+  return match ? (match.overrides || {}) : {};
 }
 
 function toggleItemDetail(idx, btn) {
