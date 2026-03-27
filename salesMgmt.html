@@ -5225,28 +5225,32 @@ async function doFssSearch(q) {
   res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">검색 중...</div>';
 
   try {
-    // fss_businesses 먼저 시도, 없으면 companies에서 검색
+    // fss_businesses (식약처 인허가 데이터) 검색
     var results = [];
     try {
       var snap = await db.collection('fss_businesses')
-        .where('nm', '>=', q)
-        .where('nm', '<', q + '\uf8ff')
+        .where('bssh_nm', '>=', q)
+        .where('bssh_nm', '<', q + '\uf8ff')
         .limit(30)
         .get();
-      results = snap.docs.map(function(d) { return d.data(); });
-    } catch(e) { /* fss_businesses 없으면 무시 */ }
+      results = snap.docs.map(function(d) {
+        var data = d.data();
+        return { nm: data.bssh_nm||'', addr: data.locp_addr||'', biz: data.induty_nm||'', ceo: data.prsdnt_nm||'', tel: data.telno||'', sido: data.addr_sido||'', lcns: d.id };
+      });
+      // 폐업 제외
+      results = results.filter(function(r) { return true; }); // clsbiz_dvs_nm 필터 필요시 추가
+    } catch(e) { console.log('fss_businesses 검색 실패, companies 폴백:', e.message); }
 
-    // companies에서도 검색 (클라이언트 필터)
+    // fss 결과 없으면 companies 폴백
     if (results.length === 0) {
       var ql = q.toLowerCase();
       results = _diaryCompanies.filter(function(c) {
         return (c.name||'').toLowerCase().indexOf(ql) >= 0 || (c.addr||'').indexOf(ql) >= 0;
-      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '' }; });
+      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '', tel: '', sido: '', lcns: '' }; });
     }
-    // results 이미 구성됨
 
     if (results.length === 0) {
-      res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">"' + escHtml(q) + '" \uac80\uc0c9 \uacb0\uacfc\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.</div>';
+      res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">"' + escHtml(q) + '" 검색 결과가 없습니다.</div>';
       return;
     }
 
@@ -5256,9 +5260,10 @@ async function doFssSearch(q) {
       var biz = r.biz || '';
       var addr = r.addr || '';
       var ceo = r.ceo || '';
+      var tel = r.tel || '';
       html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
       html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-      html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(addr) + (ceo ? ' \xb7 \ub300\ud45c ' + escHtml(ceo) : '') + '</div></div>';
+      html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(addr) + (ceo ? ' · 대표 ' + escHtml(ceo) : '') + (tel ? ' · ' + escHtml(tel) : '') + '</div></div>';
       html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px">' + escHtml(biz||'\uc2dd\ud488') + '</span>';
       html += '</div>';
     });
@@ -5347,17 +5352,20 @@ async function selectSido(sido) {
     // fss_businesses에서 시도 검색
     try {
       var snap = await db.collection('fss_businesses')
-        .where('sido', '==', sido)
+        .where('addr_sido', '==', sido)
         .limit(50)
         .get();
-      results = snap.docs.map(function(d) { return d.data(); });
-    } catch(e) { /* 컬렉션 없으면 무시 */ }
+      results = snap.docs.map(function(d) {
+        var data = d.data();
+        return { nm: data.bssh_nm||'', addr: data.locp_addr||'', biz: data.induty_nm||'', ceo: data.prsdnt_nm||'', tel: data.telno||'' };
+      });
+    } catch(e) { console.log('지역 검색 실패:', e.message); }
 
     // 결과 없으면 companies에서 주소 기반 필터
     if (results.length === 0) {
       results = _diaryCompanies.filter(function(c) {
         return (c.addr||'').indexOf(sido) >= 0;
-      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '' }; });
+      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '', tel: '' }; });
     }
 
     if (rCount) rCount.textContent = results.length + '건';
