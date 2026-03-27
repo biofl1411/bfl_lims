@@ -33798,36 +33798,18 @@ async function uploadRefFeeExcel(fileInput) {
 }
 
 // PA/PB 항목 → 참고용매핑에 동기화 (mfds_test_items + refFeeMapping 수수료)
-async function registerPAPBRefFeeItems() {
-  if (!_refFeeData) return;
-
+// PA/PB 칩 카운트만 mfds_test_items에서 가져옴 (테이블에 추가하지 않음)
+async function buildPAPBChipCounts() {
   var testItems = await MFDS_CODES.loadTestItems();
-
-  var existingCodes = {};
-  _refFeeData.forEach(function(m) { existingCodes[(m.testItemCode || '').toUpperCase()] = true; });
-
-  var added = 0;
+  var paCnt = 0, pbCnt = 0;
   testItems.forEach(function(ti) {
     var code = (ti['시험항목코드'] || '').toUpperCase();
-    var prefix2 = code.substring(0, 2);
-    if (prefix2 !== 'PA' && prefix2 !== 'PB') return;
-    if (existingCodes[code]) return;
-    _refFeeData.push({
-      testItemCode: code,
-      itemName: ti['한글명'] || '',
-      engName: ti['영문명'] || '',
-      unit: ti['단위'] || '',
-      fee: 0,
-      note: ''
-    });
-    existingCodes[code] = true;
-    added++;
+    if (code.startsWith('PA')) paCnt++;
+    else if (code.startsWith('PB')) pbCnt++;
   });
-
-  if (added > 0) {
-    _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
-    console.log('[참고용수수료] PA/PB: ' + added + '건 추가 (수수료 0원)');
-  }
+  // 칩 카운트에 반영 (refFeeData에 없어도 칩 표시)
+  if (paCnt > 0 && !_refFeeCategoryIndex['PA']) _refFeeCategoryIndex['PA'] = paCnt;
+  if (pbCnt > 0 && !_refFeeCategoryIndex['PB']) _refFeeCategoryIndex['PB'] = pbCnt;
 }
 
 // Allergen 항목 → 참고용맵핑 X2(RT-PCR), X3(Elisa) 자동 등록
@@ -33944,8 +33926,9 @@ async function loadAndRenderRefFee() {
       console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건 (수수료 미설정)');
     }
 
-    // PA/PB 항목: mfds_test_items에서 칩 표시용으로 등록 (수수료 0원)
-    await registerPAPBRefFeeItems();
+    // PA/PB: 테이블에 자동 추가 안 함 (엑셀 업로드로만 관리)
+    // 칩 표시는 mfds_test_items 기준으로 별도 처리
+    await buildPAPBChipCounts();
 
     // Allergen(RT-PCR) → X2, Allergen(ELISA) → X3 항목 자동 등록 (2026-03-03)
     registerAllergenRefFeeItems();
