@@ -290,7 +290,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .tmr-panel-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap}
 .tmr-empty{text-align:center;color:#8892a4;font-size:12px;padding:24px}
 .tmr-summary{background:#e3f2fd;border:1px solid #bbdefb;border-radius:8px;padding:10px 14px;font-size:12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center}
-.tmr-row{display:grid;grid-template-columns:1fr 130px 90px 90px 28px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #eef0f4}
+.tmr-row{display:grid;grid-template-columns:250px 90px 100px 120px 28px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #eef0f4}
 .tmr-row:last-of-type{border-bottom:none}
 .tmr-row select,.tmr-row input[type="text"]{padding:7px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit;outline:none;color:#1a2332;background:#fff;width:100%}
 .tmr-row input[type="text"]:focus,.tmr-row select:focus{border-color:#4fc3f7}
@@ -5140,16 +5140,28 @@ function searchFssLive(q) {
 async function doFssSearch(q) {
   var res = document.getElementById('tmrNewSearchResult');
   if (!res) return;
-  res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">\uac80\uc0c9 \uc911...</div>';
+  res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">검색 중...</div>';
 
   try {
-    var snap = await db.collection('fss_businesses')
-      .where('nm', '>=', q)
-      .where('nm', '<', q + '\uf8ff')
-      .limit(30)
-      .get();
+    // fss_businesses 먼저 시도, 없으면 companies에서 검색
+    var results = [];
+    try {
+      var snap = await db.collection('fss_businesses')
+        .where('nm', '>=', q)
+        .where('nm', '<', q + '\uf8ff')
+        .limit(30)
+        .get();
+      results = snap.docs.map(function(d) { return d.data(); });
+    } catch(e) { /* fss_businesses 없으면 무시 */ }
 
-    var results = snap.docs.map(function(d) { return d.data(); });
+    // companies에서도 검색 (클라이언트 필터)
+    if (results.length === 0) {
+      var ql = q.toLowerCase();
+      results = _diaryCompanies.filter(function(c) {
+        return (c.name||'').toLowerCase().indexOf(ql) >= 0 || (c.addr||'').indexOf(ql) >= 0;
+      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '' }; });
+    }
+    // results 이미 구성됨
 
     if (results.length === 0) {
       res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">"' + escHtml(q) + '" \uac80\uc0c9 \uacb0\uacfc\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.</div>';
@@ -5232,17 +5244,60 @@ function renderSidoPanel() {
   renderBreadcrumb();
 }
 
-function selectSido(sido) {
+async function selectSido(sido) {
   _areaSido = sido; _areaSg = ''; _areaDong = '';
   renderBreadcrumb();
-  var sg = document.getElementById('sgPanel');
-  if (sg) {
-    sg.style.display = '';
-    document.getElementById('sgGrid').innerHTML = '<div style="color:#8892a4;font-size:12px;padding:12px">\uc9c0\uc5ed \ub370\uc774\ud130 \uc900\ube44 \uc911... \uc5c5\uccb4\uba85 \uac80\uc0c9\uc744 \uc774\uc6a9\ud574\uc8fc\uc138\uc694.</div>';
-  }
-  ['dongPanel','areaResultPanel'].forEach(function(id) {
+  // 시군구 패널 대신 바로 해당 시도 업체 검색
+  ['sgPanel','dongPanel'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.style.display = 'none';
   });
+  var rPanel = document.getElementById('areaResultPanel');
+  var rTitle = document.getElementById('areaResultTitle');
+  var rCount = document.getElementById('areaResultCount');
+  var rList = document.getElementById('areaResultList');
+  if (!rPanel || !rList) return;
+  rPanel.style.display = '';
+  if (rTitle) rTitle.textContent = sido + ' 업체';
+  rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">검색 중...</div>';
+
+  try {
+    var results = [];
+    // fss_businesses에서 시도 검색
+    try {
+      var snap = await db.collection('fss_businesses')
+        .where('sido', '==', sido)
+        .limit(50)
+        .get();
+      results = snap.docs.map(function(d) { return d.data(); });
+    } catch(e) { /* 컬렉션 없으면 무시 */ }
+
+    // 결과 없으면 companies에서 주소 기반 필터
+    if (results.length === 0) {
+      results = _diaryCompanies.filter(function(c) {
+        return (c.addr||'').indexOf(sido) >= 0;
+      }).map(function(c) { return { nm: c.name, addr: c.addr, biz: '', ceo: '' }; });
+    }
+
+    if (rCount) rCount.textContent = results.length + '건';
+
+    if (results.length === 0) {
+      rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">' + escHtml(sido) + ' 지역 업체가 없습니다.</div>';
+      return;
+    }
+
+    var html = '';
+    results.forEach(function(r) {
+      var name = r.nm || '';
+      html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
+      html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
+      html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + '</div></div>';
+      html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px">' + escHtml(r.biz||'') + '</span>';
+      html += '</div>';
+    });
+    rList.innerHTML = html;
+  } catch(e) {
+    rList.innerHTML = '<div style="padding:20px;text-align:center;color:#e53935;font-size:12px">검색 실패</div>';
+  }
 }
 
 function renderBreadcrumb() {
