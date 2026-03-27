@@ -338,7 +338,9 @@ body {
   <div class="card">
     <div class="card-header">
       <h2>API별 수집 현황</h2>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="orderSaveMsg" style="font-size:11px;color:#2e7d32;display:none">순서 저장됨</span>
+        <button class="btn btn-secondary btn-sm" onclick="saveApiOrder()" title="행을 드래그하여 수집 순서를 변경한 후 저장">💾 순서 저장</button>
         <button class="btn btn-primary btn-sm" onclick="triggerCollect('auto')">🔄 전체 자동갱신</button>
         <button class="btn btn-warning btn-sm" onclick="triggerCollect('resume')">⏩ 이어서 수집</button>
       </div>
@@ -500,7 +502,11 @@ async function loadData() {
     var apiCounts = dataCounts.counts || {};
 
     var apis = [];
-    var apiIds = Object.keys(ALL_APIS);
+    // 저장된 순서 적용
+    await loadApiOrder();
+    var apiIds = _savedApiOrder || Object.keys(ALL_APIS);
+    // 저장된 순서에 없는 API 추가
+    Object.keys(ALL_APIS).forEach(function(sid) { if (apiIds.indexOf(sid) === -1) apiIds.push(sid); });
 
     apiIds.forEach(function(sid) {
       var info = ALL_APIS[sid];
@@ -574,6 +580,7 @@ function renderSummary(apis) {
 function renderTable(apis) {
   var html = '<table class="api-table">';
   html += '<thead><tr>'
+    + '<th style="width:30px;text-align:center;cursor:default" title="드래그하여 수집 순서 변경">☰</th>'
     + '<th>API</th>'
     + '<th>이름</th>'
     + '<th>분류</th>'
@@ -622,7 +629,8 @@ function renderTable(apis) {
     // 최신 데이터 날짜
     var latestDate = a.latest_data_date ? formatDate8d(a.latest_data_date) : '-';
 
-    html += '<tr>'
+    html += '<tr draggable="true" data-api="' + a.api_source + '" ondragstart="onApiDragStart(event)" ondragover="onApiDragOver(event)" ondrop="onApiDrop(event)" style="cursor:grab">'
+      + '<td style="text-align:center;color:var(--text3);cursor:grab;font-size:14px">☰</td>'
       + '<td><span class="api-id">' + a.api_source + '</span></td>'
       + '<td>' + a.name + '</td>'
       + '<td><span class="cat-badge ' + cat.cls + '">' + cat.label + '</span></td>'
@@ -641,6 +649,63 @@ function renderTable(apis) {
 
   html += '</tbody></table>';
   document.getElementById('tableWrap').innerHTML = html;
+}
+
+// ─── 드래그 순서 변경 ───
+var _dragApiId = null;
+function onApiDragStart(e) {
+  _dragApiId = e.target.closest('tr').getAttribute('data-api');
+  e.target.closest('tr').style.opacity = '0.4';
+}
+function onApiDragOver(e) {
+  e.preventDefault();
+  var tr = e.target.closest('tr');
+  if (tr && tr.getAttribute('data-api')) tr.style.borderTop = '2px solid #1a73e8';
+}
+function onApiDrop(e) {
+  e.preventDefault();
+  var targetTr = e.target.closest('tr');
+  if (!targetTr) return;
+  targetTr.style.borderTop = '';
+  var targetApi = targetTr.getAttribute('data-api');
+  if (!_dragApiId || !targetApi || _dragApiId === targetApi) return;
+
+  var tbody = targetTr.parentElement;
+  var rows = Array.from(tbody.querySelectorAll('tr[data-api]'));
+  var dragRow = rows.find(function(r) { return r.getAttribute('data-api') === _dragApiId; });
+  if (dragRow) {
+    dragRow.style.opacity = '';
+    tbody.insertBefore(dragRow, targetTr);
+  }
+}
+document.addEventListener('dragend', function(e) {
+  var tr = e.target.closest && e.target.closest('tr');
+  if (tr) tr.style.opacity = '';
+  document.querySelectorAll('.api-table tr').forEach(function(r) { r.style.borderTop = ''; });
+});
+
+async function saveApiOrder() {
+  var rows = document.querySelectorAll('.api-table tbody tr[data-api]');
+  var order = [];
+  rows.forEach(function(r) { order.push(r.getAttribute('data-api')); });
+  if (order.length === 0) return;
+  try {
+    await db.collection('fss_config').doc('api_order').set({ order: order, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    var msg = document.getElementById('orderSaveMsg');
+    if (msg) { msg.style.display = 'inline'; setTimeout(function() { msg.style.display = 'none'; }, 3000); }
+    showToast('수집 순서가 저장되었습니다 (' + order.length + '개 API)');
+  } catch(e) {
+    showToast('순서 저장 실패: ' + e.message);
+  }
+}
+
+// 저장된 순서 로드
+var _savedApiOrder = null;
+async function loadApiOrder() {
+  try {
+    var doc = await db.collection('fss_config').doc('api_order').get();
+    if (doc.exists) _savedApiOrder = doc.data().order || null;
+  } catch(e) { /* 무시 */ }
 }
 
 function triggerCollect(mode) {
