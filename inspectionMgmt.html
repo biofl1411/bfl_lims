@@ -33767,11 +33767,36 @@ async function uploadRefFeeExcel(fileInput) {
     var msg = '수수료 업로드: 매칭 ' + matched + '건, 신규추가 ' + added + '건';
     if (notFound.length > 0) msg += ', 미매칭 ' + notFound.length + '건';
 
-    // 자동 Firestore 저장 + 검증
+    // 자동 Firestore 저장 + 검증 + deletedCategories 복원
     if (matched > 0 || added > 0) {
       try {
         await saveRefFeesToFirestore(true);
-        // 검증: 다시 로드해서 건수 확인
+        // 업로드된 항목의 카테고리를 deletedCategories에서 제거
+        var uploadedCats = {};
+        _refFeeData.forEach(function(m) {
+          var code = (m.testItemCode||'').toUpperCase();
+          if (code.startsWith('PA')) uploadedCats['PA'] = true;
+          if (code.startsWith('PB')) uploadedCats['PB'] = true;
+        });
+        var restoreCats = Object.keys(uploadedCats);
+        if (restoreCats.length > 0) {
+          try {
+            var curDoc = await db.collection('settings').doc('refFeeMapping').get();
+            var curDeleted = curDoc.exists ? (curDoc.data().deletedCategories || []) : [];
+            var newDeleted = curDeleted.filter(function(c) { return restoreCats.indexOf(c) < 0; });
+            if (newDeleted.length !== curDeleted.length) {
+              await db.collection('settings').doc('refFeeMapping').update({ deletedCategories: newDeleted });
+            }
+          } catch(e2) {}
+        }
+        // 카테고리 인덱스 재빌드
+        _refFeeCategoryIndex = {};
+        _refFeeData.forEach(function(m) {
+          var code = (m.testItemCode || '').toUpperCase();
+          var prefix = code.indexOf('PA') === 0 ? 'PA' : code.indexOf('PB') === 0 ? 'PB' : code.charAt(0);
+          _refFeeCategoryIndex[prefix] = (_refFeeCategoryIndex[prefix] || 0) + 1;
+        });
+        renderRefFeeCategoryChips();
         var verifyDoc = await db.collection('settings').doc('refFeeMapping').get();
         var verifyCount = verifyDoc.exists ? (verifyDoc.data().items || []).length : 0;
         msg += ' → 저장 완료 (검증: ' + verifyCount + '건)';
@@ -33794,51 +33819,41 @@ async function uploadRefFeeExcel(fileInput) {
 async function registerPAPBRefFeeItems() {
   if (!_refFeeData) return;
 
-  var testItems = await MFDS_CODES.loadTestItems();
-
-  // refFeeMapping에서 수수료 로드
-  var feeMapping = {};
+  // Firestore에서 삭제된 카테고리 확인
+  var deletedCats = [];
   try {
-    var feeDoc = await db.collection('settings').doc('refFeeMapping').get();
-    if (feeDoc.exists) feeMapping = (feeDoc.data() || {}).mapping || {};
+    var cfgDoc = await db.collection('settings').doc('refFeeMapping').get();
+    if (cfgDoc.exists) deletedCats = cfgDoc.data().deletedCategories || [];
   } catch(e) {}
+
+  var testItems = await MFDS_CODES.loadTestItems();
 
   var existingCodes = {};
   _refFeeData.forEach(function(m) { existingCodes[(m.testItemCode || '').toUpperCase()] = true; });
 
-  var added = 0, updated = 0;
+  var added = 0;
   testItems.forEach(function(ti) {
     var code = (ti['시험항목코드'] || '').toUpperCase();
     var prefix2 = code.substring(0, 2);
     if (prefix2 !== 'PA' && prefix2 !== 'PB') return;
-    var fm = feeMapping[code] || {};
-    var fee = fm.fee || 0;
-    var unit = ti['단위'] || fm.unit || '';
-
-    if (existingCodes[code]) {
-      // 기존 항목 수수료/단위 업데이트
-      var existing = _refFeeData.find(function(m) { return (m.testItemCode || '').toUpperCase() === code; });
-      if (existing) {
-        if (fee > 0 && existing.fee !== fee) { existing.fee = fee; updated++; }
-        if (unit && !existing.unit) { existing.unit = unit; }
-      }
-      return;
-    }
+    // 삭제된 카테고리면 건너뜀
+    if (deletedCats.indexOf(prefix2) >= 0) return;
+    if (existingCodes[code]) return;
     _refFeeData.push({
       testItemCode: code,
       itemName: ti['한글명'] || '',
       engName: ti['영문명'] || '',
-      unit: unit,
-      fee: fee,
+      unit: ti['단위'] || '',
+      fee: 0,
       note: ''
     });
     existingCodes[code] = true;
     added++;
   });
 
-  if (added > 0 || updated > 0) {
+  if (added > 0) {
     _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
-    console.log('[참고용수수료] PA/PB: 추가 ' + added + '건, 수수료갱신 ' + updated + '건');
+    console.log('[참고용수수료] PA/PB: ' + added + '건 추가');
   }
 }
 
@@ -33956,9 +33971,8 @@ async function loadAndRenderRefFee() {
       console.log('[참고용수수료] 시험항목에서 초기 구성:', _refFeeData.length + '건 (수수료 미설정)');
     }
 
-    // PA/PB 항목 자동 등록 제거 — 수수료 엑셀 업로드로 수동 관리
-    // (삭제한 항목이 자동 재등록되는 문제 방지)
-    // await registerPAPBRefFeeItems();
+    // PA/PB 항목: mfds_test_items에서 칩 표시용으로 등록 (수수료 0원)
+    await registerPAPBRefFeeItems();
 
     // Allergen(RT-PCR) → X2, Allergen(ELISA) → X3 항목 자동 등록 (2026-03-03)
     registerAllergenRefFeeItems();
@@ -34729,11 +34743,34 @@ async function refFeeBulkDelete() {
   codes.forEach(function(c) { codeSet[c.toUpperCase()] = true; });
   _refFeeData = _refFeeData.filter(function(m) { return !codeSet[(m.testItemCode || '').toUpperCase()]; });
   _refFeeSelected = {};
+
+  // PA/PB 전체 삭제 감지 → deletedCategories에 기록
+  var deletedCats = [];
+  var remainPA = _refFeeData.some(function(m) { return (m.testItemCode||'').startsWith('PA'); });
+  var remainPB = _refFeeData.some(function(m) { return (m.testItemCode||'').startsWith('PB'); });
+  if (!remainPA && codes.some(function(c) { return c.toUpperCase().startsWith('PA'); })) deletedCats.push('PA');
+  if (!remainPB && codes.some(function(c) { return c.toUpperCase().startsWith('PB'); })) deletedCats.push('PB');
+
+  // 카테고리 인덱스 재빌드
+  _refFeeCategoryIndex = {};
+  _refFeeData.forEach(function(m) {
+    var code = (m.testItemCode || '').toUpperCase();
+    var prefix = code.indexOf('PA') === 0 ? 'PA' : code.indexOf('PB') === 0 ? 'PB' : code.charAt(0);
+    _refFeeCategoryIndex[prefix] = (_refFeeCategoryIndex[prefix] || 0) + 1;
+  });
+  renderRefFeeCategoryChips();
   renderRefFeeTable();
+
   // 자동 Firestore 저장
   try {
     await saveRefFeesToFirestore(true);
-    // 검증: 다시 로드해서 건수 확인
+    // deletedCategories 업데이트
+    if (deletedCats.length > 0) {
+      var curDoc = await db.collection('settings').doc('refFeeMapping').get();
+      var curDeleted = curDoc.exists ? (curDoc.data().deletedCategories || []) : [];
+      deletedCats.forEach(function(c) { if (curDeleted.indexOf(c) < 0) curDeleted.push(c); });
+      await db.collection('settings').doc('refFeeMapping').update({ deletedCategories: curDeleted });
+    }
     var verifyDoc = await db.collection('settings').doc('refFeeMapping').get();
     var verifyCount = verifyDoc.exists ? (verifyDoc.data().items || []).length : 0;
     showToast(codes.length + '건 삭제 + 저장 완료 (검증: ' + verifyCount + '건)', 'success');
