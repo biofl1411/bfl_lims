@@ -33782,11 +33782,14 @@ async function uploadRefFeeExcel(fileInput) {
     var msg = '수수료 업로드: 매칭 ' + matched + '건, 신규추가 ' + added + '건';
     if (notFound.length > 0) msg += ', 미매칭 ' + notFound.length + '건';
 
-    // 자동 Firestore 저장
+    // 자동 Firestore 저장 + 검증
     if (matched > 0 || added > 0) {
       try {
-        await saveRefFeesToFirestore(true); // silent 모드
-        msg += ' → 자동 저장 완료';
+        await saveRefFeesToFirestore(true);
+        // 검증: 다시 로드해서 건수 확인
+        var verifyDoc = await db.collection('settings').doc('refFeeMapping').get();
+        var verifyCount = verifyDoc.exists ? (verifyDoc.data().items || []).length : 0;
+        msg += ' → 저장 완료 (검증: ' + verifyCount + '건)';
         showToast(msg, notFound.length > 0 ? 'warning' : 'success');
       } catch(e) {
         showToast(msg + ' → 저장 실패: ' + e.message, 'error');
@@ -34711,7 +34714,7 @@ var refFeeToggleActive = toggleTestItemActive;
 
 /** 일괄 활성/비활성 (수수료 탭) — mfds_test_items 단일 원본 */
 /** 선택 항목 삭제 (참고용매핑 테이블에서 제거) */
-function refFeeBulkDelete() {
+async function refFeeBulkDelete() {
   var codes = Object.keys(_refFeeSelected);
   if (codes.length === 0) return;
   if (!confirm(codes.length + '건을 참고용매핑에서 삭제하시겠습니까?\n(시험항목 원본은 유지됩니다)')) return;
@@ -34720,7 +34723,16 @@ function refFeeBulkDelete() {
   _refFeeData = _refFeeData.filter(function(m) { return !codeSet[(m.testItemCode || '').toUpperCase()]; });
   _refFeeSelected = {};
   renderRefFeeTable();
-  showToast(codes.length + '건 삭제됨 (Firestore 저장 필요)', 'warning');
+  // 자동 Firestore 저장
+  try {
+    await saveRefFeesToFirestore(true);
+    // 검증: 다시 로드해서 건수 확인
+    var verifyDoc = await db.collection('settings').doc('refFeeMapping').get();
+    var verifyCount = verifyDoc.exists ? (verifyDoc.data().items || []).length : 0;
+    showToast(codes.length + '건 삭제 + 저장 완료 (검증: ' + verifyCount + '건)', 'success');
+  } catch(e) {
+    showToast('삭제 후 저장 실패: ' + e.message, 'error');
+  }
 }
 
 function refFeeBulkSetActive(active) {
