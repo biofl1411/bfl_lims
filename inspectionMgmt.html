@@ -1134,6 +1134,10 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
         <button onclick="applyBulkFeeFiltered()" style="padding:5px 10px;border:1px solid #ff8f00;border-radius:6px;background:#fff8e1;color:#ff8f00;font-size:11px;font-weight:600;cursor:pointer;">현재 필터 적용</button>
         <span style="color:#ccc;">|</span>
         <button class="btn" onclick="openRefFeeAddModal()" style="padding:6px 14px;font-size:13px;background:#43a047;color:#fff;border:none;border-radius:6px;cursor:pointer;">+ 코드 추가</button>
+        <label style="padding:6px 14px;font-size:13px;background:#ff8f00;color:#fff;border:none;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+          📤 수수료 엑셀 업로드
+          <input type="file" accept=".xlsx,.xls,.csv" onchange="uploadRefFeeExcel(this)" style="display:none">
+        </label>
         <button class="btn btn-primary" onclick="saveRefFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
       </div>
       <!-- 일괄 선택 도구 -->
@@ -33642,6 +33646,144 @@ async function executeExcelUpload() {
 
   btn.disabled = false;
   btn.textContent = '📥 업로드 실행';
+}
+
+// ══ 참고용매핑: 수수료 엑셀 업로드 → 시험항목코드 자동 매칭 ══
+async function uploadRefFeeExcel(fileInput) {
+  var file = fileInput.files[0];
+  fileInput.value = '';
+  if (!file) return;
+
+  if (!window.XLSX) {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+    document.head.appendChild(s);
+    await new Promise(function(r) { s.onload = r; });
+  }
+
+  var reader = new FileReader();
+  reader.onload = async function(e) {
+    var wb = XLSX.read(e.target.result, { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (rows.length < 2) { showToast('데이터가 없습니다', 'warning'); return; }
+
+    var headers = rows[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/\s+/g, ''); });
+
+    // 컬럼 자동 감지
+    var nameIdx = -1, codeIdx = -1, feeIdx = -1, unitIdx = -1, noteIdx = -1;
+    headers.forEach(function(h, i) {
+      if (codeIdx < 0 && (/코드|code|항목코드|testcode|itemcode/.test(h))) codeIdx = i;
+      if (nameIdx < 0 && (/한글|국문|항목명|검사항목|korean|name/.test(h)) && !(/영문|eng/.test(h))) nameIdx = i;
+      if (feeIdx < 0 && (/수수료|fee|금액|단가|price/.test(h))) feeIdx = i;
+      if (unitIdx < 0 && (/^단위$|^unit$/.test(h))) unitIdx = i;
+      if (noteIdx < 0 && (/비고|note|memo|참고/.test(h))) noteIdx = i;
+    });
+
+    // 한글명 자동 감지 (헤더 매칭 실패 시)
+    if (nameIdx < 0) {
+      for (var ci = 0; ci < Math.min(headers.length, 10); ci++) {
+        var korCount = 0;
+        for (var ri = 1; ri < Math.min(rows.length, 6); ri++) {
+          if (/[가-힣]/.test(String((rows[ri] || [])[ci] || ''))) korCount++;
+        }
+        if (korCount >= 2) { nameIdx = ci; break; }
+      }
+    }
+    // 수수료 자동 감지 (숫자 비율 높은 컬럼)
+    if (feeIdx < 0) {
+      for (var ci = 0; ci < Math.min(headers.length, 10); ci++) {
+        if (ci === nameIdx || ci === codeIdx) continue;
+        var numCount = 0;
+        for (var ri = 1; ri < Math.min(rows.length, 10); ri++) {
+          var v = (rows[ri] || [])[ci];
+          if (v !== undefined && v !== '' && !isNaN(Number(v))) numCount++;
+        }
+        if (numCount >= 3) { feeIdx = ci; break; }
+      }
+    }
+
+    if (nameIdx < 0 && codeIdx < 0) {
+      showToast('항목명 또는 코드 컬럼을 찾을 수 없습니다', 'error');
+      return;
+    }
+
+    // mfds_test_items 로드 (매칭용)
+    var testItems = await MFDS_CODES.loadTestItems();
+    // 한글명 → 코드 맵
+    var nameToCode = {};
+    var codeToItem = {};
+    testItems.forEach(function(ti) {
+      var code = (ti['시험항목코드'] || '').toUpperCase();
+      var name = (ti['한글명'] || '').trim();
+      if (name) nameToCode[name] = code;
+      if (code) codeToItem[code] = ti;
+    });
+
+    // refFeeData 기존 코드맵
+    if (!_refFeeData) _refFeeData = [];
+    var existingMap = {};
+    _refFeeData.forEach(function(m) { existingMap[(m.testItemCode || '').toUpperCase()] = m; });
+
+    var matched = 0, added = 0, notFound = [];
+
+    for (var ri = 1; ri < rows.length; ri++) {
+      var row = rows[ri];
+      if (!row || row.length === 0) continue;
+
+      var rawName = nameIdx >= 0 ? String(row[nameIdx] || '').trim() : '';
+      var rawCode = codeIdx >= 0 ? String(row[codeIdx] || '').trim().toUpperCase() : '';
+      var rawFee = feeIdx >= 0 ? Number(String(row[feeIdx] || '0').replace(/,/g, '')) || 0 : 0;
+      var rawUnit = unitIdx >= 0 ? String(row[unitIdx] || '').trim() : '';
+      var rawNote = noteIdx >= 0 ? String(row[noteIdx] || '').trim() : '';
+
+      // 코드 매칭 우선, 없으면 한글명 매칭
+      var matchCode = rawCode || nameToCode[rawName] || '';
+      if (!matchCode && rawName) {
+        // 부분 매칭 시도 (이름에 괄호 등 제거)
+        var cleanName = rawName.replace(/\s*\(.*?\)\s*/g, '').trim();
+        matchCode = nameToCode[cleanName] || '';
+      }
+
+      if (!matchCode) {
+        notFound.push(rawName || rawCode);
+        continue;
+      }
+
+      if (existingMap[matchCode]) {
+        // 기존 항목 수수료 업데이트
+        if (rawFee > 0) existingMap[matchCode].fee = rawFee;
+        if (rawUnit) existingMap[matchCode].unit = rawUnit;
+        if (rawNote) existingMap[matchCode].note = rawNote;
+        matched++;
+      } else {
+        // 신규 추가
+        var ti = codeToItem[matchCode] || {};
+        _refFeeData.push({
+          testItemCode: matchCode,
+          itemName: ti['한글명'] || rawName,
+          engName: ti['영문명'] || '',
+          unit: rawUnit || ti['단위'] || '',
+          fee: rawFee,
+          note: rawNote
+        });
+        existingMap[matchCode] = _refFeeData[_refFeeData.length - 1];
+        added++;
+      }
+    }
+
+    _refFeeData.sort(function(a, b) { return (a.testItemCode || '').localeCompare(b.testItemCode || ''); });
+    renderRefFeeTable();
+
+    var msg = '수수료 업로드: 매칭 ' + matched + '건, 신규추가 ' + added + '건';
+    if (notFound.length > 0) msg += ', 미매칭 ' + notFound.length + '건';
+    showToast(msg, notFound.length > 0 ? 'warning' : 'success');
+
+    if (notFound.length > 0) {
+      console.warn('[수수료 업로드] 미매칭 항목:', notFound.slice(0, 20));
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // PA/PB 항목 → 참고용매핑에 동기화 (mfds_test_items + refFeeMapping 수수료)
