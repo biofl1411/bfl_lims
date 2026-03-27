@@ -5235,7 +5235,7 @@ async function loadTmrFssData() {
     fssAllData = [];
     snap.forEach(function(doc) {
       var d = doc.data();
-      fssAllData.push({ nm: d.bssh_nm||'', addr: d.locp_addr||'', ceo: d.prsdnt_nm||'', biz: d.induty_nm||'', lic: d.lcns_no||'', tel: d.telno||'', org: d.instt_nm||'', sido: d.addr_sido||'', sigungu: d.addr_sigungu||'', dong: d.addr_dong||'' });
+      fssAllData.push({ nm: d.bssh_nm||'', addr: d.locp_addr||'', ceo: d.prsdnt_nm||'', biz: d.induty_nm||'', lic: d.lcns_no||'', tel: d.telno||'', org: d.instt_nm||'', sido: d.addr_sido||'', sigungu: d.addr_sigungu||'', dong: d.addr_dong||'', prms_dt: d.prms_dt||'' });
     });
     var label = bizFilter || '전체';
     if (cntEl) cntEl.innerHTML = label + ' <b>' + fssAllData.length.toLocaleString() + '</b>건';
@@ -5262,47 +5262,66 @@ function switchNewMode(mode) {
 }
 
 // 신규업체 알림 로드 (fss_new_businesses)
-async function loadTmrNewBizList() {
+// 신규업체 알림: fss_businesses에서 prms_dt(인허가일) 기준 20일 이내
+function loadTmrNewBizList() {
   var res = document.getElementById('tmrNewBizResult');
   if (!res) return;
   var bizFilter = (document.getElementById('tmrNewBizFilter') || {}).value || '';
-  res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">로드 중...</div>';
 
-  try {
-    var query = db.collection('fss_new_businesses').orderBy('detected_at', 'desc').limit(50);
-    var snap = await query.get();
-    var items = snap.docs.map(function(d) { return d.data(); });
-
-    // 업종 필터
-    if (bizFilter) {
-      items = items.filter(function(r) { return (r.induty_nm||'') === bizFilter; });
-    }
-
-    if (items.length === 0) {
-      res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">최근 신규 등록 업체가 없습니다.</div>';
-      return;
-    }
-
-    var html = '';
-    items.forEach(function(r) {
-      var name = r.bssh_nm || '';
-      var dt = '';
-      if (r.detected_at && r.detected_at.toDate) {
-        var d = r.detected_at.toDate();
-        dt = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-      }
-      html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
-      html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-      html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.locp_addr||'') + (r.prsdnt_nm ? ' · ' + escHtml(r.prsdnt_nm) : '') + '</div></div>';
-      html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">';
-      if (r.induty_nm) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.induty_nm) + '</span>';
-      if (dt) html += '<span style="font-size:9px;color:#1565c0">' + dt + ' 감지</span>';
-      html += '</div></div>';
-    });
-    res.innerHTML = html;
-  } catch(e) {
-    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">신규업체 데이터 로드 실패</div>';
+  // fssAllData 캐시에서 필터 (조회 후 사용 가능)
+  if (!fssAllData || fssAllData.length === 0) {
+    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">인허가 분야를 선택하고 [조회] 버튼을 먼저 눌러주세요.</div>';
+    return;
   }
+
+  // 20일 전 날짜 계산 (YYYYMMDD 형식)
+  var now = new Date();
+  var cutoff = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
+  var cutoffStr = cutoff.getFullYear() + String(cutoff.getMonth()+1).padStart(2,'0') + String(cutoff.getDate()).padStart(2,'0');
+  var todayStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+
+  // prms_dt >= cutoffStr 필터
+  var items = fssAllData.filter(function(r) {
+    if (bizFilter && r.biz !== bizFilter) return false;
+    var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
+    return prms >= cutoffStr && prms <= todayStr;
+  });
+
+  // 인허가일 최신순 정렬
+  items.sort(function(a, b) {
+    var pa = (a.prms_dt || a.prmsdt || '').replace(/-/g, '');
+    var pb = (b.prms_dt || b.prmsdt || '').replace(/-/g, '');
+    return pb.localeCompare(pa);
+  });
+
+  if (items.length === 0) {
+    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">최근 20일 이내 신규 인허가 업체가 없습니다.' + (bizFilter ? ' (' + escHtml(bizFilter) + ')' : '') + '</div>';
+    return;
+  }
+
+  var html = '<div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">최근 20일 이내 인허가 업체 <b>' + items.length + '</b>건' + (bizFilter ? ' (' + escHtml(bizFilter) + ')' : '') + '</div>';
+  items.forEach(function(r) {
+    var name = r.nm || '';
+    var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
+    // 경과일 계산
+    var days = 0;
+    if (prms.length === 8) {
+      var prmsDate = new Date(prms.slice(0,4) + '-' + prms.slice(4,6) + '-' + prms.slice(6,8));
+      days = Math.floor((now - prmsDate) / (24*60*60*1000));
+    }
+    var prmsDisplay = prms.length === 8 ? prms.slice(0,4)+'.'+prms.slice(4,6)+'.'+prms.slice(6,8) : prms;
+    var daysColor = days <= 7 ? '#2e7d32' : days <= 14 ? '#e65100' : '#c62828';
+
+    html += "<div class=\"tmr-search-item\" style=\"cursor:pointer\" onclick=\"confirmFssSelect('" + escHtml(name).replace(/'/g,"&#39;") + "')\">";
+    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
+    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · ' + escHtml(r.ceo) : '') + (r.tel ? ' · ' + escHtml(r.tel) : '') + '</div></div>';
+    html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">';
+    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
+    html += '<span style="font-size:10px;color:#1565c0">' + prmsDisplay + ' 인허가</span>';
+    html += '<span style="font-size:9px;font-weight:700;color:' + daysColor + '">' + days + '일 경과</span>';
+    html += '</div></div>';
+  });
+  res.innerHTML = html;
 }
 
 function clearTmrSearch() {
@@ -5877,7 +5896,8 @@ function loadFssData(bizFilter) {
         org: d.instt_nm || '',
         sido: d.addr_sido || '',
         sigungu: d.addr_sigungu || '',
-        dong: d.addr_dong || ''
+        dong: d.addr_dong || '',
+        prms_dt: d.prms_dt || ''
       });
     });
     fssLoading = false;
