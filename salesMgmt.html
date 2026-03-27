@@ -1020,12 +1020,24 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <button id="modeBtn-area" onclick="switchNewMode('area')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#5f6b7a;transition:all .15s;font-family:inherit;border-left:1px solid #e2e6ed">지역 탐색</button>
         </div>
         <div id="mode-search">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <input id="tmrNewSearchInput" class="tmr-search-inp" type="text" placeholder="업체명&middot;품목&middot;업종 검색" oninput="searchFssLive(this.value)" autocomplete="off">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+            <select id="tmrNewBizFilter" onchange="clearTmrSearch()" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;background:#fff;min-width:160px">
+              <option value="">전체 업종</option>
+              <option value="식품제조가공업">식품제조가공업</option>
+              <option value="즉석판매제조가공업">즉석판매제조가공업</option>
+              <option value="건강기능식품제조업">건강기능식품제조업</option>
+              <option value="건강기능식품유통전문판매업">건강기능식품유통전문판매업</option>
+              <option value="축산물가공업">축산물가공업</option>
+              <option value="식육포장처리업">식육포장처리업</option>
+              <option value="식품소분업">식품소분업</option>
+              <option value="식품등수입판매업">식품등수입판매업</option>
+              <option value="식품첨가물제조업">식품첨가물제조업</option>
+            </select>
+            <input id="tmrNewSearchInput" class="tmr-search-inp" type="text" placeholder="업종 선택 후 업체명 검색" oninput="searchFssLive(this.value)" autocomplete="off" style="flex:1;min-width:200px">
             <button class="btn btn-secondary btn-sm" onclick="clearTmrSearch()">지우기</button>
           </div>
           <div id="tmrNewSearchResult" class="tmr-search-result">
-            <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">업체명&middot;품목&middot;업종을 입력하면 식약처 인허가 데이터에서 검색합니다.</div>
+            <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">업종을 선택하고 업체명을 입력하면 식약처 인허가 데이터에서 검색합니다.</div>
           </div>
         </div>
         <div id="mode-area" style="display:none">
@@ -5225,20 +5237,28 @@ async function doFssSearch(q) {
   res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">검색 중...</div>';
 
   try {
-    // fss_businesses (식약처 인허가 데이터) 검색
+    // fss_businesses (식약처 인허가 데이터) — 업종 필터 + 업체명 검색
+    var bizFilter = (document.getElementById('tmrNewBizFilter') || {}).value || '';
     var results = [];
     try {
-      var snap = await db.collection('fss_businesses')
-        .where('bssh_nm', '>=', q)
-        .where('bssh_nm', '<', q + '\uf8ff')
-        .limit(30)
-        .get();
+      var query = db.collection('fss_businesses');
+      if (bizFilter) {
+        // 복합 쿼리: 업종 + 업체명 prefix
+        query = query.where('induty_nm', '==', bizFilter)
+                     .where('bssh_nm', '>=', q)
+                     .where('bssh_nm', '<', q + '\uf8ff');
+      } else {
+        // 업종 미선택: 업체명만 검색
+        query = query.where('bssh_nm', '>=', q)
+                     .where('bssh_nm', '<', q + '\uf8ff');
+      }
+      var snap = await query.limit(30).get();
       results = snap.docs.map(function(d) {
         var data = d.data();
-        return { nm: data.bssh_nm||'', addr: data.locp_addr||'', biz: data.induty_nm||'', ceo: data.prsdnt_nm||'', tel: data.telno||'', sido: data.addr_sido||'', lcns: d.id };
+        return { nm: data.bssh_nm||'', addr: data.locp_addr||'', biz: data.induty_nm||'', ceo: data.prsdnt_nm||'', tel: data.telno||'', sido: data.addr_sido||'', lcns: d.id, closed: data.clsbiz_dvs_nm||'' };
       });
-      // 폐업 제외
-      results = results.filter(function(r) { return true; }); // clsbiz_dvs_nm 필터 필요시 추가
+      // 폐업 업체 제외
+      results = results.filter(function(r) { return r.closed !== '폐업'; });
     } catch(e) { console.log('fss_businesses 검색 실패, companies 폴백:', e.message); }
 
     // fss 결과 없으면 companies 폴백
