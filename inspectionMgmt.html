@@ -33726,17 +33726,12 @@ async function uploadRefFeeExcel(fileInput) {
       var rawUnit = unitIdx >= 0 ? String(row[unitIdx] || '').trim() : '';
       var rawNote = noteIdx >= 0 ? String(row[noteIdx] || '').trim() : '';
 
-      // 코드 매칭: 1) 코드 컬럼 직접 → 2) 한글명 → 3) 괄호 제거 → 4) 순번 기반 PA/PB
-      var matchCode = rawCode || nameToCode[rawName] || '';
-      if (!matchCode && rawName) {
-        var cleanName = rawName.replace(/\s*\(.*?\)\s*/g, '').trim();
-        matchCode = nameToCode[cleanName] || '';
-      }
-      // 순번 기반 PA/PB 자동 코드 생성 (출력순서 컬럼이 있고 코드 매칭 실패 시)
+      // 코드 매칭: 1) 코드 컬럼 직접 → 2) 순번 기반 PA/PB (우선) → 3) 한글명 → 4) 괄호 제거
+      var matchCode = rawCode || '';
+      // 순번 기반 PA/PB 자동 코드 (한글명 매칭보다 우선 — PA/PB 항목이 기존 코드로 빠지지 않도록)
       if (!matchCode && row[0] && !isNaN(Number(row[0]))) {
         var seqNum = Number(row[0]);
         if (seqNum >= 1 && seqNum <= 9999) {
-          // PA/PB 판별: 시험분야가 '축산'이면 PB, 아니면 PA
           var fieldIdx = headers.indexOf('시험분야') >= 0 ? headers.indexOf('시험분야') :
                          headers.findIndex(function(h) { return /분야|field/i.test(h); });
           var fieldVal = fieldIdx >= 0 ? String(row[fieldIdx] || '').trim() : '';
@@ -33744,6 +33739,12 @@ async function uploadRefFeeExcel(fileInput) {
           var autoCode = prefix + String(seqNum).padStart(4, '0');
           if (codeToItem[autoCode]) matchCode = autoCode;
         }
+      }
+      // 순번 매칭 실패 시 한글명으로 폴백
+      if (!matchCode) matchCode = nameToCode[rawName] || '';
+      if (!matchCode && rawName) {
+        var cleanName = rawName.replace(/\s*\(.*?\)\s*/g, '').trim();
+        matchCode = nameToCode[cleanName] || '';
       }
 
       if (!matchCode) {
