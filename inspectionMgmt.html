@@ -1162,6 +1162,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           <span id="ref-fee-sel-count" style="font-size:12px;font-weight:600;color:#1565c0;"></span>
           <button onclick="refFeeBulkSetActive(true)" id="ref-bulk-active-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#43a047;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">활성화</button>
           <button onclick="refFeeBulkSetActive(false)" id="ref-bulk-inactive-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#e53935;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">비활성화</button>
+          <button onclick="refFeeBulkDelete()" id="ref-bulk-delete-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#b71c1c;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">선택 삭제</button>
           <button onclick="refFeeClearSelection()" id="ref-bulk-clear-btn" style="display:none;padding:3px 10px;border:none;border-radius:6px;background:#fff;color:var(--sub);font-size:11px;cursor:pointer;border:1px solid var(--bdr);">선택 해제</button>
         </div>
       </div>
@@ -34541,7 +34542,7 @@ function updateRefFeeBulkBar() {
   var cntEl = document.getElementById('ref-fee-sel-count');
   if (cntEl) cntEl.textContent = cnt > 0 ? cnt + '건 선택됨' : '';
   // 액션 버튼 표시/숨김
-  ['ref-bulk-active-btn', 'ref-bulk-inactive-btn', 'ref-bulk-clear-btn'].forEach(function(id) {
+  ['ref-bulk-active-btn', 'ref-bulk-inactive-btn', 'ref-bulk-delete-btn', 'ref-bulk-clear-btn'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.style.display = cnt > 0 ? 'inline-block' : 'none';
   });
@@ -34683,6 +34684,19 @@ var toggleMfdsTestItemActive = toggleTestItemActive;
 var refFeeToggleActive = toggleTestItemActive;
 
 /** 일괄 활성/비활성 (수수료 탭) — mfds_test_items 단일 원본 */
+/** 선택 항목 삭제 (참고용매핑 테이블에서 제거) */
+function refFeeBulkDelete() {
+  var codes = Object.keys(_refFeeSelected);
+  if (codes.length === 0) return;
+  if (!confirm(codes.length + '건을 참고용매핑에서 삭제하시겠습니까?\n(시험항목 원본은 유지됩니다)')) return;
+  var codeSet = {};
+  codes.forEach(function(c) { codeSet[c.toUpperCase()] = true; });
+  _refFeeData = _refFeeData.filter(function(m) { return !codeSet[(m.testItemCode || '').toUpperCase()]; });
+  _refFeeSelected = {};
+  renderRefFeeTable();
+  showToast(codes.length + '건 삭제됨 (Firestore 저장 필요)', 'warning');
+}
+
 function refFeeBulkSetActive(active) {
   var codes = Object.keys(_refFeeSelected);
   if (codes.length === 0) return;
