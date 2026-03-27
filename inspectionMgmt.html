@@ -1141,7 +1141,7 @@ body{font-family:'Pretendard','Outfit',sans-serif;background:var(--bg);color:var
           📤 수수료 엑셀 업로드
           <input type="file" accept=".xlsx,.xls,.csv" onchange="uploadRefFeeExcel(this)" style="display:none">
         </label>
-        <button class="btn btn-primary" onclick="saveRefFeesToFirestore()" style="padding:6px 14px;font-size:13px;">💾 Firestore 저장</button>
+        <!-- Firestore 저장: 삭제/업로드 시 자동 저장됨 -->
       </div>
       <!-- 선택 액션 바 (선택 시만 표시) -->
       <div id="ref-fee-action-bar" style="display:none;margin-bottom:8px;padding:8px 14px;background:#e3f2fd;border-radius:8px;border:1px solid #90caf9;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -34260,6 +34260,12 @@ function renderRefFeeTable() {
   updateRefFeeBulkBar();
 }
 
+var _refFeeAutoSaveTimer = null;
+function _refFeeAutoSave() {
+  clearTimeout(_refFeeAutoSaveTimer);
+  _refFeeAutoSaveTimer = setTimeout(function() { saveRefFeesToFirestore(true); }, 2000);
+}
+
 function updateRefFee(input, directVal) {
   var code = input.getAttribute('data-code');
   var newFee = typeof directVal === 'number' ? directVal : (parseInt(String(input.value).replace(/,/g, '')) || 0);
@@ -34278,6 +34284,7 @@ function updateRefFee(input, directVal) {
   var setCountEl = document.getElementById('ref-fee-set-count');
   if (totalEl) totalEl.textContent = total.toLocaleString() + '원';
   if (setCountEl) setCountEl.textContent = '수수료 설정: ' + setCount + '개';
+  _refFeeAutoSave();
 }
 
 function updateRefNote(input) {
@@ -34287,6 +34294,7 @@ function updateRefNote(input) {
     var item = _refFeeData.find(function(m) { return m.testItemCode === code; });
     if (item) item.note = note;
   }
+  _refFeeAutoSave();
 }
 
 function updateRefItemName(input) {
