@@ -33783,13 +33783,14 @@ async function uploadRefFeeExcel(fileInput) {
     if (matched > 0 || added > 0) {
       try {
         await saveRefFeesToFirestore(true);
-        // 카테고리 인덱스 재빌드
+        // 카테고리 인덱스 재빌드 + PA/PB 칩 갱신
         _refFeeCategoryIndex = {};
         _refFeeData.forEach(function(m) {
           var code = (m.testItemCode || '').toUpperCase();
           var prefix = code.indexOf('PA') === 0 ? 'PA' : code.indexOf('PB') === 0 ? 'PB' : code.charAt(0);
           _refFeeCategoryIndex[prefix] = (_refFeeCategoryIndex[prefix] || 0) + 1;
         });
+        await buildPAPBChipCounts();
         renderRefFeeCategoryChips();
         var verifyDoc = await db.collection('settings').doc('refFeeMapping').get();
         var verifyCount = verifyDoc.exists ? (verifyDoc.data().items || []).length : 0;
@@ -33819,9 +33820,9 @@ async function buildPAPBChipCounts() {
     if (code.startsWith('PA')) paCnt++;
     else if (code.startsWith('PB')) pbCnt++;
   });
-  // 칩 카운트에 반영 (refFeeData에 없어도 칩 표시)
-  if (paCnt > 0 && !_refFeeCategoryIndex['PA']) _refFeeCategoryIndex['PA'] = paCnt;
-  if (pbCnt > 0 && !_refFeeCategoryIndex['PB']) _refFeeCategoryIndex['PB'] = pbCnt;
+  // 칩 카운트에 반영 (mfds_test_items 기준 — 항상 덮어쓰기)
+  if (paCnt > 0) _refFeeCategoryIndex['PA'] = paCnt;
+  if (pbCnt > 0) _refFeeCategoryIndex['PB'] = pbCnt;
 }
 
 // Allergen 항목 → 참고용맵핑 X2(RT-PCR), X3(Elisa) 자동 등록
@@ -34726,8 +34727,8 @@ async function refFeeBulkDelete() {
     var prefix = code.indexOf('PA') === 0 ? 'PA' : code.indexOf('PB') === 0 ? 'PB' : code.charAt(0);
     _refFeeCategoryIndex[prefix] = (_refFeeCategoryIndex[prefix] || 0) + 1;
   });
-  // PA/PB 칩 카운트는 async이므로 then으로 처리
-  buildPAPBChipCounts().then(function() { renderRefFeeCategoryChips(); });
+  // PA/PB 칩 카운트 갱신 후 렌더링
+  await buildPAPBChipCounts();
   renderRefFeeCategoryChips();
   renderRefFeeTable();
 
