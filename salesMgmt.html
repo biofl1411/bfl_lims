@@ -4959,25 +4959,70 @@ async function loadPrevNewSalesPlan() {
   var pd = new Date(prevId.slice(0,4)+'-'+prevId.slice(4,6)+'-'+prevId.slice(6,8));
   var pdLabel = (pd.getMonth()+1) + '월 ' + pd.getDate() + '일';
 
+  var PLAN_FIELDS = [
+    { key: 'met',      label: '누구를',  opts: ['만났어', '못 만났어'] },
+    { key: 'bizCard',  label: '명함',    opts: ['받았어', '못 받았어'] },
+    { key: 'interest', label: '호의적',  opts: ['관심 보였어', '안 보였어'] },
+    { key: 'quote',    label: '견적',    opts: ['달래', '필요없데'] },
+    { key: 'brochure', label: '소개서',  opts: ['줬어', '안 줬어'] }
+  ];
+
   var html = '<div style="background:#f0f7ff;border:1px solid #bbdefb;border-radius:10px;padding:10px 12px;margin-bottom:8px">';
-  html += '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:8px">' + pdLabel + ' 신규 영업 계획 결과 입력</div>';
+  html += '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:10px">' + pdLabel + ' 신규 영업 계획 결과 입력</div>';
   plan.forEach(function(t, i) {
-    var savedResult = (savedResults[i] && savedResults[i].result) || '';
-    html += '<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;align-items:center;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e3f2fd">';
-    html += '<div>';
-    html += '<div style="font-weight:600;font-size:12px;color:#1a2332">' + escHtml(t.nm || '미지정') + '</div>';
+    var sv = (savedResults[i]) || {};
+    var isLast = (i === plan.length - 1);
+    html += '<div data-plan-idx="' + i + '" data-plan-date="' + prevId + '" data-plan-nm="' + escHtml(t.nm||'') + '" style="margin-bottom:' + (isLast?'0':'10') + 'px;padding-bottom:' + (isLast?'0':'10') + 'px;' + (isLast?'':'border-bottom:1px solid #dbeafe') + '">';
+    // 업체명
+    html += '<div style="font-weight:700;font-size:12px;color:#1a2332;margin-bottom:6px">' + escHtml(t.nm || '미지정');
     var meta = [];
     if (t.contactMethod) meta.push(escHtml(t.contactMethod));
     if (t.memo) meta.push(escHtml(t.memo));
-    if (meta.length) html += '<div style="font-size:10px;color:#5f6b7a;margin-top:1px">' + meta.join(' · ') + '</div>';
+    if (meta.length) html += ' <span style="font-size:10px;color:#5f6b7a;font-weight:400">· ' + meta.join(' · ') + '</span>';
     html += '</div>';
-    html += '<input type="text" data-plan-date="' + prevId + '" data-plan-idx="' + i + '" data-plan-nm="' + escHtml(t.nm||'') + '" value="' + escHtml(savedResult) + '" placeholder="결과 메모 (미방문/계약/견적 등)" style="padding:6px 8px;border:1px solid #c8d6e5;border-radius:6px;font-size:11px;font-family:inherit;width:100%;box-sizing:border-box">';
+    // 토글 필드들
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">';
+    PLAN_FIELDS.forEach(function(f) {
+      var cur = sv[f.key] || '';
+      html += '<div style="display:flex;align-items:center;gap:3px;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:3px 6px">';
+      html += '<span style="font-size:10px;color:#5f6b7a;margin-right:2px">' + f.label + '</span>';
+      html += '<input type="hidden" data-plan-field="' + f.key + '" value="' + escHtml(cur) + '">';
+      f.opts.forEach(function(opt) {
+        var isOn = (cur === opt);
+        var btnStyle = isOn
+          ? 'background:#1565c0;color:#fff;border:none;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit'
+          : 'background:#f0f4f8;color:#5f6b7a;border:none;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit';
+        html += '<button type="button" style="' + btnStyle + '" onclick="togglePlanField(this,\'' + f.key + '\',\'' + opt.replace(/'/g,"\\'") + '\')">' + escHtml(opt) + '</button>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    // 메모
+    html += '<input type="text" data-plan-memo="1" value="' + escHtml(sv.memo||'') + '" placeholder="메모" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #c8d6e5;border-radius:6px;font-size:11px;font-family:inherit">';
     html += '</div>';
   });
-  html = html.replace(/border-bottom:1px solid #e3f2fd">\s*$/, 'border-bottom:none">');
   html += '</div>';
   sec.innerHTML = html;
 }
+function togglePlanField(btn, fieldKey, opt) {
+  var fieldGroup = btn.parentElement;
+  var hidden = fieldGroup.querySelector('input[data-plan-field="' + fieldKey + '"]');
+  var cur = hidden ? hidden.value : '';
+  // 같은 필드 버튼 전체 초기화
+  fieldGroup.querySelectorAll('button').forEach(function(b) {
+    b.style.background = '#f0f4f8';
+    b.style.color = '#5f6b7a';
+  });
+  if (cur === opt) {
+    // 같은 값 재클릭 → 선택 해제
+    if (hidden) hidden.value = '';
+  } else {
+    if (hidden) hidden.value = opt;
+    btn.style.background = '#1565c0';
+    btn.style.color = '#fff';
+  }
+}
+
 // ── 업체 카드 ──
 function addDiaryCompanyCard(data) {
   var d = data || {};
@@ -5662,13 +5707,25 @@ function collectDiaryFormData(status) {
     competitorNote: (document.getElementById('diaryCompetitor')||{}).value || '',
     newSalesActivity: (document.getElementById('diaryNewSales')||{}).value || '',
     newSalesResults: (function() {
-      var inputs = document.querySelectorAll('#newSalesPlanSection [data-plan-idx]');
-      if (!inputs.length) return null;
+      var rows = document.querySelectorAll('#newSalesPlanSection [data-plan-idx]');
+      if (!rows.length) return null;
       var planDate = '';
       var items = [];
-      inputs.forEach(function(inp) {
-        planDate = inp.dataset.planDate || planDate;
-        items.push({ nm: inp.dataset.planNm || '', result: inp.value || '' });
+      rows.forEach(function(row) {
+        planDate = row.dataset.planDate || planDate;
+        function fv(key) {
+          var el = row.querySelector('input[data-plan-field="' + key + '"]');
+          return el ? el.value : '';
+        }
+        items.push({
+          nm:       row.dataset.planNm || '',
+          met:      fv('met'),
+          bizCard:  fv('bizCard'),
+          interest: fv('interest'),
+          quote:    fv('quote'),
+          brochure: fv('brochure'),
+          memo:     (row.querySelector('[data-plan-memo]') || {}).value || ''
+        });
       });
       return { planDate: planDate, items: items };
     })(),
