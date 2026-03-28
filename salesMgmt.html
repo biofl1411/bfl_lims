@@ -4925,17 +4925,15 @@ async function loadPrevNewSalesPlan() {
   if (!sec) return;
   if (!_diaryDate) { sec.innerHTML = ''; return; }
 
-  // 이전 영업일 찾기 (최대 7일 전까지, 주말 건너뜀)
+  // 가장 최근 일지 찾기 (최대 7일 전까지, tomorrowNew 있는 것 우선)
   var cur = new Date(_diaryDate.slice(0,4)+'-'+_diaryDate.slice(4,6)+'-'+_diaryDate.slice(6,8));
   var prevDoc = null, prevId = '';
   for (var i = 1; i <= 7; i++) {
     var d = new Date(cur.getTime() - i * 86400000);
-    var dw = d.getDay();
-    if (dw === 0 || dw === 6) continue; // 주말 건너뜀
     prevId = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
     try {
       var snap = await db.collection('salesDiaries').doc(prevId).get();
-      if (snap.exists) { prevDoc = snap.data(); break; }
+      if (snap.exists && (snap.data().tomorrowNew || []).length > 0) { prevDoc = snap.data(); break; }
     } catch(e) { break; }
   }
 
