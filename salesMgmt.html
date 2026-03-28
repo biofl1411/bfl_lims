@@ -5841,105 +5841,89 @@ function renderSidoPanel() {
   renderBreadcrumb();
 }
 
+function _areaHidePanels(panels) {
+  panels.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+}
+function _areaFssKey(sido) { return (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido; }
+function _areaFilter(sido, sg, dong) {
+  if (!fssAllData) return [];
+  var key = _areaFssKey(sido);
+  return fssAllData.filter(function(r) {
+    if (!(r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0)) return false;
+    if (sg && !(r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0)) return false;
+    if (dong && (r.addr||'').indexOf(dong) < 0) return false;
+    return true;
+  });
+}
+
 function selectSido(sido) {
   _areaSido = sido; _areaSg = ''; _areaDong = '';
   renderBreadcrumb();
-
-  // fssAllData 캐시에서 로컬 필터 (업체조회 fssFilterSido 동일 방식)
-  var results = [];
-  if (fssAllData && fssAllData.length > 0) {
-    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-    results = fssAllData.filter(function(r) {
-      return r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0;
-    });
-  }
-
-  // 시군구 패널 표시 (regionData 활용)
+  var results = _areaFilter(sido, '', '');
   var sgData = (typeof regionData !== 'undefined') ? (regionData[sido] || []) : [];
   var sgPanel = document.getElementById('sgPanel');
   var sgGrid = document.getElementById('sgGrid');
-  ['dongPanel'].forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
-
+  _areaHidePanels(['sidoPanel', 'dongPanel', 'areaResultPanel']);
   if (sgData.length > 0 && sgPanel && sgGrid) {
     sgPanel.style.display = '';
-    var sgHtml = '<button class="area-btn act" onclick="showAreaAllSido(\'' + sido + '\')" style="grid-column:span 2">' + sido + ' 전체 ' + results.length + '개 보기</button>';
+    var sgHtml = '<button class="area-btn act" onclick="showAreaAllSido(\'' + escHtml(sido) + '\')" style="grid-column:span 2">' + sido + ' 전체 ' + results.length + '개 보기</button>';
     sgData.forEach(function(sg) {
       var cnt = results.filter(function(r) { return r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0; }).length;
       var cls = cnt > 0 ? 'area-btn has' : 'area-btn';
-      sgHtml += '<button class="' + cls + '" onclick="selectSg(\'' + sido + '\',\'' + sg + '\')">' + sg + (cnt > 0 ? ' <span style="font-size:9px;color:#8892a4">(' + cnt + ')</span>' : '') + '</button>';
+      sgHtml += '<button class="' + cls + '" onclick="selectSg(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\')">' + escHtml(sg) + (cnt > 0 ? ' <span style="font-size:9px;color:#8892a4">(' + cnt + ')</span>' : '') + '</button>';
     });
     sgGrid.innerHTML = sgHtml;
-    document.getElementById('sidoPanel').style.display = 'none';
   }
-
-  // 결과 패널은 시군구 선택 후 표시
-  var rPanel = document.getElementById('areaResultPanel');
-  if (rPanel) rPanel.style.display = 'none';
 }
 
 function showAreaAllSido(sido) {
-  var results = fssAllData ? fssAllData.filter(function(r) {
-    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-    return r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0;
-  }) : [];
-  showTmrAreaResults(sido + ' 전체', results);
+  _areaHidePanels(['sgPanel', 'dongPanel']);
+  showTmrAreaResults(sido + ' 전체', _areaFilter(sido, '', ''));
 }
 
 function selectSg(sido, sg) {
   _areaSg = sg; _areaDong = '';
   renderBreadcrumb();
-  var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-  var results = fssAllData ? fssAllData.filter(function(r) {
-    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
-  }) : [];
-
-  // 읍면동 추출 (dong 필드 우선, 없으면 주소에서 파싱)
+  var results = _areaFilter(sido, sg, '');
+  // 읍면동 추출
   var dongMap = {};
   results.forEach(function(r) {
     var d = r.dong || '';
     if (!d) {
-      var addr = r.addr || '';
-      var parts = addr.split(/\s+/);
+      var parts = (r.addr || '').split(/\s+/);
       for (var i = 0; i < parts.length; i++) {
         var p = parts[i];
-        if (p.match(/(읍|면|동|리|가|로)$/) && p !== sido && p !== sg && p.length >= 2) {
-          d = p; break;
-        }
+        if (p.match(/(읍|면|동|리|가|로)$/) && p !== sido && p !== sg && p.length >= 2) { d = p; break; }
       }
     }
     if (d) dongMap[d] = (dongMap[d] || 0) + 1;
   });
-  var dongList = Object.keys(dongMap).sort(function(a,b) { return dongMap[b] - dongMap[a]; });
-
-  // 동 패널 표시
+  var dongList = Object.keys(dongMap).sort(function(a, b) { return dongMap[b] - dongMap[a]; });
   var dongPanel = document.getElementById('dongPanel');
   var dongGrid = document.getElementById('dongGrid');
+  _areaHidePanels(['sgPanel', 'areaResultPanel']);
   if (dongList.length > 0 && dongPanel && dongGrid) {
     dongPanel.style.display = '';
-    var dHtml = '<button class="area-btn act" onclick="showSgAllResults(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\')" style="grid-column:span 2">' + sg + ' 전체 ' + results.length + '개 보기</button>';
+    var dHtml = '<button class="area-btn act" onclick="showSgAllResults(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\')" style="grid-column:span 2">' + escHtml(sg) + ' 전체 ' + results.length + '개 보기</button>';
     dongList.forEach(function(d) {
-      dHtml += '<button class="area-btn has" onclick="selectAreaDong(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\',\'' + escHtml(d) + '\')">' + d + ' <span style="font-size:9px;color:#8892a4">(' + dongMap[d] + ')</span></button>';
+      dHtml += '<button class="area-btn has" onclick="selectAreaDong(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\',\'' + escHtml(d) + '\')">' + escHtml(d) + ' <span style="font-size:9px;color:#8892a4">(' + dongMap[d] + ')</span></button>';
     });
     dongGrid.innerHTML = dHtml;
   } else {
     showTmrAreaResults(sido + ' ' + sg, results);
   }
 }
+
 function showSgAllResults(sido, sg) {
-  var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-  var results = fssAllData ? fssAllData.filter(function(r) {
-    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
-  }) : [];
-  showTmrAreaResults(sido + ' ' + sg, results);
+  _areaHidePanels(['dongPanel']);
+  showTmrAreaResults(sido + ' ' + sg, _areaFilter(sido, sg, ''));
 }
+
 function selectAreaDong(sido, sg, dong) {
   _areaDong = dong;
   renderBreadcrumb();
-  var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-  var results = fssAllData ? fssAllData.filter(function(r) {
-    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0) && (r.addr||'').indexOf(dong) >= 0;
-  }) : [];
-  showTmrAreaResults(sido + ' ' + sg + ' ' + dong, results);
+  _areaHidePanels(['dongPanel']);
+  showTmrAreaResults(sido + ' ' + sg + ' ' + dong, _areaFilter(sido, sg, dong));
 }
 
 function showTmrAreaResults(title, results) {
@@ -5956,18 +5940,76 @@ function showTmrAreaResults(title, results) {
     rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">해당 지역 업체가 없습니다.</div>';
     return;
   }
-  var limited = results.slice(0, 50);
+
+  var PAGE = 30;
+  function renderPage(offset) {
+    var slice = results.slice(offset, offset + PAGE);
+    var html = '';
+    slice.forEach(function(r) {
+      var name = escHtml(r.nm || '');
+      var safeNameJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      html += '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
+      // 업체정보
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+      html += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+      html += '<button onclick="addAreaCompanyToTmr(\'' + safeNameJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit" title="익일 계획 추가(추후)">+ 추가</button>';
+      html += '</div>';
+      // 업체정보 그리드
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+      if (r.biz)     html += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+      if (r.ceo)     html += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+      if (r.tel)     html += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+      if (r.org)     html += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+      if (r.lic)     html += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+      if (r.prms_dt) html += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+      html += '</div>';
+      if (r.addr) html += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
+      html += '</div>';
+    });
+    if (offset + PAGE < results.length) {
+      html += '<div style="text-align:center;padding:8px"><button onclick="areaLoadMore(this,' + (offset + PAGE) + ')" data-results-id="' + title.replace(/\s/g,'_') + '" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (results.length - offset - PAGE) + '건 남음)</button></div>';
+    }
+    return html;
+  }
+  rList.innerHTML = renderPage(0);
+  rList._areaResults = results;
+  rList._areaTitle = title;
+}
+
+function areaLoadMore(btn, offset) {
+  var rList = document.getElementById('areaResultList');
+  if (!rList || !rList._areaResults) return;
+  var results = rList._areaResults;
+  var PAGE = 30;
+  var slice = results.slice(offset, offset + PAGE);
   var html = '';
-  limited.forEach(function(r) {
-    var name = r.nm || '';
-    html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
-    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · ' + escHtml(r.ceo) : '') + '</div></div>';
-    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
+  slice.forEach(function(r) {
+    var name = escHtml(r.nm || '');
+    var safeNameJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html += '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+    html += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+    html += '<button onclick="addAreaCompanyToTmr(\'' + safeNameJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button>';
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+    if (r.biz)     html += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+    if (r.ceo)     html += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+    if (r.tel)     html += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+    if (r.org)     html += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+    if (r.lic)     html += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+    if (r.prms_dt) html += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+    html += '</div>';
+    if (r.addr) html += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
     html += '</div>';
   });
-  if (results.length > 50) html += '<div style="text-align:center;padding:8px;font-size:11px;color:#8892a4">외 ' + (results.length - 50) + '건</div>';
-  rList.innerHTML = html;
+  if (offset + PAGE < results.length) {
+    html += '<div style="text-align:center;padding:8px"><button onclick="areaLoadMore(this,' + (offset + PAGE) + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (results.length - offset - PAGE) + '건 남음)</button></div>';
+  }
+  btn.closest('div').outerHTML = html;
+}
+
+function addAreaCompanyToTmr(name) {
+  showToast(name + ' — 익일 계획 추가 기능은 추후 구현 예정입니다.', 'info');
 }
 
 function renderBreadcrumb() {
