@@ -826,6 +826,17 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// 부분 매칭: 검색어를 2글자 단위 n-gram으로 쪼개 하나라도 포함되면 true
+function fuzzyMatch(term, hay) {
+  term = term.toLowerCase(); hay = hay.toLowerCase();
+  if (hay.indexOf(term) >= 0) return true; // 완전 포함 우선
+  if (term.length < 2) return false;
+  for (var i = 0; i < term.length - 1; i++) {
+    if (hay.indexOf(term.slice(i, i + 2)) >= 0) return true;
+  }
+  return false;
+}
+
 // ============================================================================
 // 필터 + 정렬
 // ============================================================================
@@ -864,11 +875,11 @@ function applyFilter() {
         // 태그 검색 (AND): 모든 태그가 hay에 매칭
         for (var ti = 0; ti < _searchTags.length; ti++) {
             var terms = _searchTags[ti].terms;
-            var matched = terms.some(function(term) { return hay.indexOf(term.toLowerCase()) >= 0; });
+            var matched = terms.some(function(term) { return fuzzyMatch(term, hay); });
             if (!matched) return false;
         }
         // 입력 중 실시간 검색
-        if (typingSearch && hay.indexOf(typingSearch) < 0) return false;
+        if (typingSearch && !fuzzyMatch(typingSearch, hay)) return false;
         return true;
     });
 
