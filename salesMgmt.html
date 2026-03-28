@@ -4925,17 +4925,24 @@ async function loadPrevNewSalesPlan() {
   if (!sec) return;
   if (!_diaryDate) { sec.innerHTML = ''; return; }
 
-  // 가장 최근 일지 찾기 (최대 7일 전까지, tomorrowNew 있는 것 우선)
-  var cur = new Date(_diaryDate.slice(0,4)+'-'+_diaryDate.slice(4,6)+'-'+_diaryDate.slice(6,8));
+  // 현재 일지 이전 날짜 중 tomorrowNew 있는 가장 최근 일지 쿼리
+  var dateStr = _diaryDate.slice(0,4)+'-'+_diaryDate.slice(4,6)+'-'+_diaryDate.slice(6,8);
   var prevDoc = null, prevId = '';
-  for (var i = 1; i <= 7; i++) {
-    var d = new Date(cur.getTime() - i * 86400000);
-    prevId = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-    try {
-      var snap = await db.collection('salesDiaries').doc(prevId).get();
-      if (snap.exists && (snap.data().tomorrowNew || []).length > 0) { prevDoc = snap.data(); break; }
-    } catch(e) { break; }
-  }
+  try {
+    var recentSnap = await db.collection('salesDiaries')
+      .where('date', '<', dateStr)
+      .orderBy('date', 'desc')
+      .limit(10)
+      .get();
+    for (var ri = 0; ri < recentSnap.docs.length; ri++) {
+      var rd = recentSnap.docs[ri].data();
+      if ((rd.tomorrowNew || []).length > 0) {
+        prevDoc = rd;
+        prevId = recentSnap.docs[ri].id;
+        break;
+      }
+    }
+  } catch(e) { console.warn('이전 일지 조회 실패:', e); }
 
   var plan = prevDoc ? (prevDoc.tomorrowNew || []) : [];
   if (plan.length === 0) {
