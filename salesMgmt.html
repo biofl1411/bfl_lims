@@ -4918,7 +4918,7 @@ function addDiaryCompanyCard(data) {
           ' 비교견적 입력' +
         '</label>' +
         '<div id="dc-compare-' + uid + '" style="' + (d.compareQuote?'':'display:none;') + 'margin-top:6px;border:1px solid #e2e6ed;border-radius:8px;padding:10px;background:#fafbfc">' +
-          '<div style="display:grid;grid-template-columns:1.2fr 1.2fr 1fr 1fr 0.5fr 1fr 1fr 24px;gap:6px;font-size:11px;font-weight:700;color:#334155;margin-bottom:6px;padding:6px 0;border-bottom:2px solid #e2e6ed"><span>검사목적</span><span>검사항목</span><span style="text-align:right">경쟁사(부가세포함)</span><span style="text-align:right">BFL(정가)</span><span style="text-align:center">할인율</span><span style="text-align:right;color:#1565c0">할인 후 금액</span><span style="text-align:right;color:#e53935">차액</span><span></span></div>' +
+          '<div style="display:grid;grid-template-columns:1.2fr 1.2fr 1fr 1fr 0.5fr 1fr 0.45fr 1fr 24px;gap:6px;font-size:11px;font-weight:700;color:#334155;margin-bottom:6px;padding:6px 0;border-bottom:2px solid #e2e6ed"><span>검사목적</span><span>검사항목</span><span style="text-align:right">경쟁사(단가)</span><span style="text-align:right">BFL(정가)</span><span style="text-align:center">할인율</span><span style="text-align:right;color:#1565c0">할인 후 금액</span><span style="text-align:center;color:#5f6b7a">건수</span><span style="text-align:right;color:#e53935">차액(건수×)</span><span></span></div>' +
           '<div id="dc-compare-rows-' + uid + '">' + buildCompareRows(uid, d.compareItems||[]) + '</div>' +
           '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
             '<button onclick="addCompareRow(\'' + uid + '\')" style="font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:4px 10px;cursor:pointer">+ 항목 추가</button>' +
@@ -5118,7 +5118,7 @@ function toggleCompareQuote(uid, show) {
   var el = document.getElementById('dc-compare-' + uid);
   if (el) el.style.display = show ? '' : 'none';
 }
-function _compareGridCols() { return '1.2fr 1.2fr 1fr 1fr 0.5fr 1fr 1fr 24px'; }
+function _compareGridCols() { return '1.2fr 1.2fr 1fr 1fr 0.5fr 1fr 0.45fr 1fr 24px'; }
 function _buildPurposeDatalist() {
   var html = '<datalist id="compare-purpose-list">';
   _diaryPurposes.forEach(function(p) {
@@ -5139,9 +5139,10 @@ function buildCompareRows(uid, items) {
     var ours = r.ours || 0;
     var competitor = r.competitor || 0;
     var discountRate = r.discountRate || 0;
+    var qty = r.qty || 1;
     var discountAmt = Math.round(ours * discountRate / 100);
     var discountedPrice = ours - discountAmt;
-    var diff = competitor - discountedPrice;
+    var diff = (competitor - discountedPrice) * qty;
     var diffColor = diff > 0 ? '#e53935' : diff < 0 ? '#2e7d32' : '#8892a4';
     var diffText = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
     return '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
@@ -5151,17 +5152,19 @@ function buildCompareRows(uid, items) {
       '<div style="display:flex;align-items:center;gap:3px"><input value="' + (ours ? Number(ours).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
       '<div style="display:flex;align-items:center;gap:2px"><input value="' + (discountRate || '') + '" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
       '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">' + (discountedPrice ? discountedPrice.toLocaleString() : '-') + '</div>' +
+      '<input value="' + qty + '" placeholder="1" data-cf="qty" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="1" step="1">' +
       '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:' + diffColor + ';padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">' + diffText + '</div>' +
       '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
     '</div>';
   }).join('');
   // 총계 행
   html += '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-top:2px;padding-top:6px;border-top:2px solid #334155;align-items:center;font-weight:700;font-size:12px" data-compare-total>' +
-    '<span style="text-align:right;color:#334155;grid-column:span 2">총계</span>' +
+    '<span style="text-align:right;color:#334155;grid-column:span 2">총계(건수 반영)</span>' +
     '<div data-cf="total-competitor" style="text-align:right;color:#5f6b7a;padding:6px 8px">-</div>' +
     '<div data-cf="total-ours" style="text-align:right;color:#334155;padding:6px 8px">-</div>' +
     '<span></span>' +
     '<div data-cf="total-discount" style="text-align:right;color:#1565c0;padding:6px 8px">-</div>' +
+    '<span></span>' +
     '<div data-cf="total-diff" style="text-align:right;color:#e53935;padding:6px 8px">-</div>' +
     '<span></span></div>';
   return html;
@@ -5183,6 +5186,7 @@ function loadPurposeItems(uid, purposeName) {
     '<div style="display:flex;align-items:center;gap:3px"><input value="' + (fee ? Number(fee).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
     '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
     '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">' + (fee ? fee.toLocaleString() : '-') + '</div>' +
+    '<input value="1" placeholder="1" data-cf="qty" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="1" step="1">' +
     '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:#8892a4;padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">-</div>' +
     '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
   '</div>';
@@ -5275,6 +5279,7 @@ function addCompareRow(uid) {
     '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
     '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
     '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">-</div>' +
+    '<input value="1" placeholder="1" data-cf="qty" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="1" step="1">' +
     '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:#8892a4;padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">-</div>' +
     '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
   '</div>';
@@ -5293,9 +5298,11 @@ function calcCompareRow(inp) {
   var ours = Number(row.querySelector('[data-cf="ours"]').value.replace(/,/g,'')) || 0;
   var rateEl = row.querySelector('[data-cf="discountRate"]');
   var rate = rateEl ? (Number(rateEl.value) || 0) : 0;
+  var qtyEl = row.querySelector('[data-cf="qty"]');
+  var qty = qtyEl ? (Number(qtyEl.value) || 1) : 1;
   var discountAmt = Math.round(ours * rate / 100);
   var discountedPrice = ours - discountAmt;
-  var diff = comp - discountedPrice;
+  var diff = (comp - discountedPrice) * qty;
 
   var discountAmtEl = row.querySelector('[data-cf="discountAmt"]');
   if (discountAmtEl) discountAmtEl.textContent = discountedPrice ? discountedPrice.toLocaleString() : '-';
@@ -5311,25 +5318,24 @@ function calcCompareTotal(el) {
   var container = el.closest('[id^="dc-compare-rows-"]') || el.closest('[id^="dc-compare-"]');
   if (!container) return;
   var rows = container.querySelectorAll('[data-compare-row]');
-  var totalComp = 0, totalOurs = 0, totalDiscount = 0, totalDiff = 0;
+  var totalComp = 0, totalDiscount = 0, totalDiff = 0;
   rows.forEach(function(row) {
     var c = Number((row.querySelector('[data-cf="competitor"]') || {value:''}).value.replace(/,/g,'')) || 0;
     var o = Number((row.querySelector('[data-cf="ours"]') || {value:''}).value.replace(/,/g,'')) || 0;
     var r = Number((row.querySelector('[data-cf="discountRate"]') || {value:''}).value) || 0;
+    var q = Number((row.querySelector('[data-cf="qty"]') || {value:'1'}).value) || 1;
     var dAmt = Math.round(o * r / 100);
-    totalComp += c;
-    totalOurs += o;
-    totalDiscount += (o - dAmt);
-    totalDiff += (c - (o - dAmt));
+    var discounted = o - dAmt;
+    totalComp += c * q;
+    totalDiscount += discounted * q;
+    totalDiff += (c - discounted) * q;
   });
   var total = container.querySelector('[data-compare-total]');
   if (!total) return;
   var tc = total.querySelector('[data-cf="total-competitor"]');
-  var to = total.querySelector('[data-cf="total-ours"]');
   var td = total.querySelector('[data-cf="total-discount"]');
   var tf = total.querySelector('[data-cf="total-diff"]');
   if (tc) tc.textContent = totalComp ? totalComp.toLocaleString() + '원' : '-';
-  if (to) to.textContent = totalOurs ? totalOurs.toLocaleString() + '원' : '-';
   if (td) td.textContent = totalDiscount ? totalDiscount.toLocaleString() + '원' : '-';
   if (tf) {
     tf.textContent = totalDiff === 0 ? '-' : (totalDiff > 0 ? '+' : '') + totalDiff.toLocaleString() + '원';
@@ -5455,7 +5461,8 @@ function collectDiaryFormData(status) {
           var comp = Number(((r.querySelector('[data-cf="competitor"]') || {}).value || '').replace(/,/g,'')) || 0;
           var ours = Number(((r.querySelector('[data-cf="ours"]') || {}).value || '').replace(/,/g,'')) || 0;
           var discountRate = Number(((r.querySelector('[data-cf="discountRate"]') || {}).value || '')) || 0;
-          if (item || testItem || comp || ours) items.push({ item: item, testItem: testItem, competitor: comp, ours: ours, discountRate: discountRate });
+          var qty = Number(((r.querySelector('[data-cf="qty"]') || {}).value || '1')) || 1;
+          if (item || testItem || comp || ours) items.push({ item: item, testItem: testItem, competitor: comp, ours: ours, discountRate: discountRate, qty: qty });
         });
         return items;
       })()
