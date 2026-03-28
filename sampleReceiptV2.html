@@ -7492,23 +7492,74 @@ function selectCompany(elOrObj) {
     document.getElementById('lic-biz-form').value = lic.licBizForm || lic.bizForm || '';
     document.getElementById('lic-biz-name').value = lic.licBizName || lic.bizName || nm;
 
-    // 업체 전화번호, 팩스번호, 휴대폰, 주소 (인허가 정보 기준)
-    document.getElementById('company-phone').value = c.contactPhone || c.phone || '';
-    var fax = c.contactFax || '';
-    if (!fax && c.contacts && c.contacts[0]) fax = c.contacts[0].fax || '';
-    document.getElementById('company-fax').value = fax;
-    var mob = c.contactMobile || '';
-    if (!mob && c.contacts && c.contacts[0]) mob = c.contacts[0].mobile || '';
-    document.getElementById('company-mobile').value = mob;
+    // 업체 주소 (인허가 기준)
     var licAddr = lic.licAddr || '';
     var licAddr2 = lic.licAddr2 || lic.licAddrDetail || '';
     document.getElementById('company-address').value = licAddr + (licAddr2 ? ' ' + licAddr2 : '');
 
-    // 영업담당자
-    var rep = c.salesRep || '';
-    if (!rep && c.contacts && c.contacts[0]) rep = c.contacts[0].salesRep || '';
-    document.getElementById('sales-rep').value = rep;
+    // 담당자 선택 로직 — 여러명이면 선택 팝업
+    var contacts = c.contacts || [];
+    window._pendingCompanyData = { company: c, lic: lic, nm: nm };
+    if (contacts.length > 1) {
+      _showContactSelectPopup(contacts);
+      return; // 팝업에서 선택 후 _finishSelectCompany 호출
+    }
+    // 1명 이하: 바로 적용
+    _finishSelectCompany(contacts[0] || {});
+}
 
+// 담당자 선택 팝업
+function _showContactSelectPopup(contacts) {
+  var existing = document.getElementById('contactSelectOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'contactSelectOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  var html = '<div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">';
+  html += '<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">담당자 선택</div>';
+  html += '<div style="font-size:13px;color:#5f6b7a;margin-bottom:16px">담당자가 <b>' + contacts.length + '명</b> 등록되어 있습니다. 선택해주세요.</div>';
+
+  contacts.forEach(function(ct, i) {
+    var num = i + 1;
+    var name = ct.name || '(이름없음)';
+    var role = ct.role || '';
+    var phone = ct.phone || ct.mobile || '';
+    var rep = ct.salesRep || '';
+    html += '<div onclick="_finishSelectCompany(window._pendingCompanyData.company.contacts[' + i + ']); document.getElementById(\'contactSelectOverlay\').remove();" ' +
+      'style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:8px;border:2px solid #e2e6ed;border-radius:10px;cursor:pointer;transition:all 0.15s" ' +
+      'onmouseover="this.style.borderColor=\'#1a73e8\';this.style.background=\'#f0f7ff\'" onmouseout="this.style.borderColor=\'#e2e6ed\';this.style.background=\'#fff\'">';
+    html += '<span style="background:#1a73e8;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">' + num + '</span>';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:14px;font-weight:600;color:#1a1a2e">' + escHtml(name) + (role ? ' <span style="color:#8892a4;font-weight:400;font-size:12px">(' + escHtml(role) + ')</span>' : '') + '</div>';
+    html += '<div style="font-size:12px;color:#5f6b7a;margin-top:2px">';
+    if (phone) html += phone;
+    if (rep) html += (phone ? ' · ' : '') + '<span style="color:#1565c0;font-weight:600">자사: ' + escHtml(rep) + '</span>';
+    html += '</div></div></div>';
+  });
+
+  html += '<div onclick="document.getElementById(\'contactSelectOverlay\').remove();" style="text-align:center;margin-top:8px;padding:8px;color:#8892a4;font-size:12px;cursor:pointer">취소</div>';
+  html += '</div>';
+
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+}
+
+// 담당자 선택 완료 후 나머지 폼 채우기
+function _finishSelectCompany(ct) {
+    var pd = window._pendingCompanyData;
+    if (!pd) return;
+    var c = pd.company, lic = pd.lic, nm = pd.nm;
+
+    // 담당자 연락처 적용
+    document.getElementById('company-phone').value = ct.phone || c.contactPhone || c.phone || '';
+    document.getElementById('company-fax').value = ct.fax || c.contactFax || '';
+    document.getElementById('company-mobile').value = ct.mobile || c.contactMobile || '';
+
+    // 영업담당자
+    var rep = ct.salesRep || c.salesRep || '';
+    document.getElementById('sales-rep').value = rep;
 
     // 계산서 정보 자동 채움 (hidden + 팝업 표시용 동기화)
     var _bn = c.bizNo || c.businessNo || '';
@@ -7577,6 +7628,7 @@ function selectCompany(elOrObj) {
     }
 
     // 성적서 발송용 데이터 보관
+    var fax = ct.fax || c.contactFax || '';
     window._selectedCompany = {
         id: c.id || '',
         company: nm,
@@ -7608,7 +7660,8 @@ function selectCompany(elOrObj) {
     applyCompanyReportSendPrefs(c);
 
     document.getElementById('company-suggestions').classList.remove('active');
-    showToast('업체 선택: ' + nm + (lic.licNo ? ' (인허가: ' + lic.licNo + ')' : ''), 'info');
+    var ctInfo = ct.name ? ' / 담당: ' + ct.name + (ct.salesRep ? ' (자사: ' + ct.salesRep + ')' : '') : '';
+    showToast('업체 선택: ' + nm + (lic.licNo ? ' (인허가: ' + lic.licNo + ')' : '') + ctInfo, 'info');
 
     // 보고번호 자동 조회 (인허가번호 설정 후)
     fetchReportNo();
