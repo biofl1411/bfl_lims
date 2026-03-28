@@ -4501,6 +4501,7 @@ var DIARY_PURPOSE_PALETTE = [
 ];
 
 var _compareTestItems = []; // 비교견적용 시험항목 캐시
+var _compareRefItems = [];  // PA/PB/P 참고용 + 자가품질검사용 통합 목록
 
 // ── 초기화 ──
 async function initDiary() {
@@ -4518,11 +4519,50 @@ async function initDiary() {
         if (!seen[n] && n) { seen[n] = true; _diaryPurposes.push(p); }
       });
     }
-    // 시험항목(수수료) 로드
-    var feeDoc = await db.collection('settings').doc('mfdsFeeMapping').get();
+    // 시험항목(수수료) 로드 — mfdsFeeMapping(자가품질검사용) + refFeeMapping(PA/PB/P 참고용) + pRefBundles(영양성분 묶음)
+    var [feeDoc, refDoc, bundleDoc] = await Promise.all([
+      db.collection('settings').doc('mfdsFeeMapping').get(),
+      db.collection('settings').doc('refFeeMapping').get(),
+      db.collection('settings').doc('pRefBundles').get()
+    ]);
     if (feeDoc.exists) {
       _compareTestItems = (feeDoc.data().items || []).filter(function(i) { return i.fee > 0; });
     }
+    // 통합 비교견적 항목 빌드
+    var rawItems = [];
+    // 1) 자가품질검사용 (mfdsFeeMapping)
+    _compareTestItems.forEach(function(t) {
+      if (t.itemName) rawItems.push({ itemName: t.itemName, fee: t.fee || 0 });
+    });
+    // 2) PA/PB/P 참고용 (refFeeMapping)
+    if (refDoc.exists && refDoc.data().items) {
+      (refDoc.data().items).forEach(function(i) {
+        var code = (i.testItemCode || '').toUpperCase();
+        var isP = code.startsWith('PA') || code.startsWith('PB') || (code.charAt(0) === 'P' && !code.startsWith('PA') && !code.startsWith('PB'));
+        if (isP && i.itemName && i.fee > 0) rawItems.push({ itemName: i.itemName, fee: i.fee });
+      });
+    }
+    // 3) P2 영양성분 묶음 (pRefBundles, subcat '2')
+    if (bundleDoc.exists) {
+      var bd = bundleDoc.data();
+      var bNames = bd.names || {}, bFees = bd.fees || {};
+      Object.keys(bNames).forEach(function(nk) {
+        if (nk.split('_')[0] !== '2') return; // P2(영양성분)만
+        var bundles = bNames[nk] || {};
+        Object.keys(bundles).forEach(function(bNum) {
+          var fee = bFees[nk + '_' + bNum] || 0;
+          if (fee > 0 && bundles[bNum]) rawItems.push({ itemName: bundles[bNum], fee: fee });
+        });
+      });
+    }
+    // 중복 제거 (항목명+수수료 동일 시 하나만)
+    var _seen = {};
+    _compareRefItems = [];
+    rawItems.forEach(function(t) {
+      var key = t.itemName + '|' + t.fee;
+      if (!_seen[key]) { _seen[key] = true; _compareRefItems.push(t); }
+    });
+    _compareRefItems.sort(function(a, b) { return a.itemName.localeCompare(b.itemName); });
     // 업체 로드
     var cSnap = await db.collection('companies').get();
     _diaryCompanies = cSnap.docs.map(function(d) {
@@ -5094,7 +5134,7 @@ function _getPurposeFee(name) {
 function buildCompareRows(uid, items) {
   if (!items || items.length === 0) items = [{ item:'', competitor:0, ours:0, discountRate:0 }];
   var gc = _compareGridCols();
-  var html = _buildPurposeDatalist() + _buildTestItemDatalist();
+  var html = _buildPurposeDatalist();
   html += items.map(function(r, i) {
     var ours = r.ours || 0;
     var competitor = r.competitor || 0;
@@ -5104,9 +5144,9 @@ function buildCompareRows(uid, items) {
     var diff = competitor - discountedPrice;
     var diffColor = diff > 0 ? '#e53935' : diff < 0 ? '#2e7d32' : '#8892a4';
     var diffText = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
-    return '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:center" data-compare-row>' +
+    return '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
       '<input value="' + escHtml(r.item||'') + '" placeholder="검사목적 검색" data-cf="item" list="compare-purpose-list" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
-      '<input value="' + escHtml(r.testItem||'') + '" placeholder="검사항목 검색" data-cf="testItem" list="compare-testitem-list" onchange="onCompareTestItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+      _compareItemInputHtml(r.testItem||'') +
       '<div style="display:flex;align-items:center;gap:3px"><input value="' + (competitor ? Number(competitor).toLocaleString() : '') + '" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
       '<div style="display:flex;align-items:center;gap:3px"><input value="' + (ours ? Number(ours).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
       '<div style="display:flex;align-items:center;gap:2px"><input value="' + (discountRate || '') + '" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
@@ -5136,9 +5176,9 @@ function loadPurposeItems(uid, purposeName) {
   var gc = _compareGridCols();
   var totalRow = container.querySelector('[data-compare-total]');
   var fee = p.fee || 0;
-  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:center" data-compare-row>' +
+  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
     '<input value="' + escHtml(purposeName) + '" data-cf="item" list="compare-purpose-list" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
-    '<input value="" placeholder="검사항목 검색" data-cf="testItem" list="compare-testitem-list" onchange="onCompareTestItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+    _compareItemInputHtml('') +
     '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
     '<div style="display:flex;align-items:center;gap:3px"><input value="' + (fee ? Number(fee).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
     '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
@@ -5154,19 +5194,57 @@ function loadPurposeItems(uid, purposeName) {
   showToast(purposeName + ' 추가 (정가: ' + fee.toLocaleString() + '원)', 'info');
 }
 
-// 검사항목 datalist 생성
-function _buildTestItemDatalist() {
-  var html = '<datalist id="compare-testitem-list">';
-  _compareTestItems.forEach(function(t) {
-    html += '<option value="' + escHtml(t.itemName) + '">';
-  });
-  html += '</datalist>';
-  return html;
+// ── 검사항목 커스텀 자동완성 ──
+function showCompareItemSuggestions(inp) {
+  var q = inp.value.trim().toLowerCase();
+  var wrap = inp.parentElement;
+  var dd = wrap ? wrap.querySelector('.cid-dd') : null;
+  if (!dd) return;
+  if (!q) { dd.style.display = 'none'; return; }
+  var matches = _compareRefItems.filter(function(t) {
+    return t.itemName.toLowerCase().indexOf(q) >= 0;
+  }).slice(0, 60);
+  if (matches.length === 0) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(function(t) {
+    return '<div class="cid-opt" onmousedown="selectCompareItem(this)" data-name="' + escHtml(t.itemName) + '" data-fee="' + t.fee + '" style="padding:6px 10px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #f4f5f7;white-space:nowrap">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis">' + escHtml(t.itemName) + '</span>' +
+      '<span style="color:#1565c0;font-weight:600;flex-shrink:0">' + (t.fee||0).toLocaleString() + '원</span>' +
+    '</div>';
+  }).join('');
+  dd.style.display = 'block';
 }
-// 검사항목 선택 시 수수료 자동 입력
+function hideCompareItemSuggestions(inp) {
+  var wrap = inp.parentElement;
+  var dd = wrap ? wrap.querySelector('.cid-dd') : null;
+  setTimeout(function() { if (dd) dd.style.display = 'none'; }, 150);
+}
+function selectCompareItem(optEl) {
+  var name = optEl.dataset.name;
+  var fee = Number(optEl.dataset.fee) || 0;
+  var dd = optEl.closest('.cid-dd');
+  if (!dd) return;
+  dd.style.display = 'none';
+  var wrap = dd.parentElement;
+  var inp = wrap ? wrap.querySelector('input[data-cf="testItem"]') : null;
+  if (!inp) return;
+  inp.value = name;
+  var row = inp.closest('[data-compare-row]');
+  if (row && fee > 0) {
+    var oursEl = row.querySelector('[data-cf="ours"]');
+    if (oursEl) { oursEl.value = Number(fee).toLocaleString(); calcCompareRow(oursEl); }
+  }
+}
+function _compareItemInputHtml(val) {
+  val = val || '';
+  return '<div style="position:relative">' +
+    '<input value="' + escHtml(val) + '" placeholder="검사항목 검색" data-cf="testItem" autocomplete="off" oninput="showCompareItemSuggestions(this)" onblur="hideCompareItemSuggestions(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box">' +
+    '<div class="cid-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;max-height:220px;overflow-y:auto;background:#fff;border:1px solid #c8d6e5;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.13);margin-top:2px"></div>' +
+  '</div>';
+}
+// 검사항목 선택 시 수수료 자동 입력 (datalist 호환 — 현재 미사용)
 function onCompareTestItemSelect(inp) {
   var name = inp.value;
-  var item = _compareTestItems.find(function(t) { return t.itemName === name; });
+  var item = _compareRefItems.find(function(t) { return t.itemName === name; });
   if (item && item.fee > 0) {
     var row = inp.closest('[data-compare-row]');
     if (!row) return;
@@ -5190,9 +5268,9 @@ function addCompareRow(uid) {
   if (!container) return;
   var gc = _compareGridCols();
   var totalRow = container.querySelector('[data-compare-total]');
-  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:center" data-compare-row>' +
+  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
     '<input value="" placeholder="검사목적 검색" data-cf="item" list="compare-purpose-list" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
-    '<input value="" placeholder="검사항목 검색" data-cf="testItem" list="compare-testitem-list" onchange="onCompareTestItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+    _compareItemInputHtml('') +
     '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
     '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
     '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
@@ -5373,10 +5451,11 @@ function collectDiaryFormData(status) {
         var rows = document.querySelectorAll('#dc-compare-rows-' + uid + ' [data-compare-row]');
         rows.forEach(function(r) {
           var item = (r.querySelector('[data-cf="item"]') || {}).value || '';
+          var testItem = (r.querySelector('[data-cf="testItem"]') || {}).value || '';
           var comp = Number(((r.querySelector('[data-cf="competitor"]') || {}).value || '').replace(/,/g,'')) || 0;
           var ours = Number(((r.querySelector('[data-cf="ours"]') || {}).value || '').replace(/,/g,'')) || 0;
           var discountRate = Number(((r.querySelector('[data-cf="discountRate"]') || {}).value || '')) || 0;
-          if (item || comp || ours) items.push({ item: item, competitor: comp, ours: ours, discountRate: discountRate });
+          if (item || testItem || comp || ours) items.push({ item: item, testItem: testItem, competitor: comp, ours: ours, discountRate: discountRate });
         });
         return items;
       })()
