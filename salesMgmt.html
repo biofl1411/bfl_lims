@@ -893,6 +893,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
           <h3 id="diaryListTitle">업무일지</h3>
           <div class="right">
             <span id="diaryListCount" style="font-size:11px;color:#8892a4"></span>
+            <button id="diaryDeleteBtn" class="btn btn-sm" onclick="deleteSelectedDiaries()" style="display:none;background:#fce4ec;color:#c62828;border:1px solid #ef9a9a;font-size:11px">선택 삭제</button>
             <button class="btn btn-primary btn-sm" onclick="openDiaryToday()">+ 오늘 일지 작성</button>
           </div>
         </div>
@@ -4629,7 +4630,8 @@ async function loadDiaryList() {
       });
       var revHtml = total > 0 ? '<span style="font-weight:700;color:#1565c0">' + total.toLocaleString() + '원</span>' : '<span style="color:#c8d6e5">\u2014</span>';
 
-      html += '<div class="diary-row" onclick="openDiaryDetail(\'' + docId + '\')">';
+      html += '<div class="diary-row" data-doc-id="' + docId + '" onclick="openDiaryDetail(\'' + docId + '\')">';
+      html += '<div onclick="event.stopPropagation()" style="display:flex;align-items:center;padding-right:4px"><input type="checkbox" class="diary-chk" data-id="' + docId + '" onchange="onDiaryChkChange()" style="width:15px;height:15px;cursor:pointer"></div>';
       html += '<div><div style="font-weight:600;font-size:13px">' + dayLabel + '</div><div style="font-size:10px;color:#8892a4">' + dowLabel + '</div></div>';
       html += '<div class="chips">' + chipHtml + '</div>';
       html += '<div style="text-align:right">' + revHtml + '</div>';
@@ -4643,6 +4645,31 @@ async function loadDiaryList() {
   } catch(e) {
     console.error('업무일지 목록 로드 실패:', e);
     body.innerHTML = '<div style="padding:40px;text-align:center;color:#e53935;font-size:13px">로드 실패: ' + e.message + '</div>';
+  }
+}
+
+function onDiaryChkChange() {
+  var checked = document.querySelectorAll('.diary-chk:checked');
+  var btn = document.getElementById('diaryDeleteBtn');
+  if (btn) btn.style.display = checked.length > 0 ? 'inline-block' : 'none';
+}
+
+async function deleteSelectedDiaries() {
+  var checked = document.querySelectorAll('.diary-chk:checked');
+  if (checked.length === 0) return;
+  if (!confirm(checked.length + '개 업무일지를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.')) return;
+  var ids = Array.from(checked).map(function(el) { return el.dataset.id; });
+  try {
+    var batch = db.batch();
+    ids.forEach(function(id) {
+      batch.delete(db.collection('salesDiaries').doc(id));
+    });
+    await batch.commit();
+    var btn = document.getElementById('diaryDeleteBtn');
+    if (btn) btn.style.display = 'none';
+    await loadDiaryList();
+  } catch(e) {
+    alert('삭제 실패: ' + e.message);
   }
 }
 
@@ -4828,7 +4855,7 @@ function addDiaryCompanyCard(data) {
         '<div class="fg" style="margin:0"><label>\uc8fc\uc18c</label>' +
           '<input id="dc-addr-' + uid + '" value="' + escHtml(d.region||'') + '" placeholder="\uc790\ub3d9" readonly style="background:#f8f9fb;padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' +
         '</div>' +
-        '<div class="fg" style="margin:0"><label>\uc218\uac70\ubc29\ubc95</label>' +
+        '<div class="fg" style="margin:0"><label>접수 형태</label>' +
           '<select id="dc-method-' + uid + '" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + methodOpts + '</select>' +
         '</div>' +
       '</div>' +
@@ -5473,7 +5500,7 @@ function renderTmrExisting() {
       compOpts += '<option' + sel + '>' + escHtml(c.name) + '</option>';
     });
     var methods = ['\ubc29\ubb38','\ud0dd\ubc30','\ud035','\ub0b4\ubc29'];
-    var mOpts = '<option value="">\uc218\uac70</option>';
+    var mOpts = '<option value="">접수 형태</option>';
     methods.forEach(function(m) {
       var sel = (t.collectMethod === m) ? ' selected' : '';
       mOpts += '<option' + sel + '>' + m + '</option>';
