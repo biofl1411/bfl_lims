@@ -247,6 +247,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .diary-row:hover{background:#fafbfc}
 .diary-row:last-child{border-bottom:none}
 .chips{display:flex;flex-wrap:nowrap;gap:4px;align-items:center;overflow:hidden}
+.chips-meta{font-size:10px;color:#8892a4;margin-top:3px;white-space:nowrap}
 .chip{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
 .chip-exist{background:#e3f2fd;color:#1565c0}
 .chip-new{background:#e8f5e9;color:#2e7d32}
@@ -4640,15 +4641,31 @@ async function loadDiaryList() {
 
       // 업체 칩
       var companies = doc.companies || [];
+      var existCount = 0, newCount = 0;
       var chipHtml = '';
       companies.forEach(function(c) {
         var isNew = c.type === 'new';
+        if (isNew) newCount++; else existCount++;
         var cls = isNew ? 'chip chip-new' : 'chip chip-exist';
         var pfx = isNew ? '★ ' : '';
-        chipHtml += '<span class="' + cls + '">' + pfx + escHtml(c.companyName || '미지정') + '</span> ';
+        chipHtml += '<span class="' + cls + '">' + pfx + escHtml(c.companyName || '미지정') + '</span>';
       });
       if (isDraft) chipHtml += '<span class="draft-badge">임시저장</span>';
       if (isToday) chipHtml += '<span style="font-size:9px;background:#1a73e8;color:#fff;padding:1px 5px;border-radius:3px;margin-left:2px">오늘</span>';
+
+      // 건수 메타
+      var metaParts = [];
+      if (existCount > 0) metaParts.push('<span style="color:#1565c0">기존 ' + existCount + '개</span>');
+      if (newCount > 0) metaParts.push('<span style="color:#2e7d32">신규 ' + newCount + '개</span>');
+      var tmrExistCnt = (doc.tomorrowExisting || []).length;
+      var tmrNewCnt = (doc.tomorrowNew || []).length;
+      if (tmrExistCnt > 0 || tmrNewCnt > 0) {
+        var tmrParts = [];
+        if (tmrExistCnt > 0) tmrParts.push('기존 ' + tmrExistCnt + '개');
+        if (tmrNewCnt > 0) tmrParts.push('신규 ' + tmrNewCnt + '개');
+        metaParts.push('익일: ' + tmrParts.join(' · '));
+      }
+      var metaHtml = metaParts.length ? '<div class="chips-meta">' + metaParts.join(' &nbsp;·&nbsp; ') + '</div>' : '';
 
       // 매출 합계
       var total = 0;
@@ -4660,7 +4677,7 @@ async function loadDiaryList() {
       html += '<div class="diary-row" data-doc-id="' + docId + '" onclick="openDiaryDetail(\'' + docId + '\')">';
       html += '<div onclick="event.stopPropagation()" style="display:flex;align-items:center;padding-right:4px"><input type="checkbox" class="diary-chk" data-id="' + docId + '" onchange="onDiaryChkChange()" style="width:15px;height:15px;cursor:pointer"></div>';
       html += '<div><div style="font-weight:600;font-size:13px">' + dayLabel + '</div><div style="font-size:10px;color:#8892a4">' + dowLabel + '</div></div>';
-      html += '<div class="chips">' + chipHtml + '</div>';
+      html += '<div><div class="chips">' + chipHtml + '</div>' + metaHtml + '</div>';
       html += '<div style="text-align:right">' + revHtml + '</div>';
       html += '<div style="text-align:center;font-size:14px;color:#8892a4">\u203a</div>';
       html += '</div>';
