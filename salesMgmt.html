@@ -4709,20 +4709,26 @@ async function loadCenterSummary() {
       db.collection('salesDiaries').where('date','>=',fromDate).where('date','<=',toDate).get()
     ]);
 
-    // 사용자 부서명 맵
-    var userDeptMap = {};
+    // 고객관리 부서 사용자만 추출 (name → team 맵)
+    var userTeamMap = {}; // name → team(부서명 세부)
+    var validUsers = new Set();
     (usersSnap || []).forEach(function(u) {
       var nm = u.name || '';
       var dept = u.department || u['부서명'] || '';
-      if (nm) userDeptMap[nm] = dept;
+      if (!nm || dept !== '고객관리') return;
+      var team = u.team || u['팀'] || u['팀명'] || dept;
+      userTeamMap[nm] = team;
+      validUsers.add(nm);
     });
 
-    // 개인별 매출 합산 + 최신 일자
+    if (validUsers.size === 0) { block.innerHTML = ''; return; }
+
+    // 개인별 매출 합산 + 최신 일자 (고객관리 소속만)
     var personMap = {}; // name → { sales, latestDate }
     diarySnap.docs.forEach(function(d) {
       var data = d.data();
       var author = data.authorName || '';
-      if (!author) return;
+      if (!author || !validUsers.has(author)) return;
       if (!personMap[author]) personMap[author] = { sales: 0, latestDate: '' };
       var total = 0;
       (data.companies || []).forEach(function(c) {
@@ -4734,40 +4740,29 @@ async function loadCenterSummary() {
       }
     });
 
-    // 부서별 그룹
-    var deptMap = {}; // dept → [{ name, sales, latestDate }]
-    Object.keys(personMap).forEach(function(nm) {
-      var dept = userDeptMap[nm] || '미분류';
-      if (!deptMap[dept]) deptMap[dept] = [];
-      deptMap[dept].push({ name: nm, sales: personMap[nm].sales, latestDate: personMap[nm].latestDate });
+    // 팀별 그룹 (일지 없는 사람도 포함)
+    var teamMap = {}; // team → [{ name, sales, latestDate }]
+    validUsers.forEach(function(nm) {
+      var team = userTeamMap[nm] || '고객관리';
+      if (!teamMap[team]) teamMap[team] = [];
+      var p = personMap[nm] || { sales: 0, latestDate: '' };
+      teamMap[team].push({ name: nm, sales: p.sales, latestDate: p.latestDate });
     });
 
-    // 등록된 사용자 중 일지 없는 사람도 포함
-    (usersSnap || []).forEach(function(u) {
-      var nm = u.name || '';
-      var dept = u.department || u['부서명'] || '';
-      if (!nm || !dept) return;
-      if (!deptMap[dept]) deptMap[dept] = [];
-      if (!personMap[nm]) {
-        deptMap[dept].push({ name: nm, sales: 0, latestDate: '' });
-      }
-    });
-
-    var depts = Object.keys(deptMap).sort();
-    if (depts.length === 0) { block.innerHTML = ''; return; }
+    var teams = Object.keys(teamMap).sort();
+    if (teams.length === 0) { block.innerHTML = ''; return; }
 
     var html = '';
-    depts.forEach(function(dept) {
-      var members = deptMap[dept];
-      // 이름 기준 정렬
+    teams.forEach(function(team) {
+      var members = teamMap[team];
       members.sort(function(a,b) { return a.name.localeCompare(b.name); });
-      var centerTotal = members.reduce(function(s,m) { return s + m.sales; }, 0);
+      var teamTotal = members.reduce(function(s,m) { return s + m.sales; }, 0);
 
       html += '<div style="background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:12px 16px;margin-bottom:8px">';
-      // 헤더: 센터명 + 총매출
+      // 헤더: 팀명 + 총매출
       html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-      html += '<span style="font-size:13px;font-weight:700;color:#1a2332">' + escHtml(dept) + '</span>';
-      html += '<span style="font-size:13px;font-weight:700;color:#1565c0">' + centerTotal.toLocaleString() + '원</span>';
+      html += '<span style="font-size:13px;font-weight:700;color:#1a2332">' + escHtml(team) + ' 팀</span>';
+      html += '<span style="font-size:13px;font-weight:700;color:#1565c0">' + teamTotal.toLocaleString() + '원</span>';
       html += '</div>';
       // 인원별 행
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px">';
