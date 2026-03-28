@@ -995,7 +995,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       </div>
 
       <div class="sec-title"><span class="sec-num">4</span> 신규영업 활동</div>
-      <textarea id="diaryNewSales" class="bottom-input" style="margin-bottom:16px" placeholder="신규 영업 활동 내용&#10;예: 하림그룹 식품안전팀 미팅 &mdash; 제안서 전달"></textarea>
+      <div id="newSalesPlanSection" style="margin-bottom:8px"></div>
+      <textarea id="diaryNewSales" class="bottom-input" style="margin-bottom:16px" placeholder="기타 신규 영업 활동 메모&#10;예: 하림그룹 식품안전팀 미팅 &mdash; 제안서 전달"></textarea>
 
       <div class="sec-title"><span class="sec-num">5</span> 비고</div>
       <textarea id="diaryRemark" class="bottom-input" style="min-height:44px;margin-bottom:16px" placeholder="기타 전달사항"></textarea>
@@ -4810,8 +4811,62 @@ function renderDiaryDetailForm() {
   renderTmrNew();
 
   updateDiarySumBlock();
+
+  // 이전 영업일지 신규 영업 계획 로드
+  loadPrevNewSalesPlan();
 }
 
+// ── 이전 영업일지 신규 영업 계획 불러오기 ──
+async function loadPrevNewSalesPlan() {
+  var sec = document.getElementById('newSalesPlanSection');
+  if (!sec) return;
+  if (!_diaryDate) { sec.innerHTML = ''; return; }
+
+  // 이전 영업일 찾기 (최대 7일 전까지, 주말 건너뜀)
+  var cur = new Date(_diaryDate.slice(0,4)+'-'+_diaryDate.slice(4,6)+'-'+_diaryDate.slice(6,8));
+  var prevDoc = null, prevId = '';
+  for (var i = 1; i <= 7; i++) {
+    var d = new Date(cur.getTime() - i * 86400000);
+    var dw = d.getDay();
+    if (dw === 0 || dw === 6) continue; // 주말 건너뜀
+    prevId = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+    try {
+      var snap = await db.collection('salesDiaries').doc(prevId).get();
+      if (snap.exists) { prevDoc = snap.data(); break; }
+    } catch(e) { break; }
+  }
+
+  var plan = prevDoc ? (prevDoc.tomorrowNew || []) : [];
+  if (plan.length === 0) { sec.innerHTML = ''; return; }
+
+  // 현재 일지에 저장된 결과 불러오기
+  var saved = (_diaryDoc && _diaryDoc.newSalesResults) ? _diaryDoc.newSalesResults : {};
+  var planDate = saved.planDate || '';
+  var savedResults = (planDate === prevId && saved.items) ? saved.items : [];
+
+  // 날짜 라벨
+  var pd = new Date(prevId.slice(0,4)+'-'+prevId.slice(4,6)+'-'+prevId.slice(6,8));
+  var pdLabel = (pd.getMonth()+1) + '월 ' + pd.getDate() + '일';
+
+  var html = '<div style="background:#f0f7ff;border:1px solid #bbdefb;border-radius:10px;padding:10px 12px;margin-bottom:8px">';
+  html += '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:8px">' + pdLabel + ' 신규 영업 계획 결과 입력</div>';
+  plan.forEach(function(t, i) {
+    var savedResult = (savedResults[i] && savedResults[i].result) || '';
+    html += '<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;align-items:center;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e3f2fd">';
+    html += '<div>';
+    html += '<div style="font-weight:600;font-size:12px;color:#1a2332">' + escHtml(t.nm || '미지정') + '</div>';
+    var meta = [];
+    if (t.contactMethod) meta.push(escHtml(t.contactMethod));
+    if (t.memo) meta.push(escHtml(t.memo));
+    if (meta.length) html += '<div style="font-size:10px;color:#5f6b7a;margin-top:1px">' + meta.join(' · ') + '</div>';
+    html += '</div>';
+    html += '<input type="text" data-plan-date="' + prevId + '" data-plan-idx="' + i + '" data-plan-nm="' + escHtml(t.nm||'') + '" value="' + escHtml(savedResult) + '" placeholder="결과 메모 (미방문/계약/견적 등)" style="padding:6px 8px;border:1px solid #c8d6e5;border-radius:6px;font-size:11px;font-family:inherit;width:100%;box-sizing:border-box">';
+    html += '</div>';
+  });
+  html = html.replace(/border-bottom:1px solid #e3f2fd">\s*$/, 'border-bottom:none">');
+  html += '</div>';
+  sec.innerHTML = html;
+}
 // ── 업체 카드 ──
 function addDiaryCompanyCard(data) {
   var d = data || {};
@@ -5495,6 +5550,17 @@ function collectDiaryFormData(status) {
     companies: companies,
     competitorNote: (document.getElementById('diaryCompetitor')||{}).value || '',
     newSalesActivity: (document.getElementById('diaryNewSales')||{}).value || '',
+    newSalesResults: (function() {
+      var inputs = document.querySelectorAll('#newSalesPlanSection [data-plan-idx]');
+      if (!inputs.length) return null;
+      var planDate = '';
+      var items = [];
+      inputs.forEach(function(inp) {
+        planDate = inp.dataset.planDate || planDate;
+        items.push({ nm: inp.dataset.planNm || '', result: inp.value || '' });
+      });
+      return { planDate: planDate, items: items };
+    })(),
     remark: (document.getElementById('diaryRemark')||{}).value || '',
     tomorrowExisting: tmrEx,
     tomorrowNew: _tmrNew,
