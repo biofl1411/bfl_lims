@@ -4846,7 +4846,10 @@ function addDiaryCompanyCard(data) {
         '<div id="dc-compare-' + uid + '" style="' + (d.compareQuote?'':'display:none;') + 'margin-top:6px;border:1px solid #e2e6ed;border-radius:8px;padding:10px;background:#fafbfc">' +
           '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 0.6fr 1fr 1fr 24px;gap:6px;font-size:11px;font-weight:700;color:#334155;margin-bottom:6px;padding:6px 0;border-bottom:2px solid #e2e6ed"><span>항목</span><span style="text-align:right">경쟁사(부가세포함)</span><span style="text-align:right">BFL(정가)</span><span style="text-align:center">할인율</span><span style="text-align:right;color:#1565c0">할인 후 금액</span><span style="text-align:right;color:#e53935">차액</span><span></span></div>' +
           '<div id="dc-compare-rows-' + uid + '">' + buildCompareRows(uid, d.compareItems||[]) + '</div>' +
-          '<button onclick="addCompareRow(\'' + uid + '\')" style="margin-top:4px;font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:3px 10px;cursor:pointer">+ 항목 추가</button>' +
+          '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
+            '<button onclick="addCompareRow(\'' + uid + '\')" style="font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:4px 10px;cursor:pointer">+ 항목 추가</button>' +
+            '<select onchange="loadPurposeItems(\'' + uid + '\',this.value);this.selectedIndex=0" style="font-size:10px;padding:4px 8px;border:1px solid #c5e1a5;border-radius:4px;background:#f1f8e9;color:#2e7d32;cursor:pointer"><option value="">검사목적 항목 불러오기</option>' + _diaryPurposes.filter(function(p){return (p.n||'').indexOf('접수취소')===-1;}).map(function(p){return '<option value="'+escHtml(p.n)+'">'+escHtml(p.n)+' ('+(p.fee||0).toLocaleString()+'원)</option>';}).join('') + '</select>' +
+          '</div>' +
           '<div style="margin-top:8px"><label style="font-size:10px;color:#5f6b7a;display:block;margin-bottom:3px">제안사항</label>' +
           '<textarea id="dc-proposal-' + uid + '" placeholder="경쟁사 대비 가격 대응 방안, 할인 제안 등" style="width:100%;min-height:40px;padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;font-family:inherit;resize:vertical;box-sizing:border-box">' + escHtml(d.proposal||'') + '</textarea></div>' +
         '</div>' +
@@ -5083,6 +5086,33 @@ function buildCompareRows(uid, items) {
     '<span></span></div>';
   return html;
 }
+// 검사목적 항목 불러오기 — 해당 목적의 수수료를 행에 자동 추가
+function loadPurposeItems(uid, purposeName) {
+  if (!purposeName) return;
+  var p = _diaryPurposes.find(function(x) { return x.n === purposeName; });
+  if (!p) return;
+  var container = document.getElementById('dc-compare-rows-' + uid);
+  if (!container) return;
+  var gc = _compareGridCols();
+  var totalRow = container.querySelector('[data-compare-total]');
+  var fee = p.fee || 0;
+  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:center" data-compare-row>' +
+    '<input value="' + escHtml(purposeName) + '" data-cf="item" list="compare-purpose-list" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="' + (fee ? Number(fee).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
+    '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">' + (fee ? fee.toLocaleString() : '-') + '</div>' +
+    '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:#8892a4;padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">-</div>' +
+    '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
+  '</div>';
+  if (totalRow) totalRow.insertAdjacentHTML('beforebegin', newRow);
+  else container.insertAdjacentHTML('beforeend', newRow);
+  // 총계 재계산
+  var lastRow = container.querySelector('[data-compare-row]:last-of-type [data-cf="ours"]');
+  if (lastRow) calcCompareRow(lastRow);
+  showToast(purposeName + ' 추가 (정가: ' + fee.toLocaleString() + '원)', 'info');
+}
+
 // 항목 선택 시 수수료 자동 입력
 function onCompareItemSelect(inp) {
   var name = inp.value;
