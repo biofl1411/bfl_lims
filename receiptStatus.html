@@ -1285,7 +1285,7 @@ function openDetailPanel(id, sampleIdx) {
     content.style.display = 'flex';
 
     // 헤더
-    document.getElementById('dp-receipt-no').textContent = r._baseReceiptNo || r.receiptNo || '';
+    document.getElementById('dp-receipt-no').textContent = r.receiptNo || r._baseReceiptNo || '';
     var tlLabels = {green:'정상',blue:'양호',yellow:'주의',orange:'경고',red:'위험'};
     var statusHtml = '';
     var tagCls = r.status === '접수완료' ? 'tag-complete' : r.status === '접수중' ? 'tag-inprogress' : 'tag-waiting';
@@ -1332,10 +1332,16 @@ function openDetailPanel(id, sampleIdx) {
     var testPurpose = r.testPurpose || '';
     var currentReceiptNo = r._baseReceiptNo || r.receiptNo || '';
 
+    // 보고번호: 저장된 값이 없으면 동적 조회
+    var reportNoVal = s.reportNo || '';
+    if (!reportNoVal && r.licNo && productName) {
+        _fetchReportNoForDetail(r.licNo, productName);
+    }
+
     // 이전 접수 비교 대상 필드
     var compareFields = [
         {key:'productName',   label:'제품/시료명', val: productName},
-        {key:'reportNo',      label:'보고번호',    val: s.reportNo || ''},
+        {key:'reportNo',      label:'보고번호',    val: reportNoVal},
         {key:'foodType',      label:'검체유형',    val: s.foodType || r.foodType || ''},
         {key:'manufactureDate',label:'제조일자',   val: s.manufactureDate || ''},
         {key:'expiryDate',    label:'소비기한',    val: s.expiryDate || ''},
@@ -1431,6 +1437,29 @@ function dpRow(label, val) {
 }
 
 // ============================================================================
+// 보고번호 동적 조회 (상세 페이지용)
+async function _fetchReportNoForDetail(licNoRaw, productName) {
+    try {
+        var licNo = (licNoRaw || '').replace(/[^0-9]/g, '');
+        if (!licNo || !productName) return;
+        var snap = await db.collection('fss_products').where('lcns_no', '==', licNo).get();
+        if (snap.empty) return;
+        var normalizedInput = productName.replace(/\s/g, '').toLowerCase();
+        var matched = null;
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            var prdName = (d.prdlst_nm || '').replace(/\s/g, '').toLowerCase();
+            if (prdName === normalizedInput || prdName.indexOf(normalizedInput) >= 0 || normalizedInput.indexOf(prdName) >= 0) {
+                if (!matched || (d.prms_dt || '') > (matched.prms_dt || '')) matched = d;
+            }
+        });
+        if (matched && matched.prdlst_report_no) {
+            var el = document.getElementById('dp-sf-reportNo');
+            if (el) el.textContent = matched.prdlst_report_no;
+        }
+    } catch(e) { console.warn('[보고번호 조회]', e.message); }
+}
+
 // 이전 접수 시료 비교 (자가품질위탁검사용)
 // ============================================================================
 var _dismissedWarnings = {}; // 해제된 경고 { 'receiptNo_fieldKey': true }
