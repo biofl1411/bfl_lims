@@ -4813,8 +4813,8 @@ function addDiaryCompanyCard(data) {
           '<label>\uc5c5\uccb4\uba85 <span class="req">*</span></label>' +
           '<div id="dc-comp-wrap-' + uid + '">' +
             (isNew ?
-              '<input id="dc-comp-' + uid + '" value="' + escHtml(d.companyName||'') + '" placeholder="\uc2e0\uaddc \uc5c5\uccb4\uba85 \uc785\ub825" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' :
-              '<select id="dc-comp-' + uid + '" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + compOpts + '</select>'
+              '<input id="dc-comp-' + uid + '" value="' + escHtml(d.companyName||'') + '" placeholder="신규 업체명 입력" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' :
+              '<input id="dc-comp-' + uid + '" list="dc-comp-dl-' + uid + '" value="' + escHtml(d.companyName||'') + '" placeholder="업체명 검색..." autocomplete="off" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%"><datalist id="dc-comp-dl-' + uid + '">' + _diaryCompanies.map(function(c){return '<option value="'+escHtml(c.name)+'">';}).join('') + '</datalist>'
             ) +
           '</div>' +
         '</div>' +
@@ -4903,10 +4903,25 @@ function _showNewCompanyConfirm(uid) {
   btnNo.onmouseover = function() { this.style.borderColor='#e53935'; this.style.background='#fce4ec'; };
   btnNo.onmouseout = function() { this.style.borderColor='#e2e6ed'; this.style.background='#fff'; };
   btnNo.onclick = async function() {
-    overlay.remove();
-    await saveDiary('draft', true);
-    showToast('임시저장을 완료하였습니다. 업체등록 페이지로 이동합니다.', 'info');
-    setTimeout(function() { location.href = 'companyMgmt.html'; }, 1200);
+    btnNo.textContent = '저장 중...';
+    btnNo.style.pointerEvents = 'none';
+    try {
+      await saveDiary('draft', true);
+      // 저장 완료 확인 + 수정/이동 선택
+      box.innerHTML =
+        '<div style="text-align:center;padding:8px 0">' +
+          '<div style="font-size:40px;margin-bottom:8px">✅</div>' +
+          '<div style="font-size:15px;font-weight:700;color:#2e7d32;margin-bottom:4px">임시저장 완료</div>' +
+          '<div style="font-size:13px;color:#5f6b7a;margin-bottom:20px">업무일지가 임시저장 되었습니다.</div>' +
+          '<div style="display:flex;gap:8px">' +
+            '<button onclick="document.getElementById(\'newCompanyConfirmOverlay\').remove();" style="flex:1;padding:10px;border:2px solid #e2e6ed;border-radius:8px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">계속 수정</button>' +
+            '<button onclick="location.href=\'companyMgmt.html\';" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1a73e8;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">업체등록으로 이동</button>' +
+          '</div>' +
+        '</div>';
+    } catch(e) {
+      showToast('임시저장 실패: ' + e.message, 'error');
+      overlay.remove();
+    }
   };
   box.appendChild(btnNo);
 
@@ -4946,15 +4961,22 @@ function setDiaryCardType(uid, type) {
   var wrap = document.getElementById('dc-comp-wrap-' + uid);
   if (wrap) {
     if (isNew) {
-      wrap.innerHTML = '<input id="dc-comp-' + uid + '" placeholder="\uc2e0\uaddc \uc5c5\uccb4\uba85 \uc785\ub825" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">';
+      wrap.innerHTML = '<input id="dc-comp-' + uid + '" placeholder="신규 업체명 입력" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">';
       var addrEl = document.getElementById('dc-addr-' + uid);
       if (addrEl) addrEl.value = '';
     } else {
-      var opts = '<option value="">\uc5c5\uccb4 \uc120\ud0dd...</option>';
-      _diaryCompanies.forEach(function(c) { opts += '<option value="' + escHtml(c.name) + '">' + escHtml(c.name) + '</option>'; });
-      wrap.innerHTML = '<select id="dc-comp-' + uid + '" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + opts + '</select>';
+      _buildCompanySearchInput(wrap, uid);
     }
   }
+}
+// 기존 거래처 검색 input 생성
+function _buildCompanySearchInput(wrap, uid, selectedName) {
+  var dlId = 'dc-comp-dl-' + uid;
+  var html = '<input id="dc-comp-' + uid + '" list="' + dlId + '" value="' + escHtml(selectedName||'') + '" placeholder="업체명 검색..." autocomplete="off" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">';
+  html += '<datalist id="' + dlId + '">';
+  _diaryCompanies.forEach(function(c) { html += '<option value="' + escHtml(c.name) + '">'; });
+  html += '</datalist>';
+  wrap.innerHTML = html;
 }
 
 function selectDiaryIntro(uid, path) {
