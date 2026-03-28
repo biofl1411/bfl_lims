@@ -5745,13 +5745,58 @@ function showAreaAllSido(sido) {
 }
 
 function selectSg(sido, sg) {
-  _areaSg = sg;
+  _areaSg = sg; _areaDong = '';
   renderBreadcrumb();
+  var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
   var results = fssAllData ? fssAllData.filter(function(r) {
-    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
+    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
+  }) : [];
+
+  // 읍면동 추출
+  var dongMap = {};
+  results.forEach(function(r) {
+    var addr = r.addr || '';
+    var parts = addr.split(/\s+/);
+    // 시도, 시군구 이후 읍/면/동 추출
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (p.match(/(읍|면|동|리|가|로)$/) && p !== sido && p !== sg && p.length >= 2) {
+        dongMap[p] = (dongMap[p] || 0) + 1;
+        break;
+      }
+    }
+  });
+  var dongList = Object.keys(dongMap).sort(function(a,b) { return dongMap[b] - dongMap[a]; });
+
+  // 동 패널 표시
+  var dongPanel = document.getElementById('dongPanel');
+  var dongGrid = document.getElementById('dongGrid');
+  if (dongList.length > 0 && dongPanel && dongGrid) {
+    dongPanel.style.display = '';
+    var dHtml = '<button class="area-btn act" onclick="showSgAllResults(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\')" style="grid-column:span 2">' + sg + ' 전체 ' + results.length + '개 보기</button>';
+    dongList.forEach(function(d) {
+      dHtml += '<button class="area-btn has" onclick="selectAreaDong(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\',\'' + escHtml(d) + '\')">' + d + ' <span style="font-size:9px;color:#8892a4">(' + dongMap[d] + ')</span></button>';
+    });
+    dongGrid.innerHTML = dHtml;
+  } else {
+    showTmrAreaResults(sido + ' ' + sg, results);
+  }
+}
+function showSgAllResults(sido, sg) {
+  var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
+  var results = fssAllData ? fssAllData.filter(function(r) {
     return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
   }) : [];
   showTmrAreaResults(sido + ' ' + sg, results);
+}
+function selectAreaDong(sido, sg, dong) {
+  _areaDong = dong;
+  renderBreadcrumb();
+  var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
+  var results = fssAllData ? fssAllData.filter(function(r) {
+    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0) && (r.addr||'').indexOf(dong) >= 0;
+  }) : [];
+  showTmrAreaResults(sido + ' ' + sg + ' ' + dong, results);
 }
 
 function showTmrAreaResults(title, results) {
