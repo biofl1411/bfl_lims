@@ -1038,17 +1038,18 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
         <!-- 모드 전환 (3탭) -->
         <div style="display:flex;gap:0;margin-bottom:12px;border:1px solid #e2e6ed;border-radius:8px;overflow:hidden">
-          <button id="modeBtn-search" onclick="switchNewMode('search')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;transition:all .15s;font-family:inherit">업체명 검색</button>
+          <button id="modeBtn-search" onclick="switchNewMode('search')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;transition:all .15s;font-family:inherit">전체보기</button>
           <button id="modeBtn-area" onclick="switchNewMode('area')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#5f6b7a;transition:all .15s;font-family:inherit;border-left:1px solid #e2e6ed">지역 탐색</button>
           <button id="modeBtn-newbiz" onclick="switchNewMode('newbiz')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#5f6b7a;transition:all .15s;font-family:inherit;border-left:1px solid #e2e6ed">신규업체 알림</button>
         </div>
         <div id="mode-search">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <input id="tmrNewSearchInput" class="tmr-search-inp" type="text" placeholder="업체명 검색 (조회 후 입력)" oninput="searchFssLive(this.value)" autocomplete="off" style="flex:1">
-            <button class="btn btn-secondary btn-sm" onclick="clearTmrSearch()">지우기</button>
+            <input id="tmrNewSearchInput" class="tmr-search-inp" type="text" placeholder="업체명 검색..." oninput="renderAllFssResults()" autocomplete="off" style="flex:1">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tmrNewSearchInput').value='';renderAllFssResults()">지우기</button>
           </div>
+          <div id="tmrNewSearchCount" style="font-size:11px;color:#8892a4;margin-bottom:4px"></div>
           <div id="tmrNewSearchResult" class="tmr-search-result">
-            <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 버튼을 누른 후 업체명을 검색하세요.</div>
+            <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 버튼을 눌러주세요.</div>
           </div>
         </div>
         <div id="mode-area" style="display:none">
@@ -1077,7 +1078,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         </div>
         <!-- 신규업체 알림 -->
         <div id="mode-newbiz" style="display:none">
-          <div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">선택한 인허가 분야의 최근 신규 등록 업체입니다. (식약처 수집기 자동 감지)</div>
+          <div id="newbizCondDesc" style="font-size:11px;color:#5f6b7a;margin-bottom:8px">인허가 분야 + 선택한 지역 조건의 최근 20일 이내 신규 인허가 업체입니다.</div>
           <div id="tmrNewBizResult" class="tmr-search-result" style="max-height:350px">
             <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 후 확인하세요.</div>
           </div>
@@ -5663,19 +5664,109 @@ function switchNewMode(mode) {
   });
   if (mode === 'area') renderSidoPanel();
   if (mode === 'newbiz') loadTmrNewBizList();
+  if (mode === 'search') renderAllFssResults();
 }
 
-// 신규업체 알림 로드 (fss_new_businesses)
-// 신규업체 알림: fss_businesses에서 prms_dt(인허가일) 기준 20일 이내
+// 전체보기 — fssAllData 전체를 이름 검색 + 현재 지역 조건으로 필터
+function renderAllFssResults() {
+  var res = document.getElementById('tmrNewSearchResult');
+  var cntEl = document.getElementById('tmrNewSearchCount');
+  if (!res) return;
+  if (!fssAllData || fssAllData.length === 0) {
+    if (cntEl) cntEl.textContent = '';
+    res.innerHTML = '<div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 버튼을 눌러주세요.</div>';
+    return;
+  }
+  var q = ((document.getElementById('tmrNewSearchInput') || {}).value || '').trim().toLowerCase();
+  var items = _areaFilter(_areaSido, _areaSg, _areaDong);
+  if (q) items = items.filter(function(r) { return (r.nm||'').toLowerCase().indexOf(q) >= 0; });
+  var condParts = [];
+  if (_areaSido) condParts.push(_areaSido);
+  if (_areaSg) condParts.push(_areaSg);
+  if (_areaDong) condParts.push(_areaDong);
+  if (cntEl) cntEl.textContent = (condParts.length ? '[' + condParts.join(' ') + '] ' : '') + items.length + '건';
+  if (items.length === 0) {
+    res.innerHTML = '<div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">검색 결과가 없습니다.</div>';
+    return;
+  }
+  var PAGE = 30;
+  function buildCards(slice) {
+    return slice.map(function(r) {
+      var name = escHtml(r.nm || '');
+      var safeJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var s = '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
+      s += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+      s += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+      s += '<button onclick="addAreaCompanyToTmr(\'' + safeJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button>';
+      s += '</div>';
+      s += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+      if (r.biz)     s += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+      if (r.ceo)     s += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+      if (r.tel)     s += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+      if (r.org)     s += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+      if (r.lic)     s += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+      if (r.prms_dt) s += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+      s += '</div>';
+      if (r.addr) s += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
+      s += '</div>';
+      return s;
+    }).join('');
+  }
+  var html = buildCards(items.slice(0, PAGE));
+  if (items.length > PAGE) {
+    html += '<div id="allFssMoreWrap" style="text-align:center;padding:8px"><button onclick="allFssLoadMore(this,' + PAGE + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (items.length - PAGE) + '건 남음)</button></div>';
+  }
+  res.innerHTML = html;
+  res._allFssItems = items;
+}
+function allFssLoadMore(btn, offset) {
+  var res = document.getElementById('tmrNewSearchResult');
+  if (!res || !res._allFssItems) return;
+  var items = res._allFssItems;
+  var PAGE = 30;
+  var slice = items.slice(offset, offset + PAGE);
+  var html = slice.map(function(r) {
+    var name = escHtml(r.nm || '');
+    var safeJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var s = '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
+    s += '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+    s += '<button onclick="addAreaCompanyToTmr(\'' + safeJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button></div>';
+    s += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+    if (r.biz)     s += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+    if (r.ceo)     s += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+    if (r.tel)     s += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+    if (r.org)     s += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+    if (r.lic)     s += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+    if (r.prms_dt) s += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+    s += '</div>';
+    if (r.addr) s += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
+    s += '</div>';
+    return s;
+  }).join('');
+  if (offset + PAGE < items.length) {
+    html += '<div style="text-align:center;padding:8px"><button onclick="allFssLoadMore(this,' + (offset+PAGE) + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (items.length-offset-PAGE) + '건 남음)</button></div>';
+  }
+  btn.closest('div').outerHTML = html;
+}
+
+// 신규업체 알림: prms_dt 20일 이내 + 현재 지역 조건 필터
 function loadTmrNewBizList() {
   var res = document.getElementById('tmrNewBizResult');
   if (!res) return;
-  var bizFilter = (document.getElementById('tmrNewBizFilter') || {}).value || '';
 
-  // fssAllData 캐시에서 필터 (조회 후 사용 가능)
   if (!fssAllData || fssAllData.length === 0) {
     res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">인허가 분야를 선택하고 [조회] 버튼을 먼저 눌러주세요.</div>';
     return;
+  }
+
+  // 현재 지역 조건 안내 업데이트
+  var desc = document.getElementById('newbizCondDesc');
+  if (desc) {
+    var condParts = [];
+    if (_areaSido) condParts.push(_areaSido);
+    if (_areaSg) condParts.push(_areaSg);
+    if (_areaDong) condParts.push(_areaDong);
+    desc.textContent = '최근 20일 이내 신규 인허가 업체' + (condParts.length ? ' [' + condParts.join(' ') + ']' : ' (전체 지역)') + ' — 지역 탐색에서 범위를 좁히세요.';
   }
 
   // 20일 전 날짜 계산 (YYYYMMDD 형식)
@@ -5684,9 +5775,9 @@ function loadTmrNewBizList() {
   var cutoffStr = cutoff.getFullYear() + String(cutoff.getMonth()+1).padStart(2,'0') + String(cutoff.getDate()).padStart(2,'0');
   var todayStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
 
-  // prms_dt >= cutoffStr 필터
-  var items = fssAllData.filter(function(r) {
-    if (bizFilter && r.biz !== bizFilter) return false;
+  // 지역 필터 + prms_dt 필터
+  var base = _areaFilter(_areaSido, _areaSg, _areaDong);
+  var items = base.filter(function(r) {
     var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
     return prms >= cutoffStr && prms <= todayStr;
   });
@@ -5699,11 +5790,11 @@ function loadTmrNewBizList() {
   });
 
   if (items.length === 0) {
-    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">최근 20일 이내 신규 인허가 업체가 없습니다.' + (bizFilter ? ' (' + escHtml(bizFilter) + ')' : '') + '</div>';
+    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">최근 20일 이내 신규 인허가 업체가 없습니다.</div>';
     return;
   }
 
-  var html = '<div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">최근 20일 이내 인허가 업체 <b>' + items.length + '</b>건' + (bizFilter ? ' (' + escHtml(bizFilter) + ')' : '') + '</div>';
+  var html = '<div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">최근 20일 이내 신규 인허가 업체 <b>' + items.length + '</b>건</div>';
   items.forEach(function(r) {
     var name = r.nm || '';
     var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
