@@ -5747,6 +5747,79 @@ function switchNewMode(mode) {
   else renderAllFssResults();
 }
 
+// FSS 업체 카드 공통 빌더
+function _buildFssCard(r, extraBadge) {
+  var name = escHtml(r.nm || '');
+  var safeJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  var safeLic = (r.lic || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  var s = '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff" data-fss-card>';
+  s += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+  s += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+  s += '<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex-shrink:0">';
+  s += '<button onclick="addAreaCompanyToTmr(\'' + safeJs + '\')" style="padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button>';
+  s += '<button onclick="showTmrProducts(\'' + safeLic + '\',this)" style="padding:2px 8px;font-size:10px;font-weight:500;border:1px solid #c8d6e5;color:#5f6b7a;background:#f4f6f9;border-radius:6px;cursor:pointer;font-family:inherit">제품보기</button>';
+  if (extraBadge) s += extraBadge;
+  s += '</div></div>';
+  s += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+  if (r.biz)     s += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+  if (r.ceo)     s += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+  if (r.tel)     s += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+  if (r.org)     s += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+  if (r.lic)     s += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+  if (r.prms_dt) s += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+  s += '</div>';
+  if (r.addr) s += '<div style="font-size:10px;color:#8892a4;margin-bottom:4px">' + escHtml(r.addr) + '</div>';
+  s += '<div class="tmr-prod-panel" style="display:none;margin-top:6px;padding:8px 10px;background:#f4f6f9;border-radius:6px;border:1px solid #e2e6ed"></div>';
+  s += '</div>';
+  return s;
+}
+
+async function showTmrProducts(licNo, btn) {
+  var card = btn.closest('[data-fss-card]');
+  if (!card) return;
+  var panel = card.querySelector('.tmr-prod-panel');
+  if (!panel) return;
+  // 토글
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    btn.textContent = '제품보기';
+    return;
+  }
+  panel.style.display = '';
+  btn.textContent = '닫기';
+  if (!licNo) {
+    panel.innerHTML = '<div style="color:#8892a4;font-size:11px;text-align:center;padding:8px">인허가번호 없음</div>';
+    return;
+  }
+  panel.innerHTML = '<div style="color:#8892a4;font-size:11px;text-align:center;padding:8px">품목 조회 중...</div>';
+  try {
+    var snap = await db.collection('fss_products').where('lcns_no','==',licNo).get();
+    var products = [];
+    snap.forEach(function(doc) { products.push(doc.data()); });
+    if (products.length === 0) {
+      panel.innerHTML = '<div style="color:#8892a4;font-size:11px;text-align:center;padding:8px">등록된 품목이 없습니다.</div>';
+      return;
+    }
+    products.sort(function(a,b) { return (b.prms_dt||'').localeCompare(a.prms_dt||''); });
+    var html = '<div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:6px">품목 ' + products.length + '건</div>';
+    products.forEach(function(p) {
+      var active = !(p.production === 'Y' || p.production === '종료');
+      var statusColor = active ? '#2e7d32' : '#e53935';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #eef0f4;font-size:11px">';
+      html += '<div><span style="font-weight:600;color:#1a2332">' + escHtml(p.prdlst_nm||'-') + '</span>';
+      if (p.prdlst_dcnm) html += ' <span style="color:#8892a4;font-size:10px">(' + escHtml(p.prdlst_dcnm) + ')</span>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">';
+      if (p.prms_dt) html += '<span style="color:#5f6b7a;font-size:10px">' + formatDate8(p.prms_dt) + '</span>';
+      html += '<span style="color:' + statusColor + ';font-weight:600;font-size:10px">' + (active ? '생산중' : '종료') + '</span>';
+      html += '</div></div>';
+    });
+    panel.innerHTML = html;
+  } catch(e) {
+    panel.innerHTML = '<div style="color:#e53935;font-size:11px;text-align:center;padding:8px">조회 실패: ' + e.message + '</div>';
+  }
+}
+
 // 전체보기 — fssAllData 전체를 이름 검색 + 현재 지역 조건으로 필터
 function renderAllFssResults() {
   var res = document.getElementById('tmrNewSearchResult');
@@ -5772,24 +5845,7 @@ function renderAllFssResults() {
   var PAGE = 30;
   function buildCards(slice) {
     return slice.map(function(r) {
-      var name = escHtml(r.nm || '');
-      var safeJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      var s = '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
-      s += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
-      s += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
-      s += '<button onclick="addAreaCompanyToTmr(\'' + safeJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button>';
-      s += '</div>';
-      s += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
-      if (r.biz)     s += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
-      if (r.ceo)     s += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
-      if (r.tel)     s += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
-      if (r.org)     s += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
-      if (r.lic)     s += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
-      if (r.prms_dt) s += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
-      s += '</div>';
-      if (r.addr) s += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
-      s += '</div>';
-      return s;
+      return _buildFssCard(r);
     }).join('');
   }
   var html = buildCards(items.slice(0, PAGE));
@@ -5805,24 +5861,7 @@ function allFssLoadMore(btn, offset) {
   var items = res._allFssItems;
   var PAGE = 30;
   var slice = items.slice(offset, offset + PAGE);
-  var html = slice.map(function(r) {
-    var name = escHtml(r.nm || '');
-    var safeJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    var s = '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
-    s += '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
-    s += '<button onclick="addAreaCompanyToTmr(\'' + safeJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button></div>';
-    s += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
-    if (r.biz)     s += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
-    if (r.ceo)     s += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
-    if (r.tel)     s += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
-    if (r.org)     s += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
-    if (r.lic)     s += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
-    if (r.prms_dt) s += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
-    s += '</div>';
-    if (r.addr) s += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
-    s += '</div>';
-    return s;
-  }).join('');
+  var html = slice.map(function(r) { return _buildFssCard(r); }).join('');
   if (offset + PAGE < items.length) {
     html += '<div style="text-align:center;padding:8px"><button onclick="allFssLoadMore(this,' + (offset+PAGE) + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (items.length-offset-PAGE) + '건 남음)</button></div>';
   }
@@ -5876,25 +5915,14 @@ function loadTmrNewBizList() {
 
   var html = '<div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">최근 20일 이내 신규 인허가 업체 <b>' + items.length + '</b>건</div>';
   items.forEach(function(r) {
-    var name = r.nm || '';
     var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
-    // 경과일 계산
     var days = 0;
     if (prms.length === 8) {
       var prmsDate = new Date(prms.slice(0,4) + '-' + prms.slice(4,6) + '-' + prms.slice(6,8));
       days = Math.floor((now - prmsDate) / (24*60*60*1000));
     }
-    var prmsDisplay = prms.length === 8 ? prms.slice(0,4)+'.'+prms.slice(4,6)+'.'+prms.slice(6,8) : prms;
     var daysColor = days <= 7 ? '#2e7d32' : days <= 14 ? '#e65100' : '#c62828';
-
-    html += "<div class=\"tmr-search-item\" style=\"cursor:pointer\" onclick=\"confirmFssSelect('" + escHtml(name).replace(/'/g,"&#39;") + "')\">";
-    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · ' + escHtml(r.ceo) : '') + (r.tel ? ' · ' + escHtml(r.tel) : '') + '</div></div>';
-    html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">';
-    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
-    html += '<span style="font-size:10px;color:#1565c0">' + prmsDisplay + ' 인허가</span>';
-    html += '<span style="font-size:9px;font-weight:700;color:' + daysColor + '">' + days + '일 경과</span>';
-    html += '</div></div>';
+    html += _buildFssCard(r, '<span style="font-size:9px;font-weight:700;color:' + daysColor + '">' + days + '일 경과</span>');
   });
   res.innerHTML = html;
 }
