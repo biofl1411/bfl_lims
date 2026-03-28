@@ -883,7 +883,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
         <h2 style="font-size:17px;font-weight:700;color:#1a2332">업무일지</h2>
         <span id="diaryYearLabel" style="font-size:13px;color:#8892a4"></span>
-        <div style="margin-left:auto;display:flex;gap:6px">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <select id="diaryMyNameSel" onchange="onDiaryMyNameChange()" style="font-size:12px;padding:4px 8px;border:1px solid #c8d6e5;border-radius:7px;color:#334155;background:#f5f7fa;outline:none">
+            <option value="">내 이름 선택</option>
+          </select>
           <button class="btn btn-secondary btn-sm" onclick="diaryChangeYear(-1)">&lt;</button>
           <button class="btn btn-secondary btn-sm" onclick="diaryChangeYear(1)">&gt;</button>
         </div>
@@ -4709,15 +4712,24 @@ async function loadCenterSummary() {
       db.collection('salesDiaries').where('date','>=',fromDate).where('date','<=',toDate).get()
     ]);
 
-    // 고객관리 부서 사용자만 추출 (name → team 맵)
-    var userTeamMap = {}; // name → team(부서명 세부)
+    // 로그인 사용자의 부서를 동적으로 조회
+    var myName = getDiaryMyName();
+    if (!myName) { block.innerHTML = ''; return; }
+
+    var myDept = '';
+    (usersSnap || []).forEach(function(u) {
+      if ((u.name || '') === myName) myDept = u.department || u['부서명'] || '';
+    });
+    if (!myDept) { block.innerHTML = ''; return; }
+
+    // 같은 부서 사용자만 추출
+    var userTeamMap = {};
     var validUsers = new Set();
     (usersSnap || []).forEach(function(u) {
       var nm = u.name || '';
       var dept = u.department || u['부서명'] || '';
-      if (!nm || dept !== '고객관리') return;
-      var team = u.team || u['팀'] || u['팀명'] || dept;
-      userTeamMap[nm] = team;
+      if (!nm || dept !== myDept) return;
+      userTeamMap[nm] = dept;
       validUsers.add(nm);
     });
 
@@ -4740,43 +4752,32 @@ async function loadCenterSummary() {
       }
     });
 
-    // 팀별 그룹 (일지 없는 사람도 포함)
-    var teamMap = {}; // team → [{ name, sales, latestDate }]
+    // 팀 구성 (일지 없는 사람도 포함)
+    var members = [];
     validUsers.forEach(function(nm) {
-      var team = userTeamMap[nm] || '고객관리';
-      if (!teamMap[team]) teamMap[team] = [];
       var p = personMap[nm] || { sales: 0, latestDate: '' };
-      teamMap[team].push({ name: nm, sales: p.sales, latestDate: p.latestDate });
+      members.push({ name: nm, sales: p.sales, latestDate: p.latestDate });
     });
+    members.sort(function(a,b) { return a.name.localeCompare(b.name); });
+    var teamTotal = members.reduce(function(s,m) { return s + m.sales; }, 0);
 
-    var teams = Object.keys(teamMap).sort();
-    if (teams.length === 0) { block.innerHTML = ''; return; }
-
-    var html = '';
-    teams.forEach(function(team) {
-      var members = teamMap[team];
-      members.sort(function(a,b) { return a.name.localeCompare(b.name); });
-      var teamTotal = members.reduce(function(s,m) { return s + m.sales; }, 0);
-
-      html += '<div style="background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:12px 16px;margin-bottom:8px">';
-      // 헤더: 팀명 + 총매출
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-      html += '<span style="font-size:13px;font-weight:700;color:#1a2332">' + escHtml(team) + ' 팀</span>';
-      html += '<span style="font-size:13px;font-weight:700;color:#1565c0">' + teamTotal.toLocaleString() + '원</span>';
+    var html = '<div style="background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:12px 16px;margin-bottom:8px">';
+    // 헤더: 팀명(동적) + 총매출
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<span style="font-size:13px;font-weight:700;color:#1a2332">' + escHtml(myDept) + '</span>';
+    html += '<span style="font-size:13px;font-weight:700;color:#1565c0">' + teamTotal.toLocaleString() + '원</span>';
       html += '</div>';
-      // 인원별 행
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px">';
-      members.forEach(function(m) {
-        var dateLabel = m.latestDate ? m.latestDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3') : '-';
-        html += '<div style="background:#f5f7fa;border-radius:7px;padding:7px 10px;display:flex;flex-direction:column;gap:2px">';
-        html += '<span style="font-size:12px;font-weight:600;color:#334155">' + escHtml(m.name) + '</span>';
-        html += '<span style="font-size:12px;color:#1565c0;font-weight:700">' + (m.sales > 0 ? m.sales.toLocaleString() + '원' : '<span style="color:#c8d6e5">—</span>') + '</span>';
-        html += '<span style="font-size:10px;color:#8892a4">최신: ' + dateLabel + '</span>';
-        html += '</div>';
-      });
-      html += '</div>';
+    // 인원별 행
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px">';
+    members.forEach(function(m) {
+      var dateLabel = m.latestDate ? m.latestDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3') : '-';
+      html += '<div style="background:#f5f7fa;border-radius:7px;padding:7px 10px;display:flex;flex-direction:column;gap:2px">';
+      html += '<span style="font-size:12px;font-weight:600;color:#334155">' + escHtml(m.name) + '</span>';
+      html += '<span style="font-size:12px;color:#1565c0;font-weight:700">' + (m.sales > 0 ? m.sales.toLocaleString() + '원' : '<span style="color:#c8d6e5">—</span>') + '</span>';
+      html += '<span style="font-size:10px;color:#8892a4">최신: ' + dateLabel + '</span>';
       html += '</div>';
     });
+    html += '</div></div>';
 
     block.innerHTML = html;
   } catch(e) {
@@ -6429,7 +6430,44 @@ function switchDailyTab(btn) {
   if (tabId === 'dailyTaxUnissued') loadTaxUnissuedData();
   if (tabId === 'dailyInvoice') loadTaxInvoiceData();
 }
-function wlInit() { initDiary().then(function() { renderDiaryMonthTabs(); loadDiaryList(); }); }
+function wlInit() {
+  initDiary().then(function() {
+    populateDiaryMyNameSel();
+    renderDiaryMonthTabs();
+    loadDiaryList();
+  });
+}
+
+async function populateDiaryMyNameSel() {
+  var sel = document.getElementById('diaryMyNameSel');
+  if (!sel) return;
+  try {
+    var users = await fsGetUsers();
+    var names = users
+      .map(function(u) { return (u.name || '').trim(); })
+      .filter(function(n, i, arr) { return n && arr.indexOf(n) === i; })
+      .sort();
+    sel.innerHTML = '<option value="">내 이름 선택</option>';
+    names.forEach(function(n) {
+      var opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    var saved = localStorage.getItem('bfl_diary_myname') || '';
+    if (saved) sel.value = saved;
+  } catch(e) { console.warn('사용자 목록 로드 실패:', e); }
+}
+
+function getDiaryMyName() {
+  return localStorage.getItem('bfl_diary_myname') || '';
+}
+
+function onDiaryMyNameChange() {
+  var val = (document.getElementById('diaryMyNameSel') || {}).value || '';
+  if (val) localStorage.setItem('bfl_diary_myname', val);
+  else localStorage.removeItem('bfl_diary_myname');
+  loadCenterSummary();
+}
 
 // ============================================================================
 // 세금계산서 미발행 / 발행요청 — Firestore receipts 연동
