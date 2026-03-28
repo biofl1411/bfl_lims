@@ -599,6 +599,56 @@ var _detContactCardCount = 0;
 var _detLicCardFiles = {};
 var _detailEditMode = false;
 var _detailSnapshot = null;
+
+// 자사 담당자 드롭다운용 데이터
+var SALES_TEAMS = ['고객지원팀', '마케팅사업부', '고객관리', '지사', '마케팅팀'];
+var _salesUsersList = [];
+(function loadSalesUsersForMgmt() {
+  var fallback = [
+    {"부서명":"고객지원팀","아이디":"허현미","접수자":"허현미"},
+    {"부서명":"고객지원팀","아이디":"이은경","접수자":"이은경"},
+    {"부서명":"고객지원팀","아이디":"김수정","접수자":"김수정"},
+    {"부서명":"고객지원팀","아이디":"박신영","접수자":"박신영"},
+    {"부서명":"고객지원팀","아이디":"류하늘","접수자":"류하늘"},
+    {"부서명":"고객지원팀","아이디":"이진희","접수자":"이진희"},
+    {"부서명":"고객관리","아이디":"김희성","접수자":"김희성"},
+    {"부서명":"고객관리","아이디":"조봉현","접수자":"조봉현"},
+    {"부서명":"고객관리","아이디":"엄상흠","접수자":"엄상흠"},
+    {"부서명":"고객관리","아이디":"오세중","접수자":"오세중"},
+    {"부서명":"고객관리","아이디":"장동주","접수자":"장동주"},
+    {"부서명":"고객관리","아이디":"오석현","접수자":"오석현"},
+    {"부서명":"마케팅사업부","아이디":"조현정","접수자":"조현정"},
+    {"부서명":"마케팅사업부","아이디":"이슬기","접수자":"이슬기"},
+    {"부서명":"마케팅팀","아이디":"김도희","접수자":"김도희"},
+    {"부서명":"마케팅팀","아이디":"송성현","접수자":"송성현"}
+  ];
+  _salesUsersList = fallback;
+  window.addEventListener('firebase-ready', async function() {
+    try {
+      var fsUsers = await fsGetUsers();
+      if (fsUsers && fsUsers.length > 0) {
+        var all = fsUsers.map(function(u) {
+          return { 부서명: u.department || u.부서명 || '', 아이디: u.name || u.아이디 || '', 접수자: u.receiver || u.접수자 || '' };
+        });
+        _salesUsersList = all.filter(function(u) { return SALES_TEAMS.indexOf(u.부서명) !== -1; });
+      }
+    } catch(e) { console.warn('[companyMgmt] 사용자 로드 실패, 기본값 사용'); }
+  });
+})();
+function _buildSalesRepSelect(id, currentValue) {
+  var html = '<select id="' + id + '" style="border:1px solid #90caf9;background:#f0f7ff;color:#1565c0;font-size:12px;font-weight:600;padding:3px 8px;border-radius:8px;outline:none;cursor:pointer">';
+  html += '<option value="">담당자 선택</option>';
+  var seen = {};
+  _salesUsersList.forEach(function(u) {
+    var name = (u.접수자 || u.아이디 || '').trim();
+    if (!name || seen[name]) return;
+    seen[name] = true;
+    var sel = (name === currentValue) ? ' selected' : '';
+    html += '<option value="' + escHtml(name) + '"' + sel + '>' + escHtml(name) + ' (' + escHtml(u.부서명) + ')</option>';
+  });
+  html += '</select>';
+  return html;
+}
 var _licMatchContactNum = null;
 var _custSearchQuery = '';
 
@@ -1612,7 +1662,7 @@ function addDetailContactCard() {
   card.innerHTML =
     '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 고객사 담당자</div>' +
       '<div style="display:flex;gap:4px;margin-left:auto;align-items:center">' +
-        '<span class="inhouse-rep-badge">자사: <input id="detContactSalesRep_' + num + '" placeholder="자사 담당" style="border:none;background:transparent;color:#1565c0;font-size:12px;font-weight:600;width:70px;outline:none" class="det-contact-field"></span>' +
+        '<span class="inhouse-rep-badge">자사: ' + _buildSalesRepSelect('detContactSalesRep_' + num, '') + '</span>' +
         '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
         '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
       '</div>' +
@@ -1837,7 +1887,9 @@ function toggleDetailEdit() {
     _detailSnapshot._salesRepSnapshot.push(srEl ? srEl.value : '');
     var srLabel = document.getElementById('detContactSalesRepLabel_' + ci);
     if (srLabel && srEl) {
-      srLabel.innerHTML = '<input id="detContactSalesRepEdit_' + ci + '" value="' + escHtml(srEl.value) + '" style="border:none;background:transparent;color:#1565c0;font-size:11px;font-weight:600;width:70px;outline:none;border-bottom:1px dashed #1565c0" class="det-contact-field" onchange="document.getElementById(\'detContactSalesRep_' + ci + '\').value=this.value">';
+      srLabel.innerHTML = _buildSalesRepSelect('detContactSalesRepEdit_' + ci, srEl.value);
+      var selEl = document.getElementById('detContactSalesRepEdit_' + ci);
+      if (selEl) selEl.onchange = function() { srEl.value = this.value; };
     }
   }
   // 버튼 전환
