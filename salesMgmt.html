@@ -5782,19 +5782,21 @@ function selectSg(sido, sg) {
     return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
   }) : [];
 
-  // 읍면동 추출
+  // 읍면동 추출 (dong 필드 우선, 없으면 주소에서 파싱)
   var dongMap = {};
   results.forEach(function(r) {
-    var addr = r.addr || '';
-    var parts = addr.split(/\s+/);
-    // 시도, 시군구 이후 읍/면/동 추출
-    for (var i = 0; i < parts.length; i++) {
-      var p = parts[i];
-      if (p.match(/(읍|면|동|리|가|로)$/) && p !== sido && p !== sg && p.length >= 2) {
-        dongMap[p] = (dongMap[p] || 0) + 1;
-        break;
+    var d = r.dong || '';
+    if (!d) {
+      var addr = r.addr || '';
+      var parts = addr.split(/\s+/);
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (p.match(/(읍|면|동|리|가|로)$/) && p !== sido && p !== sg && p.length >= 2) {
+          d = p; break;
+        }
       }
     }
+    if (d) dongMap[d] = (dongMap[d] || 0) + 1;
   });
   var dongList = Object.keys(dongMap).sort(function(a,b) { return dongMap[b] - dongMap[a]; });
 
