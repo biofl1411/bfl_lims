@@ -2609,7 +2609,9 @@ async function loadReceiptForEdit(docId) {
                     'remarks': s.remarks || '',
                     '_refTestItems': s.refTestItems || s.testItems || null,
                     '_savedTestItems': s.testItems || s.refTestItems || null,
-                    'notice-memo': s.sampleMemo || ''
+                    'notice-memo': s.sampleMemo || '',
+                    'notice-memo-by': s.sampleMemoBy || '',
+                    'notice-memo-at': s.sampleMemoAt || ''
                 };
             });
             document.getElementById('sample-total-count').value = _sampleData.length;
@@ -6526,7 +6528,17 @@ function saveSampleToArray() {
     var _msSave = document.querySelector('input[name="memo-scope"]:checked');
     if (_msSave && _msSave.value === 'current') {
         var _mbSave = document.getElementById('notice-memo-box');
-        _sampleData[_currentSampleIdx]['notice-memo'] = _mbSave ? _mbSave.value : '';
+        var _memoVal = _mbSave ? _mbSave.value : '';
+        _sampleData[_currentSampleIdx]['notice-memo'] = _memoVal;
+        // 기록자/시각은 처음 메모가 입력될 때만 기록 (기존값 유지)
+        if (_memoVal && !_sampleData[_currentSampleIdx]['notice-memo-by']) {
+            _sampleData[_currentSampleIdx]['notice-memo-by'] = document.getElementById('sales-rep')?.value || window._currentUser || '';
+            _sampleData[_currentSampleIdx]['notice-memo-at'] = new Date().toISOString().slice(0,16).replace('T',' ');
+        }
+        if (!_memoVal) {
+            _sampleData[_currentSampleIdx]['notice-memo-by'] = '';
+            _sampleData[_currentSampleIdx]['notice-memo-at'] = '';
+        }
     }
 
     // 공유 필드 자동 전파 제거 — selectInline/applySharedToOtherSamples에서 confirm 후 수동 적용
@@ -7985,7 +7997,9 @@ function collectReceiptData() {
                 // 시료별 긴급여부
                 urgentValue: s['urgent-value'] || '',
                 // 시료별 메모 (memo-scope="current"인 경우)
-                sampleMemo: s['notice-memo'] || ''
+                sampleMemo: s['notice-memo'] || '',
+                sampleMemoBy: s['notice-memo-by'] || '',
+                sampleMemoAt: s['notice-memo-at'] || ''
             };
         }),
         // 검사정보
@@ -8033,6 +8047,12 @@ function collectReceiptData() {
         noticeMemoScope: (document.querySelector('input[name="memo-scope"]:checked') || {}).value || 'all',
         noticeMemo: ((document.querySelector('input[name="memo-scope"]:checked') || {}).value !== 'current')
             ? (document.getElementById('notice-memo-box')?.value || document.getElementById('notice-memo')?.value || '')
+            : '',
+        noticeMemoBy: (document.getElementById('notice-memo-box')?.value || document.getElementById('notice-memo')?.value)
+            ? (document.getElementById('sales-rep')?.value || window._currentUser || '')
+            : '',
+        noticeMemoAt: (document.getElementById('notice-memo-box')?.value || document.getElementById('notice-memo')?.value)
+            ? new Date().toISOString().slice(0,16).replace('T',' ')
             : '',
         // 수수료/결제 정보
         feeOriginal: window._feeGrandTotal || 0,
