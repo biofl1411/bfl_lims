@@ -514,17 +514,35 @@ async function loadData() {
       var lastLog = latestLogs[sid] || null;
 
       var fresh = freshness[sid] || {};
+
+      // 증분 수집(incremental)의 total_count는 CHNG_DT 필터 결과 건수 → API 전체 건수로 사용 불가
+      // full / full_resume 수집 로그에서만 API 총건수를 읽어옴
+      var lastFullLog = null;
+      var lastIncLog = null;
+      if (latestLogs[sid]) {
+        var ltype = latestLogs[sid].collect_type || '';
+        if (ltype.indexOf('incremental') >= 0) {
+          lastIncLog = latestLogs[sid];
+          // 이전 full 로그가 있으면 freshnessloaded에서 total 보관 (없으면 0)
+        } else {
+          lastFullLog = latestLogs[sid];
+        }
+      }
+      // API 총건수: full 로그 기반. incremental만 있으면 fresh에 저장된 값 또는 0 표시
+      var apiTotal = lastFullLog ? (lastFullLog.total_count || 0) : (fresh.last_full_total || 0);
+
       var apiData = {
         api_source: sid,
         name: info.name,
         table: info.collection,
         db_count: dbCount,
-        last_api_total: lastLog ? (lastLog.total_count || 0) : 0,
+        last_api_total: apiTotal,
         last_collect: null,
         total_count_changed_at: fresh.total_count_changed_at || '',
         latest_data_date: fresh.latest_data_date || '',
       };
 
+      var lastLog = latestLogs[sid] || null;
       if (lastLog) {
         apiData.last_collect = {
           type: lastLog.collect_type || '',
@@ -539,10 +557,10 @@ async function loadData() {
         };
       }
 
-      // 상태 판단
-      if (dbCount === 0 && (!lastLog || !lastLog.total_count)) {
+      // 상태 판단: API 총건수(full 기준)와 Firestore 건수 비교
+      if (dbCount === 0 && !apiTotal) {
         apiData.status = 'not_started';
-      } else if (lastLog && lastLog.total_count && dbCount < lastLog.total_count) {
+      } else if (apiTotal > 0 && dbCount < apiTotal) {
         apiData.status = 'in_progress';
       } else {
         apiData.status = 'completed';
