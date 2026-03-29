@@ -6774,7 +6774,10 @@ async function loadCollectionData() {
     snap.forEach(function(doc) {
       var d = doc.data();
       if (d.payDate) return; // 수금 완료 제외
-      if (_arSelectedUser && d.salesRep !== _arSelectedUser) return;
+      // 관리자: 담당자 선택 시 해당 담당자만, 미선택 시 전체
+      // 일반 직원: 본인 것만 (CURRENT_USER.name 기준)
+      var filterRep = IS_ADMIN ? _arSelectedUser : CURRENT_USER.name;
+      if (filterRep && d.salesRep !== filterRep) return;
       _arAllReceipts.push(Object.assign({}, d, { _id: doc.id }));
     });
 
@@ -6953,7 +6956,15 @@ function renderArTable() {
       '<td class="center" style="color:' + daysColor + ';font-weight:' + daysWeight + '">' + (days || '-') + '일</td>' +
       '<td class="center">' + (nearestDue ? '<span style="font-size:11px">' + _arFmt(nearestDue) + '</span>' : '<span style="color:#e53935;font-weight:600">미지정</span>') + '</td>' +
       '<td class="center" style="font-size:11px;color:' + (comp.recentActivity ? '#333' : '#8892a4') + '">' + (comp.recentActivity ? _arFmt(comp.recentActivity) : '없음') + '</td>' +
-      '<td class="center"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openActivityModal(\'' + cn.replace(/'/g,"\\'") + '\')">📝 활동기록</button></td>';
+      (function() {
+        var currentRep = IS_ADMIN ? _arSelectedUser : CURRENT_USER.name;
+        var canRecord = !currentRep || comp.salesRep === currentRep;
+        return '<td class="center">' +
+          (canRecord
+            ? '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openActivityModal(\'' + cn.replace(/'/g,"\\'") + '\')">📝 활동기록</button>'
+            : '<span style="font-size:10px;color:#b0bec5">🔒 담당자만</span>') +
+          '</td>';
+      })();
     tbody.appendChild(tr);
 
     // 펼침 행 (접수건 서브테이블) — 초기 숨김
@@ -7104,7 +7115,9 @@ async function openActivityModal(companyName) {
   var now = new Date();
   document.getElementById('arActDate').value = _arToday();
   document.getElementById('arActTime').value = now.toTimeString().substring(0, 5);
-  document.getElementById('arActWriter').value = _arSelectedUser || CURRENT_USER.name;
+  // 기록자 = 회사의 담당 영업사원 (본인 회사만 버튼이 활성화되므로 일치 보장)
+  var comp = _arCompanyMap[companyName] || {};
+  document.getElementById('arActWriter').value = comp.salesRep || _arSelectedUser || CURRENT_USER.name;
   // 로그인 연동 후: document.getElementById('arActWriter').value = firebase.auth().currentUser.displayName;
   document.getElementById('arContactName').value = '';
   document.getElementById('arActNote').value = '';
