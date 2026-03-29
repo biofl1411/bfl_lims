@@ -1611,10 +1611,14 @@ function openDetailPanel(id, sampleIdx) {
     var teamMemo = r.teamMemo || {};
     var teamMemoLog = r.teamMemoLog || {};
 
-    // 메모 표시 형식: "내용(성명)"
-    function _memoDisplay(text, by) {
+    // 메모 표시 형식: 각 줄마다 "(성명)"이 없으면 fallbackBy 추가
+    function _annotateLines(text, fallbackBy) {
         if (!text) return '';
-        return by ? (text + '(' + by + ')') : text;
+        return text.split('\n').map(function(line) {
+            line = line.trim();
+            if (!line) return line;
+            return /\([^)]+\)$/.test(line) ? line : (line + (fallbackBy ? '(' + fallbackBy + ')' : ''));
+        }).join('\n');
     }
 
     // 팀별 사용자 선택 셀렉트 빌드 (users 로드 후 채워짐)
@@ -1656,7 +1660,7 @@ function openDetailPanel(id, sampleIdx) {
     var memoHtml = '';
 
     // 접수메모
-    var _recDisplayText = _memoDisplay(_receiptMemoText, _memoBy);
+    var _recDisplayText = _annotateLines(_receiptMemoText, _memoBy);
     memoHtml += _buildMemoSection('receipt',
         '접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span>',
         _recDisplayText, _memoAt);
@@ -1670,7 +1674,7 @@ function openDetailPanel(id, sampleIdx) {
     _teamDefs.forEach(function(def) {
         var tLog = teamMemoLog[def.team] || {};
         var tText = teamMemo[def.team] || '';
-        var tDisplayText = _memoDisplay(tText, tLog.by || '');
+        var tDisplayText = _annotateLines(tText, tLog.by || '');
         memoHtml += _buildMemoSection(def.key,
             def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.dept + ')</span>',
             tDisplayText, tLog.at || '');
@@ -2125,11 +2129,11 @@ function saveMemoField(key) {
             r.teamMemo[team] = mergedText;
             r.teamMemoLog[team] = { by: by, at: at };
         }
-        // 기존 메모 표시 영역 갱신
+        // 기존 메모 표시 영역 갱신 (저장된 전체 텍스트, 이미 (성명) 포함)
         var dispEl = document.getElementById('memo-display-' + key);
         if (dispEl) {
             dispEl.style.display = '';
-            dispEl.textContent = mergedText;
+            dispEl.textContent = mergedText; // newEntry에 이미 (by) 붙어 있음
         }
         // 입력란 초기화
         textEl.value = '';
