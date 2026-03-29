@@ -831,7 +831,18 @@ body.sidebar-collapsed .main-container{margin-left:64px}
     </div>
 
     <!-- 메모 박스 (공지여부 '메모' 선택 시) -->
-    <textarea id="notice-memo-box" placeholder="메모에 기록된 내용은 공지 대상이 아닙니다" style="display:none;width:100%;padding:8px 10px;border:1px solid #bbdefb;border-radius:5px;font-size:12px;resize:vertical;min-height:50px;max-height:120px;font-family:inherit;background:#f0f7ff" oninput="markAsModified()"></textarea>
+    <div id="notice-memo-wrap" style="display:none">
+      <div style="margin-bottom:4px;font-size:11px;color:#5f6b7a;display:flex;align-items:center;gap:12px">
+        <span style="font-weight:500">메모 범위:</span>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:3px">
+          <input type="radio" name="memo-scope" id="memo-scope-all" value="all" checked onchange="markAsModified()">전체 시료
+        </label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:3px">
+          <input type="radio" name="memo-scope" id="memo-scope-current" value="current" onchange="onMemoScopeChange()">현재 시료만
+        </label>
+      </div>
+      <textarea id="notice-memo-box" placeholder="메모에 기록된 내용은 공지 대상이 아닙니다" style="width:100%;padding:8px 10px;border:1px solid #bbdefb;border-radius:5px;font-size:12px;resize:vertical;min-height:50px;max-height:120px;font-family:inherit;background:#f0f7ff" oninput="markAsModified()"></textarea>
+    </div>
 
     <!-- 파일 첨부 -->
     <div class="f-sec-title">📎 첨부파일</div>
@@ -2511,12 +2522,18 @@ async function loadReceiptForEdit(docId) {
         if (nrEl) nrEl.value = data.noticeRemark || '';
         // 공지 메모
         var nmBox = document.getElementById('notice-memo-box');
+        var nmWrap = document.getElementById('notice-memo-wrap');
         if (nmBox && data.noticeMemo) {
             nmBox.value = data.noticeMemo;
-            nmBox.style.display = '';
+            if (nmWrap) nmWrap.style.display = '';
         }
         var nmHidden = document.getElementById('notice-memo');
         if (nmHidden) nmHidden.value = data.noticeMemo || '';
+        // 메모 범위 복원
+        if (data.noticeMemoScope === 'current') {
+            var msEl = document.getElementById('memo-scope-current');
+            if (msEl) msEl.checked = true;
+        }
 
         // 수수료/결제 (hidden 필드에 보관 — 수정 시 보호용)
         window._editFeeData = {
@@ -2591,7 +2608,8 @@ async function loadReceiptForEdit(docId) {
                     'disposal-date': s.disposalDate || '',
                     'remarks': s.remarks || '',
                     '_refTestItems': s.refTestItems || s.testItems || null,
-                    '_savedTestItems': s.testItems || s.refTestItems || null
+                    '_savedTestItems': s.testItems || s.refTestItems || null,
+                    'notice-memo': s.sampleMemo || ''
                 };
             });
             document.getElementById('sample-total-count').value = _sampleData.length;
@@ -6504,7 +6522,21 @@ function saveSampleToArray() {
 
     _sampleData[_currentSampleIdx] = obj;
 
+    // 현재 시료 메모 저장 (memo-scope="current"인 경우)
+    var _msSave = document.querySelector('input[name="memo-scope"]:checked');
+    if (_msSave && _msSave.value === 'current') {
+        var _mbSave = document.getElementById('notice-memo-box');
+        _sampleData[_currentSampleIdx]['notice-memo'] = _mbSave ? _mbSave.value : '';
+    }
+
     // 공유 필드 자동 전파 제거 — selectInline/applySharedToOtherSamples에서 confirm 후 수동 적용
+}
+
+function onMemoScopeChange() {
+    // scope 변경 시: 현재 시료의 메모 저장 후 재로드 (다른 시료 간 메모 분리)
+    saveSampleToArray();
+    loadSampleFromArray(_currentSampleIdx);
+    markAsModified();
 }
 
 function loadSampleFromArray(idx) {
@@ -6519,6 +6551,12 @@ function loadSampleFromArray(idx) {
         var el = document.getElementById(id);
         if (el) el.value = obj[id] || '';
     });
+    // 현재 시료 메모 복원 (memo-scope="current"인 경우)
+    var _msLoad = document.querySelector('input[name="memo-scope"]:checked');
+    if (_msLoad && _msLoad.value === 'current') {
+        var _mbLoad = document.getElementById('notice-memo-box');
+        if (_mbLoad) _mbLoad.value = obj['notice-memo'] || '';
+    }
     // 소비기한 일수 모드 복원
     var daysVal = parseInt(obj['expiry-days']);
     var textEl = document.getElementById('expiry-date-text');
@@ -7945,7 +7983,9 @@ function collectReceiptData() {
                 testItems: s._savedTestItems || s._refTestItems || null,
                 refTestItems: s._refTestItems || s._savedTestItems || null,
                 // 시료별 긴급여부
-                urgentValue: s['urgent-value'] || ''
+                urgentValue: s['urgent-value'] || '',
+                // 시료별 메모 (memo-scope="current"인 경우)
+                sampleMemo: s['notice-memo'] || ''
             };
         }),
         // 검사정보
@@ -7990,7 +8030,10 @@ function collectReceiptData() {
             return { idx: idx, text: (_filteredNotices[idx] || {}).text || '' };
         }),
         noticeRemark: document.getElementById('notice-remark-input')?.value || '',
-        noticeMemo: document.getElementById('notice-memo-box')?.value || document.getElementById('notice-memo')?.value || '',
+        noticeMemoScope: (document.querySelector('input[name="memo-scope"]:checked') || {}).value || 'all',
+        noticeMemo: ((document.querySelector('input[name="memo-scope"]:checked') || {}).value !== 'current')
+            ? (document.getElementById('notice-memo-box')?.value || document.getElementById('notice-memo')?.value || '')
+            : '',
         // 수수료/결제 정보
         feeOriginal: window._feeGrandTotal || 0,
         discountRate: parseFloat(document.getElementById('discount-rate')?.value) || 0,
@@ -9256,8 +9299,8 @@ function selectInline(type, val, color, bg, border) {
     document.getElementById(m.picker).style.display = 'none';
     // 공지여부 처리
     if (type === 'notice') {
-        var memoBox = document.getElementById('notice-memo-box');
-        if (memoBox) memoBox.style.display = (val === '메모') ? '' : 'none';
+        var memoWrap = document.getElementById('notice-memo-wrap');
+        if (memoWrap) memoWrap.style.display = (val === '메모') ? '' : 'none';
         var noticeSection = document.getElementById('receipt-notice-section');
         if (noticeSection) noticeSection.style.display = (val === '아니요') ? 'none' : '';
         if (val === '예' && typeof loadNoticeTemplate === 'function') loadNoticeTemplate();
