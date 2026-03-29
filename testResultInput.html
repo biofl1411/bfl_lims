@@ -803,10 +803,15 @@ function renderReceiptList() {
     var statusBadge = getStatusBadge(r.status);
     var fieldBadge = r.testField === '축산' ? '<span class="badge badge-danger">축산</span>' : '<span class="badge badge-primary">식품</span>';
     var sampleCnt = (r.samples && r.samples.length) || 0;
+    // 검체유형 추출 (첫 시료 기준)
+    var s0 = (r.samples && r.samples[0]) || {};
+    var ft0 = s0.foodType || s0.foodTypeValue || '';
+    var ftLabel = ft0 ? ft0.replace(/\(.*\)/, '').trim() : '';
+    var ftBadge = ftLabel ? '<span style="font-size:10px;color:#6b7280;background:#f1f5f9;padding:1px 5px;border-radius:3px;margin-left:4px">' + ftLabel + '</span>' : '';
     var isActive = currentReceipt && currentReceipt.id === r.id ? ' active' : '';
     return '<div class="receipt-row' + isActive + '" onclick="selectReceipt(\'' + r.id + '\')">' +
       '<div class="row-top"><span class="row-no">' + (r.receiptNo || '-') + '</span>' + statusBadge + '</div>' +
-      '<div class="row-bottom">' + fieldBadge + ' <span class="row-company">' + (r.companyName || '-') + '</span>' +
+      '<div class="row-bottom">' + fieldBadge + ' <span class="row-company">' + (r.companyName || '-') + '</span>' + ftBadge +
       '<span style="margin-left:auto">시료 ' + sampleCnt + '건</span></div>' +
       '</div>';
   }).join('');
@@ -895,12 +900,27 @@ function renderRightPanel() {
     html += '</div>';
   }
 
-  // 현재 시료 정보
+  // 현재 시료 정보 + 동적 품목코드 매칭
   var sample = samples[currentSampleIdx] || {};
+  var dispFoodType = sample.foodType || sample.foodTypeValue || '';
+  var dispProductCode = sample.mfdsProductCode || '';
+  // 품목코드가 없으면 검체유형으로 mfdsTemplates에서 역매칭
+  if (!dispProductCode && dispFoodType && _mfdsTemplatesCache) {
+    var ftBase = dispFoodType.replace(/\(.*\)/, '').trim();
+    var matched = _mfdsTemplatesCache.find(function(t) {
+      return t.templateName === dispFoodType || t.foodTypeName === dispFoodType
+        || t.templateName === ftBase || t.foodTypeName === ftBase;
+    });
+    if (matched) dispProductCode = matched.foodTypeCode || '';
+  }
+  // 검체유형이 없으면 접수 기본 정보에서 유추
+  if (!dispFoodType && r.testField === '축산') {
+    dispFoodType = '축산물';
+  }
   html += '<div class="alert alert-info" id="sample-info">';
   html += '<strong>제품명:</strong> ' + (sample.productName || '-');
-  html += ' | <strong>검체유형:</strong> ' + (sample.foodType || '-');
-  html += ' | <strong>품목코드:</strong> ' + (sample.mfdsProductCode || '-');
+  html += ' | <strong>검체유형:</strong> ' + (dispFoodType || '-');
+  html += ' | <strong>품목코드:</strong> ' + (dispProductCode || '-');
   html += '</div>';
 
   // 결과 테이블
@@ -1733,32 +1753,51 @@ async function loadFormTemplates() {
   }
 }
 
-// 항목명 + 식품유형으로 양식 찾기 (식품유형 일치 우선, 없으면 null)
+// 항목명 + 식품유형으로 양식 찾기 (정확→부분→기본 순 매칭)
 function findFormTemplate(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return null;
   var name = itemName.trim();
   var ft = (sampleFoodType || '').trim();
+  var ftBase = ft.replace(/\(.*\)/, '').trim(); // "과자(밀봉,유탕,유처리)" → "과자"
+  var exact = null, partial = null, nameOnly = null;
   for (var i = 0; i < _formTemplatesList.length; i++) {
     var t = _formTemplatesList[i];
-    if (t.itemName === name && t.foodType === ft) {
-      var res = Object.assign({}, t.analyzed);
-      res._roundingRules = t.roundingRules || [{ decimal: 2, mode: 'round' }];
-      return res;
-    }
+    if (t.itemName !== name) continue;
+    var tft = (t.foodType || '').trim();
+    // 1순위: 정확 일치
+    if (tft === ft) { exact = t; break; }
+    // 2순위: 기본 식품유형 일치 ("과자" == "과자")
+    if (!partial && ftBase && tft === ftBase) partial = t;
+    // 3순위: 양식의 식품유형이 접수 식품유형에 포함 ("과자" in "과자(밀봉,유탕,유처리)")
+    if (!partial && tft && ft.indexOf(tft) === 0) partial = t;
+    // 4순위: 항목명만 일치 (식품유형 무관 폴백)
+    if (!nameOnly) nameOnly = t;
   }
-  return null;
+  var match = exact || partial || nameOnly;
+  if (!match) return null;
+  var res = Object.assign({}, match.analyzed);
+  res._roundingRules = match.roundingRules || [{ decimal: 2, mode: 'round' }];
+  return res;
 }
 
-// 항목명 + 식품유형으로 오버라이드(시험일지 수정값) 찾기
+// 항목명 + 식품유형으로 오버라이드(시험일지 수정값) 찾기 (정확→부분→기본 순)
 function findFormTemplateOverrides(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return {};
   var name = itemName.trim();
   var ft = (sampleFoodType || '').trim();
+  var ftBase = ft.replace(/\(.*\)/, '').trim();
+  var exact = null, partial = null, nameOnly = null;
   for (var i = 0; i < _formTemplatesList.length; i++) {
     var t = _formTemplatesList[i];
-    if (t.itemName === name && t.foodType === ft) return t.overrides || {};
+    if (t.itemName !== name) continue;
+    var tft = (t.foodType || '').trim();
+    if (tft === ft) { exact = t; break; }
+    if (!partial && ftBase && tft === ftBase) partial = t;
+    if (!partial && tft && ft.indexOf(tft) === 0) partial = t;
+    if (!nameOnly) nameOnly = t;
   }
-  return {};
+  var match = exact || partial || nameOnly;
+  return match ? (match.overrides || {}) : {};
 }
 
 function toggleItemDetail(idx, btn) {
@@ -1866,42 +1905,158 @@ function renderCalcForm(idx, item, tmpl, saved) {
     return h;
   }
 
-  // 섹션별 입력 필드
-  sections.forEach(function(sec) {
-    var isStdSection = (sec.title === '표준물질정보' || sec.title === '표준용액농도');
-    if (sec.title) {
-      h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px;display:flex;justify-content:space-between;align-items:center">';
-      h += '<span>' + sec.title + '</span>';
-      if (isStdSection) {
-        h += '<button type="button" style="font-size:10px;padding:2px 8px;border:1px solid #f59e0b;background:#fffbeb;color:#b45309;border-radius:4px;cursor:pointer" onclick="openStdChangeModal(' + idx + ')">값 변경</button>';
-      }
+  // 미생물 양식 감지
+  var isMicro = tmpl.isMicroForm || (function() {
+    var basis = tmpl.testBasis || '';
+    return basis.indexOf('미생물') >= 0 || basis.indexOf('제8.') >= 0 || basis.indexOf('일반시험법 4.') >= 0;
+  })();
+
+  if (isMicro) {
+    // ── 미생물 전용: 시료정보 + 희석배수 테이블 ──
+    // 시료정보 섹션
+    var sampleFields = [];
+    var microFields = []; // 희석배수/집락수/채취량 필드
+    sections.forEach(function(sec) {
+      (sec.fields || []).forEach(function(f) {
+        if (/희석배수|집락수|검체채취량/.test(f.label || f.id)) {
+          microFields.push(f);
+        } else {
+          sampleFields.push(f);
+        }
+      });
+    });
+
+    // 시료정보 그리드
+    if (sampleFields.length) {
+      h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px">시료정보</div>';
+      h += '<div class="idf-grid">';
+      var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
+      sampleFields.forEach(function(f) {
+        var fid = 'idf-' + f.id + '-' + idx;
+        var val = raw[f.id] || autoVals[f.id] || '';
+        var fieldLabel = f.id === 'expiryDate' ? '소비기한' : f.label;
+        var lbl = fieldLabel + (f.unit ? ' (' + f.unit + ')' : '');
+        var isStdField = stdFieldIds.indexOf(f.id) >= 0;
+        if (f.type === 'readonly' || isStdField) {
+          h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + (val || f.exampleValue || '') + '" readonly style="background:#f0fdf4;color:#166534;font-weight:500"></div>';
+        } else {
+          var typeAttr = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+          var stepAttr = f.type === 'number' ? ' step="any"' : '';
+          h += '<div class="idf-field"><label>' + lbl + (f.required ? ' <span style="color:#ef4444">*</span>' : '') + '</label>';
+          h += '<input type="' + typeAttr + '" id="' + fid + '" value="' + val + '" placeholder="' + (f.placeholder || f.exampleValue || '') + '"' + stepAttr + ' oninput="calcItemResult(' + idx + ')"></div>';
+        }
+      });
       h += '</div>';
     }
-    h += '<div class="idf-grid">';
-    // 표준물질/표준용액 필드 ID 목록 (읽기전용으로 표시, 수정은 모달)
-    var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
-    (sec.fields || []).forEach(function(f) {
-      var fid = 'idf-' + f.id + '-' + idx;
-      var val = raw[f.id] || autoVals[f.id] || '';
-      // 소비기한 라벨 통일
-      var fieldLabel = f.id === 'expiryDate' ? '소비기한' : f.label;
-      var lbl = fieldLabel + (f.unit ? ' (' + f.unit + ')' : '');
-      var isStdField = stdFieldIds.indexOf(f.id) >= 0;
-      if (f.type === 'readonly' || isStdField) {
-        // 표준물질/표준용액 필드: 시험일지 값으로 읽기전용 표시
-        var displayVal = val || f.exampleValue || '';
-        h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + displayVal + '" readonly style="background:#f0fdf4;color:#166534;font-weight:500"></div>';
-      } else if (f.type === 'textarea') {
-        h += '<div class="idf-field" style="grid-column:1/-1"><label>' + lbl + '</label><textarea id="' + fid + '" rows="2" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" oninput="calcItemResult(' + idx + ')">' + val + '</textarea></div>';
-      } else {
-        var typeAttr = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
-        var stepAttr = f.type === 'number' ? ' step="any"' : '';
-        h += '<div class="idf-field"><label>' + lbl + (f.required ? ' <span style="color:#ef4444">*</span>' : '') + '</label>';
-        h += '<input type="' + typeAttr + '" id="' + fid + '" value="' + val + '" placeholder="' + (f.placeholder || f.exampleValue || '') + '"' + stepAttr + ' oninput="calcItemResult(' + idx + ')"></div>';
-      }
+
+    // 희석배수 × n 평판 테이블
+    // n 수 파악: 집락수 필드 중 가장 큰 n 번호
+    var nCount = 0;
+    var dilutions = [];
+    var dilSet = {};
+    microFields.forEach(function(f) {
+      var nm = f.label || f.id || '';
+      var nMatch = nm.match(/n(\d+)/);
+      if (nMatch) { var nn = parseInt(nMatch[1]); if (nn > nCount) nCount = nn; }
+      var dMatch = nm.match(/희석배수\s*(\d+)/);
+      if (dMatch && !dilSet[dMatch[1]]) { dilSet[dMatch[1]] = true; dilutions.push(parseInt(dMatch[1])); }
     });
-    h += '</div>';
-  });
+    if (nCount === 0) nCount = 5;
+    dilutions.sort(function(a,b){ return a-b; });
+    if (!dilutions.length) dilutions = [10, 100, 1000, 10000, 100000];
+
+    // 채취량 필드 매핑
+    var weightFields = {};
+    microFields.forEach(function(f) {
+      var nm = f.label || f.id || '';
+      var wm = nm.match(/검체채취량\s*n(\d+)/);
+      if (wm) weightFields[parseInt(wm[1])] = f;
+    });
+
+    h += '<div style="font-size:12px;font-weight:600;color:#1d4ed8;margin:12px 0 6px;border-bottom:1px solid #93c5fd;padding-bottom:3px">🦠 집락수 입력</div>';
+    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 130) + 'px">';
+    // 헤더
+    h += '<thead><tr><th rowspan="2" style="background:#1e3a8a;color:#fff;padding:5px 6px;border:0.5px solid #1e40af;width:70px;text-align:center;font-size:10px">희석배수</th>';
+    for (var n = 1; n <= nCount; n++) h += '<th colspan="2" style="background:#1e3a8a;color:#fff;padding:4px;border:0.5px solid #1e40af;text-align:center;font-size:10px">n' + n + '</th>';
+    h += '</tr><tr>';
+    for (var n = 1; n <= nCount; n++) {
+      h += '<th style="background:#374151;color:#fff;padding:3px;border:0.5px solid #4b5563;font-size:10px">평판1</th>';
+      h += '<th style="background:#374151;color:#fff;padding:3px;border:0.5px solid #4b5563;font-size:10px">평판2</th>';
+    }
+    h += '</tr></thead><tbody>';
+
+    // 각 희석배수 행
+    dilutions.forEach(function(dil) {
+      h += '<tr><td style="background:#f9fafb;padding:4px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;font-size:11px">1:' + dil.toLocaleString() + '</td>';
+      for (var n = 1; n <= nCount; n++) {
+        [1, 2].forEach(function(p) {
+          // 필드 찾기: "희석배수 {dil} n{n} 평판{p}"
+          var matchF = null;
+          microFields.forEach(function(f) {
+            var nm = f.label || f.id || '';
+            if (nm.indexOf('희석배수') >= 0 && nm.indexOf(String(dil)) >= 0 && nm.indexOf('n' + n) >= 0 && nm.indexOf('평판' + p) >= 0) matchF = f;
+          });
+          if (matchF) {
+            var fid = 'idf-' + matchF.id + '-' + idx;
+            var val = raw[matchF.id] || '';
+            h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="' + fid + '" value="' + val + '" placeholder="집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" oninput="calcItemResult(' + idx + ')"></td>';
+          } else {
+            h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" style="width:52px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" disabled></td>';
+          }
+        });
+      }
+      h += '</tr>';
+    });
+
+    // 채취량 행
+    h += '<tr style="background:#f0fdf4"><td style="padding:4px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center">채취량(g)</td>';
+    for (var n = 1; n <= nCount; n++) {
+      var wf = weightFields[n];
+      if (wf) {
+        var fid = 'idf-' + wf.id + '-' + idx;
+        var val = raw[wf.id] || '';
+        h += '<td colspan="2" style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="' + fid + '" value="' + val + '" placeholder="g" style="width:70px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" oninput="calcItemResult(' + idx + ')"></td>';
+      } else {
+        h += '<td colspan="2" style="padding:2px;border:0.5px solid #e5e7eb;text-align:center">-</td>';
+      }
+    }
+    h += '</tr></tbody></table></div>';
+
+  } else {
+    // ── 이화학 등 일반 양식: 기존 그리드 렌더링 ──
+    sections.forEach(function(sec) {
+      var isStdSection = (sec.title === '표준물질정보' || sec.title === '표준용액농도');
+      if (sec.title) {
+        h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px;display:flex;justify-content:space-between;align-items:center">';
+        h += '<span>' + sec.title + '</span>';
+        if (isStdSection) {
+          h += '<button type="button" style="font-size:10px;padding:2px 8px;border:1px solid #f59e0b;background:#fffbeb;color:#b45309;border-radius:4px;cursor:pointer" onclick="openStdChangeModal(' + idx + ')">값 변경</button>';
+        }
+        h += '</div>';
+      }
+      h += '<div class="idf-grid">';
+      var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
+      (sec.fields || []).forEach(function(f) {
+        var fid = 'idf-' + f.id + '-' + idx;
+        var val = raw[f.id] || autoVals[f.id] || '';
+        var fieldLabel = f.id === 'expiryDate' ? '소비기한' : f.label;
+        var lbl = fieldLabel + (f.unit ? ' (' + f.unit + ')' : '');
+        var isStdField = stdFieldIds.indexOf(f.id) >= 0;
+        if (f.type === 'readonly' || isStdField) {
+          var displayVal = val || f.exampleValue || '';
+          h += '<div class="idf-field"><label>' + lbl + '</label><input type="text" id="' + fid + '" value="' + displayVal + '" readonly style="background:#f0fdf4;color:#166534;font-weight:500"></div>';
+        } else if (f.type === 'textarea') {
+          h += '<div class="idf-field" style="grid-column:1/-1"><label>' + lbl + '</label><textarea id="' + fid + '" rows="2" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" oninput="calcItemResult(' + idx + ')">' + val + '</textarea></div>';
+        } else {
+          var typeAttr = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+          var stepAttr = f.type === 'number' ? ' step="any"' : '';
+          h += '<div class="idf-field"><label>' + lbl + (f.required ? ' <span style="color:#ef4444">*</span>' : '') + '</label>';
+          h += '<input type="' + typeAttr + '" id="' + fid + '" value="' + val + '" placeholder="' + (f.placeholder || f.exampleValue || '') + '"' + stepAttr + ' oninput="calcItemResult(' + idx + ')"></div>';
+        }
+      });
+      h += '</div>';
+    });
+  }
 
   // 계산식 표시
   if (calculations.length > 0) {

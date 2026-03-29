@@ -63,6 +63,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .sub-card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .sub-card-title{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
 .sub-card-num{background:#e3f2fd;color:#1565c0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.inhouse-rep-badge{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#e3f2fd,#bbdefb);color:#0d47a1;font-size:13px;padding:5px 14px;border-radius:14px;font-weight:700;white-space:nowrap;letter-spacing:0.3px;border:1px solid #90caf9;box-shadow:0 1px 3px rgba(21,101,192,0.12)}
 .btn-add{display:flex;align-items:center;gap:6px;padding:10px;border:2px dashed #c8d6e5;border-radius:10px;background:transparent;color:#5f6b7a;font-size:12px;font-weight:600;cursor:pointer;width:100%;justify-content:center}
 .btn-add:hover{border-color:#1a73e8;color:#1a73e8;background:#f0f7ff}
 .combo{display:flex;gap:6px}.combo select,.combo input{flex:1}
@@ -598,6 +599,56 @@ var _detContactCardCount = 0;
 var _detLicCardFiles = {};
 var _detailEditMode = false;
 var _detailSnapshot = null;
+
+// 자사 담당자 드롭다운용 데이터
+var SALES_TEAMS = ['고객지원팀', '마케팅사업부', '고객관리', '지사', '마케팅팀'];
+var _salesUsersList = [];
+(function loadSalesUsersForMgmt() {
+  var fallback = [
+    {"부서명":"고객지원팀","아이디":"허현미","접수자":"허현미"},
+    {"부서명":"고객지원팀","아이디":"이은경","접수자":"이은경"},
+    {"부서명":"고객지원팀","아이디":"김수정","접수자":"김수정"},
+    {"부서명":"고객지원팀","아이디":"박신영","접수자":"박신영"},
+    {"부서명":"고객지원팀","아이디":"류하늘","접수자":"류하늘"},
+    {"부서명":"고객지원팀","아이디":"이진희","접수자":"이진희"},
+    {"부서명":"고객관리","아이디":"김희성","접수자":"김희성"},
+    {"부서명":"고객관리","아이디":"조봉현","접수자":"조봉현"},
+    {"부서명":"고객관리","아이디":"엄상흠","접수자":"엄상흠"},
+    {"부서명":"고객관리","아이디":"오세중","접수자":"오세중"},
+    {"부서명":"고객관리","아이디":"장동주","접수자":"장동주"},
+    {"부서명":"고객관리","아이디":"오석현","접수자":"오석현"},
+    {"부서명":"마케팅사업부","아이디":"조현정","접수자":"조현정"},
+    {"부서명":"마케팅사업부","아이디":"이슬기","접수자":"이슬기"},
+    {"부서명":"마케팅팀","아이디":"김도희","접수자":"김도희"},
+    {"부서명":"마케팅팀","아이디":"송성현","접수자":"송성현"}
+  ];
+  _salesUsersList = fallback;
+  window.addEventListener('firebase-ready', async function() {
+    try {
+      var fsUsers = await fsGetUsers();
+      if (fsUsers && fsUsers.length > 0) {
+        var all = fsUsers.map(function(u) {
+          return { 부서명: u.department || u.부서명 || '', 아이디: u.name || u.아이디 || '', 접수자: u.receiver || u.접수자 || '' };
+        });
+        _salesUsersList = all.filter(function(u) { return SALES_TEAMS.indexOf(u.부서명) !== -1; });
+      }
+    } catch(e) { console.warn('[companyMgmt] 사용자 로드 실패, 기본값 사용'); }
+  });
+})();
+function _buildSalesRepSelect(id, currentValue) {
+  var html = '<select id="' + id + '" style="border:1px solid #90caf9;background:#f0f7ff;color:#1565c0;font-size:12px;font-weight:600;padding:3px 8px;border-radius:8px;outline:none;cursor:pointer">';
+  html += '<option value="">담당자 선택</option>';
+  var seen = {};
+  _salesUsersList.forEach(function(u) {
+    var name = (u.접수자 || u.아이디 || '').trim();
+    if (!name || seen[name]) return;
+    seen[name] = true;
+    var sel = (name === currentValue) ? ' selected' : '';
+    html += '<option value="' + escHtml(name) + '"' + sel + '>' + escHtml(name) + ' (' + escHtml(u.부서명) + ')</option>';
+  });
+  html += '</select>';
+  return html;
+}
 var _licMatchContactNum = null;
 var _custSearchQuery = '';
 
@@ -880,10 +931,15 @@ async function loadList() {
     var tdHtml = '<td class="center" onclick="event.stopPropagation()"><input type="checkbox" class="row-check" value="' + (c.id||'') + '" onchange="updateBulkDeleteBtn()"></td>';
     visCols.forEach(function(col) { tdHtml += col.render(c); });
     tr.innerHTML = tdHtml;
-    // 클릭 시 상세 보기
+    // 클릭 시 펼침 행 토글 + 상세 보기
     if (c.id) {
       tr.setAttribute('data-cust-id', c.id);
-      tr.onclick = (function(custId) { return function(e) { if (e.target.type === 'checkbox') return; openDetail(custId); }; })(c.id);
+      tr.onclick = (function(cust) { return function(e) {
+        if (e.target.type === 'checkbox') return;
+        _toggleExpandRow(cust, this);
+      }; })(c);
+      // 더블클릭 시 상세 패널 열기
+      tr.ondblclick = (function(custId) { return function(e) { if (e.target.type === 'checkbox') return; openDetail(custId); }; })(c.id);
     }
     tbody.appendChild(tr);
   });
@@ -900,6 +956,86 @@ async function loadList() {
 
   // ── 드래그 핸들러 초기화 ──
   initColumnDrag();
+}
+
+// ── 행 아래 펼침 (사업자/인허가/세금계산서 정보) ──
+var _expandedRowId = null;
+function _toggleExpandRow(c, trEl) {
+  var existing = document.getElementById('expand-row-' + c.id);
+  // 이미 열려있으면 닫기
+  if (existing) { existing.remove(); _expandedRowId = null; return; }
+  // 다른 펼침 닫기
+  var prev = document.querySelector('[id^="expand-row-"]');
+  if (prev) prev.remove();
+  _expandedRowId = c.id;
+
+  var colSpan = trEl.querySelectorAll('td').length;
+  var expandTr = document.createElement('tr');
+  expandTr.id = 'expand-row-' + c.id;
+  expandTr.style.cssText = 'background:#f8fafc;animation:fadeIn 0.2s ease';
+
+  var html = '<td colspan="' + colSpan + '" style="padding:12px 16px">';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">';
+
+  // 1) 사업자정보
+  html += '<div style="background:#fff;border:1px solid #e8ecf1;border-radius:8px;padding:12px">';
+  html += '<div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:8px;border-bottom:1px solid #e8ecf1;padding-bottom:4px">사업자 정보</div>';
+  html += _exRow('사업자번호', c.bizNo);
+  html += _exRow('대표자', c.repName);
+  html += _exRow('업종', c.bizType);
+  html += _exRow('업태', c.bizItem);
+  html += _exRow('법인번호', c.corpNo);
+  var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
+  html += _exRow('주소', addr);
+  html += '</div>';
+
+  // 2) 인허가정보
+  var lics = c.licenses && c.licenses.length > 0 ? c.licenses : [];
+  html += '<div style="background:#fff;border:1px solid #e8ecf1;border-radius:8px;padding:12px">';
+  html += '<div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:8px;border-bottom:1px solid #e8ecf1;padding-bottom:4px">인허가 정보 (' + (lics.length || 0) + '건)</div>';
+  if (lics.length === 0) {
+    html += '<div style="color:#999;font-size:12px">등록된 인허가 없음</div>';
+  } else {
+    lics.forEach(function(l, i) {
+      if (i > 0) html += '<div style="border-top:1px dashed #e8ecf1;margin:6px 0"></div>';
+      html += _exRow('분야', l.licField);
+      html += _exRow('영업형태', l.licBizForm);
+      html += _exRow('인허가번호', l.licNo);
+      html += _exRow('영업소명칭', l.licBizName);
+      html += _exRow('자사 담당', l.licSalesRep);
+    });
+  }
+  html += '</div>';
+
+  // 3) 담당자 + 세금계산서
+  var contacts = c.contacts && c.contacts.length > 0 ? c.contacts : [];
+  html += '<div style="background:#fff;border:1px solid #e8ecf1;border-radius:8px;padding:12px">';
+  html += '<div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:8px;border-bottom:1px solid #e8ecf1;padding-bottom:4px">담당자 (' + contacts.length + '명) / 세금계산서</div>';
+  if (contacts.length > 0) {
+    contacts.forEach(function(ct, i) {
+      if (i > 0) html += '<div style="border-top:1px dashed #e8ecf1;margin:6px 0"></div>';
+      html += _exRow('담당자 ' + (i+1), (ct.name || '-') + (ct.role ? ' (' + ct.role + ')' : ''));
+      html += _exRow('전화/휴대폰', (ct.phone || '') + (ct.mobile ? ' / ' + ct.mobile : ''));
+      html += _exRow('이메일', ct.email);
+      html += _exRow('자사 담당', ct.salesRep);
+    });
+  }
+  if (c.taxName || c.taxEmail || c.taxPhone) {
+    html += '<div style="border-top:1px solid #e8ecf1;margin:8px 0;padding-top:6px;font-size:11px;font-weight:600;color:#6d4c41">세금계산서</div>';
+    html += _exRow('담당자', c.taxName);
+    html += _exRow('전화', c.taxPhone);
+    html += _exRow('이메일', c.taxEmail);
+  }
+  html += '</div>';
+
+  html += '</div>';
+  html += '<div style="text-align:right;margin-top:8px"><button onclick="openDetail(\'' + c.id + '\')" style="background:#1a73e8;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer">상세 보기</button></div>';
+  html += '</td>';
+  expandTr.innerHTML = html;
+  trEl.after(expandTr);
+}
+function _exRow(label, val) {
+  return '<div style="display:flex;gap:8px;font-size:12px;line-height:1.6"><span style="color:#8892a4;min-width:70px;flex-shrink:0">' + label + '</span><span style="color:#1a1a2e;font-weight:500">' + (val || '-') + '</span></div>';
 }
 
 function filterCustomerTable(val) {
@@ -1434,7 +1570,7 @@ function renderDetailLicenses(cust) {
       // 인허가 담당자 필드
       '<div style="margin-top:8px;padding:8px 10px;background:#f1f8e9;border-radius:6px;border:1px solid #c5e1a5">' +
         '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:#33691e;margin-bottom:6px">👤 인허가 담당자' +
-        '<span id="detLicSalesRepLabel_' + num + '" style="background:#e3f2fd;color:#1565c0;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:auto">🏢 자사: ' + escHtml(lic.licSalesRep || '-') + '</span>' +
+        '<span id="detLicSalesRepLabel_' + num + '" class="inhouse-rep-badge" style="margin-left:auto">자사: ' + escHtml(lic.licSalesRep || '-') + '</span>' +
         '<input type="hidden" id="detLicSalesRep_' + num + '" value="' + escHtml(lic.licSalesRep || '') + '">' +
       '</div>' +
         '<div class="fg-row" style="gap:8px">' +
@@ -1492,7 +1628,7 @@ function renderDetailContacts(cust) {
     card.innerHTML =
       '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 고객사 담당자</div>' +
         '<div style="display:flex;gap:4px;margin-left:auto;align-items:center">' +
-          '<span style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600">🏢 자사: <span id="detContactSalesRepLabel_' + num + '">' + salesRepDisplay + '</span></span>' +
+          '<span class="inhouse-rep-badge">자사: <span id="detContactSalesRepLabel_' + num + '">' + salesRepDisplay + '</span></span>' +
           '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="display:none;font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
           '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="display:none;font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
         '</div>' +
@@ -1572,7 +1708,7 @@ function addDetailLicenseCard() {
     // 인허가 담당자
     '<div style="margin-top:8px;padding:8px 10px;background:#f1f8e9;border-radius:6px;border:1px solid #c5e1a5">' +
       '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:#33691e;margin-bottom:6px">👤 인허가 담당자' +
-        '<span id="detLicSalesRepLabel_' + num + '" style="background:#e3f2fd;color:#1565c0;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:auto">🏢 자사: -</span>' +
+        '<span id="detLicSalesRepLabel_' + num + '" class="inhouse-rep-badge" style="margin-left:auto">자사: -</span>' +
         '<input type="hidden" id="detLicSalesRep_' + num + '" value="">' +
       '</div>' +
       '<div class="fg-row" style="gap:8px">' +
@@ -1611,7 +1747,7 @@ function addDetailContactCard() {
   card.innerHTML =
     '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 고객사 담당자</div>' +
       '<div style="display:flex;gap:4px;margin-left:auto;align-items:center">' +
-        '<span style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600">🏢 자사: <input id="detContactSalesRep_' + num + '" placeholder="자사 담당" style="border:none;background:transparent;color:#1565c0;font-size:11px;font-weight:600;width:70px;outline:none" class="det-contact-field"></span>' +
+        '<span class="inhouse-rep-badge">자사: ' + _buildSalesRepSelect('detContactSalesRep_' + num, '') + '</span>' +
         '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
         '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
       '</div>' +
@@ -1775,7 +1911,7 @@ function updateLicContactDisplay() {
       if (phoneField) phoneField.value = phones;
       if (salesRepField) salesRepField.value = uniqueReps;
       var repLabel = document.getElementById('detLicSalesRepLabel_' + li);
-      if (repLabel) repLabel.innerHTML = '🏢 자사: ' + escHtml(uniqueReps || '-');
+      if (repLabel) repLabel.innerHTML = '자사: ' + escHtml(uniqueReps || '-');
     }
   }
 }
@@ -1836,7 +1972,9 @@ function toggleDetailEdit() {
     _detailSnapshot._salesRepSnapshot.push(srEl ? srEl.value : '');
     var srLabel = document.getElementById('detContactSalesRepLabel_' + ci);
     if (srLabel && srEl) {
-      srLabel.innerHTML = '<input id="detContactSalesRepEdit_' + ci + '" value="' + escHtml(srEl.value) + '" style="border:none;background:transparent;color:#1565c0;font-size:11px;font-weight:600;width:70px;outline:none;border-bottom:1px dashed #1565c0" class="det-contact-field" onchange="document.getElementById(\'detContactSalesRep_' + ci + '\').value=this.value">';
+      srLabel.innerHTML = _buildSalesRepSelect('detContactSalesRepEdit_' + ci, srEl.value);
+      var selEl = document.getElementById('detContactSalesRepEdit_' + ci);
+      if (selEl) selEl.onchange = function() { srEl.value = this.value; };
     }
   }
   // 버튼 전환

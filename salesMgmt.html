@@ -114,6 +114,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .sub-card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .sub-card-title{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
 .sub-card-num{background:#e3f2fd;color:#1565c0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.inhouse-rep-badge{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#e3f2fd,#bbdefb);color:#0d47a1;font-size:13px;padding:5px 14px;border-radius:14px;font-weight:700;white-space:nowrap;letter-spacing:0.3px;border:1px solid #90caf9;box-shadow:0 1px 3px rgba(21,101,192,0.12)}
 .btn-remove{background:none;border:none;color:#e53935;font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px}
 .btn-remove:hover{background:#fce4ec}
 .btn-add{display:flex;align-items:center;gap:6px;padding:10px;border:2px dashed #c8d6e5;border-radius:10px;background:transparent;color:#5f6b7a;font-size:12px;font-weight:600;cursor:pointer;width:100%;justify-content:center}
@@ -242,10 +243,11 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .mt-has{background:#e3f2fd;color:#1565c0}
 .mt-active{background:#1a73e8;color:#fff}
 /* ── 목록 행 ── */
-.diary-row{display:grid;grid-template-columns:110px 1fr 140px 40px;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #eef0f4;cursor:pointer;transition:background .1s}
+.diary-row{display:grid;grid-template-columns:28px 110px 1fr 130px 24px;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #eef0f4;cursor:pointer;transition:background .1s}
 .diary-row:hover{background:#fafbfc}
 .diary-row:last-child{border-bottom:none}
-.chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.chips{display:flex;flex-wrap:nowrap;gap:4px;align-items:center;overflow:hidden}
+.chips-meta{font-size:10px;color:#8892a4;margin-top:3px;white-space:nowrap}
 .chip{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
 .chip-exist{background:#e3f2fd;color:#1565c0}
 .chip-new{background:#e8f5e9;color:#2e7d32}
@@ -881,17 +883,23 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
         <h2 style="font-size:17px;font-weight:700;color:#1a2332">업무일지</h2>
         <span id="diaryYearLabel" style="font-size:13px;color:#8892a4"></span>
-        <div style="margin-left:auto;display:flex;gap:6px">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <select id="diaryMyNameSel" onchange="onDiaryMyNameChange()" style="font-size:12px;padding:4px 8px;border:1px solid #c8d6e5;border-radius:7px;color:#334155;background:#f5f7fa;outline:none">
+            <option value="">내 이름 선택</option>
+          </select>
           <button class="btn btn-secondary btn-sm" onclick="diaryChangeYear(-1)">&lt;</button>
           <button class="btn btn-secondary btn-sm" onclick="diaryChangeYear(1)">&gt;</button>
         </div>
       </div>
+      <div id="centerSummaryBlock" style="margin-bottom:14px"></div>
       <div id="diaryMonthTabs" style="display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap"></div>
       <div class="card">
         <div class="card-hd">
           <h3 id="diaryListTitle">업무일지</h3>
           <div class="right">
             <span id="diaryListCount" style="font-size:11px;color:#8892a4"></span>
+            <button id="diaryDeleteBtn" class="btn btn-sm" onclick="deleteSelectedDiaries()" style="display:none;background:#fce4ec;color:#c62828;border:1px solid #ef9a9a;font-size:11px">선택 삭제</button>
+            <input type="date" id="diaryDatePicker" style="font-size:12px;padding:4px 8px;border:1px solid #c8d6e5;border-radius:7px;color:#334155;background:#f5f7fa;outline:none" onchange="openDiaryByDate(this.value)">
             <button class="btn btn-primary btn-sm" onclick="openDiaryToday()">+ 오늘 일지 작성</button>
           </div>
         </div>
@@ -992,7 +1000,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
       </div>
 
       <div class="sec-title"><span class="sec-num">4</span> 신규영업 활동</div>
-      <textarea id="diaryNewSales" class="bottom-input" style="margin-bottom:16px" placeholder="신규 영업 활동 내용&#10;예: 하림그룹 식품안전팀 미팅 &mdash; 제안서 전달"></textarea>
+      <div id="newSalesPlanSection" style="margin-bottom:8px"></div>
+      <textarea id="diaryNewSales" class="bottom-input" style="margin-bottom:16px" placeholder="기타 신규 영업 활동 메모&#10;예: 하림그룹 식품안전팀 미팅 &mdash; 제안서 전달"></textarea>
 
       <div class="sec-title"><span class="sec-num">5</span> 비고</div>
       <textarea id="diaryRemark" class="bottom-input" style="min-height:44px;margin-bottom:16px" placeholder="기타 전달사항"></textarea>
@@ -1012,69 +1021,57 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <div id="tmrExistingList"></div>
         <div id="tmrExistingEmpty" class="tmr-empty">추가된 업체가 없습니다.</div>
         <div id="tmrExistingSummary" class="tmr-summary" style="display:none"></div>
+        <div style="text-align:right;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveDiary('draft',true);showToast('임시저장 완료','info')">임시저장</button></div>
       </div>
 
       <div id="tmr-new" class="tmr-panel" style="display:none">
-        <!-- 공통: 업종 선택 + 조회 -->
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;padding:8px 12px;background:#f0f4f8;border-radius:8px">
-          <span style="font-size:11px;font-weight:600;color:#5f6b7a">인허가 분야</span>
-          <select id="tmrNewBizFilter" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;background:#fff;min-width:160px">
-            <option value="">전체 업종</option>
-            <option value="식품제조가공업">식품제조가공업</option>
-            <option value="즉석판매제조가공업">즉석판매제조가공업</option>
-            <option value="건강기능식품제조업">건강기능식품제조업</option>
-            <option value="건강기능식품유통전문판매업">건강기능식품유통전문판매업</option>
-            <option value="축산물가공업">축산물가공업</option>
-            <option value="식육포장처리업">식육포장처리업</option>
-            <option value="식품소분업">식품소분업</option>
-            <option value="식품등수입판매업">식품등수입판매업</option>
-            <option value="식품첨가물제조업">식품첨가물제조업</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="loadTmrFssData()">조회</button>
-          <span id="tmrFssCount" style="font-size:11px;color:#8892a4"></span>
+        <!-- I. 검색조건 UI -->
+        <div style="background:#f0f4f8;border-radius:10px;padding:10px 12px;margin-bottom:10px">
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr auto;gap:6px;align-items:center">
+            <select id="tmrNewBizFilter" style="padding:7px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;background:#fff">
+              <option value="">전체 업종</option>
+              <option value="식품제조가공업">식품제조가공업</option>
+              <option value="즉석판매제조가공업">즉석판매제조가공업</option>
+              <option value="건강기능식품제조업">건강기능식품제조업</option>
+              <option value="건강기능식품유통전문판매업">건강기능식품유통전문판매업</option>
+              <option value="축산물가공업">축산물가공업</option>
+              <option value="식육포장처리업">식육포장처리업</option>
+              <option value="식품소분업">식품소분업</option>
+              <option value="식품등수입판매업">식품등수입판매업</option>
+              <option value="식품첨가물제조업">식품첨가물제조업</option>
+            </select>
+            <select id="tmrSidoFilter" onchange="onSidoFilterChange()" style="padding:7px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;background:#fff">
+              <option value="">시/도 전체</option>
+            </select>
+            <select id="tmrSgFilter" onchange="onSgFilterChange()" style="padding:7px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;background:#fff">
+              <option value="">시/군/구 전체</option>
+            </select>
+            <select id="tmrDongFilter" onchange="onDongFilterChange()" style="padding:7px 8px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;background:#fff">
+              <option value="">읍/면/동 전체</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="loadTmrFssData()">조회</button>
+          </div>
+          <div style="margin-top:6px"><span id="tmrFssCount" style="font-size:11px;color:#8892a4"></span></div>
         </div>
-        <!-- 모드 전환 (3탭) -->
+        <!-- II. 데이터 로드 -->
         <div style="display:flex;gap:0;margin-bottom:12px;border:1px solid #e2e6ed;border-radius:8px;overflow:hidden">
-          <button id="modeBtn-search" onclick="switchNewMode('search')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;transition:all .15s;font-family:inherit">업체명 검색</button>
-          <button id="modeBtn-area" onclick="switchNewMode('area')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#5f6b7a;transition:all .15s;font-family:inherit;border-left:1px solid #e2e6ed">지역 탐색</button>
-          <button id="modeBtn-newbiz" onclick="switchNewMode('newbiz')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#5f6b7a;transition:all .15s;font-family:inherit;border-left:1px solid #e2e6ed">신규업체 알림</button>
+          <button id="modeBtn-search" onclick="switchNewMode('search')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;transition:all .15s;font-family:inherit">전체보기</button>
+          <button id="modeBtn-newbiz" onclick="switchNewMode('newbiz')" style="flex:1;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#5f6b7a;transition:all .15s;font-family:inherit;border-left:1px solid #e2e6ed">신규업체 알림 <span id="newbizCountBadge" style="display:none;background:#e53935;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700">0</span></button>
         </div>
+        <!-- 전체보기 패널 -->
         <div id="mode-search">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <input id="tmrNewSearchInput" class="tmr-search-inp" type="text" placeholder="업체명 검색 (조회 후 입력)" oninput="searchFssLive(this.value)" autocomplete="off" style="flex:1">
-            <button class="btn btn-secondary btn-sm" onclick="clearTmrSearch()">지우기</button>
+            <input id="tmrNewSearchInput" class="tmr-search-inp" type="text" placeholder="업체명 검색..." oninput="renderAllFssResults()" autocomplete="off" style="flex:1">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tmrNewSearchInput').value='';renderAllFssResults()">지우기</button>
           </div>
+          <div id="tmrNewSearchCount" style="font-size:11px;color:#8892a4;margin-bottom:4px"></div>
           <div id="tmrNewSearchResult" class="tmr-search-result">
-            <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 버튼을 누른 후 업체명을 검색하세요.</div>
+            <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 버튼을 눌러주세요.</div>
           </div>
         </div>
-        <div id="mode-area" style="display:none">
-          <div id="areaBreadcrumb" style="display:flex;align-items:center;gap:4px;font-size:12px;margin-bottom:10px;flex-wrap:wrap">
-            <span style="color:#8892a4">전체 지역</span>
-          </div>
-          <div id="sidoPanel">
-            <div style="font-size:11px;font-weight:700;color:#5f6b7a;margin-bottom:8px">시/도 선택</div>
-            <div id="sidoGrid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px"></div>
-          </div>
-          <div id="sgPanel" style="display:none">
-            <div style="font-size:11px;font-weight:700;color:#5f6b7a;margin-bottom:8px">시/군/구 선택</div>
-            <div id="sgGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"></div>
-          </div>
-          <div id="dongPanel" style="display:none">
-            <div style="font-size:11px;font-weight:700;color:#5f6b7a;margin-bottom:8px">읍/면/동 선택</div>
-            <div id="dongGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"></div>
-          </div>
-          <div id="areaResultPanel" style="display:none">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span id="areaResultTitle" style="font-size:12px;font-weight:700;color:#1a2332"></span>
-              <span id="areaResultCount" style="font-size:11px;color:#8892a4"></span>
-            </div>
-            <div id="areaResultList" class="tmr-search-result"></div>
-          </div>
-        </div>
-        <!-- 신규업체 알림 -->
+        <!-- 신규업체 알림 패널 -->
         <div id="mode-newbiz" style="display:none">
-          <div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">선택한 인허가 분야의 최근 신규 등록 업체입니다. (식약처 수집기 자동 감지)</div>
+          <div id="newbizCondDesc" style="font-size:11px;color:#5f6b7a;margin-bottom:8px">인허가 분야 + 선택한 지역 조건의 최근 20일 이내 신규 인허가 업체입니다.</div>
           <div id="tmrNewBizResult" class="tmr-search-result" style="max-height:350px">
             <div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 후 확인하세요.</div>
           </div>
@@ -2616,7 +2613,7 @@ function renderDetailLicenses(cust) {
       // 인허가 담당자 필드 (매칭으로 자동 채워짐)
       '<div style="margin-top:8px;padding:8px 10px;background:#f1f8e9;border-radius:6px;border:1px solid #c5e1a5">' +
         '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:#33691e;margin-bottom:6px">👤 인허가 담당자' +
-        '<span id="detLicSalesRepLabel_' + num + '" style="background:#e3f2fd;color:#1565c0;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:auto">🏢 자사: ' + escHtml(lic.licSalesRep || '-') + '</span>' +
+        '<span id="detLicSalesRepLabel_' + num + '" class="inhouse-rep-badge" style="margin-left:auto">자사: ' + escHtml(lic.licSalesRep || '-') + '</span>' +
         '<input type="hidden" id="detLicSalesRep_' + num + '" value="' + escHtml(lic.licSalesRep || '') + '">' +
       '</div>' +
         '<div class="fg-row" style="gap:8px">' +
@@ -2764,7 +2761,7 @@ function renderDetailContacts(cust) {
     card.innerHTML =
       '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 고객사 담당자</div>' +
         '<div style="display:flex;gap:4px;margin-left:auto;align-items:center">' +
-          '<span style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600">🏢 자사: <span id="detContactSalesRepLabel_' + num + '">' + salesRepDisplay + '</span></span>' +
+          '<span class="inhouse-rep-badge">자사: <span id="detContactSalesRepLabel_' + num + '">' + salesRepDisplay + '</span></span>' +
           '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="display:none;font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
           '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="display:none;font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
         '</div>' +
@@ -2803,7 +2800,7 @@ function addDetailContactCard() {
   card.innerHTML =
     '<div class="sub-card-hd"><div class="sub-card-title"><span class="sub-card-num" style="background:#43a047">' + num + '</span> 고객사 담당자</div>' +
       '<div style="display:flex;gap:4px;margin-left:auto;align-items:center">' +
-        '<span style="background:#e3f2fd;color:#1565c0;font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600">🏢 자사: <input id="detContactSalesRep_' + num + '" placeholder="자사 담당" style="border:none;background:transparent;color:#1565c0;font-size:11px;font-weight:600;width:70px;outline:none" class="det-contact-field"></span>' +
+        '<span class="inhouse-rep-badge">자사: ' + _buildSalesRepSelect('detContactSalesRep_' + num, '') + '</span>' +
         '<button class="btn btn-secondary btn-sm detContactMatchBtn" onclick="openLicMatchModal(' + num + ')" style="font-size:11px;padding:3px 10px;color:#1565c0;border-color:#90caf9" title="인허가 매칭">🔗 매칭</button>' +
         '<button class="btn btn-secondary btn-sm detContactDelBtn" onclick="removeDetailContactCard(' + num + ')" style="font-size:11px;padding:3px 10px;color:#c62828;border-color:#ef9a9a">✕ 삭제</button>' +
       '</div>' +
@@ -2980,13 +2977,63 @@ function updateLicContactDisplay() {
       if (salesRepField) salesRepField.value = uniqueReps;
       // 자사 담당 라벨 업데이트
       var repLabel = document.getElementById('detLicSalesRepLabel_' + li);
-      if (repLabel) repLabel.innerHTML = '🏢 자사: ' + escHtml(uniqueReps || '-');
+      if (repLabel) repLabel.innerHTML = '자사: ' + escHtml(uniqueReps || '-');
     }
   }
 }
 
 var _detailEditMode = false;
 var _detailSnapshot = null; // 수정 전 스냅샷
+
+// 자사 담당자 드롭다운용 데이터
+var SALES_TEAMS_SM = ['고객지원팀', '마케팅사업부', '고객관리', '지사', '마케팅팀'];
+var _salesUsersList = [];
+(function loadSalesUsersForMgmt() {
+  var fallback = [
+    {"부서명":"고객지원팀","아이디":"허현미","접수자":"허현미"},
+    {"부서명":"고객지원팀","아이디":"이은경","접수자":"이은경"},
+    {"부서명":"고객지원팀","아이디":"김수정","접수자":"김수정"},
+    {"부서명":"고객지원팀","아이디":"박신영","접수자":"박신영"},
+    {"부서명":"고객지원팀","아이디":"류하늘","접수자":"류하늘"},
+    {"부서명":"고객지원팀","아이디":"이진희","접수자":"이진희"},
+    {"부서명":"고객관리","아이디":"김희성","접수자":"김희성"},
+    {"부서명":"고객관리","아이디":"조봉현","접수자":"조봉현"},
+    {"부서명":"고객관리","아이디":"엄상흠","접수자":"엄상흠"},
+    {"부서명":"고객관리","아이디":"오세중","접수자":"오세중"},
+    {"부서명":"고객관리","아이디":"장동주","접수자":"장동주"},
+    {"부서명":"고객관리","아이디":"오석현","접수자":"오석현"},
+    {"부서명":"마케팅사업부","아이디":"조현정","접수자":"조현정"},
+    {"부서명":"마케팅사업부","아이디":"이슬기","접수자":"이슬기"},
+    {"부서명":"마케팅팀","아이디":"김도희","접수자":"김도희"},
+    {"부서명":"마케팅팀","아이디":"송성현","접수자":"송성현"}
+  ];
+  _salesUsersList = fallback;
+  window.addEventListener('firebase-ready', async function() {
+    try {
+      var fsUsers = await fsGetUsers();
+      if (fsUsers && fsUsers.length > 0) {
+        var all = fsUsers.map(function(u) {
+          return { 부서명: u.department || u.부서명 || '', 아이디: u.name || u.아이디 || '', 접수자: u.receiver || u.접수자 || '' };
+        });
+        _salesUsersList = all.filter(function(u) { return SALES_TEAMS_SM.indexOf(u.부서명) !== -1; });
+      }
+    } catch(e) { console.warn('[salesMgmt] 사용자 로드 실패, 기본값 사용'); }
+  });
+})();
+function _buildSalesRepSelect(id, currentValue) {
+  var html = '<select id="' + id + '" style="border:1px solid #90caf9;background:#f0f7ff;color:#1565c0;font-size:12px;font-weight:600;padding:3px 8px;border-radius:8px;outline:none;cursor:pointer">';
+  html += '<option value="">담당자 선택</option>';
+  var seen = {};
+  _salesUsersList.forEach(function(u) {
+    var name = (u.접수자 || u.아이디 || '').trim();
+    if (!name || seen[name]) return;
+    seen[name] = true;
+    var sel = (name === currentValue) ? ' selected' : '';
+    html += '<option value="' + escHtml(name) + '"' + sel + '>' + escHtml(name) + ' (' + escHtml(u.부서명) + ')</option>';
+  });
+  html += '</select>';
+  return html;
+}
 
 // --- 상세 페이지: 수정 모드 전환 ---
 function toggleDetailEdit() {
@@ -3024,7 +3071,9 @@ function toggleDetailEdit() {
     // 자사 담당 라벨 → 편집 가능 input
     var srLabel = document.getElementById('detContactSalesRepLabel_' + ci);
     if (srLabel && srEl) {
-      srLabel.innerHTML = '<input id="detContactSalesRepEdit_' + ci + '" value="' + escHtml(srEl.value) + '" style="border:none;background:transparent;color:#1565c0;font-size:11px;font-weight:600;width:70px;outline:none;border-bottom:1px dashed #1565c0" class="det-contact-field" onchange="document.getElementById(\'detContactSalesRep_' + ci + '\').value=this.value">';
+      srLabel.innerHTML = _buildSalesRepSelect('detContactSalesRepEdit_' + ci, srEl.value);
+      var selEl = document.getElementById('detContactSalesRepEdit_' + ci);
+      if (selEl) selEl.onchange = function() { srEl.value = this.value; };
     }
   }
   // 버튼 전환
@@ -3343,7 +3392,7 @@ function addDetailLicenseCard() {
     // 인허가 담당자 필드
     '<div style="margin-top:8px;padding:8px 10px;background:#f1f8e9;border-radius:6px;border:1px solid #c5e1a5">' +
       '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:#33691e;margin-bottom:6px">👤 인허가 담당자' +
-        '<span id="detLicSalesRepLabel_' + num + '" style="background:#e3f2fd;color:#1565c0;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:auto">🏢 자사: -</span>' +
+        '<span id="detLicSalesRepLabel_' + num + '" class="inhouse-rep-badge" style="margin-left:auto">자사: -</span>' +
         '<input type="hidden" id="detLicSalesRep_' + num + '" value="">' +
       '</div>' +
       '<div class="fg-row" style="gap:8px">' +
@@ -4445,6 +4494,9 @@ var DIARY_PURPOSE_PALETTE = [
   {color:'#e0f2f1',textColor:'#00695c'}
 ];
 
+var _compareTestItems = []; // 비교견적용 시험항목 캐시
+var _compareRefItems = [];  // PA/PB/P 참고용 + 자가품질검사용 통합 목록
+
 // ── 초기화 ──
 async function initDiary() {
   if (_diaryInited) return;
@@ -4461,6 +4513,50 @@ async function initDiary() {
         if (!seen[n] && n) { seen[n] = true; _diaryPurposes.push(p); }
       });
     }
+    // 시험항목(수수료) 로드 — mfdsFeeMapping(자가품질검사용) + refFeeMapping(PA/PB/P 참고용) + pRefBundles(영양성분 묶음)
+    var [feeDoc, refDoc, bundleDoc] = await Promise.all([
+      db.collection('settings').doc('mfdsFeeMapping').get(),
+      db.collection('settings').doc('refFeeMapping').get(),
+      db.collection('settings').doc('pRefBundles').get()
+    ]);
+    if (feeDoc.exists) {
+      _compareTestItems = (feeDoc.data().items || []).filter(function(i) { return i.fee > 0; });
+    }
+    // 통합 비교견적 항목 빌드
+    var rawItems = [];
+    // 1) 자가품질검사용 (mfdsFeeMapping)
+    _compareTestItems.forEach(function(t) {
+      if (t.itemName) rawItems.push({ itemName: t.itemName, fee: t.fee || 0 });
+    });
+    // 2) PA/PB/P 참고용 (refFeeMapping)
+    if (refDoc.exists && refDoc.data().items) {
+      (refDoc.data().items).forEach(function(i) {
+        var code = (i.testItemCode || '').toUpperCase();
+        var isP = code.startsWith('PA') || code.startsWith('PB') || (code.charAt(0) === 'P' && !code.startsWith('PA') && !code.startsWith('PB'));
+        if (isP && i.itemName && i.fee > 0) rawItems.push({ itemName: i.itemName, fee: i.fee });
+      });
+    }
+    // 3) P2 영양성분 묶음 (pRefBundles, subcat '2')
+    if (bundleDoc.exists) {
+      var bd = bundleDoc.data();
+      var bNames = bd.names || {}, bFees = bd.fees || {};
+      Object.keys(bNames).forEach(function(nk) {
+        if (nk.split('_')[0] !== '2') return; // P2(영양성분)만
+        var bundles = bNames[nk] || {};
+        Object.keys(bundles).forEach(function(bNum) {
+          var fee = bFees[nk + '_' + bNum] || 0;
+          if (fee > 0 && bundles[bNum]) rawItems.push({ itemName: bundles[bNum], fee: fee });
+        });
+      });
+    }
+    // 중복 제거 (항목명+수수료 동일 시 하나만)
+    var _seen = {};
+    _compareRefItems = [];
+    rawItems.forEach(function(t) {
+      var key = t.itemName + '|' + t.fee;
+      if (!_seen[key]) { _seen[key] = true; _compareRefItems.push(t); }
+    });
+    _compareRefItems.sort(function(a, b) { return a.itemName.localeCompare(b.itemName); });
     // 업체 로드
     var cSnap = await db.collection('companies').get();
     _diaryCompanies = cSnap.docs.map(function(d) {
@@ -4509,6 +4605,7 @@ async function loadDiaryList() {
   if (!body) return;
   body.innerHTML = '<div style="padding:40px;text-align:center;color:#8892a4;font-size:13px">로딩 중...</div>';
   if (titleEl) titleEl.textContent = _diaryMonth + '월 업무일지';
+  loadCenterSummary();
 
   var mm = String(_diaryMonth).padStart(2,'0');
   var fromDate = _diaryYear + '-' + mm + '-01';
@@ -4551,15 +4648,31 @@ async function loadDiaryList() {
 
       // 업체 칩
       var companies = doc.companies || [];
+      var existCount = 0, newCount = 0;
       var chipHtml = '';
       companies.forEach(function(c) {
         var isNew = c.type === 'new';
+        if (isNew) newCount++; else existCount++;
         var cls = isNew ? 'chip chip-new' : 'chip chip-exist';
         var pfx = isNew ? '★ ' : '';
-        chipHtml += '<span class="' + cls + '">' + pfx + escHtml(c.companyName || '미지정') + '</span> ';
+        chipHtml += '<span class="' + cls + '">' + pfx + escHtml(c.companyName || '미지정') + '</span>';
       });
       if (isDraft) chipHtml += '<span class="draft-badge">임시저장</span>';
       if (isToday) chipHtml += '<span style="font-size:9px;background:#1a73e8;color:#fff;padding:1px 5px;border-radius:3px;margin-left:2px">오늘</span>';
+
+      // 건수 메타
+      var metaParts = [];
+      if (existCount > 0) metaParts.push('<span style="color:#1565c0">기존 ' + existCount + '개</span>');
+      if (newCount > 0) metaParts.push('<span style="color:#2e7d32">신규 ' + newCount + '개</span>');
+      var tmrExistCnt = (doc.tomorrowExisting || []).length;
+      var tmrNewCnt = (doc.tomorrowNew || []).length;
+      if (tmrExistCnt > 0 || tmrNewCnt > 0) {
+        var tmrParts = [];
+        if (tmrExistCnt > 0) tmrParts.push('기존 ' + tmrExistCnt + '개');
+        if (tmrNewCnt > 0) tmrParts.push('신규 ' + tmrNewCnt + '개');
+        metaParts.push('익일: ' + tmrParts.join(' · '));
+      }
+      var metaHtml = metaParts.length ? '<div class="chips-meta">' + metaParts.join(' &nbsp;·&nbsp; ') + '</div>' : '';
 
       // 매출 합계
       var total = 0;
@@ -4568,9 +4681,10 @@ async function loadDiaryList() {
       });
       var revHtml = total > 0 ? '<span style="font-weight:700;color:#1565c0">' + total.toLocaleString() + '원</span>' : '<span style="color:#c8d6e5">\u2014</span>';
 
-      html += '<div class="diary-row" onclick="openDiaryDetail(\'' + docId + '\')">';
+      html += '<div class="diary-row" data-doc-id="' + docId + '" onclick="openDiaryDetail(\'' + docId + '\')">';
+      html += '<div onclick="event.stopPropagation()" style="display:flex;align-items:center;padding-right:4px"><input type="checkbox" class="diary-chk" data-id="' + docId + '" onchange="onDiaryChkChange()" style="width:15px;height:15px;cursor:pointer"></div>';
       html += '<div><div style="font-weight:600;font-size:13px">' + dayLabel + '</div><div style="font-size:10px;color:#8892a4">' + dowLabel + '</div></div>';
-      html += '<div class="chips">' + chipHtml + '</div>';
+      html += '<div><div class="chips">' + chipHtml + '</div>' + metaHtml + '</div>';
       html += '<div style="text-align:right">' + revHtml + '</div>';
       html += '<div style="text-align:center;font-size:14px;color:#8892a4">\u203a</div>';
       html += '</div>';
@@ -4582,6 +4696,119 @@ async function loadDiaryList() {
   } catch(e) {
     console.error('업무일지 목록 로드 실패:', e);
     body.innerHTML = '<div style="padding:40px;text-align:center;color:#e53935;font-size:13px">로드 실패: ' + e.message + '</div>';
+  }
+}
+
+// ── 센터 요약 블록 ──
+async function loadCenterSummary() {
+  var block = document.getElementById('centerSummaryBlock');
+  if (!block) return;
+  try {
+    var mm = String(_diaryMonth).padStart(2,'0');
+    var fromDate = _diaryYear + '-' + mm + '-01';
+    var toDate = _diaryYear + '-' + mm + '-31';
+
+    var [usersSnap, diarySnap] = await Promise.all([
+      fsGetUsers(),
+      db.collection('salesDiaries').where('date','>=',fromDate).where('date','<=',toDate).get()
+    ]);
+
+    // 로그인 사용자의 부서를 동적으로 조회
+    var myName = getDiaryMyName();
+    if (!myName) { block.innerHTML = ''; return; }
+
+    var myDept = '';
+    (usersSnap || []).forEach(function(u) {
+      if ((u.name || '') === myName) myDept = u.department || u['부서명'] || '';
+    });
+    if (!myDept) { block.innerHTML = ''; return; }
+
+    // 같은 부서 사용자만 추출
+    var userTeamMap = {};
+    var validUsers = new Set();
+    (usersSnap || []).forEach(function(u) {
+      var nm = u.name || '';
+      var dept = u.department || u['부서명'] || '';
+      if (!nm || dept !== myDept) return;
+      userTeamMap[nm] = dept;
+      validUsers.add(nm);
+    });
+
+    if (validUsers.size === 0) { block.innerHTML = ''; return; }
+
+    // 개인별 매출 합산 + 최신 일자 (고객관리 소속만)
+    var personMap = {}; // name → { sales, latestDate }
+    diarySnap.docs.forEach(function(d) {
+      var data = d.data();
+      var author = data.authorName || '';
+      if (!author || !validUsers.has(author)) return;
+      if (!personMap[author]) personMap[author] = { sales: 0, latestDate: '' };
+      var total = 0;
+      (data.companies || []).forEach(function(c) {
+        if (c.purposeSales) Object.values(c.purposeSales).forEach(function(v) { total += (v.amount || 0); });
+      });
+      personMap[author].sales += total;
+      if (!personMap[author].latestDate || data.date > personMap[author].latestDate) {
+        personMap[author].latestDate = data.date || '';
+      }
+    });
+
+    // 팀 구성 (일지 없는 사람도 포함)
+    var members = [];
+    validUsers.forEach(function(nm) {
+      var p = personMap[nm] || { sales: 0, latestDate: '' };
+      members.push({ name: nm, sales: p.sales, latestDate: p.latestDate });
+    });
+    members.sort(function(a,b) { return a.name.localeCompare(b.name); });
+    var teamTotal = members.reduce(function(s,m) { return s + m.sales; }, 0);
+
+    var html = '<div style="background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:12px 16px;margin-bottom:8px">';
+    // 헤더: 팀명(동적) + 총매출
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<span style="font-size:13px;font-weight:700;color:#1a2332">' + escHtml(myDept) + '</span>';
+    html += '<span style="font-size:13px;font-weight:700;color:#1565c0">' + teamTotal.toLocaleString() + '원</span>';
+      html += '</div>';
+    // 인원별 행
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px">';
+    members.forEach(function(m) {
+      var dateLabel = m.latestDate ? m.latestDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3') : '-';
+      html += '<div style="background:#f5f7fa;border-radius:7px;padding:7px 10px;display:flex;flex-direction:column;gap:2px">';
+      html += '<span style="font-size:12px;font-weight:600;color:#334155">' + escHtml(m.name) + '</span>';
+      html += '<span style="font-size:12px;color:#1565c0;font-weight:700">' + (m.sales > 0 ? m.sales.toLocaleString() + '원' : '<span style="color:#c8d6e5">—</span>') + '</span>';
+      html += '<span style="font-size:10px;color:#8892a4">최신: ' + dateLabel + '</span>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+
+    block.innerHTML = html;
+  } catch(e) {
+    console.error('센터 요약 로드 실패:', e);
+    block.innerHTML = '';
+  }
+}
+
+function onDiaryChkChange() {
+  var checked = document.querySelectorAll('.diary-chk:checked');
+  var btn = document.getElementById('diaryDeleteBtn');
+  if (btn) btn.style.display = checked.length > 0 ? 'inline-block' : 'none';
+}
+
+async function deleteSelectedDiaries() {
+  var checked = document.querySelectorAll('.diary-chk:checked');
+  if (checked.length === 0) return;
+  if (!confirm(checked.length + '개 업무일지를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.')) return;
+  var ids = Array.from(checked).map(function(el) { return el.dataset.id; });
+  try {
+    var batch = db.batch();
+    ids.forEach(function(id) {
+      batch.delete(db.collection('salesDiaries').doc(id));
+    });
+    await batch.commit();
+    var btn = document.getElementById('diaryDeleteBtn');
+    if (btn) btn.style.display = 'none';
+    await loadDiaryList();
+  } catch(e) {
+    alert('삭제 실패: ' + e.message);
   }
 }
 
@@ -4610,6 +4837,15 @@ function getTodayStr() {
 function openDiaryToday() {
   var todayId = getTodayStr().replace(/-/g,'');
   openDiaryDetail(todayId);
+}
+
+function openDiaryByDate(dateStr) {
+  if (!dateStr) return;
+  var docId = dateStr.replace(/-/g,'');
+  openDiaryDetail(docId);
+  // 날짜 피커 초기화
+  var el = document.getElementById('diaryDatePicker');
+  if (el) el.value = '';
 }
 
 // ── 상세 페이지 ──
@@ -4678,6 +4914,113 @@ function renderDiaryDetailForm() {
   renderTmrNew();
 
   updateDiarySumBlock();
+
+  // 이전 영업일지 신규 영업 계획 로드
+  loadPrevNewSalesPlan();
+}
+
+// ── 이전 영업일지 신규 영업 계획 불러오기 ──
+async function loadPrevNewSalesPlan() {
+  var sec = document.getElementById('newSalesPlanSection');
+  if (!sec) return;
+  if (!_diaryDate) { sec.innerHTML = ''; return; }
+
+  // 현재 일지 이전 날짜 중 tomorrowNew 있는 가장 최근 일지 쿼리
+  var dateStr = _diaryDate.slice(0,4)+'-'+_diaryDate.slice(4,6)+'-'+_diaryDate.slice(6,8);
+  var prevDoc = null, prevId = '';
+  try {
+    var recentSnap = await db.collection('salesDiaries')
+      .where('date', '<', dateStr)
+      .orderBy('date', 'desc')
+      .limit(10)
+      .get();
+    for (var ri = 0; ri < recentSnap.docs.length; ri++) {
+      var rd = recentSnap.docs[ri].data();
+      if ((rd.tomorrowNew || []).length > 0) {
+        prevDoc = rd;
+        prevId = recentSnap.docs[ri].id;
+        break;
+      }
+    }
+  } catch(e) { console.warn('이전 일지 조회 실패:', e); }
+
+  var plan = prevDoc ? (prevDoc.tomorrowNew || []) : [];
+  if (plan.length === 0) {
+    sec.innerHTML = '<div style="font-size:11px;color:#b0bec5;padding:6px 0">이전 영업일 신규 계획 없음</div>';
+    return;
+  }
+
+  // 현재 일지에 저장된 결과 불러오기
+  var saved = (_diaryDoc && _diaryDoc.newSalesResults) ? _diaryDoc.newSalesResults : {};
+  var planDate = saved.planDate || '';
+  var savedResults = (planDate === prevId && saved.items) ? saved.items : [];
+
+  // 날짜 라벨
+  var pd = new Date(prevId.slice(0,4)+'-'+prevId.slice(4,6)+'-'+prevId.slice(6,8));
+  var pdLabel = (pd.getMonth()+1) + '월 ' + pd.getDate() + '일';
+
+  var PLAN_FIELDS = [
+    { key: 'met',      label: '누구를',  opts: ['만났어', '못 만났어'] },
+    { key: 'bizCard',  label: '명함',    opts: ['받았어', '못 받았어'] },
+    { key: 'interest', label: '호의적',  opts: ['관심 보였어', '안 보였어'] },
+    { key: 'quote',    label: '견적',    opts: ['달래', '필요없데'] },
+    { key: 'brochure', label: '소개서',  opts: ['줬어', '안 줬어'] }
+  ];
+
+  var html = '<div style="background:#f0f7ff;border:1px solid #bbdefb;border-radius:10px;padding:10px 12px;margin-bottom:8px">';
+  html += '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:10px">' + pdLabel + ' 신규 영업 계획 결과 입력</div>';
+  plan.forEach(function(t, i) {
+    var sv = (savedResults[i]) || {};
+    var isLast = (i === plan.length - 1);
+    html += '<div data-plan-idx="' + i + '" data-plan-date="' + prevId + '" data-plan-nm="' + escHtml(t.nm||'') + '" style="margin-bottom:' + (isLast?'0':'10') + 'px;padding-bottom:' + (isLast?'0':'10') + 'px;' + (isLast?'':'border-bottom:1px solid #dbeafe') + '">';
+    // 업체명
+    html += '<div style="font-weight:700;font-size:12px;color:#1a2332;margin-bottom:6px">' + escHtml(t.nm || '미지정');
+    var meta = [];
+    if (t.contactMethod) meta.push(escHtml(t.contactMethod));
+    if (t.memo) meta.push(escHtml(t.memo));
+    if (meta.length) html += ' <span style="font-size:10px;color:#5f6b7a;font-weight:400">· ' + meta.join(' · ') + '</span>';
+    html += '</div>';
+    // 토글 필드들
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">';
+    PLAN_FIELDS.forEach(function(f) {
+      var cur = sv[f.key] || '';
+      html += '<div style="display:flex;align-items:center;gap:3px;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:3px 6px">';
+      html += '<span style="font-size:10px;color:#5f6b7a;margin-right:2px">' + f.label + '</span>';
+      html += '<input type="hidden" data-plan-field="' + f.key + '" value="' + escHtml(cur) + '">';
+      f.opts.forEach(function(opt) {
+        var isOn = (cur === opt);
+        var btnStyle = isOn
+          ? 'background:#1565c0;color:#fff;border:none;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit'
+          : 'background:#f0f4f8;color:#5f6b7a;border:none;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit';
+        html += '<button type="button" style="' + btnStyle + '" onclick="togglePlanField(this,\'' + f.key + '\',\'' + opt.replace(/'/g,"\\'") + '\')">' + escHtml(opt) + '</button>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    // 메모
+    html += '<input type="text" data-plan-memo="1" value="' + escHtml(sv.memo||'') + '" placeholder="메모" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #c8d6e5;border-radius:6px;font-size:11px;font-family:inherit">';
+    html += '</div>';
+  });
+  html += '</div>';
+  sec.innerHTML = html;
+}
+function togglePlanField(btn, fieldKey, opt) {
+  var fieldGroup = btn.parentElement;
+  var hidden = fieldGroup.querySelector('input[data-plan-field="' + fieldKey + '"]');
+  var cur = hidden ? hidden.value : '';
+  // 같은 필드 버튼 전체 초기화
+  fieldGroup.querySelectorAll('button').forEach(function(b) {
+    b.style.background = '#f0f4f8';
+    b.style.color = '#5f6b7a';
+  });
+  if (cur === opt) {
+    // 같은 값 재클릭 → 선택 해제
+    if (hidden) hidden.value = '';
+  } else {
+    if (hidden) hidden.value = opt;
+    btn.style.background = '#1565c0';
+    btn.style.color = '#fff';
+  }
 }
 
 // ── 업체 카드 ──
@@ -4750,7 +5093,7 @@ function addDiaryCompanyCard(data) {
       '<button class="type-btn ' + (isNew?'type-btn-new-act':'type-btn-new') + '" onclick="setDiaryCardType(\'' + uid + '\',\'new\')">\uc2e0\uaddc \uc5c5\uccb4</button>' +
       (idx > 0 ? '<button class="btn-remove" onclick="removeDiaryCard(\'' + uid + '\')" style="margin-left:auto">\u2715</button>' : '<span style="margin-left:auto"></span>') +
     '</div>' +
-    '<div id="dc-intro-' + uid + '" style="' + (isNew?'':'display:none;') + 'padding:8px 14px;background:#f1f8e9;border:1px solid #c5e1a5;border-radius:8px;margin:8px 14px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+    '<div id="dc-intro-' + uid + '" style="display:flex;padding:8px 14px;background:#f1f8e9;border:1px solid #c5e1a5;border-radius:8px;margin:8px 14px 0;gap:6px;flex-wrap:wrap;align-items:center">' +
       '<span style="font-size:10px;color:#5f6b7a;margin-right:4px">\uc18c\uac1c\uacbd\ub85c:</span>' + introHtml +
     '</div>' +
     '<div style="padding:12px 14px">' +
@@ -4759,15 +5102,15 @@ function addDiaryCompanyCard(data) {
           '<label>\uc5c5\uccb4\uba85 <span class="req">*</span></label>' +
           '<div id="dc-comp-wrap-' + uid + '">' +
             (isNew ?
-              '<input id="dc-comp-' + uid + '" value="' + escHtml(d.companyName||'') + '" placeholder="\uc2e0\uaddc \uc5c5\uccb4\uba85 \uc785\ub825" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' :
-              '<select id="dc-comp-' + uid + '" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + compOpts + '</select>'
+              '<input id="dc-comp-' + uid + '" value="' + escHtml(d.companyName||'') + '" placeholder="신규 업체명 입력" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' :
+              '<input id="dc-comp-' + uid + '" list="dc-comp-dl-' + uid + '" value="' + escHtml(d.companyName||'') + '" placeholder="업체명 검색..." autocomplete="off" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%"><datalist id="dc-comp-dl-' + uid + '">' + _diaryCompanies.map(function(c){return '<option value="'+escHtml(c.name)+'">';}).join('') + '</datalist>'
             ) +
           '</div>' +
         '</div>' +
         '<div class="fg" style="margin:0"><label>\uc8fc\uc18c</label>' +
           '<input id="dc-addr-' + uid + '" value="' + escHtml(d.region||'') + '" placeholder="\uc790\ub3d9" readonly style="background:#f8f9fb;padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' +
         '</div>' +
-        '<div class="fg" style="margin:0"><label>\uc218\uac70\ubc29\ubc95</label>' +
+        '<div class="fg" style="margin:0"><label>접수 형태</label>' +
           '<select id="dc-method-' + uid + '" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + methodOpts + '</select>' +
         '</div>' +
       '</div>' +
@@ -4790,9 +5133,12 @@ function addDiaryCompanyCard(data) {
           ' 비교견적 입력' +
         '</label>' +
         '<div id="dc-compare-' + uid + '" style="' + (d.compareQuote?'':'display:none;') + 'margin-top:6px;border:1px solid #e2e6ed;border-radius:8px;padding:10px;background:#fafbfc">' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 28px;gap:6px;font-size:10px;font-weight:600;color:#5f6b7a;margin-bottom:4px"><span>항목</span><span style="text-align:right">경쟁사 (부가세포함)</span><span style="text-align:right">우리 (부가세포함)</span><span style="text-align:right;color:#e53935">차액</span><span></span></div>' +
+          '<div style="display:grid;grid-template-columns:1.2fr 1.2fr 1fr 1fr 0.5fr 1fr 0.45fr 1fr 24px;gap:6px;font-size:11px;font-weight:700;color:#334155;margin-bottom:6px;padding:6px 0;border-bottom:2px solid #e2e6ed"><span>검사목적</span><span>검사항목</span><span style="text-align:right">경쟁사(단가)</span><span style="text-align:right">BFL(정가)</span><span style="text-align:center">할인율</span><span style="text-align:right;color:#1565c0">할인 후 금액</span><span style="text-align:center;color:#5f6b7a">건수</span><span style="text-align:right;color:#e53935">차액(건수×)</span><span></span></div>' +
           '<div id="dc-compare-rows-' + uid + '">' + buildCompareRows(uid, d.compareItems||[]) + '</div>' +
-          '<button onclick="addCompareRow(\'' + uid + '\')" style="margin-top:4px;font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:3px 10px;cursor:pointer">+ 항목 추가</button>' +
+          '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
+            '<button onclick="addCompareRow(\'' + uid + '\')" style="font-size:10px;color:#1565c0;background:none;border:1px dashed #bbdefb;border-radius:4px;padding:4px 10px;cursor:pointer">+ 항목 추가</button>' +
+            '<select onchange="loadPurposeItems(\'' + uid + '\',this.value);this.selectedIndex=0" style="font-size:10px;padding:4px 8px;border:1px solid #c5e1a5;border-radius:4px;background:#f1f8e9;color:#2e7d32;cursor:pointer"><option value="">검사목적 항목 불러오기</option>' + _diaryPurposes.filter(function(p){return (p.n||'').indexOf('접수취소')===-1;}).map(function(p){return '<option value="'+escHtml(p.n)+'">'+escHtml(p.n)+' ('+(p.fee||0).toLocaleString()+'원)</option>';}).join('') + '</select>' +
+          '</div>' +
           '<div style="margin-top:8px"><label style="font-size:10px;color:#5f6b7a;display:block;margin-bottom:3px">제안사항</label>' +
           '<textarea id="dc-proposal-' + uid + '" placeholder="경쟁사 대비 가격 대응 방안, 할인 제안 등" style="width:100%;min-height:40px;padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;font-family:inherit;resize:vertical;box-sizing:border-box">' + escHtml(d.proposal||'') + '</textarea></div>' +
         '</div>' +
@@ -4816,10 +5162,86 @@ function onDiaryCompanyChange(uid) {
   addr.value = found ? found.addr : '';
 }
 
+// 신규 업체 선택 시 등록 여부 확인 팝업
+function _showNewCompanyConfirm(uid) {
+  var existing = document.getElementById('newCompanyConfirmOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'newCompanyConfirmOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:24px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)';
+  box.onclick = function(e) { e.stopPropagation(); };
+
+  box.innerHTML =
+    '<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:8px">신규 업체 등록</div>' +
+    '<div style="font-size:13px;color:#5f6b7a;margin-bottom:20px;line-height:1.6">해당 업체가 업체등록·수정에 등록되어 있나요?<br>미등록 시 임시저장 후 등록 페이지로 이동합니다.</div>';
+
+  // 등록됨 버튼
+  var btnYes = document.createElement('div');
+  btnYes.style.cssText = 'padding:12px;margin-bottom:8px;border:2px solid #e2e6ed;border-radius:10px;cursor:pointer;text-align:center;font-size:14px;font-weight:600;color:#1a1a2e;transition:all 0.15s';
+  btnYes.textContent = '등록되어 있음 — 계속 작성';
+  btnYes.onmouseover = function() { this.style.borderColor='#43a047'; this.style.background='#f1f8e9'; };
+  btnYes.onmouseout = function() { this.style.borderColor='#e2e6ed'; this.style.background='#fff'; };
+  btnYes.onclick = function() {
+    overlay.remove();
+    // 등록된 업체이므로 검색 입력으로 전환하되 라벨은 신규 업체 유지
+    var wrap = document.getElementById('dc-comp-wrap-' + uid);
+    if (wrap) _buildCompanySearchInput(wrap, uid);
+  };
+  box.appendChild(btnYes);
+
+  // 미등록 버튼
+  var btnNo = document.createElement('div');
+  btnNo.style.cssText = 'padding:12px;margin-bottom:8px;border:2px solid #e2e6ed;border-radius:10px;cursor:pointer;text-align:center;font-size:14px;font-weight:600;color:#e53935;transition:all 0.15s';
+  btnNo.textContent = '미등록 — 임시저장 후 등록 페이지로 이동';
+  btnNo.onmouseover = function() { this.style.borderColor='#e53935'; this.style.background='#fce4ec'; };
+  btnNo.onmouseout = function() { this.style.borderColor='#e2e6ed'; this.style.background='#fff'; };
+  btnNo.onclick = async function() {
+    btnNo.textContent = '저장 중...';
+    btnNo.style.pointerEvents = 'none';
+    try {
+      await saveDiary('draft', true);
+      // 저장 완료 확인 + 수정/이동 선택
+      box.innerHTML =
+        '<div style="text-align:center;padding:8px 0">' +
+          '<div style="font-size:40px;margin-bottom:8px">✅</div>' +
+          '<div style="font-size:15px;font-weight:700;color:#2e7d32;margin-bottom:4px">임시저장 완료</div>' +
+          '<div style="font-size:13px;color:#5f6b7a;margin-bottom:20px">업무일지가 임시저장 되었습니다.</div>' +
+          '<div style="display:flex;gap:8px">' +
+            '<button onclick="document.getElementById(\'newCompanyConfirmOverlay\').remove();" style="flex:1;padding:10px;border:2px solid #e2e6ed;border-radius:8px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">계속 수정</button>' +
+            '<button onclick="location.href=\'companyMgmt.html\';" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1a73e8;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">업체등록으로 이동</button>' +
+          '</div>' +
+        '</div>';
+    } catch(e) {
+      showToast('임시저장 실패: ' + e.message, 'error');
+      overlay.remove();
+    }
+  };
+  box.appendChild(btnNo);
+
+  // 취소 버튼
+  var btnCancel = document.createElement('div');
+  btnCancel.style.cssText = 'text-align:center;padding:8px;color:#8892a4;font-size:12px;cursor:pointer;margin-top:4px';
+  btnCancel.textContent = '취소';
+  btnCancel.onclick = function() { overlay.remove(); };
+  box.appendChild(btnCancel);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
 function setDiaryCardType(uid, type) {
   var card = document.getElementById('dc-' + uid);
   if (!card) return;
   var isNew = type === 'new';
+
+  // 신규 업체 선택 시 등록 여부 확인
+  if (isNew) {
+    _showNewCompanyConfirm(uid);
+  }
 
   if (isNew) card.classList.add('sub-card-new'); else card.classList.remove('sub-card-new');
 
@@ -4831,20 +5253,27 @@ function setDiaryCardType(uid, type) {
   if (num) num.className = isNew ? 'sub-card-num sub-card-num-new' : 'sub-card-num';
 
   var intro = document.getElementById('dc-intro-' + uid);
-  if (intro) intro.style.display = isNew ? 'flex' : 'none';
+  if (intro) intro.style.display = 'flex';
 
   var wrap = document.getElementById('dc-comp-wrap-' + uid);
   if (wrap) {
     if (isNew) {
-      wrap.innerHTML = '<input id="dc-comp-' + uid + '" placeholder="\uc2e0\uaddc \uc5c5\uccb4\uba85 \uc785\ub825" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">';
+      wrap.innerHTML = '<input id="dc-comp-' + uid + '" placeholder="신규 업체명 입력" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">';
       var addrEl = document.getElementById('dc-addr-' + uid);
       if (addrEl) addrEl.value = '';
     } else {
-      var opts = '<option value="">\uc5c5\uccb4 \uc120\ud0dd...</option>';
-      _diaryCompanies.forEach(function(c) { opts += '<option value="' + escHtml(c.name) + '">' + escHtml(c.name) + '</option>'; });
-      wrap.innerHTML = '<select id="dc-comp-' + uid + '" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + opts + '</select>';
+      _buildCompanySearchInput(wrap, uid);
     }
   }
+}
+// 기존 거래처 검색 input 생성
+function _buildCompanySearchInput(wrap, uid, selectedName) {
+  var dlId = 'dc-comp-dl-' + uid;
+  var html = '<input id="dc-comp-' + uid + '" list="' + dlId + '" value="' + escHtml(selectedName||'') + '" placeholder="업체명 검색..." autocomplete="off" onchange="onDiaryCompanyChange(\'' + uid + '\')" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">';
+  html += '<datalist id="' + dlId + '">';
+  _diaryCompanies.forEach(function(c) { html += '<option value="' + escHtml(c.name) + '">'; });
+  html += '</datalist>';
+  wrap.innerHTML = html;
 }
 
 function selectDiaryIntro(uid, path) {
@@ -4904,25 +5333,173 @@ function toggleCompareQuote(uid, show) {
   var el = document.getElementById('dc-compare-' + uid);
   if (el) el.style.display = show ? '' : 'none';
 }
+function _compareGridCols() { return '1.2fr 1.2fr 1fr 1fr 0.5fr 1fr 0.45fr 1fr 24px'; }
+function _buildPurposeDatalist() {
+  var html = '<datalist id="compare-purpose-list">';
+  _diaryPurposes.forEach(function(p) {
+    if ((p.n||'').indexOf('접수취소') === -1) html += '<option value="' + escHtml(p.n) + '">';
+  });
+  html += '</datalist>';
+  return html;
+}
+function _getPurposeFee(name) {
+  var p = _diaryPurposes.find(function(x) { return x.n === name; });
+  return p ? (p.fee || 0) : 0;
+}
 function buildCompareRows(uid, items) {
-  if (!items || items.length === 0) items = [{ item:'', competitor:0, ours:0 }];
-  return items.map(function(r, i) {
-    var diff = (r.ours||0) - (r.competitor||0);
-    var diffColor = diff < 0 ? '#2e7d32' : diff > 0 ? '#e53935' : '#8892a4';
+  if (!items || items.length === 0) items = [{ item:'', competitor:0, ours:0, discountRate:0 }];
+  var gc = _compareGridCols();
+  var html = _buildPurposeDatalist();
+  html += items.map(function(r, i) {
+    var ours = r.ours || 0;
+    var competitor = r.competitor || 0;
+    var discountRate = r.discountRate || 0;
+    var qty = r.qty || 1;
+    var discountAmt = Math.round(ours * discountRate / 100);
+    var discountedPrice = ours - discountAmt;
+    var diff = (competitor - discountedPrice) * qty;
+    var diffColor = diff > 0 ? '#e53935' : diff < 0 ? '#2e7d32' : '#8892a4';
     var diffText = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
-    return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 28px;gap:6px;margin-bottom:4px;align-items:center" data-compare-row>' +
-      '<input value="' + escHtml(r.item||'') + '" placeholder="항목명" data-cf="item" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
-      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (r.competitor ? Number(r.competitor).toLocaleString() : '') + '" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
-      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (r.ours ? Number(r.ours).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    return '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
+      '<input value="' + escHtml(r.item||'') + '" placeholder="검사목적 검색" data-cf="item" list="compare-purpose-list" oninput="onCompareItemSelect(this)" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+      _compareItemInputHtml(r.testItem||'') +
+      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (competitor ? Number(competitor).toLocaleString() : '') + '" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+      '<div style="display:flex;align-items:center;gap:3px"><input value="' + (ours ? Number(ours).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+      '<div style="display:flex;align-items:center;gap:2px"><input value="' + (discountRate || '') + '" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
+      '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">' + (discountedPrice ? discountedPrice.toLocaleString() : '-') + '</div>' +
+      '<input value="' + qty + '" placeholder="1" data-cf="qty" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="1" step="1">' +
       '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:' + diffColor + ';padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">' + diffText + '</div>' +
-      '<button onclick="this.closest(\'[data-compare-row]\').remove()" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
+      '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
     '</div>';
   }).join('');
+  // 총계 행
+  html += '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-top:2px;padding-top:6px;border-top:2px solid #334155;align-items:center;font-weight:700;font-size:12px" data-compare-total>' +
+    '<span style="text-align:right;color:#334155;grid-column:span 2">총계(건수 반영)</span>' +
+    '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span style="font-size:9px;font-weight:400;color:#8892a4">경쟁사 소계</span><div data-cf="total-competitor" style="color:#5f6b7a">-</div></div>' +
+    '<span></span>' +
+    '<span></span>' +
+    '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span style="font-size:9px;font-weight:400;color:#1565c0">BFL 소계</span><div data-cf="total-discount" style="color:#1565c0">-</div></div>' +
+    '<span></span>' +
+    '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span style="font-size:9px;font-weight:400;color:#334155">총계(BFL-경쟁사)</span><div data-cf="total-diff" style="color:#8892a4">-</div></div>' +
+    '<span></span></div>';
+  return html;
+}
+// 검사목적 항목 불러오기 — 해당 목적의 수수료를 행에 자동 추가
+function loadPurposeItems(uid, purposeName) {
+  if (!purposeName) return;
+  var p = _diaryPurposes.find(function(x) { return x.n === purposeName; });
+  if (!p) return;
+  var container = document.getElementById('dc-compare-rows-' + uid);
+  if (!container) return;
+  var gc = _compareGridCols();
+  var totalRow = container.querySelector('[data-compare-total]');
+  var fee = p.fee || 0;
+  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
+    '<input value="' + escHtml(purposeName) + '" data-cf="item" list="compare-purpose-list" oninput="onCompareItemSelect(this)" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+    _compareItemInputHtml('') +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="' + (fee ? Number(fee).toLocaleString() : '') + '" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
+    '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">' + (fee ? fee.toLocaleString() : '-') + '</div>' +
+    '<input value="1" placeholder="1" data-cf="qty" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="1" step="1">' +
+    '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:#8892a4;padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">-</div>' +
+    '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
+  '</div>';
+  if (totalRow) totalRow.insertAdjacentHTML('beforebegin', newRow);
+  else container.insertAdjacentHTML('beforeend', newRow);
+  // 총계 재계산
+  var lastRow = container.querySelector('[data-compare-row]:last-of-type [data-cf="ours"]');
+  if (lastRow) calcCompareRow(lastRow);
+  showToast(purposeName + ' 추가 (정가: ' + fee.toLocaleString() + '원)', 'info');
+}
+
+// ── 검사항목 커스텀 자동완성 ──
+function showCompareItemSuggestions(inp) {
+  var q = inp.value.trim().toLowerCase();
+  var wrap = inp.parentElement;
+  var dd = wrap ? wrap.querySelector('.cid-dd') : null;
+  if (!dd) return;
+  if (!q) { dd.style.display = 'none'; return; }
+  var matches = _compareRefItems.filter(function(t) {
+    return t.itemName.toLowerCase().indexOf(q) >= 0;
+  }).slice(0, 60);
+  if (matches.length === 0) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(function(t) {
+    return '<div class="cid-opt" onmousedown="selectCompareItem(this)" data-name="' + escHtml(t.itemName) + '" data-fee="' + t.fee + '" style="padding:6px 10px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #f4f5f7;white-space:nowrap">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis">' + escHtml(t.itemName) + '</span>' +
+      '<span style="color:#1565c0;font-weight:600;flex-shrink:0">' + (t.fee||0).toLocaleString() + '원</span>' +
+    '</div>';
+  }).join('');
+  dd.style.display = 'block';
+}
+function hideCompareItemSuggestions(inp) {
+  var wrap = inp.parentElement;
+  var dd = wrap ? wrap.querySelector('.cid-dd') : null;
+  setTimeout(function() { if (dd) dd.style.display = 'none'; }, 150);
+}
+function selectCompareItem(optEl) {
+  var name = optEl.dataset.name;
+  var fee = Number(optEl.dataset.fee) || 0;
+  var dd = optEl.closest('.cid-dd');
+  if (!dd) return;
+  dd.style.display = 'none';
+  var wrap = dd.parentElement;
+  var inp = wrap ? wrap.querySelector('input[data-cf="testItem"]') : null;
+  if (!inp) return;
+  inp.value = name;
+  var row = inp.closest('[data-compare-row]');
+  if (row && fee > 0) {
+    var oursEl = row.querySelector('[data-cf="ours"]');
+    if (oursEl) { oursEl.value = Number(fee).toLocaleString(); calcCompareRow(oursEl); }
+  }
+}
+function _compareItemInputHtml(val) {
+  val = val || '';
+  return '<div style="position:relative">' +
+    '<input value="' + escHtml(val) + '" placeholder="검사항목 검색" data-cf="testItem" autocomplete="off" oninput="showCompareItemSuggestions(this)" onblur="hideCompareItemSuggestions(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box">' +
+    '<div class="cid-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;max-height:220px;overflow-y:auto;background:#fff;border:1px solid #c8d6e5;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.13);margin-top:2px"></div>' +
+  '</div>';
+}
+// 검사항목 선택 시 수수료 자동 입력 (datalist 호환 — 현재 미사용)
+function onCompareTestItemSelect(inp) {
+  var name = inp.value;
+  var item = _compareRefItems.find(function(t) { return t.itemName === name; });
+  if (item && item.fee > 0) {
+    var row = inp.closest('[data-compare-row]');
+    if (!row) return;
+    var oursEl = row.querySelector('[data-cf="ours"]');
+    if (oursEl) { oursEl.value = Number(item.fee).toLocaleString(); calcCompareRow(oursEl); }
+  }
+}
+// 항목 선택 시 수수료 자동 입력
+function onCompareItemSelect(inp) {
+  var name = inp.value;
+  var fee = _getPurposeFee(name);
+  if (fee > 0) {
+    var row = inp.closest('[data-compare-row]');
+    if (!row) return;
+    var oursEl = row.querySelector('[data-cf="ours"]');
+    if (oursEl) { oursEl.value = Number(fee).toLocaleString(); calcCompareRow(oursEl); }
+  }
 }
 function addCompareRow(uid) {
   var container = document.getElementById('dc-compare-rows-' + uid);
   if (!container) return;
-  container.insertAdjacentHTML('beforeend', buildCompareRows(uid, [{ item:'', competitor:0, ours:0 }]));
+  var gc = _compareGridCols();
+  var totalRow = container.querySelector('[data-compare-total]');
+  var newRow = '<div style="display:grid;grid-template-columns:' + gc + ';gap:6px;margin-bottom:4px;align-items:start" data-compare-row>' +
+    '<input value="" placeholder="검사목적 검색" data-cf="item" list="compare-purpose-list" oninput="onCompareItemSelect(this)" onchange="onCompareItemSelect(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px">' +
+    _compareItemInputHtml('') +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="competitor" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:3px"><input value="" placeholder="0" data-cf="ours" oninput="fmtCompareInput(this);calcCompareRow(this)" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:right;flex:1"><span style="font-size:9px;color:#8892a4">원</span></div>' +
+    '<div style="display:flex;align-items:center;gap:2px"><input value="" placeholder="0" data-cf="discountRate" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="0" max="100" step="1"><span style="font-size:9px;color:#8892a4">%</span></div>' +
+    '<div data-cf="discountAmt" style="text-align:right;font-size:12px;font-weight:600;color:#1565c0;padding:6px 8px;border:1px solid #e3f2fd;border-radius:6px;background:#f0f7ff">-</div>' +
+    '<input value="1" placeholder="1" data-cf="qty" oninput="calcCompareRow(this)" style="padding:6px 4px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;text-align:center;width:100%" type="number" min="1" step="1">' +
+    '<div data-cf="diff" style="text-align:right;font-size:12px;font-weight:700;color:#8892a4;padding:6px 8px;border:1px solid #eef0f4;border-radius:6px;background:#f8f9fb">-</div>' +
+    '<button onclick="this.closest(\'[data-compare-row]\').remove();calcCompareTotal(this)" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0">✕</button>' +
+  '</div>';
+  if (totalRow) totalRow.insertAdjacentHTML('beforebegin', newRow);
+  else container.insertAdjacentHTML('beforeend', newRow);
 }
 function fmtCompareInput(inp) {
   var raw = inp.value.replace(/[^0-9]/g,'');
@@ -4934,11 +5511,50 @@ function calcCompareRow(inp) {
   if (!row) return;
   var comp = Number(row.querySelector('[data-cf="competitor"]').value.replace(/,/g,'')) || 0;
   var ours = Number(row.querySelector('[data-cf="ours"]').value.replace(/,/g,'')) || 0;
-  var diff = ours - comp;
+  var rateEl = row.querySelector('[data-cf="discountRate"]');
+  var rate = rateEl ? (Number(rateEl.value) || 0) : 0;
+  var qtyEl = row.querySelector('[data-cf="qty"]');
+  var qty = qtyEl ? (Number(qtyEl.value) || 1) : 1;
+  var discountAmt = Math.round(ours * rate / 100);
+  var discountedPrice = ours - discountAmt;
+  var diff = (comp - discountedPrice) * qty;
+
+  var discountAmtEl = row.querySelector('[data-cf="discountAmt"]');
+  if (discountAmtEl) discountAmtEl.textContent = discountedPrice ? discountedPrice.toLocaleString() : '-';
+
   var diffEl = row.querySelector('[data-cf="diff"]');
   if (diffEl) {
-    diffEl.style.color = diff < 0 ? '#2e7d32' : diff > 0 ? '#e53935' : '#8892a4';
+    diffEl.style.color = diff > 0 ? '#e53935' : diff < 0 ? '#2e7d32' : '#8892a4';
     diffEl.textContent = diff === 0 ? '-' : (diff > 0 ? '+' : '') + diff.toLocaleString();
+  }
+  calcCompareTotal(inp);
+}
+function calcCompareTotal(el) {
+  var container = el.closest('[id^="dc-compare-rows-"]') || el.closest('[id^="dc-compare-"]');
+  if (!container) return;
+  var rows = container.querySelectorAll('[data-compare-row]');
+  var totalComp = 0, totalDiscount = 0, totalDiff = 0;
+  rows.forEach(function(row) {
+    var c = Number((row.querySelector('[data-cf="competitor"]') || {value:''}).value.replace(/,/g,'')) || 0;
+    var o = Number((row.querySelector('[data-cf="ours"]') || {value:''}).value.replace(/,/g,'')) || 0;
+    var r = Number((row.querySelector('[data-cf="discountRate"]') || {value:''}).value) || 0;
+    var q = Number((row.querySelector('[data-cf="qty"]') || {value:'1'}).value) || 1;
+    var dAmt = Math.round(o * r / 100);
+    var discounted = o - dAmt;
+    totalComp += c * q;
+    totalDiscount += discounted * q;
+    totalDiff += (discounted - c) * q;
+  });
+  var total = container.querySelector('[data-compare-total]');
+  if (!total) return;
+  var tc = total.querySelector('[data-cf="total-competitor"]');
+  var td = total.querySelector('[data-cf="total-discount"]');
+  var tf = total.querySelector('[data-cf="total-diff"]');
+  if (tc) tc.textContent = totalComp ? totalComp.toLocaleString() + '원' : '-';
+  if (td) td.textContent = totalDiscount ? totalDiscount.toLocaleString() + '원' : '-';
+  if (tf) {
+    tf.textContent = totalDiff === 0 ? '-' : (totalDiff > 0 ? '+' : '') + totalDiff.toLocaleString() + '원';
+    tf.style.color = totalDiff < 0 ? '#2e7d32' : totalDiff > 0 ? '#e53935' : '#8892a4';
   }
 }
 
@@ -5056,9 +5672,12 @@ function collectDiaryFormData(status) {
         var rows = document.querySelectorAll('#dc-compare-rows-' + uid + ' [data-compare-row]');
         rows.forEach(function(r) {
           var item = (r.querySelector('[data-cf="item"]') || {}).value || '';
+          var testItem = (r.querySelector('[data-cf="testItem"]') || {}).value || '';
           var comp = Number(((r.querySelector('[data-cf="competitor"]') || {}).value || '').replace(/,/g,'')) || 0;
           var ours = Number(((r.querySelector('[data-cf="ours"]') || {}).value || '').replace(/,/g,'')) || 0;
-          if (item || comp || ours) items.push({ item: item, competitor: comp, ours: ours });
+          var discountRate = Number(((r.querySelector('[data-cf="discountRate"]') || {}).value || '')) || 0;
+          var qty = Number(((r.querySelector('[data-cf="qty"]') || {}).value || '1')) || 1;
+          if (item || testItem || comp || ours) items.push({ item: item, testItem: testItem, competitor: comp, ours: ours, discountRate: discountRate, qty: qty });
         });
         return items;
       })()
@@ -5087,6 +5706,29 @@ function collectDiaryFormData(status) {
     companies: companies,
     competitorNote: (document.getElementById('diaryCompetitor')||{}).value || '',
     newSalesActivity: (document.getElementById('diaryNewSales')||{}).value || '',
+    newSalesResults: (function() {
+      var rows = document.querySelectorAll('#newSalesPlanSection [data-plan-idx]');
+      if (!rows.length) return null;
+      var planDate = '';
+      var items = [];
+      rows.forEach(function(row) {
+        planDate = row.dataset.planDate || planDate;
+        function fv(key) {
+          var el = row.querySelector('input[data-plan-field="' + key + '"]');
+          return el ? el.value : '';
+        }
+        items.push({
+          nm:       row.dataset.planNm || '',
+          met:      fv('met'),
+          bizCard:  fv('bizCard'),
+          interest: fv('interest'),
+          quote:    fv('quote'),
+          brochure: fv('brochure'),
+          memo:     (row.querySelector('[data-plan-memo]') || {}).value || ''
+        });
+      });
+      return { planDate: planDate, items: items };
+    })(),
     remark: (document.getElementById('diaryRemark')||{}).value || '',
     tomorrowExisting: tmrEx,
     tomorrowNew: _tmrNew,
@@ -5159,7 +5801,7 @@ function addTmrExisting() {
 
   row.innerHTML =
     '<select>' + compOpts + '</select>' +
-    '<select><option value="">수거</option><option>방문</option><option>택배</option><option>퀵</option><option>내방</option></select>' +
+    '<select><option value="">접수 형태</option><option>방문</option><option>택배</option><option>퀵</option><option>내방</option></select>' +
     '<div style="display:flex;align-items:center;gap:3px"><input type="text" placeholder="예상매출" oninput="onDiaryAmtChange(this);renderTmrSummary()" style="flex:1"><span style="font-size:9px;color:#8892a4;white-space:nowrap">원</span></div>' +
     '<input type="text" placeholder="메모" style="font-size:11px">' +
     '<button class="tmr-del" onclick="this.parentElement.remove();renderTmrSummary()">✕</button>';
@@ -5187,7 +5829,7 @@ function renderTmrExisting() {
       compOpts += '<option' + sel + '>' + escHtml(c.name) + '</option>';
     });
     var methods = ['\ubc29\ubb38','\ud0dd\ubc30','\ud035','\ub0b4\ubc29'];
-    var mOpts = '<option value="">\uc218\uac70</option>';
+    var mOpts = '<option value="">접수 형태</option>';
     methods.forEach(function(m) {
       var sel = (t.collectMethod === m) ? ' selected' : '';
       mOpts += '<option' + sel + '>' + m + '</option>';
@@ -5241,37 +5883,260 @@ async function loadTmrFssData() {
     if (cntEl) cntEl.innerHTML = label + ' <b>' + fssAllData.length.toLocaleString() + '</b>건';
     toast(label + ' ' + fssAllData.length.toLocaleString() + '건 조회 완료');
     // 활성 탭 갱신
-    if (_newMode === 'area') renderSidoPanel();
+    populateSidoDropdown();
+    updateNewbizBadge();
     if (_newMode === 'newbiz') loadTmrNewBizList();
+    else renderAllFssResults();
   } catch(e) {
     if (cntEl) cntEl.innerHTML = '<span style="color:#e53935">조회 실패</span>';
     toast('데이터 로드 실패: ' + e.message);
   }
 }
 
+function populateSidoDropdown() {
+  var sel = document.getElementById('tmrSidoFilter');
+  if (!sel) return;
+  var sidoMap = {};
+  fssAllData.forEach(function(r) { if (r.sido) sidoMap[r.sido] = (sidoMap[r.sido]||0)+1; });
+  var sorted = Object.keys(sidoMap).sort();
+  sel.innerHTML = '<option value="">시/도 전체</option>';
+  sorted.forEach(function(s) {
+    sel.innerHTML += '<option value="' + escHtml(s) + '">' + escHtml(s) + ' (' + sidoMap[s].toLocaleString() + ')</option>';
+  });
+  var sgSel = document.getElementById('tmrSgFilter');
+  var dongSel = document.getElementById('tmrDongFilter');
+  if (sgSel) sgSel.innerHTML = '<option value="">시/군/구 전체</option>';
+  if (dongSel) dongSel.innerHTML = '<option value="">읍/면/동 전체</option>';
+  _areaSido = ''; _areaSg = ''; _areaDong = '';
+}
+
+function onSidoFilterChange() {
+  _areaSido = (document.getElementById('tmrSidoFilter')||{}).value || '';
+  _areaSg = ''; _areaDong = '';
+  var sgSel = document.getElementById('tmrSgFilter');
+  var dongSel = document.getElementById('tmrDongFilter');
+  if (dongSel) dongSel.innerHTML = '<option value="">읍/면/동 전체</option>';
+  if (sgSel) {
+    sgSel.innerHTML = '<option value="">시/군/구 전체</option>';
+    if (_areaSido) {
+      var results = _areaFilter(_areaSido, '', '');
+      var sgMap = {};
+      results.forEach(function(r) { if (r.sigungu) sgMap[r.sigungu] = (sgMap[r.sigungu]||0)+1; });
+      Object.keys(sgMap).sort().forEach(function(sg) {
+        sgSel.innerHTML += '<option value="' + escHtml(sg) + '">' + escHtml(sg) + ' (' + sgMap[sg].toLocaleString() + ')</option>';
+      });
+    }
+  }
+  applyAreaFilter();
+}
+
+function onSgFilterChange() {
+  _areaSg = (document.getElementById('tmrSgFilter')||{}).value || '';
+  _areaDong = '';
+  var dongSel = document.getElementById('tmrDongFilter');
+  if (dongSel) {
+    dongSel.innerHTML = '<option value="">읍/면/동 전체</option>';
+    if (_areaSg) {
+      var results = _areaFilter(_areaSido, _areaSg, '');
+      var dongMap = {};
+      results.forEach(function(r) {
+        var d = r.dong || '';
+        if (!d) {
+          var parts = (r.addr || '').split(/\s+/);
+          for (var i = 0; i < parts.length; i++) {
+            var p = parts[i];
+            if (p.match(/(읍|면|동|리|가|로)$/) && p !== _areaSido && p !== _areaSg && p.length >= 2) { d = p; break; }
+          }
+        }
+        if (d) dongMap[d] = (dongMap[d]||0)+1;
+      });
+      Object.keys(dongMap).sort().forEach(function(d) {
+        dongSel.innerHTML += '<option value="' + escHtml(d) + '">' + escHtml(d) + ' (' + dongMap[d].toLocaleString() + ')</option>';
+      });
+    }
+  }
+  applyAreaFilter();
+}
+
+function onDongFilterChange() {
+  _areaDong = (document.getElementById('tmrDongFilter')||{}).value || '';
+  applyAreaFilter();
+}
+
+function applyAreaFilter() {
+  updateNewbizBadge();
+  if (_newMode === 'search') renderAllFssResults();
+  else if (_newMode === 'newbiz') loadTmrNewBizList();
+}
+
+function updateNewbizBadge() {
+  var badge = document.getElementById('newbizCountBadge');
+  if (!badge) return;
+  if (!fssAllData || fssAllData.length === 0) { badge.style.display = 'none'; return; }
+  var now = new Date();
+  var cutoff = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
+  var cutoffStr = cutoff.getFullYear() + String(cutoff.getMonth()+1).padStart(2,'0') + String(cutoff.getDate()).padStart(2,'0');
+  var todayStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+  var base = _areaFilter(_areaSido, _areaSg, _areaDong);
+  var cnt = base.filter(function(r) {
+    var prms = (r.prms_dt||'').replace(/-/g,'');
+    return prms >= cutoffStr && prms <= todayStr;
+  }).length;
+  badge.textContent = cnt;
+  badge.style.display = cnt > 0 ? '' : 'none';
+}
+
 function switchNewMode(mode) {
   _newMode = mode;
-  ['search','area','newbiz'].forEach(function(m) {
+  ['search','newbiz'].forEach(function(m) {
     var el = document.getElementById('mode-' + m);
     if (el) el.style.display = (m === mode) ? '' : 'none';
     var btn = document.getElementById('modeBtn-' + m);
     if (btn) { btn.style.background = (m === mode) ? '#1a73e8' : '#fff'; btn.style.color = (m === mode) ? '#fff' : '#5f6b7a'; }
   });
-  if (mode === 'area') renderSidoPanel();
   if (mode === 'newbiz') loadTmrNewBizList();
+  else renderAllFssResults();
 }
 
-// 신규업체 알림 로드 (fss_new_businesses)
-// 신규업체 알림: fss_businesses에서 prms_dt(인허가일) 기준 20일 이내
+// FSS 업체 카드 공통 빌더
+function _buildFssCard(r, extraBadge) {
+  var name = escHtml(r.nm || '');
+  var safeJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  var safeLic = (r.lic || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  var s = '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff" data-fss-card>';
+  s += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+  s += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+  s += '<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex-shrink:0">';
+  s += '<button onclick="addAreaCompanyToTmr(\'' + safeJs + '\')" style="padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button>';
+  s += '<button onclick="showTmrProducts(\'' + safeLic + '\',this)" style="padding:2px 8px;font-size:10px;font-weight:500;border:1px solid #c8d6e5;color:#5f6b7a;background:#f4f6f9;border-radius:6px;cursor:pointer;font-family:inherit">제품보기</button>';
+  if (extraBadge) s += extraBadge;
+  s += '</div></div>';
+  s += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+  if (r.biz)     s += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+  if (r.ceo)     s += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+  if (r.tel)     s += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+  if (r.org)     s += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+  if (r.lic)     s += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+  if (r.prms_dt) s += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+  s += '</div>';
+  if (r.addr) s += '<div style="font-size:10px;color:#8892a4;margin-bottom:4px">' + escHtml(r.addr) + '</div>';
+  s += '<div class="tmr-prod-panel" style="display:none;margin-top:6px;padding:8px 10px;background:#f4f6f9;border-radius:6px;border:1px solid #e2e6ed"></div>';
+  s += '</div>';
+  return s;
+}
+
+async function showTmrProducts(licNo, btn) {
+  var card = btn.closest('[data-fss-card]');
+  if (!card) return;
+  var panel = card.querySelector('.tmr-prod-panel');
+  if (!panel) return;
+  // 토글
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    btn.textContent = '제품보기';
+    return;
+  }
+  panel.style.display = '';
+  btn.textContent = '닫기';
+  if (!licNo) {
+    panel.innerHTML = '<div style="color:#8892a4;font-size:11px;text-align:center;padding:8px">인허가번호 없음</div>';
+    return;
+  }
+  panel.innerHTML = '<div style="color:#8892a4;font-size:11px;text-align:center;padding:8px">품목 조회 중...</div>';
+  try {
+    var snap = await db.collection('fss_products').where('lcns_no','==',licNo).get();
+    var products = [];
+    snap.forEach(function(doc) { products.push(doc.data()); });
+    if (products.length === 0) {
+      panel.innerHTML = '<div style="color:#8892a4;font-size:11px;text-align:center;padding:8px">등록된 품목이 없습니다.</div>';
+      return;
+    }
+    products.sort(function(a,b) { return (b.prms_dt||'').localeCompare(a.prms_dt||''); });
+    var html = '<div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:6px">품목 ' + products.length + '건</div>';
+    products.forEach(function(p) {
+      var active = !(p.production === 'Y' || p.production === '종료');
+      var statusColor = active ? '#2e7d32' : '#e53935';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #eef0f4;font-size:11px">';
+      html += '<div><span style="font-weight:600;color:#1a2332">' + escHtml(p.prdlst_nm||'-') + '</span>';
+      if (p.prdlst_dcnm) html += ' <span style="color:#8892a4;font-size:10px">(' + escHtml(p.prdlst_dcnm) + ')</span>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">';
+      if (p.prms_dt) html += '<span style="color:#5f6b7a;font-size:10px">' + formatDate8(p.prms_dt) + '</span>';
+      html += '<span style="color:' + statusColor + ';font-weight:600;font-size:10px">' + (active ? '생산중' : '종료') + '</span>';
+      html += '</div></div>';
+    });
+    panel.innerHTML = html;
+  } catch(e) {
+    panel.innerHTML = '<div style="color:#e53935;font-size:11px;text-align:center;padding:8px">조회 실패: ' + e.message + '</div>';
+  }
+}
+
+// 전체보기 — fssAllData 전체를 이름 검색 + 현재 지역 조건으로 필터
+function renderAllFssResults() {
+  var res = document.getElementById('tmrNewSearchResult');
+  var cntEl = document.getElementById('tmrNewSearchCount');
+  if (!res) return;
+  if (!fssAllData || fssAllData.length === 0) {
+    if (cntEl) cntEl.textContent = '';
+    res.innerHTML = '<div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">인허가 분야를 선택하고 [조회] 버튼을 눌러주세요.</div>';
+    return;
+  }
+  var q = ((document.getElementById('tmrNewSearchInput') || {}).value || '').trim().toLowerCase();
+  var items = _areaFilter(_areaSido, _areaSg, _areaDong);
+  if (q) items = items.filter(function(r) { return (r.nm||'').toLowerCase().indexOf(q) >= 0; });
+  var condParts = [];
+  if (_areaSido) condParts.push(_areaSido);
+  if (_areaSg) condParts.push(_areaSg);
+  if (_areaDong) condParts.push(_areaDong);
+  if (cntEl) cntEl.textContent = (condParts.length ? '[' + condParts.join(' ') + '] ' : '') + items.length + '건';
+  if (items.length === 0) {
+    res.innerHTML = '<div style="color:#8892a4;font-size:12px;text-align:center;padding:20px">검색 결과가 없습니다.</div>';
+    return;
+  }
+  var PAGE = 30;
+  function buildCards(slice) {
+    return slice.map(function(r) {
+      return _buildFssCard(r);
+    }).join('');
+  }
+  var html = buildCards(items.slice(0, PAGE));
+  if (items.length > PAGE) {
+    html += '<div id="allFssMoreWrap" style="text-align:center;padding:8px"><button onclick="allFssLoadMore(this,' + PAGE + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (items.length - PAGE) + '건 남음)</button></div>';
+  }
+  res.innerHTML = html;
+  res._allFssItems = items;
+}
+function allFssLoadMore(btn, offset) {
+  var res = document.getElementById('tmrNewSearchResult');
+  if (!res || !res._allFssItems) return;
+  var items = res._allFssItems;
+  var PAGE = 30;
+  var slice = items.slice(offset, offset + PAGE);
+  var html = slice.map(function(r) { return _buildFssCard(r); }).join('');
+  if (offset + PAGE < items.length) {
+    html += '<div style="text-align:center;padding:8px"><button onclick="allFssLoadMore(this,' + (offset+PAGE) + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (items.length-offset-PAGE) + '건 남음)</button></div>';
+  }
+  btn.closest('div').outerHTML = html;
+}
+
+// 신규업체 알림: prms_dt 20일 이내 + 현재 지역 조건 필터
 function loadTmrNewBizList() {
   var res = document.getElementById('tmrNewBizResult');
   if (!res) return;
-  var bizFilter = (document.getElementById('tmrNewBizFilter') || {}).value || '';
 
-  // fssAllData 캐시에서 필터 (조회 후 사용 가능)
   if (!fssAllData || fssAllData.length === 0) {
     res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">인허가 분야를 선택하고 [조회] 버튼을 먼저 눌러주세요.</div>';
     return;
+  }
+
+  // 현재 지역 조건 안내 업데이트
+  var desc = document.getElementById('newbizCondDesc');
+  if (desc) {
+    var condParts = [];
+    if (_areaSido) condParts.push(_areaSido);
+    if (_areaSg) condParts.push(_areaSg);
+    if (_areaDong) condParts.push(_areaDong);
+    desc.textContent = '최근 20일 이내 신규 인허가 업체' + (condParts.length ? ' [' + condParts.join(' ') + ']' : ' (전체 지역)') + ' — 지역 탐색에서 범위를 좁히세요.';
   }
 
   // 20일 전 날짜 계산 (YYYYMMDD 형식)
@@ -5280,9 +6145,9 @@ function loadTmrNewBizList() {
   var cutoffStr = cutoff.getFullYear() + String(cutoff.getMonth()+1).padStart(2,'0') + String(cutoff.getDate()).padStart(2,'0');
   var todayStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
 
-  // prms_dt >= cutoffStr 필터
-  var items = fssAllData.filter(function(r) {
-    if (bizFilter && r.biz !== bizFilter) return false;
+  // 지역 필터 + prms_dt 필터
+  var base = _areaFilter(_areaSido, _areaSg, _areaDong);
+  var items = base.filter(function(r) {
     var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
     return prms >= cutoffStr && prms <= todayStr;
   });
@@ -5295,31 +6160,20 @@ function loadTmrNewBizList() {
   });
 
   if (items.length === 0) {
-    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">최근 20일 이내 신규 인허가 업체가 없습니다.' + (bizFilter ? ' (' + escHtml(bizFilter) + ')' : '') + '</div>';
+    res.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">최근 20일 이내 신규 인허가 업체가 없습니다.</div>';
     return;
   }
 
-  var html = '<div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">최근 20일 이내 인허가 업체 <b>' + items.length + '</b>건' + (bizFilter ? ' (' + escHtml(bizFilter) + ')' : '') + '</div>';
+  var html = '<div style="font-size:11px;color:#5f6b7a;margin-bottom:8px">최근 20일 이내 신규 인허가 업체 <b>' + items.length + '</b>건</div>';
   items.forEach(function(r) {
-    var name = r.nm || '';
     var prms = (r.prms_dt || r.prmsdt || '').replace(/-/g, '');
-    // 경과일 계산
     var days = 0;
     if (prms.length === 8) {
       var prmsDate = new Date(prms.slice(0,4) + '-' + prms.slice(4,6) + '-' + prms.slice(6,8));
       days = Math.floor((now - prmsDate) / (24*60*60*1000));
     }
-    var prmsDisplay = prms.length === 8 ? prms.slice(0,4)+'.'+prms.slice(4,6)+'.'+prms.slice(6,8) : prms;
     var daysColor = days <= 7 ? '#2e7d32' : days <= 14 ? '#e65100' : '#c62828';
-
-    html += "<div class=\"tmr-search-item\" style=\"cursor:pointer\" onclick=\"confirmFssSelect('" + escHtml(name).replace(/'/g,"&#39;") + "')\">";
-    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · ' + escHtml(r.ceo) : '') + (r.tel ? ' · ' + escHtml(r.tel) : '') + '</div></div>';
-    html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">';
-    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
-    html += '<span style="font-size:10px;color:#1565c0">' + prmsDisplay + ' 인허가</span>';
-    html += '<span style="font-size:9px;font-weight:700;color:' + daysColor + '">' + days + '일 경과</span>';
-    html += '</div></div>';
+    html += _buildFssCard(r, '<span style="font-size:9px;font-weight:700;color:' + daysColor + '">' + days + '일 경과</span>');
   });
   res.innerHTML = html;
 }
@@ -5444,58 +6298,89 @@ function renderSidoPanel() {
   renderBreadcrumb();
 }
 
+function _areaHidePanels(panels) {
+  panels.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+}
+function _areaFssKey(sido) { return (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido; }
+function _areaFilter(sido, sg, dong) {
+  if (!fssAllData) return [];
+  var key = _areaFssKey(sido);
+  return fssAllData.filter(function(r) {
+    if (!(r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0)) return false;
+    if (sg && !(r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0)) return false;
+    if (dong && (r.addr||'').indexOf(dong) < 0) return false;
+    return true;
+  });
+}
+
 function selectSido(sido) {
   _areaSido = sido; _areaSg = ''; _areaDong = '';
   renderBreadcrumb();
-
-  // fssAllData 캐시에서 로컬 필터 (업체조회 fssFilterSido 동일 방식)
-  var results = [];
-  if (fssAllData && fssAllData.length > 0) {
-    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-    results = fssAllData.filter(function(r) {
-      return r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0;
-    });
-  }
-
-  // 시군구 패널 표시 (regionData 활용)
+  var results = _areaFilter(sido, '', '');
   var sgData = (typeof regionData !== 'undefined') ? (regionData[sido] || []) : [];
   var sgPanel = document.getElementById('sgPanel');
   var sgGrid = document.getElementById('sgGrid');
-  ['dongPanel'].forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
-
+  _areaHidePanels(['sidoPanel', 'dongPanel', 'areaResultPanel']);
   if (sgData.length > 0 && sgPanel && sgGrid) {
     sgPanel.style.display = '';
-    var sgHtml = '<button class="area-btn act" onclick="showAreaAllSido(\'' + sido + '\')" style="grid-column:span 2">' + sido + ' 전체 ' + results.length + '개 보기</button>';
+    var sgHtml = '<button class="area-btn act" onclick="showAreaAllSido(\'' + escHtml(sido) + '\')" style="grid-column:span 2">' + sido + ' 전체 ' + results.length + '개 보기</button>';
     sgData.forEach(function(sg) {
       var cnt = results.filter(function(r) { return r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0; }).length;
       var cls = cnt > 0 ? 'area-btn has' : 'area-btn';
-      sgHtml += '<button class="' + cls + '" onclick="selectSg(\'' + sido + '\',\'' + sg + '\')">' + sg + (cnt > 0 ? ' <span style="font-size:9px;color:#8892a4">(' + cnt + ')</span>' : '') + '</button>';
+      sgHtml += '<button class="' + cls + '" onclick="selectSg(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\')">' + escHtml(sg) + (cnt > 0 ? ' <span style="font-size:9px;color:#8892a4">(' + cnt + ')</span>' : '') + '</button>';
     });
     sgGrid.innerHTML = sgHtml;
-    document.getElementById('sidoPanel').style.display = 'none';
   }
-
-  // 결과 패널은 시군구 선택 후 표시
-  var rPanel = document.getElementById('areaResultPanel');
-  if (rPanel) rPanel.style.display = 'none';
 }
 
 function showAreaAllSido(sido) {
-  var results = fssAllData ? fssAllData.filter(function(r) {
-    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-    return r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0;
-  }) : [];
-  showTmrAreaResults(sido + ' 전체', results);
+  _areaHidePanels(['sgPanel', 'dongPanel']);
+  showTmrAreaResults(sido + ' 전체', _areaFilter(sido, '', ''));
 }
 
 function selectSg(sido, sg) {
-  _areaSg = sg;
+  _areaSg = sg; _areaDong = '';
   renderBreadcrumb();
-  var results = fssAllData ? fssAllData.filter(function(r) {
-    var key = (typeof SIDO_ADDR !== 'undefined' && SIDO_ADDR[sido]) || sido;
-    return (r.sido === sido || r.sido === key || (r.addr||'').indexOf(key) >= 0) && (r.sigungu === sg || (r.addr||'').indexOf(sg) >= 0);
-  }) : [];
-  showTmrAreaResults(sido + ' ' + sg, results);
+  var results = _areaFilter(sido, sg, '');
+  // 읍면동 추출
+  var dongMap = {};
+  results.forEach(function(r) {
+    var d = r.dong || '';
+    if (!d) {
+      var parts = (r.addr || '').split(/\s+/);
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (p.match(/(읍|면|동|리|가|로)$/) && p !== sido && p !== sg && p.length >= 2) { d = p; break; }
+      }
+    }
+    if (d) dongMap[d] = (dongMap[d] || 0) + 1;
+  });
+  var dongList = Object.keys(dongMap).sort(function(a, b) { return dongMap[b] - dongMap[a]; });
+  var dongPanel = document.getElementById('dongPanel');
+  var dongGrid = document.getElementById('dongGrid');
+  _areaHidePanels(['sgPanel', 'areaResultPanel']);
+  if (dongList.length > 0 && dongPanel && dongGrid) {
+    dongPanel.style.display = '';
+    var dHtml = '<button class="area-btn act" onclick="showSgAllResults(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\')" style="grid-column:span 2">' + escHtml(sg) + ' 전체 ' + results.length + '개 보기</button>';
+    dongList.forEach(function(d) {
+      dHtml += '<button class="area-btn has" onclick="selectAreaDong(\'' + escHtml(sido) + '\',\'' + escHtml(sg) + '\',\'' + escHtml(d) + '\')">' + escHtml(d) + ' <span style="font-size:9px;color:#8892a4">(' + dongMap[d] + ')</span></button>';
+    });
+    dongGrid.innerHTML = dHtml;
+  } else {
+    showTmrAreaResults(sido + ' ' + sg, results);
+  }
+}
+
+function showSgAllResults(sido, sg) {
+  _areaHidePanels(['dongPanel']);
+  showTmrAreaResults(sido + ' ' + sg, _areaFilter(sido, sg, ''));
+}
+
+function selectAreaDong(sido, sg, dong) {
+  _areaDong = dong;
+  renderBreadcrumb();
+  _areaHidePanels(['dongPanel']);
+  showTmrAreaResults(sido + ' ' + sg + ' ' + dong, _areaFilter(sido, sg, dong));
 }
 
 function showTmrAreaResults(title, results) {
@@ -5512,18 +6397,82 @@ function showTmrAreaResults(title, results) {
     rList.innerHTML = '<div style="padding:20px;text-align:center;color:#8892a4;font-size:12px">해당 지역 업체가 없습니다.</div>';
     return;
   }
-  var limited = results.slice(0, 50);
+
+  var PAGE = 30;
+  function renderPage(offset) {
+    var slice = results.slice(offset, offset + PAGE);
+    var html = '';
+    slice.forEach(function(r) {
+      var name = escHtml(r.nm || '');
+      var safeNameJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      html += '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
+      // 업체정보
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+      html += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+      html += '<button onclick="addAreaCompanyToTmr(\'' + safeNameJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit" title="익일 계획 추가(추후)">+ 추가</button>';
+      html += '</div>';
+      // 업체정보 그리드
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+      if (r.biz)     html += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+      if (r.ceo)     html += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+      if (r.tel)     html += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+      if (r.org)     html += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+      if (r.lic)     html += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+      if (r.prms_dt) html += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+      html += '</div>';
+      if (r.addr) html += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
+      html += '</div>';
+    });
+    if (offset + PAGE < results.length) {
+      html += '<div style="text-align:center;padding:8px"><button onclick="areaLoadMore(this,' + (offset + PAGE) + ')" data-results-id="' + title.replace(/\s/g,'_') + '" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (results.length - offset - PAGE) + '건 남음)</button></div>';
+    }
+    return html;
+  }
+  rList.innerHTML = renderPage(0);
+  rList._areaResults = results;
+  rList._areaTitle = title;
+}
+
+function areaLoadMore(btn, offset) {
+  var rList = document.getElementById('areaResultList');
+  if (!rList || !rList._areaResults) return;
+  var results = rList._areaResults;
+  var PAGE = 30;
+  var slice = results.slice(offset, offset + PAGE);
   var html = '';
-  limited.forEach(function(r) {
-    var name = r.nm || '';
-    html += '<div class="tmr-search-item" style="cursor:pointer" onclick="confirmFssSelect(\'' + escHtml(name).replace(/'/g,'&#39;') + '\')">';
-    html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">' + escHtml(name) + '</div>';
-    html += '<div style="font-size:10px;color:#8892a4;margin-top:2px">' + escHtml(r.addr||'') + (r.ceo ? ' · ' + escHtml(r.ceo) : '') + '</div></div>';
-    if (r.biz) html += '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:4px;white-space:nowrap">' + escHtml(r.biz) + '</span>';
+  slice.forEach(function(r) {
+    var name = escHtml(r.nm || '');
+    var safeNameJs = (r.nm || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html += '<div style="border:1px solid #e2e6ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+    html += '<div style="font-weight:700;font-size:13px;color:#1a2332">' + name + '</div>';
+    html += '<button onclick="addAreaCompanyToTmr(\'' + safeNameJs + '\')" style="flex-shrink:0;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:6px;cursor:pointer;font-family:inherit">+ 추가</button>';
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;color:#5f6b7a;margin-bottom:6px">';
+    if (r.biz)     html += '<div><span style="color:#8892a4">업종</span> ' + escHtml(r.biz) + '</div>';
+    if (r.ceo)     html += '<div><span style="color:#8892a4">대표자</span> ' + escHtml(r.ceo) + '</div>';
+    if (r.tel)     html += '<div><span style="color:#8892a4">전화</span> ' + escHtml(r.tel) + '</div>';
+    if (r.org)     html += '<div><span style="color:#8892a4">기관</span> ' + escHtml(r.org) + '</div>';
+    if (r.lic)     html += '<div><span style="color:#8892a4">인허가</span> ' + escHtml(r.lic) + '</div>';
+    if (r.prms_dt) html += '<div><span style="color:#8892a4">허가일</span> ' + escHtml(r.prms_dt) + '</div>';
+    html += '</div>';
+    if (r.addr) html += '<div style="font-size:10px;color:#8892a4">' + escHtml(r.addr) + '</div>';
     html += '</div>';
   });
-  if (results.length > 50) html += '<div style="text-align:center;padding:8px;font-size:11px;color:#8892a4">외 ' + (results.length - 50) + '건</div>';
-  rList.innerHTML = html;
+  if (offset + PAGE < results.length) {
+    html += '<div style="text-align:center;padding:8px"><button onclick="areaLoadMore(this,' + (offset + PAGE) + ')" style="font-size:12px;color:#1a73e8;background:none;border:1px solid #bbdefb;border-radius:6px;padding:6px 20px;cursor:pointer;font-family:inherit">더보기 (' + (results.length - offset - PAGE) + '건 남음)</button></div>';
+  }
+  btn.closest('div').outerHTML = html;
+}
+
+function addAreaCompanyToTmr(name) {
+  var exists = _tmrNew.some(function(t) { return t.nm === name; });
+  if (exists) { showToast('이미 추가된 업체입니다.', 'info'); return; }
+  var rec = fssAllData ? fssAllData.find(function(r) { return r.nm === name; }) : null;
+  var memo = rec ? (rec.biz || '') : '';
+  _tmrNew.push({ _uid: Date.now() + '_' + Math.random().toString(36).slice(2,4), nm: name, contactMethod: '방문', memo: memo });
+  renderTmrNew();
+  showToast(name + ' 추가됨', 'success');
 }
 
 function renderBreadcrumb() {
@@ -5556,7 +6505,44 @@ function switchDailyTab(btn) {
   if (tabId === 'dailyTaxUnissued') loadTaxUnissuedData();
   if (tabId === 'dailyInvoice') loadTaxInvoiceData();
 }
-function wlInit() { initDiary().then(function() { renderDiaryMonthTabs(); loadDiaryList(); }); }
+function wlInit() {
+  initDiary().then(function() {
+    populateDiaryMyNameSel();
+    renderDiaryMonthTabs();
+    loadDiaryList();
+  });
+}
+
+async function populateDiaryMyNameSel() {
+  var sel = document.getElementById('diaryMyNameSel');
+  if (!sel) return;
+  try {
+    var users = await fsGetUsers();
+    var names = users
+      .map(function(u) { return (u.name || '').trim(); })
+      .filter(function(n, i, arr) { return n && arr.indexOf(n) === i; })
+      .sort();
+    sel.innerHTML = '<option value="">내 이름 선택</option>';
+    names.forEach(function(n) {
+      var opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    var saved = localStorage.getItem('bfl_diary_myname') || '';
+    if (saved) sel.value = saved;
+  } catch(e) { console.warn('사용자 목록 로드 실패:', e); }
+}
+
+function getDiaryMyName() {
+  return localStorage.getItem('bfl_diary_myname') || '';
+}
+
+function onDiaryMyNameChange() {
+  var val = (document.getElementById('diaryMyNameSel') || {}).value || '';
+  if (val) localStorage.setItem('bfl_diary_myname', val);
+  else localStorage.removeItem('bfl_diary_myname');
+  loadCenterSummary();
+}
 
 // ============================================================================
 // 세금계산서 미발행 / 발행요청 — Firestore receipts 연동
@@ -5983,7 +6969,7 @@ function initSidoMap() {
         layer.bindTooltip(shortName, {permanent:true, direction:'center', className:'sido-label'});
         layer.on('mouseover', function(e){ e.target.setStyle({fillOpacity:0.75, weight:3}); });
         layer.on('mouseout', function(e){ sidoGeoLayer.resetStyle(e.target); });
-        layer.on('click', function(){ selectSido(shortName); });
+        layer.on('click', function(){ _bizSelectSido(shortName); });
       }
     }).addTo(sidoMap);
     sidoMap.fitBounds(sidoGeoLayer.getBounds(), {padding:[10,10]});
@@ -6014,7 +7000,7 @@ var SIDO_CODE_MAP = {
   '경기':'31','강원':'32','충북':'33','충남':'34','전북':'35','전남':'36','경북':'37','경남':'38','제주':'39'
 };
 
-function selectSido(sido) {
+function _bizSelectSido(sido) {
   bizState = {sido:sido, sigungu:'', dong:''};
   var list = regionData[sido] || [];
   var html = '';
