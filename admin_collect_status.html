@@ -705,6 +705,11 @@ function renderTable(apis) {
 
 // ─── 증분 현황 셀 렌더링 ───
 // field: 'available'(증분 가용) 또는 'inserted'(증분 수집)
+// avail=0, ins=0 → 증분 실행했으나 신규 없음(정상) — 초록 ✓
+// avail>0, ins>=avail → 신규 전량 수집 — 진한 초록
+// avail>0, ins>0, ins<avail → 부분 수집 — 주황
+// avail>0, ins=0 → 미수집(오류) — 빨강
+// incrLog 없음 → 증분 미실행 — 회색 -
 function renderIncrCell(incrLog, field) {
   if (!incrLog) {
     return '<td class="count-cell" style="text-align:right;color:var(--text3)">-</td>';
@@ -713,23 +718,28 @@ function renderIncrCell(incrLog, field) {
   var ins = incrLog.inserted || 0;
 
   if (field === 'available') {
-    var color = avail > 0 ? 'var(--text)' : 'var(--text3)';
+    // 신규 없음(0)이면 연초록, 있으면 일반 텍스트색
+    var color = avail === 0 ? '#6dbb8a' : 'var(--text)';
+    var label = avail === 0 ? '✓ 0' : numberFormat(avail);
     return '<td class="count-cell" style="text-align:right;color:' + color + '">'
-      + (avail > 0 ? numberFormat(avail) : '0') + '</td>';
+      + label + '</td>';
   } else {
-    // inserted: 전량=초록, 부분=주황, 0=회색
-    var color2, label;
+    var color2, label2;
     if (avail === 0 && ins === 0) {
-      color2 = 'var(--text3)'; label = '0';
+      // 증분 실행, 신규 없음 → 정상(연초록 ✓)
+      color2 = '#6dbb8a'; label2 = '✓';
     } else if (ins >= avail && avail > 0) {
-      color2 = 'var(--success)'; label = '+' + numberFormat(ins);
+      // 전량 수집 → 진한 초록
+      color2 = 'var(--success)'; label2 = '+' + numberFormat(ins);
     } else if (ins > 0) {
-      color2 = 'var(--warning)'; label = '+' + numberFormat(ins);
+      // 부분 수집 → 주황
+      color2 = 'var(--warning)'; label2 = '+' + numberFormat(ins);
     } else {
-      color2 = 'var(--danger)'; label = '0';
+      // 가용 있는데 수집 0 → 미수집 오류
+      color2 = 'var(--danger)'; label2 = '0';
     }
     return '<td class="count-cell" style="text-align:right;color:' + color2 + ';font-weight:600">'
-      + label + '</td>';
+      + label2 + '</td>';
   }
 }
 
