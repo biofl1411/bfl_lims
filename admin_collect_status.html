@@ -556,6 +556,9 @@ async function loadData() {
     document.getElementById('refreshInfo').textContent =
       '마지막 갱신: ' + new Date().toLocaleTimeString('ko-KR') + ' (30초마다) [Firestore]';
 
+    // 변경이력 API(fss_changes)의 최근 30일 체크
+    loadChangeHistoryCheck();
+
   } catch(e) {
     console.error('loadData 오류:', e);
     document.getElementById('refreshInfo').textContent = '⚠️ Firestore 조회 오류: ' + e.message;
@@ -593,6 +596,7 @@ function renderTable(apis) {
     + '<th>증분일</th>'
     + '<th>건수 변동일</th>'
     + '<th>최신 데이터</th>'
+    + '<th title="fss_changes API만 표시 — 최근 30일 이내 변경이력 건수">최근 변경(30일)</th>'
     + '</tr></thead><tbody>';
 
   apis.forEach(function(a) {
@@ -648,11 +652,88 @@ function renderTable(apis) {
       + '<td class="time-cell">' + (a.last_collect && a.last_collect.inserted > 0 ? formatTime(a.last_collect.finished_at) : '-') + '</td>'
       + '<td class="time-cell">' + changedAt + '</td>'
       + '<td class="time-cell">' + latestDate + '</td>'
+      + (a.table === 'fss_changes'
+          ? '<td class="time-cell" data-chng-check="' + a.api_source + '" style="line-height:1.3">'
+            + renderChangeCheckCell(_changeCheckResult[a.api_source])
+            + '</td>'
+          : '<td class="time-cell" style="color:var(--text3)">-</td>')
       + '</tr>';
   });
 
   html += '</tbody></table>';
   document.getElementById('tableWrap').innerHTML = html;
+}
+
+// ─── 변경이력 체크 ───
+// fss_changes API(I2859, I2860)의 최근 30일 신규 변경이력 건수와 최신 날짜를 Firestore에서 조회
+var _changeCheckResult = {}; // { I2859: { count30: N, latestChngDt: 'YYYYMMDD' }, ... }
+
+async function loadChangeHistoryCheck() {
+  var changeApis = Object.keys(ALL_APIS).filter(function(sid) {
+    return ALL_APIS[sid].collection === 'fss_changes';
+  });
+  if (!changeApis.length) return;
+
+  // 30일 전 날짜 문자열 (YYYYMMDD)
+  var d30 = new Date();
+  d30.setDate(d30.getDate() - 30);
+  var since30 = d30.getFullYear().toString()
+    + String(d30.getMonth() + 1).padStart(2, '0')
+    + String(d30.getDate()).padStart(2, '0');
+
+  var newResult = {};
+
+  await Promise.all(changeApis.map(async function(sid) {
+    try {
+      // 최근 30일 이내 chng_dt 기준 건수
+      var snap30 = await db.collection('fss_changes')
+        .where('api_source', '==', sid)
+        .where('chng_dt', '>=', since30)
+        .get();
+
+      // 전체 중 최신 chng_dt
+      var snapLatest = await db.collection('fss_changes')
+        .where('api_source', '==', sid)
+        .orderBy('chng_dt', 'desc')
+        .limit(1)
+        .get();
+
+      var latestDt = '';
+      if (!snapLatest.empty) latestDt = snapLatest.docs[0].data().chng_dt || '';
+
+      newResult[sid] = { count30: snap30.size, latestChngDt: latestDt };
+    } catch(e) {
+      newResult[sid] = { count30: -1, latestChngDt: '' };
+    }
+  }));
+
+  _changeCheckResult = newResult;
+
+  // 테이블 셀 업데이트 (DOM 직접 수정)
+  changeApis.forEach(function(sid) {
+    var cell = document.querySelector('td[data-chng-check="' + sid + '"]');
+    if (!cell) return;
+    var r = _changeCheckResult[sid] || {};
+    cell.innerHTML = renderChangeCheckCell(r);
+  });
+}
+
+function renderChangeCheckCell(r) {
+  if (!r || r.count30 === undefined) return '<span style="color:var(--text3)">-</span>';
+  if (r.count30 < 0) return '<span style="color:var(--danger);font-size:11px">조회오류</span>';
+
+  var latestFmt = '-';
+  if (r.latestChngDt && r.latestChngDt.length === 8) {
+    latestFmt = r.latestChngDt.substring(0,4) + '-' + r.latestChngDt.substring(4,6) + '-' + r.latestChngDt.substring(6,8);
+  }
+
+  if (r.count30 > 0) {
+    return '<span style="color:#2e7d32;font-weight:600">' + r.count30 + '건</span>'
+      + '<br><span style="font-size:10px;color:var(--text3)">최신 ' + latestFmt + '</span>';
+  } else {
+    return '<span style="color:var(--text3)">0건</span>'
+      + '<br><span style="font-size:10px;color:var(--text3)">최신 ' + latestFmt + '</span>';
+  }
 }
 
 // ─── 드래그 순서 변경 ───
