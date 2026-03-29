@@ -1632,20 +1632,34 @@ function openDetailPanel(id, sampleIdx) {
             opts + '</select>';
     }
 
+    // 메모 섹션 빌더: 기존 메모(읽기전용) + 새 메모 입력란 분리
+    function _buildMemoSection(key, labelHtml, existText, existAt) {
+        var dispText = existText
+            ? '<div id="memo-display-' + key + '" style="' +
+              'padding:7px 9px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;' +
+              'font-size:12px;color:#374151;line-height:1.6;white-space:pre-wrap;margin-bottom:6px">' +
+              existText.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>'
+            : '<div id="memo-display-' + key + '" style="display:none"></div>';
+        return '<div style="margin-bottom:16px">' +
+            '<div style="display:flex;align-items:center;margin-bottom:4px">' +
+            '<label style="font-size:11px;color:#5f6b7a">' + labelHtml + '</label>' +
+            _buildUserSelect(key, MEMO_TEAM_MAP[key]) + '</div>' +
+            dispText +
+            '<textarea class="dp-memo-area" id="memo-area-' + key + '" ' +
+            'placeholder="새 메모 입력..." style="min-height:48px"></textarea>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'' + key + '\')">저장</button>' +
+            (existAt ? '<div class="dp-memo-author">' + existAt + '</div>' : '') +
+            '</div></div>';
+    }
+
     var memoHtml = '';
 
     // 접수메모
     var _recDisplayText = _memoDisplay(_receiptMemoText, _memoBy);
-    memoHtml +=
-        '<div style="margin-bottom:14px">' +
-        '<div style="display:flex;align-items:center;margin-bottom:4px">' +
-        '<label style="font-size:11px;color:#5f6b7a">접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span></label>' +
-        _buildUserSelect('receipt', '고객지원팀') + '</div>' +
-        '<textarea class="dp-memo-area" id="memo-area-receipt">' + _recDisplayText + '</textarea>' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-        '<button class="dp-memo-save-btn" onclick="saveMemoField(\'receipt\')">저장</button>' +
-        (_memoAt ? '<div class="dp-memo-author">' + _memoAt + '</div>' : '') +
-        '</div></div>';
+    memoHtml += _buildMemoSection('receipt',
+        '접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span>',
+        _recDisplayText, _memoAt);
 
     // 팀 메모
     var _teamDefs = [
@@ -1657,16 +1671,9 @@ function openDetailPanel(id, sampleIdx) {
         var tLog = teamMemoLog[def.team] || {};
         var tText = teamMemo[def.team] || '';
         var tDisplayText = _memoDisplay(tText, tLog.by || '');
-        memoHtml +=
-            '<div style="margin-bottom:14px">' +
-            '<div style="display:flex;align-items:center;margin-bottom:4px">' +
-            '<label style="font-size:11px;color:#5f6b7a">' + def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.dept + ')</span></label>' +
-            _buildUserSelect(def.key, def.dept) + '</div>' +
-            '<textarea class="dp-memo-area" id="memo-area-' + def.key + '">' + tDisplayText + '</textarea>' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'' + def.key + '\')">저장</button>' +
-            (tLog.at ? '<div class="dp-memo-author">' + tLog.at + '</div>' : '') +
-            '</div></div>';
+        memoHtml += _buildMemoSection(def.key,
+            def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.dept + ')</span>',
+            tDisplayText, tLog.at || '');
     });
 
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
@@ -2075,20 +2082,32 @@ function saveMemoField(key) {
     var by = userSel ? userSel.value.trim() : '';
     if (!by) { showToast('담당자를 먼저 선택하세요', 'error'); return; }
 
-    // textarea 값에서 "내용(성명)" 형식의 성명 부분 제거 → 순수 텍스트만 추출
-    var rawText = textEl.value.trim();
-    var text = rawText.replace(/\([^)]+\)$/, '').trim();
+    // 새로 입력한 텍스트
+    var newText = textEl.value.trim();
+    if (!newText) { showToast('메모 내용을 입력하세요', 'error'); return; }
 
     var at = new Date().toISOString().slice(0,16).replace('T',' ');
+    var newEntry = newText + '(' + by + ')';  // "내용(성명)" 형식
+
+    // 기존 메모에 append (줄바꿈 구분)
+    var prevText = '';
+    if (key === 'receipt') {
+        prevText = r.noticeMemo || '';
+    } else {
+        var _tm = key.replace('team_', '');
+        prevText = (r.teamMemo && r.teamMemo[_tm]) ? r.teamMemo[_tm] : '';
+    }
+    // 기존 내용 뒤에 새 항목 추가 (기존 없으면 그냥 새 항목)
+    var mergedText = prevText ? (prevText + '\n' + newEntry) : newEntry;
 
     var updateObj = {};
     if (key === 'receipt') {
-        updateObj.noticeMemo = text;
+        updateObj.noticeMemo = mergedText;
         updateObj.noticeMemoBy = by;
         updateObj.noticeMemoAt = at;
     } else if (key.indexOf('team_') === 0) {
         var team = key.replace('team_', '');
-        updateObj['teamMemo.' + team] = text;
+        updateObj['teamMemo.' + team] = mergedText;
         updateObj['teamMemoLog.' + team] = { by: by, at: at };
     } else {
         return;
@@ -2098,25 +2117,25 @@ function saveMemoField(key) {
     .then(function() {
         // 로컬 캐시 업데이트
         if (key === 'receipt') {
-            r.noticeMemo = text; r.noticeMemoBy = by; r.noticeMemoAt = at;
+            r.noticeMemo = mergedText; r.noticeMemoBy = by; r.noticeMemoAt = at;
         } else {
             var team = key.replace('team_', '');
             if (!r.teamMemo) r.teamMemo = {};
             if (!r.teamMemoLog) r.teamMemoLog = {};
-            r.teamMemo[team] = text;
+            r.teamMemo[team] = mergedText;
             r.teamMemoLog[team] = { by: by, at: at };
         }
-        // textarea에 "내용(성명)" 형식으로 업데이트
-        var displayText = text ? (text + '(' + by + ')') : '';
-        textEl.value = displayText;
-        // 시각 표시 갱신
-        var atDiv = textEl.parentElement.querySelector('.dp-memo-author');
-        if (atDiv) { atDiv.innerHTML = at; }
-        else {
-            var d = document.createElement('div');
-            d.className = 'dp-memo-author'; d.innerHTML = at;
-            textEl.parentElement.appendChild(d);
+        // 기존 메모 표시 영역 갱신
+        var dispEl = document.getElementById('memo-display-' + key);
+        if (dispEl) {
+            dispEl.style.display = '';
+            dispEl.textContent = mergedText;
         }
+        // 입력란 초기화
+        textEl.value = '';
+        // 시각 갱신
+        var atDiv = textEl.closest('div[style]').querySelector('.dp-memo-author');
+        if (atDiv) atDiv.innerHTML = at;
         showToast('메모가 저장됐습니다', 'success');
     })
     .catch(function(e) { showToast('저장 실패: ' + e.message, 'error'); });
