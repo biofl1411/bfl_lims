@@ -108,7 +108,9 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .dp-grid .dp-val{color:#1a2332;font-size:13px;font-weight:500;padding:4px 0}
 .dp-section-title{font-size:12px;font-weight:700;color:#1a2332;margin:12px 0 8px;padding-top:8px;border-top:1px solid #eef0f4}
 .dp-sample-card{border:1px solid #e2e6ed;border-radius:8px;padding:10px;margin-bottom:8px}
-.dp-memo-area{width:100%;min-height:60px;border:1px solid #e2e6ed;border-radius:6px;padding:8px;font-size:12px;resize:vertical;background:#f8f9fb;font-family:inherit}
+.dp-memo-area{width:100%;min-height:60px;border:1px solid #e2e6ed;border-radius:6px;padding:8px;font-size:12px;resize:vertical;background:#f8f9fb;font-family:inherit;transition:border-color .15s,background .15s}
+.dp-memo-area[readonly]{color:#6b7a8d;cursor:default}
+.dp-memo-area:not([readonly]){background:#fff;border-color:#cbd5e1}
 .dp-memo-area:not([readonly]):focus{border-color:#1a73e8;outline:none;background:#fff;box-shadow:0 0 0 2px rgba(26,115,232,.1)}
 .dp-memo-save-btn{padding:4px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;font-family:inherit;margin-top:4px}
 .dp-memo-save-btn:hover{background:#1557b0}
@@ -600,6 +602,52 @@ var _currentDetailId = null; // 현재 상세 패널 접수 doc ID
 var _currentDetailSampleIdx = 0; // 현재 상세 패널 시료 인덱스
 var _currentDetailRecord = null; // 현재 상세 패널 레코드
 var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
+
+// 메모 사용자 목록
+var _memoUsers = [];         // [{ id, name, department }, ...]
+var _memoCurrentUser = null; // 현재 선택된 사용자 { id, name, department }
+
+// 메모 팀 매핑 (메모키 → 사용 허용 팀명)
+var MEMO_TEAM_MAP = {
+    'receipt':   '고객지원팀',
+    'team_품질팀':  '품질보증팀',
+    'team_마케팅팀': '마케팅팀',
+    'team_재무팀':  '재무팀'
+};
+
+// 사용자 목록 로드 (최초 1회)
+async function loadMemoUsers() {
+    if (_memoUsers.length > 0) return;
+    try {
+        var snap = await db.collection('users').orderBy('name').get();
+        _memoUsers = [];
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            _memoUsers.push({ id: doc.id, name: d.name || doc.id, department: d.department || '' });
+        });
+    } catch(e) { console.warn('[메모 사용자 로드]', e.message); }
+}
+
+// 메모 사용자 선택 변경
+function onMemoUserSelect(selectEl) {
+    var uid = selectEl.value;
+    _memoCurrentUser = _memoUsers.find(function(u) { return u.id === uid; }) || null;
+    localStorage.setItem('bfl_memo_user_id', uid);
+    _refreshMemoSaveBtns();
+}
+
+// 팀에 따라 저장 버튼 활성/비활성 갱신
+function _refreshMemoSaveBtns() {
+    var dept = _memoCurrentUser ? _memoCurrentUser.department : '';
+    Object.keys(MEMO_TEAM_MAP).forEach(function(key) {
+        var btn = document.getElementById('memo-save-btn-' + key);
+        if (!btn) return;
+        var allowed = (MEMO_TEAM_MAP[key] === dept);
+        btn.style.display = allowed ? '' : 'none';
+        var ta = document.getElementById('memo-area-' + key);
+        if (ta) ta.readOnly = !allowed;
+    });
+}
 
 // ============================================================================
 // ═══ 소분류 수수료 규칙 — 공통 모듈(js/sub-chip-fee.js) 사용 ═══
@@ -1563,31 +1611,81 @@ function openDetailPanel(id, sampleIdx) {
     var teamMemo = r.teamMemo || {};
     var teamMemoLog = r.teamMemoLog || {};
 
-    // 접수메모: readonly, 기록자·시각 표시
-    var _memoByLine = _memoBy
-        ? '<div class="dp-memo-author">기록자: <strong>' + _memoBy + '</strong>' + (_memoAt ? ' &nbsp;·&nbsp; ' + _memoAt : '') + '</div>'
-        : '';
-    var memoHtml =
-        '<div style="margin-bottom:14px">' +
-        '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">접수메모</label>' +
-        '<textarea class="dp-memo-area" readonly>' + _receiptMemoText + '</textarea>' +
-        _memoByLine + '</div>';
+    // 메모 표시 형식: "내용(성명)" 또는 그냥 내용
+    function _memoDisplay(text, by) {
+        if (!text) return '';
+        return by ? (text + '(' + by + ')') : text;
+    }
 
-    // 팀 메모: 편집 가능 + 저장 버튼 + 기록자 표시
-    ['품질팀','마케팅팀','재무팀'].forEach(function(team) {
-        var tLog = teamMemoLog[team] || {};
-        var tByLine = (teamMemo[team] && tLog.by)
-            ? '<div class="dp-memo-author">기록자: <strong>' + tLog.by + '</strong>' + (tLog.at ? ' &nbsp;·&nbsp; ' + tLog.at : '') + '</div>'
-            : '';
+    // 사용자 선택 드롭다운
+    var savedUid = localStorage.getItem('bfl_memo_user_id') || '';
+    var userOptions = '<option value="">-- 사용자 선택 --</option>';
+    _memoUsers.forEach(function(u) {
+        var sel = (u.id === savedUid) ? ' selected' : '';
+        userOptions += '<option value="' + u.id + '"' + sel + '>' + u.name + ' (' + (u.department || '') + ')</option>';
+    });
+    var memoHtml =
+        '<div style="margin-bottom:12px;padding:8px 10px;background:#f8f9fb;border-radius:6px;border:1px solid #e2e6ed">' +
+        '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">메모 작성자 선택</label>' +
+        '<select style="width:100%;padding:5px 8px;border:1px solid #cdd5df;border-radius:5px;font-size:12px;font-family:inherit" onchange="onMemoUserSelect(this)">' +
+        userOptions + '</select></div>';
+
+    // 접수메모
+    var _recDisplayText = _memoDisplay(_receiptMemoText, _memoBy);
+    memoHtml +=
+        '<div style="margin-bottom:14px">' +
+        '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span></label>' +
+        '<textarea class="dp-memo-area" id="memo-area-receipt" readonly>' + (_recDisplayText) + '</textarea>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+        '<button class="dp-memo-save-btn" id="memo-save-btn-receipt" style="display:none" onclick="saveMemoField(\'receipt\')">저장</button>' +
+        (_memoAt ? '<div class="dp-memo-author">' + _memoAt + '</div>' : '') +
+        '</div></div>';
+
+    // 팀 메모
+    var _teamDefs = [
+        { key: 'team_품질팀',   label: '품질팀 메모',   team: '품질팀',   teamLabel: '품질보증팀' },
+        { key: 'team_마케팅팀', label: '마케팅팀 메모', team: '마케팅팀', teamLabel: '마케팅팀' },
+        { key: 'team_재무팀',   label: '재무팀 메모',   team: '재무팀',   teamLabel: '재무팀' }
+    ];
+    _teamDefs.forEach(function(def) {
+        var tLog = teamMemoLog[def.team] || {};
+        var tText = teamMemo[def.team] || '';
+        var tDisplayText = _memoDisplay(tText, tLog.by || '');
         memoHtml +=
             '<div style="margin-bottom:14px">' +
-            '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + team + ' 메모</label>' +
-            '<textarea class="dp-memo-area" id="memo-area-team_' + team + '">' + (teamMemo[team] || '') + '</textarea>' +
+            '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.teamLabel + ')</span></label>' +
+            '<textarea class="dp-memo-area" id="memo-area-' + def.key + '" readonly>' + tDisplayText + '</textarea>' +
             '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'team_' + team + '\')">저장</button>' +
-            tByLine + '</div></div>';
+            '<button class="dp-memo-save-btn" id="memo-save-btn-' + def.key + '" style="display:none" onclick="saveMemoField(\'' + def.key + '\')">저장</button>' +
+            (tLog.at ? '<div class="dp-memo-author">' + tLog.at + '</div>' : '') +
+            '</div></div>';
     });
+
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
+
+    // 저장된 사용자 복원 + 버튼 권한 갱신
+    if (savedUid && _memoUsers.length > 0) {
+        _memoCurrentUser = _memoUsers.find(function(u) { return u.id === savedUid; }) || null;
+    }
+    _refreshMemoSaveBtns();
+
+    // 사용자 목록이 아직 없으면 로드 후 드롭다운 갱신
+    if (_memoUsers.length === 0) {
+        loadMemoUsers().then(function() {
+            var sel = document.querySelector('#dp-tab-memo select');
+            if (!sel) return;
+            var opts = '<option value="">-- 사용자 선택 --</option>';
+            var sid = localStorage.getItem('bfl_memo_user_id') || '';
+            _memoUsers.forEach(function(u) {
+                opts += '<option value="' + u.id + '"' + (u.id === sid ? ' selected' : '') + '>' + u.name + ' (' + (u.department || '') + ')</option>';
+            });
+            sel.innerHTML = opts;
+            if (sid) {
+                _memoCurrentUser = _memoUsers.find(function(u) { return u.id === sid; }) || null;
+                _refreshMemoSaveBtns();
+            }
+        });
+    }
 
     // 수정이력 탭
     var editLog = r.editLog || [];
@@ -1965,11 +2063,16 @@ function saveMemoField(key) {
     var docId = r._origId || r.id;
     var textEl = document.getElementById('memo-area-' + key);
     if (!textEl) return;
-    var text = textEl.value.trim();
-    var savedName = localStorage.getItem('bfl_memo_author') || '';
-    var by = savedName || (prompt('작성자 이름을 입력하세요', '') || '');
-    if (!by) return;
-    localStorage.setItem('bfl_memo_author', by);
+
+    // 사용자 확인
+    if (!_memoCurrentUser) { showToast('먼저 메모 작성자를 선택하세요', 'error'); return; }
+    var by = _memoCurrentUser.name;
+
+    // textarea 값에서 "내용(성명)" 형식의 성명 부분 제거 → 순수 텍스트만 추출
+    var rawText = textEl.value.trim();
+    // 끝에 "(성명)" 패턴이 붙어있으면 제거
+    var text = rawText.replace(/\([^)]+\)$/, '').trim();
+
     var at = new Date().toISOString().slice(0,16).replace('T',' ');
 
     var updateObj = {};
@@ -1997,15 +2100,16 @@ function saveMemoField(key) {
             r.teamMemo[team] = text;
             r.teamMemoLog[team] = { by: by, at: at };
         }
-        // 기록자/시각 표시 업데이트
-        var btn = textEl.parentElement.querySelector('.dp-memo-save-btn');
-        var authorDiv = textEl.parentElement.querySelector('.dp-memo-author');
-        var newAuthorHtml = (by || at) ? '기록자: ' + (by || '-') + (at ? ' &nbsp;|&nbsp; ' + at : '') : '';
-        if (authorDiv) { authorDiv.innerHTML = newAuthorHtml; }
-        else if (newAuthorHtml && btn) {
+        // textarea에 "내용(성명)" 형식으로 업데이트
+        var displayText = text ? (text + '(' + by + ')') : '';
+        textEl.value = displayText;
+        // 시각 표시 갱신
+        var atDiv = textEl.parentElement.querySelector('.dp-memo-author');
+        if (atDiv) { atDiv.innerHTML = at; }
+        else {
             var d = document.createElement('div');
-            d.className = 'dp-memo-author'; d.innerHTML = newAuthorHtml;
-            btn.parentElement.appendChild(d);
+            d.className = 'dp-memo-author'; d.innerHTML = at;
+            textEl.parentElement.appendChild(d);
         }
         showToast('메모가 저장됐습니다', 'success');
     })
