@@ -109,6 +109,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .dp-section-title{font-size:12px;font-weight:700;color:#1a2332;margin:12px 0 8px;padding-top:8px;border-top:1px solid #eef0f4}
 .dp-sample-card{border:1px solid #e2e6ed;border-radius:8px;padding:10px;margin-bottom:8px}
 .dp-memo-area{width:100%;min-height:60px;border:1px solid #e2e6ed;border-radius:6px;padding:8px;font-size:12px;resize:vertical;background:#f8f9fb;font-family:inherit}
+.dp-memo-area:not([readonly]):focus{border-color:#1a73e8;outline:none;background:#fff;box-shadow:0 0 0 2px rgba(26,115,232,.1)}
+.dp-memo-save-btn{padding:4px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;font-family:inherit;margin-top:4px}
+.dp-memo-save-btn:hover{background:#1557b0}
+.dp-memo-author{margin-top:3px;font-size:11px;color:#94a3b8}
 
 /* 인라인 편집 */
 .dp-edit-input{width:100%;padding:4px 6px;border:1px solid #d0d5dd;border-radius:4px;font-size:12px;font-family:inherit;background:#fff;color:#1a2332}
@@ -1552,20 +1556,42 @@ function openDetailPanel(id, sampleIdx) {
         '</div>';
     document.getElementById('dp-tab-fee').innerHTML = feeHtml;
 
-    // 탭4 메모 — sampleMemo(현재 시료) 또는 noticeMemo(전체 시료) 모두 접수메모에 표시
+    // 탭4 메모 — 모든 메모 필드 편집 가능
     var _useSampleMemo = !!s.sampleMemo;
     var _receiptMemoText = s.sampleMemo || r.noticeMemo || r.receiptMemo || r.memo || '';
     var _memoBy = _useSampleMemo ? (s.sampleMemoBy || '') : (r.noticeMemoBy || '');
     var _memoAt = _useSampleMemo ? (s.sampleMemoAt || '') : (r.noticeMemoAt || '');
-    var _memoByHtml = (_receiptMemoText && (_memoBy || _memoAt))
-        ? '<div style="margin-top:3px;font-size:11px;color:#94a3b8">기록자: ' + (_memoBy || '-') + (_memoAt ? ' &nbsp;|&nbsp; ' + _memoAt : '') + '</div>'
-        : '';
-    var memoHtml = '<div style="margin-bottom:12px"><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">접수메모</label>' +
-        '<textarea class="dp-memo-area" readonly>' + _receiptMemoText + '</textarea>' + _memoByHtml + '</div>';
     var teamMemo = r.teamMemo || {};
+    var teamMemoLog = r.teamMemoLog || {};
+
+    function _memoAuthorHtml(by, at) {
+        if (!by && !at) return '';
+        return '<div class="dp-memo-author">기록자: ' + (by || '-') + (at ? ' &nbsp;|&nbsp; ' + at : '') + '</div>';
+    }
+    function _memoBlock(key, label, text, by, at) {
+        var safeText = text ? text.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+        return '<div style="margin-bottom:14px">' +
+            '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + label + '</label>' +
+            '<textarea class="dp-memo-area" id="memo-area-' + key + '">' + safeText + '</textarea>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'' + key + '\')">저장</button>' +
+            _memoAuthorHtml(by, at) +
+            '</div></div>';
+    }
+
+    var memoHtml =
+        // 작성자 입력 (localStorage 기억)
+        '<div style="margin-bottom:12px;padding:8px 10px;background:#f0f7ff;border-radius:6px;border:1px solid #bbdefb;display:flex;align-items:center;gap:8px">' +
+        '<label style="font-size:11px;color:#1565c0;font-weight:600;white-space:nowrap">작성자</label>' +
+        '<input id="memo-author-input" type="text" placeholder="이름 입력" style="flex:1;padding:4px 8px;border:1px solid #90caf9;border-radius:4px;font-size:12px;font-family:inherit" ' +
+        'value="' + (localStorage.getItem('bfl_memo_author') || '') + '" ' +
+        'oninput="localStorage.setItem(\'bfl_memo_author\',this.value)">' +
+        '</div>' +
+        _memoBlock('receipt', '접수메모', _receiptMemoText, _memoBy, _memoAt);
+
     ['품질팀','마케팅팀','재무팀'].forEach(function(team) {
-        memoHtml += '<div style="margin-bottom:12px"><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + team + ' 메모</label>' +
-            '<textarea class="dp-memo-area" readonly>' + (teamMemo[team] || '') + '</textarea></div>';
+        var tLog = teamMemoLog[team] || {};
+        memoHtml += _memoBlock('team_' + team, team + ' 메모', teamMemo[team] || '', tLog.by || '', tLog.at || '');
     });
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
 
@@ -1936,6 +1962,60 @@ function goToReceiptEdit() {
     if (!r) return;
     var docId = r._origId || r.id;
     window.open('sampleReceiptV2.html?edit=' + encodeURIComponent(docId), '_blank');
+}
+
+// 메모 저장 (접수현황 메모 탭에서 직접 저장)
+function saveMemoField(key) {
+    var r = _currentDetailRecord;
+    if (!r) return;
+    var docId = r._origId || r.id;
+    var textEl = document.getElementById('memo-area-' + key);
+    if (!textEl) return;
+    var text = textEl.value.trim();
+    var by = (document.getElementById('memo-author-input') || {}).value || '';
+    var at = new Date().toISOString().slice(0,16).replace('T',' ');
+
+    // localStorage에 작성자 기억
+    if (by) localStorage.setItem('bfl_memo_author', by);
+
+    var updateObj = {};
+    if (key === 'receipt') {
+        updateObj.noticeMemo = text;
+        updateObj.noticeMemoBy = by;
+        updateObj.noticeMemoAt = at;
+    } else if (key.indexOf('team_') === 0) {
+        var team = key.replace('team_', '');
+        updateObj['teamMemo.' + team] = text;
+        updateObj['teamMemoLog.' + team] = { by: by, at: at };
+    } else {
+        return;
+    }
+
+    db.collection('receipts').doc(docId).update(updateObj)
+    .then(function() {
+        // 로컬 캐시 업데이트
+        if (key === 'receipt') {
+            r.noticeMemo = text; r.noticeMemoBy = by; r.noticeMemoAt = at;
+        } else {
+            var team = key.replace('team_', '');
+            if (!r.teamMemo) r.teamMemo = {};
+            if (!r.teamMemoLog) r.teamMemoLog = {};
+            r.teamMemo[team] = text;
+            r.teamMemoLog[team] = { by: by, at: at };
+        }
+        // 기록자/시각 표시 업데이트
+        var btn = textEl.parentElement.querySelector('.dp-memo-save-btn');
+        var authorDiv = textEl.parentElement.querySelector('.dp-memo-author');
+        var newAuthorHtml = (by || at) ? '기록자: ' + (by || '-') + (at ? ' &nbsp;|&nbsp; ' + at : '') : '';
+        if (authorDiv) { authorDiv.innerHTML = newAuthorHtml; }
+        else if (newAuthorHtml && btn) {
+            var d = document.createElement('div');
+            d.className = 'dp-memo-author'; d.innerHTML = newAuthorHtml;
+            btn.parentElement.appendChild(d);
+        }
+        showToast('메모가 저장됐습니다', 'success');
+    })
+    .catch(function(e) { showToast('저장 실패: ' + e.message, 'error'); });
 }
 
 // ============================================================================
