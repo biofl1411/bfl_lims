@@ -1556,42 +1556,37 @@ function openDetailPanel(id, sampleIdx) {
         '</div>';
     document.getElementById('dp-tab-fee').innerHTML = feeHtml;
 
-    // 탭4 메모 — 모든 메모 필드 편집 가능
+    // 탭4 메모
     var _useSampleMemo = !!s.sampleMemo;
     var _receiptMemoText = s.sampleMemo || r.noticeMemo || r.receiptMemo || r.memo || '';
-    var _memoBy = _useSampleMemo ? (s.sampleMemoBy || '') : (r.noticeMemoBy || '');
+    var _memoBy = _useSampleMemo ? (s.sampleMemoBy || '') : (r.noticeMemoBy || r.salesRep || '');
     var _memoAt = _useSampleMemo ? (s.sampleMemoAt || '') : (r.noticeMemoAt || '');
     var teamMemo = r.teamMemo || {};
     var teamMemoLog = r.teamMemoLog || {};
 
-    function _memoAuthorHtml(by, at) {
-        if (!by && !at) return '';
-        return '<div class="dp-memo-author">기록자: ' + (by || '-') + (at ? ' &nbsp;|&nbsp; ' + at : '') + '</div>';
-    }
-    function _memoBlock(key, label, text, by, at) {
-        var safeText = text ? text.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
-        return '<div style="margin-bottom:14px">' +
-            '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + label + '</label>' +
-            '<textarea class="dp-memo-area" id="memo-area-' + key + '">' + safeText + '</textarea>' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'' + key + '\')">저장</button>' +
-            _memoAuthorHtml(by, at) +
-            '</div></div>';
-    }
-
+    // 접수메모: readonly, 기록자·시각 표시
+    var _memoByLine = (_receiptMemoText && _memoBy)
+        ? '<div class="dp-memo-author">기록자: <strong>' + _memoBy + '</strong>' + (_memoAt ? ' &nbsp;·&nbsp; ' + _memoAt : '') + '</div>'
+        : '';
     var memoHtml =
-        // 작성자 입력 (localStorage 기억)
-        '<div style="margin-bottom:12px;padding:8px 10px;background:#f0f7ff;border-radius:6px;border:1px solid #bbdefb;display:flex;align-items:center;gap:8px">' +
-        '<label style="font-size:11px;color:#1565c0;font-weight:600;white-space:nowrap">작성자</label>' +
-        '<input id="memo-author-input" type="text" placeholder="이름 입력" style="flex:1;padding:4px 8px;border:1px solid #90caf9;border-radius:4px;font-size:12px;font-family:inherit" ' +
-        'value="' + (localStorage.getItem('bfl_memo_author') || '') + '" ' +
-        'oninput="localStorage.setItem(\'bfl_memo_author\',this.value)">' +
-        '</div>' +
-        _memoBlock('receipt', '접수메모', _receiptMemoText, _memoBy, _memoAt);
+        '<div style="margin-bottom:14px">' +
+        '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">접수메모</label>' +
+        '<textarea class="dp-memo-area" readonly>' + _receiptMemoText + '</textarea>' +
+        _memoByLine + '</div>';
 
+    // 팀 메모: 편집 가능 + 저장 버튼 + 기록자 표시
     ['품질팀','마케팅팀','재무팀'].forEach(function(team) {
         var tLog = teamMemoLog[team] || {};
-        memoHtml += _memoBlock('team_' + team, team + ' 메모', teamMemo[team] || '', tLog.by || '', tLog.at || '');
+        var tByLine = (teamMemo[team] && tLog.by)
+            ? '<div class="dp-memo-author">기록자: <strong>' + tLog.by + '</strong>' + (tLog.at ? ' &nbsp;·&nbsp; ' + tLog.at : '') + '</div>'
+            : '';
+        memoHtml +=
+            '<div style="margin-bottom:14px">' +
+            '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + team + ' 메모</label>' +
+            '<textarea class="dp-memo-area" id="memo-area-team_' + team + '">' + (teamMemo[team] || '') + '</textarea>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'team_' + team + '\')">저장</button>' +
+            tByLine + '</div></div>';
     });
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
 
@@ -1972,11 +1967,11 @@ function saveMemoField(key) {
     var textEl = document.getElementById('memo-area-' + key);
     if (!textEl) return;
     var text = textEl.value.trim();
-    var by = (document.getElementById('memo-author-input') || {}).value || '';
+    var savedName = localStorage.getItem('bfl_memo_author') || '';
+    var by = savedName || (prompt('작성자 이름을 입력하세요', '') || '');
+    if (!by) return;
+    localStorage.setItem('bfl_memo_author', by);
     var at = new Date().toISOString().slice(0,16).replace('T',' ');
-
-    // localStorage에 작성자 기억
-    if (by) localStorage.setItem('bfl_memo_author', by);
 
     var updateObj = {};
     if (key === 'receipt') {
