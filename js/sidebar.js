@@ -272,10 +272,14 @@ const SIDEBAR_MENU = [
       { label: '대시보드 권한',     disabled: true },
       { label: '알림 설정',         disabled: true },
       { label: '시스템 로그',       disabled: true },
-      { label: 'API 설정(영업부용)', href: 'salesMgmt.html#apiSettings',  page: 'apiSettings',  internalPage: 'apiSettings' },
-      { label: 'API 수집 설정',    href: 'admin_api_settings.html',    page: 'admin-api-settings' },
-      { label: '수집 현황',         href: 'admin_collect_status.html',  page: 'admin-collect-status' },
-      { label: '신규 업체 알림',    href: 'admin_new_businesses.html',  page: 'admin-new-biz' }
+      { label: 'API',               href: 'admin_api.html',             page: 'admin-api',
+        subTabs: [
+          { tab: 'apiSettings' },
+          { tab: 'collectSettings' },
+          { tab: 'collectStatus' },
+          { tab: 'newBiz' }
+        ]
+      }
     ]
   }
 ];
