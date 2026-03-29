@@ -314,6 +314,22 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .crumb-link{color:#1a73e8;cursor:pointer;font-weight:600}
 .crumb-link:hover{text-decoration:underline}
 .crumb-cur{color:#1a2332;font-weight:700}
+
+/* ── 미수금활동내역 탭 ── */
+.ar-kpi-card{background:#fff;border:2px solid #e2e6ed;border-radius:12px;padding:12px 8px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.ar-kpi-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(26,115,232,.12)}
+.ar-kpi-card.active::after{content:'▼';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:10px;color:#1a73e8}
+.ar-kpi-emoji{font-size:18px;margin-bottom:4px}
+.ar-kpi-label{font-size:9px;font-weight:700;color:#5f6b7a;line-height:1.3}
+.ar-kpi-count{font-size:20px;font-weight:800}
+.ar-kpi-amount{font-size:9px;color:#8892a4;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar-radio-chip{padding:5px 10px;border:1px solid #e2e6ed;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:4px}
+.ar-radio-chip.selected{background:#e3f2fd;border-color:#1a73e8;color:#1565c0;font-weight:600}
+.ar-expand-icon{font-size:10px;color:#8892a4;transition:transform .2s;display:inline-block}
+.ar-company-row.expanded .ar-expand-icon{transform:rotate(90deg);color:#1a73e8}
+.ar-company-row.expanded{background:#f0f7ff !important}
+.ar-expand-row td{background:#f4f8ff;border-bottom:2px solid #1a73e8 !important;padding:0 !important}
+.ar-tl-btn.active-tl{background:#1a73e8 !important;color:#fff !important;border-color:#1a73e8 !important}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -911,11 +927,146 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 
       <!-- 탭2: 미수금활동내역 -->
       <div class="daily-tab-content" id="dtab-dailyCollection" style="display:none">
-      <div class="card">
-        <div class="card-hd"><h3>미수금 활동 내역</h3><div class="right"><button class="btn btn-primary btn-sm">+ 수금 활동 기록</button></div></div>
-        <div class="card-bd"><div style="text-align:center;padding:40px;color:#8892a4;font-size:13px">미수금 활동 내역 — Firestore 연동 예정</div></div>
-      </div>
-      </div>
+
+        <!-- [A] 알림 배너 -->
+        <div id="arAlertBanner" style="display:none;background:#fff8e1;border:1px solid #ffe082;border-left:4px solid #f59e0b;border-radius:10px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px">
+          <span style="font-size:20px;flex-shrink:0">⚠️</span>
+          <div id="arAlertText" style="font-size:12px;color:#78350f;line-height:1.8;flex:1"></div>
+          <button onclick="document.getElementById('arAlertBanner').style.display='none'" style="margin-left:auto;background:none;border:none;color:#92400e;font-size:16px;cursor:pointer">✕</button>
+        </div>
+
+        <!-- [B] 담당자 선택 바 -->
+        <div style="background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:#5f6b7a">👤 담당자 선택</span>
+          <select id="arRepSel" onchange="onArRepChange()" style="padding:7px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;font-weight:600;background:#f8f9fb;display:none"></select>
+          <span id="arRepBadge" style="display:none;background:#e3f2fd;border:1px solid #90caf9;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#1565c0"></span>
+          <div id="arTopbarInfo" style="margin-left:auto;font-size:11px;color:#8892a4;text-align:right"></div>
+        </div>
+
+        <!-- [C] KPI 카드 8개 -->
+        <div id="arKpiGrid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:16px"></div>
+
+        <!-- [D] 업체 목록 테이블 -->
+        <div class="card">
+          <div class="card-hd">
+            <h3 id="arTableTitle">업체 목록</h3>
+            <div class="right">
+              <button id="arTlAll"    class="btn btn-sm ar-tl-btn active-tl" onclick="filterByTrafficLight('all')"    style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;background:#1a73e8;color:#fff;border:1px solid #1a73e8;cursor:pointer">전체</button>
+              <button id="arTlRed"    class="btn btn-sm ar-tl-btn"           onclick="filterByTrafficLight('red')"    style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;background:#fff;color:#5f6b7a;border:1px solid #e2e6ed;cursor:pointer">🔴 위험</button>
+              <button id="arTlOrange" class="btn btn-sm ar-tl-btn"           onclick="filterByTrafficLight('orange')" style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;background:#fff;color:#5f6b7a;border:1px solid #e2e6ed;cursor:pointer">🟠 경고</button>
+              <button class="btn btn-secondary btn-sm" onclick="loadCollectionData()">🔄 새로고침</button>
+            </div>
+          </div>
+          <div class="card-bd" style="padding:0">
+            <table class="tbl" style="width:100%">
+              <thead>
+                <tr>
+                  <th style="width:32px;text-align:center"></th>
+                  <th style="width:28px;text-align:center">신호등</th>
+                  <th>회사명</th>
+                  <th style="text-align:right">미수금 총액</th>
+                  <th style="text-align:center">접수건수</th>
+                  <th style="text-align:center">최장 경과일</th>
+                  <th style="text-align:center">예상수금일</th>
+                  <th style="text-align:center">최근활동일</th>
+                  <th style="text-align:center">액션</th>
+                </tr>
+              </thead>
+              <tbody id="arCompanyTbody">
+                <tr><td colspan="9" style="text-align:center;padding:40px;color:#8892a4;font-size:13px">로딩 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- [F] 활동기록 모달 오버레이 -->
+        <div id="arActivityOverlay" class="overlay" style="z-index:9000">
+          <div style="background:#fff;border-radius:16px;padding:28px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+              <div>
+                <div style="font-size:16px;font-weight:800;color:#1a2332">📝 미수금 활동 기록</div>
+                <div id="arModalSubtitle" style="font-size:11px;color:#8892a4;margin-top:3px"></div>
+              </div>
+              <button onclick="document.getElementById('arActivityOverlay').classList.remove('show')" style="background:none;border:none;font-size:20px;color:#8892a4;cursor:pointer">✕</button>
+            </div>
+
+            <!-- 섹션1: 기본 정보 -->
+            <div style="background:#f8f9fb;border-radius:10px;padding:14px;margin-bottom:12px">
+              <div style="font-size:10px;font-weight:700;color:#8892a4;letter-spacing:.8px;margin-bottom:10px">기본 정보</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                <div><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">활동일</label><input type="date" id="arActDate" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit"></div>
+                <div><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">활동시각</label><input type="time" id="arActTime" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit"></div>
+              </div>
+              <div><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">기록자</label><input type="text" id="arActWriter" readonly style="width:100%;padding:7px 10px;border:1px solid #90caf9;border-radius:7px;font-size:12px;background:#f0f7ff;color:#1565c0;font-weight:600;font-family:inherit"></div>
+            </div>
+
+            <!-- 섹션2: 접촉 방법 -->
+            <div style="background:#f8f9fb;border-radius:10px;padding:14px;margin-bottom:12px">
+              <div style="font-size:10px;font-weight:700;color:#8892a4;letter-spacing:.8px;margin-bottom:10px">접촉 방법</div>
+              <div id="arContactMethodGroup" style="display:flex;gap:8px;flex-wrap:wrap">
+                <label class="ar-radio-chip" data-group="contactMethod" data-val="전화"><input type="radio" name="arContactMethod" value="전화" style="display:none">📞 전화</label>
+                <label class="ar-radio-chip" data-group="contactMethod" data-val="문자"><input type="radio" name="arContactMethod" value="문자" style="display:none">💬 문자</label>
+                <label class="ar-radio-chip" data-group="contactMethod" data-val="토스문자"><input type="radio" name="arContactMethod" value="토스문자" style="display:none">💸 토스문자</label>
+                <label class="ar-radio-chip" data-group="contactMethod" data-val="방문"><input type="radio" name="arContactMethod" value="방문" style="display:none">🚗 방문</label>
+                <label class="ar-radio-chip" data-group="contactMethod" data-val="이메일"><input type="radio" name="arContactMethod" value="이메일" style="display:none">📧 이메일</label>
+                <label class="ar-radio-chip" data-group="contactMethod" data-val="기타"><input type="radio" name="arContactMethod" value="기타" style="display:none">기타</label>
+              </div>
+            </div>
+
+            <!-- 섹션3: 상대방 정보 -->
+            <div style="background:#f8f9fb;border-radius:10px;padding:14px;margin-bottom:12px">
+              <div style="font-size:10px;font-weight:700;color:#8892a4;letter-spacing:.8px;margin-bottom:10px">상대방 정보</div>
+              <div style="margin-bottom:10px"><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">상대방 이름</label><input type="text" id="arContactName" placeholder="예: 홍길동 부장" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit"></div>
+              <div style="font-size:11px;color:#5f6b7a;margin-bottom:6px">상대방 인지 여부</div>
+              <div id="arContactAwareGroup" style="display:flex;gap:8px;flex-wrap:wrap">
+                <label class="ar-radio-chip" data-group="contactAware" data-val="인지"><input type="radio" name="arContactAware" value="인지" style="display:none">✅ 인지함</label>
+                <label class="ar-radio-chip" data-group="contactAware" data-val="미인지"><input type="radio" name="arContactAware" value="미인지" style="display:none">❓ 미인지</label>
+                <label class="ar-radio-chip" data-group="contactAware" data-val="부재"><input type="radio" name="arContactAware" value="부재" style="display:none">📵 부재중</label>
+              </div>
+            </div>
+
+            <!-- 섹션4: 입금 약속 -->
+            <div style="background:#f8f9fb;border-radius:10px;padding:14px;margin-bottom:12px">
+              <div style="font-size:10px;font-weight:700;color:#8892a4;letter-spacing:.8px;margin-bottom:10px">입금 약속</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px">
+                <input type="checkbox" id="arHasPromise" onchange="document.getElementById('arPromiseBox').style.display=this.checked?'block':'none'"> 입금 약속을 받았습니다
+              </label>
+              <div id="arPromiseBox" style="display:none;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:12px;margin-top:6px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                  <div><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">약속 일자</label><input type="date" id="arPromiseDate" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit"></div>
+                  <div><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">약속 금액</label><input type="text" id="arPromiseAmount" placeholder="0" oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',')" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit"></div>
+                </div>
+                <div style="font-size:11px;color:#5f6b7a;margin-bottom:6px">결제 방법</div>
+                <div id="arPayMethodGroup" style="display:flex;gap:8px;flex-wrap:wrap">
+                  <label class="ar-radio-chip" data-group="payMethod" data-val="온라인이체"><input type="radio" name="arPayMethod" value="온라인이체" style="display:none">🏦 온라인이체</label>
+                  <label class="ar-radio-chip" data-group="payMethod" data-val="카드"><input type="radio" name="arPayMethod" value="카드" style="display:none">💳 카드</label>
+                  <label class="ar-radio-chip" data-group="payMethod" data-val="현금"><input type="radio" name="arPayMethod" value="현금" style="display:none">💵 현금</label>
+                  <label class="ar-radio-chip" data-group="payMethod" data-val="기타"><input type="radio" name="arPayMethod" value="기타" style="display:none">기타</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- 섹션5: 메모 -->
+            <div style="background:#f8f9fb;border-radius:10px;padding:14px;margin-bottom:12px">
+              <div style="font-size:10px;font-weight:700;color:#8892a4;letter-spacing:.8px;margin-bottom:10px">메모</div>
+              <textarea id="arActNote" placeholder="통화 내용, 특이사항, 다음 조치 계획 등..." style="width:100%;min-height:70px;resize:vertical;padding:8px 10px;border:1px solid #e2e6ed;border-radius:7px;font-size:12px;font-family:inherit"></textarea>
+            </div>
+
+            <!-- 이전 활동 히스토리 -->
+            <div id="arHistorySection" style="display:none;margin-bottom:16px">
+              <div style="font-size:11px;font-weight:700;color:#5f6b7a;margin-bottom:10px">📋 이전 활동 히스토리</div>
+              <div id="arHistoryList"></div>
+            </div>
+
+            <!-- 하단 버튼 -->
+            <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:16px;border-top:1px solid #eef0f4;margin-top:4px">
+              <button class="btn btn-secondary" onclick="document.getElementById('arActivityOverlay').classList.remove('show')">취소</button>
+              <button class="btn btn-primary" onclick="saveActivityRecord()">💾 활동 저장</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dtab-dailyCollection -->
 
       <!-- 탭3: 거래명세표관리 -->
       <div class="daily-tab-content" id="dtab-dailyTrade" style="display:none">
@@ -6507,7 +6658,560 @@ function switchDailyTab(btn) {
   if (target) target.style.display = '';
   if (tabId === 'dailyTaxUnissued') loadTaxUnissuedData();
   if (tabId === 'dailyInvoice') loadTaxInvoiceData();
+  if (tabId === 'dailyCollection') initCollectionTab();
 }
+
+// ============================================================
+// 미수금 활동 내역 탭
+// ============================================================
+
+// ★ 로그인 구현 전 임시 설정 — 로그인 완성 후 이 블록만 교체
+var CURRENT_USER = { name: '이용표', role: 'admin' };
+var IS_ADMIN = true;
+// 로그인 연동 후 교체할 코드 (주석 보존):
+// firebase.auth().onAuthStateChanged(function(user) {
+//   if (!user) { location.href = 'login.html'; return; }
+//   db.collection('users').where('name','==',user.displayName).get()
+//     .then(function(snap) {
+//       var role = snap.empty ? 'staff' : (snap.docs[0].data().role || 'staff');
+//       CURRENT_USER = { name: user.displayName, role: role };
+//       IS_ADMIN = (role === 'admin' || role === 'manager');
+//       initCollectionTab();
+//     });
+// });
+
+var _arInited = false;
+var _arAllReceipts = [];      // 미수금 접수 목록
+var _arCompanyMap = {};       // companyName → { receipts[], salesRep, companyId, trafficLight, recentActivity }
+var _arKpiData = {};
+var _arCurrentKpiFilter = null;
+var _arCurrentTlFilter = 'all';
+var _arSelectedUser = '';     // 현재 선택된 담당자명
+var _arActivityCompany = '';  // 활동기록 모달 대상 업체명
+var _arRepCountMap = {};      // 담당자 → 담당 업체 수
+
+var _arKpiDefs = [
+  { key:'noDate',   emoji:'🔴', label:'수금일\n미지정',  color:'#e53935', activeBg:'#fff5f5', activeBd:'#e53935' },
+  { key:'within7',  emoji:'⏰', label:'7일 이내\n임박',  color:'#ff9800', activeBg:'#fff8f0', activeBd:'#ff9800' },
+  { key:'overdue',  emoji:'🔥', label:'수금일\n지남',    color:'#c62828', activeBg:'#fce4ec', activeBd:'#c62828' },
+  { key:'m3',       emoji:'📦', label:'3개월\n이하',     color:'#546e7a', activeBg:'#f0f7ff', activeBd:'#1a73e8' },
+  { key:'m6',       emoji:'📦', label:'6개월\n이하',     color:'#546e7a', activeBg:'#f0f7ff', activeBd:'#1a73e8' },
+  { key:'m9',       emoji:'📦', label:'9개월\n이하',     color:'#546e7a', activeBg:'#f0f7ff', activeBd:'#1a73e8' },
+  { key:'m12',      emoji:'📦', label:'12개월\n이하',    color:'#546e7a', activeBg:'#f0f7ff', activeBd:'#1a73e8' },
+  { key:'over1y',   emoji:'💀', label:'1년\n이상',       color:'#1a2332', activeBg:'#f0f0f0', activeBd:'#1a2332' }
+];
+
+var _arContactColors = { '전화':'#e3f2fd','문자':'#f3e5f5','토스문자':'#e8f5e9','방문':'#fff3e0','이메일':'#e0f7fa','기타':'#f5f5f5' };
+var _arContactEmoji  = { '전화':'📞','문자':'💬','토스문자':'💸','방문':'🚗','이메일':'📧','기타':'📋' };
+
+function initCollectionTab() {
+  if (_arInited) return;
+  _arInited = true;
+  loadSalesRepsFromCompanies();
+  loadCollectionData();
+}
+
+function _arToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+function _arFmt(d) { // "YYYY-MM-DD" → "YY.MM.DD"
+  if (!d) return '';
+  return d.slice(2).replace(/-/g, '.');
+}
+function _arDaysDiff(dateStr) { // 경과일
+  if (!dateStr) return 0;
+  var d = new Date(dateStr), n = new Date(_arToday());
+  return Math.floor((n - d) / 86400000);
+}
+
+async function loadSalesRepsFromCompanies() {
+  try {
+    var snap = await db.collection('companies').get();
+    var repCompany = {}; // rep → Set(companyName)
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      var rep = d.salesRep;
+      if (!rep) return;
+      if (!repCompany[rep]) repCompany[rep] = 0;
+      repCompany[rep]++;
+    });
+    var reps = Object.keys(repCompany).sort();
+    _arRepCountMap = repCompany;
+
+    if (IS_ADMIN) {
+      var sel = document.getElementById('arRepSel');
+      sel.style.display = '';
+      sel.innerHTML = '<option value="">전체 담당자</option>';
+      reps.forEach(function(r) {
+        sel.innerHTML += '<option value="' + r + '">' + r + ' (' + repCompany[r] + '개 업체)</option>';
+      });
+      _arSelectedUser = '';
+    } else {
+      document.getElementById('arRepSel').style.display = 'none';
+      var badge = document.getElementById('arRepBadge');
+      badge.style.display = '';
+      badge.textContent = '🔐 ' + CURRENT_USER.name + ' (본인 데이터만 조회)';
+      _arSelectedUser = CURRENT_USER.name;
+    }
+  } catch(e) { console.warn('[미수금] loadSalesReps:', e.message); }
+}
+
+function onArRepChange() {
+  _arSelectedUser = document.getElementById('arRepSel').value;
+  _arInited = false; // 강제 재로드
+  _arInited = true;
+  loadCollectionData();
+}
+
+async function loadCollectionData() {
+  document.getElementById('arCompanyTbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#8892a4">로딩 중...</td></tr>';
+  try {
+    var query = db.collection('receipts').where('feeTotal', '>', 0);
+    var snap = await query.get();
+
+    var today = _arToday();
+    _arAllReceipts = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      if (d.payDate) return; // 수금 완료 제외
+      if (_arSelectedUser && d.salesRep !== _arSelectedUser) return;
+      _arAllReceipts.push(Object.assign({}, d, { _id: doc.id }));
+    });
+
+    // 업체별 집계
+    _arCompanyMap = {};
+    _arAllReceipts.forEach(function(r) {
+      var cn = r.companyName || '(업체명 없음)';
+      if (!_arCompanyMap[cn]) {
+        _arCompanyMap[cn] = { receipts: [], salesRep: r.salesRep || '', companyId: '', trafficLight: _companyTrafficLight[r.companyName] || 'blue', recentActivity: '' };
+      }
+      _arCompanyMap[cn].receipts.push(r);
+    });
+
+    // companies에서 companyId, trafficLight 보완
+    // (이미 _companyTrafficLight에 있으면 사용, 없으면 blue)
+
+    // 최근 활동일 로드
+    await _loadRecentActivities();
+
+    _arKpiData = calcKpiCategories(_arAllReceipts);
+    renderKpiCards(_arKpiData);
+    updateAlertBanner(_arKpiData);
+    updateTopbarInfo();
+    renderArTable();
+  } catch(e) {
+    console.error('[미수금] loadCollectionData:', e);
+    document.getElementById('arCompanyTbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#e53935">데이터 로드 실패: ' + e.message + '</td></tr>';
+  }
+}
+
+async function _loadRecentActivities() {
+  try {
+    var companies = Object.keys(_arCompanyMap);
+    if (!companies.length) return;
+    // 최근 활동 조회 (companyName in 목록) — 청크 10개씩
+    var chunks = [];
+    for (var i = 0; i < companies.length; i += 10) chunks.push(companies.slice(i, i+10));
+    for (var ci = 0; ci < chunks.length; ci++) {
+      var snap = await db.collection('collectionActivities')
+        .where('companyName', 'in', chunks[ci])
+        .orderBy('activityDate', 'desc')
+        .get();
+      snap.forEach(function(doc) {
+        var d = doc.data();
+        var cn = d.companyName;
+        if (_arCompanyMap[cn] && !_arCompanyMap[cn].recentActivity) {
+          _arCompanyMap[cn].recentActivity = d.activityDate || '';
+        }
+      });
+    }
+  } catch(e) { /* collectionActivities 없으면 무시 */ }
+}
+
+function calcKpiCategories(receipts) {
+  var today = _arToday();
+  var d7 = new Date(); d7.setDate(d7.getDate() + 7);
+  var d7s = d7.toISOString().slice(0,10);
+  var result = {};
+  _arKpiDefs.forEach(function(def) { result[def.key] = { companies: [], totalAmount: 0 }; });
+
+  // 업체 단위 집계
+  Object.keys(_arCompanyMap).forEach(function(cn) {
+    var comp = _arCompanyMap[cn];
+    var totalAmt = comp.receipts.reduce(function(s, r) { return s + (r.feeTotal || 0); }, 0);
+    var noDate   = comp.receipts.some(function(r) { return !r.paymentDueDate; });
+    var overdue  = comp.receipts.some(function(r) { return r.paymentDueDate && r.paymentDueDate < today; });
+    var within7  = comp.receipts.some(function(r) { return r.paymentDueDate && r.paymentDueDate >= today && r.paymentDueDate <= d7s; });
+    var oldestDate = comp.receipts.reduce(function(min, r) { return (!min || (r.receiptDate && r.receiptDate < min)) ? r.receiptDate : min; }, null);
+    var days = oldestDate ? _arDaysDiff(oldestDate) : 0;
+
+    var entry = { cn: cn, totalAmount: totalAmt };
+    if (noDate)       { result['noDate'].companies.push(entry);  result['noDate'].totalAmount  += totalAmt; }
+    if (within7)      { result['within7'].companies.push(entry); result['within7'].totalAmount += totalAmt; }
+    if (overdue)      { result['overdue'].companies.push(entry); result['overdue'].totalAmount += totalAmt; }
+    if (days <= 90)   { result['m3'].companies.push(entry);      result['m3'].totalAmount      += totalAmt; }
+    else if (days <= 180) { result['m6'].companies.push(entry);  result['m6'].totalAmount      += totalAmt; }
+    else if (days <= 270) { result['m9'].companies.push(entry);  result['m9'].totalAmount      += totalAmt; }
+    else if (days <= 365) { result['m12'].companies.push(entry); result['m12'].totalAmount     += totalAmt; }
+    else                  { result['over1y'].companies.push(entry); result['over1y'].totalAmount += totalAmt; }
+  });
+  return result;
+}
+
+function renderKpiCards(kpiData) {
+  var grid = document.getElementById('arKpiGrid');
+  grid.innerHTML = '';
+  _arKpiDefs.forEach(function(def) {
+    var cat = kpiData[def.key] || { companies: [], totalAmount: 0 };
+    var isActive = _arCurrentKpiFilter === def.key;
+    var card = document.createElement('div');
+    card.className = 'ar-kpi-card' + (isActive ? ' active' : '');
+    if (isActive) { card.style.borderColor = def.activeBd; card.style.background = def.activeBg; }
+    card.innerHTML =
+      '<div class="ar-kpi-emoji">' + def.emoji + '</div>' +
+      '<div class="ar-kpi-label">' + def.label.replace('\n','<br>') + '</div>' +
+      '<div class="ar-kpi-count" style="color:' + def.color + '">' + cat.companies.length + '</div>' +
+      '<div class="ar-kpi-amount">' + (cat.totalAmount ? cat.totalAmount.toLocaleString() + '원' : '-') + '</div>';
+    card.onclick = (function(k) { return function() { filterByKpi(k); }; })(def.key);
+    grid.appendChild(card);
+  });
+}
+
+function updateAlertBanner(kpiData) {
+  var today = _arToday();
+  var overdueCat = kpiData['overdue'] || { companies: [], totalAmount: 0 };
+  var within7Cat = kpiData['within7'] || { companies: [], totalAmount: 0 };
+  if (!overdueCat.companies.length && !within7Cat.companies.length) {
+    document.getElementById('arAlertBanner').style.display = 'none';
+    return;
+  }
+  document.getElementById('arAlertBanner').style.display = 'flex';
+  document.getElementById('arAlertText').innerHTML =
+    '수금 예정일이 지난 업체 <strong>' + overdueCat.companies.length + '개</strong> / <strong>' + overdueCat.totalAmount.toLocaleString() + '원</strong> 미수금 상태입니다.<br>' +
+    '금일 수금 예정 <strong>' + within7Cat.companies.length + '건</strong> / <strong>' + within7Cat.totalAmount.toLocaleString() + '원</strong> &nbsp;|&nbsp; 미수금 활동을 기록해 주세요. 📝';
+}
+
+function updateTopbarInfo() {
+  var total = Object.keys(_arCompanyMap).length;
+  var totalAmt = _arAllReceipts.reduce(function(s, r) { return s + (r.feeTotal || 0); }, 0);
+  document.getElementById('arTopbarInfo').innerHTML =
+    '📅 기준일: ' + _arToday().replace(/-/g,'.').slice(2) + '&nbsp;&nbsp;|&nbsp;&nbsp;담당 미수금 업체 <strong>' + total + '개</strong> / 합계 <strong>' + totalAmt.toLocaleString() + '원</strong>';
+}
+
+function renderArTable() {
+  var tbody = document.getElementById('arCompanyTbody');
+  var today = _arToday();
+
+  // 필터링
+  var filtered = Object.keys(_arCompanyMap).filter(function(cn) {
+    var comp = _arCompanyMap[cn];
+    if (_arCurrentTlFilter !== 'all' && comp.trafficLight !== _arCurrentTlFilter) return false;
+    if (_arCurrentKpiFilter) {
+      var cat = _arKpiData[_arCurrentKpiFilter];
+      if (!cat) return false;
+      return cat.companies.some(function(e) { return e.cn === cn; });
+    }
+    return true;
+  });
+
+  // 금액 내림차순 정렬
+  filtered.sort(function(a, b) {
+    var ta = _arCompanyMap[a].receipts.reduce(function(s,r){return s+(r.feeTotal||0);},0);
+    var tb = _arCompanyMap[b].receipts.reduce(function(s,r){return s+(r.feeTotal||0);},0);
+    return tb - ta;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:48px"><div style="font-size:40px">🎉</div><div style="font-size:14px;font-weight:600;color:#5f6b7a;margin-top:8px">해당 조건의 미수금 업체가 없습니다</div><div style="font-size:12px;color:#8892a4;margin-top:4px">다른 필터를 선택해 보세요</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '';
+  filtered.forEach(function(cn) {
+    var comp = _arCompanyMap[cn];
+    var totalAmt = comp.receipts.reduce(function(s,r){return s+(r.feeTotal||0);},0);
+    var noDateCnt = comp.receipts.filter(function(r){return !r.paymentDueDate;}).length;
+    var oldestDate = comp.receipts.reduce(function(min,r){return (!min||(r.receiptDate&&r.receiptDate<min))?r.receiptDate:min;},null);
+    var days = oldestDate ? _arDaysDiff(oldestDate) : 0;
+    var daysColor = days > 90 ? '#e53935' : (days > 30 ? '#ff9800' : '#333');
+    var daysWeight = days > 30 ? '600' : '400';
+    var nearestDue = comp.receipts.reduce(function(min,r){return r.paymentDueDate&&(!min||r.paymentDueDate<min)?r.paymentDueDate:min;},null);
+    var tlClass = 'tl tl-' + (comp.trafficLight || 'blue');
+    var cid = cn.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+
+    var tr = document.createElement('tr');
+    tr.className = 'ar-company-row';
+    tr.dataset.company = cn;
+    tr.onclick = function() { toggleReceiptRows(cid, cn); };
+    tr.innerHTML =
+      '<td class="center"><span class="ar-expand-icon">▶</span></td>' +
+      '<td class="center"><span class="' + tlClass + '" style="display:inline-block;width:10px;height:10px;border-radius:50%"></span></td>' +
+      '<td><div style="font-weight:700">' + cn + (noDateCnt ? ' <span style="background:#fce4ec;color:#c62828;border-radius:4px;font-size:10px;padding:1px 6px;margin-left:4px">미지정 ' + noDateCnt + '건</span>' : '') + '</div>' +
+      '<div style="font-size:10px;color:#8892a4">' + (comp.salesRep || '') + '</div></td>' +
+      '<td style="text-align:right;color:#e53935;font-weight:700">' + totalAmt.toLocaleString() + '원</td>' +
+      '<td class="center">' + comp.receipts.length + '건</td>' +
+      '<td class="center" style="color:' + daysColor + ';font-weight:' + daysWeight + '">' + (days || '-') + '일</td>' +
+      '<td class="center">' + (nearestDue ? '<span style="font-size:11px">' + _arFmt(nearestDue) + '</span>' : '<span style="color:#e53935;font-weight:600">미지정</span>') + '</td>' +
+      '<td class="center" style="font-size:11px;color:' + (comp.recentActivity ? '#333' : '#8892a4') + '">' + (comp.recentActivity ? _arFmt(comp.recentActivity) : '없음') + '</td>' +
+      '<td class="center"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openActivityModal(\'' + cn.replace(/'/g,"\\'") + '\')">📝 활동기록</button></td>';
+    tbody.appendChild(tr);
+
+    // 펼침 행 (접수건 서브테이블) — 초기 숨김
+    var expandTr = document.createElement('tr');
+    expandTr.id = 'expand-' + cid;
+    expandTr.style.display = 'none';
+    expandTr.innerHTML = '<td colspan="9" class="ar-expand-row-td" style="background:#f4f8ff;border-bottom:2px solid #1a73e8;padding:0"></td>';
+    expandTr.querySelector('td').appendChild(_buildSubTable(cn, comp, cid));
+    tbody.appendChild(expandTr);
+  });
+
+  // 타이틀 업데이트
+  var title = _arCurrentKpiFilter ? (_arKpiDefs.find(function(d){return d.key===_arCurrentKpiFilter;})||{}).label || '업체 목록' : '업체 목록';
+  document.getElementById('arTableTitle').textContent = title.replace('\n',' ') + ' (' + filtered.length + '개 업체)';
+}
+
+function _buildSubTable(cn, comp, cid) {
+  var wrap = document.createElement('div');
+  wrap.style.padding = '16px 20px';
+  var header = document.createElement('div');
+  header.style.marginBottom = '10px';
+  header.innerHTML = '<span style="font-size:11px;font-weight:700;color:#1565c0">📋 ' + cn + ' — 접수건 목록</span><span style="font-size:10px;color:#8892a4;font-weight:400"> (날짜를 입력하고 [저장]을 누르세요)</span>';
+  wrap.appendChild(header);
+
+  var tbl = document.createElement('table');
+  tbl.style.cssText = 'width:100%;background:#fff;border:1px solid #e2e6ed;border-radius:8px;overflow:hidden;border-collapse:collapse';
+  tbl.innerHTML = '<thead><tr style="background:#e3f2fd;color:#1565c0;font-size:10px;font-weight:700">' +
+    '<th style="padding:8px 12px;text-align:left">접수번호</th>' +
+    '<th style="padding:8px 12px;text-align:left">접수일</th>' +
+    '<th style="padding:8px 12px;text-align:left">품목명</th>' +
+    '<th style="padding:8px 12px;text-align:right">금액</th>' +
+    '<th style="padding:8px 12px;text-align:center">예상수금일</th>' +
+    '<th style="padding:8px 12px;text-align:center">저장</th>' +
+    '</tr></thead><tbody></tbody>';
+  var tbdy = tbl.querySelector('tbody');
+
+  comp.receipts.forEach(function(r) {
+    var hasDue = !!r.paymentDueDate;
+    var tr = document.createElement('tr');
+    tr.style.borderTop = '1px solid #f0f0f0';
+    var inputId = 'due-' + r._id;
+    tr.innerHTML =
+      '<td style="padding:8px 12px;color:#1a73e8;font-weight:600;font-size:11px">' + (r.receiptNo || r._id) + '</td>' +
+      '<td style="padding:8px 12px;font-size:11px">' + _arFmt(r.receiptDate) + '</td>' +
+      '<td style="padding:8px 12px;font-size:11px">' + (r.companyName || '') + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:600">' + (r.feeTotal||0).toLocaleString() + '원</td>' +
+      '<td style="padding:8px 12px;text-align:center"><input type="date" id="' + inputId + '" value="' + (r.paymentDueDate || '') + '" style="width:130px;padding:5px 8px;border:1px solid ' + (hasDue?'#4caf50':'#e2e6ed') + ';border-radius:6px;font-size:11px;background:' + (hasDue?'#f1f8e9':'#fff') + ';font-family:inherit" onchange="this.style.borderColor=this.value?\'#4caf50\':\'#e2e6ed\';this.style.background=this.value?\'#f1f8e9\':\'#fff\'"></td>' +
+      '<td style="padding:8px 12px;text-align:center"><button class="btn btn-success btn-sm" onclick="savePaymentDueDate(\'' + r._id + '\',document.getElementById(\'' + inputId + '\').value,\'' + (cn.replace(/'/g,"\\'")) + '\')">저장</button></td>';
+    tbdy.appendChild(tr);
+  });
+  tbl.appendChild(tbdy);
+  wrap.appendChild(tbl);
+
+  // 고정 결제일 박스
+  var fixBox = document.createElement('div');
+  fixBox.style.cssText = 'background:#fff3e0;border:1px solid #ffe082;border-radius:8px;padding:10px 12px;margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+  fixBox.innerHTML =
+    '<span style="font-size:14px">📅</span>' +
+    '<span style="font-size:11px;font-weight:700;color:#e65100;white-space:nowrap">업체 고정 결제일 설정 (매월)</span>' +
+    '<input type="number" id="fixDay-' + cid + '" min="1" max="31" style="width:56px;text-align:center;padding:5px 8px;border:1px solid #ffcc80;border-radius:6px;font-size:12px;font-weight:700;font-family:inherit">' +
+    '<span style="font-size:11px;color:#e65100">일</span>' +
+    '<button class="btn btn-sm" style="background:#fff3e0;color:#e65100;border:1px solid #ffcc80" onclick="saveFixedPaymentDay(\'' + cid + '\',\'' + cn.replace(/'/g,"\\'") + '\')">미지정 건에 일괄 적용</button>' +
+    '<span style="font-size:10px;color:#8892a4">설정 시 새 접수건에도 자동 적용</span>';
+  wrap.appendChild(fixBox);
+  return wrap;
+}
+
+function toggleReceiptRows(cid, cn) {
+  var expandTr = document.getElementById('expand-' + cid);
+  var compRows = document.querySelectorAll('[data-company="' + cn + '"]');
+  if (!expandTr) return;
+  var isShown = expandTr.style.display !== 'none';
+  expandTr.style.display = isShown ? 'none' : '';
+  compRows.forEach(function(r) { r.classList.toggle('expanded', !isShown); });
+}
+
+async function savePaymentDueDate(receiptId, dateVal, companyName) {
+  if (!dateVal) { toast('❗ 날짜를 입력해 주세요'); return; }
+  try {
+    await db.collection('receipts').doc(receiptId).update({ paymentDueDate: dateVal });
+    // 로컬 캐시 갱신
+    var r = _arAllReceipts.find(function(x){ return x._id === receiptId; });
+    if (r) r.paymentDueDate = dateVal;
+    toast('✅ 수금일이 저장되었습니다');
+    _arKpiData = calcKpiCategories(_arAllReceipts);
+    renderKpiCards(_arKpiData);
+    updateAlertBanner(_arKpiData);
+  } catch(e) { toast('❗ 저장 실패: ' + e.message); }
+}
+
+async function saveFixedPaymentDay(cid, companyName) {
+  var dayInput = document.getElementById('fixDay-' + cid);
+  var day = parseInt(dayInput ? dayInput.value : 0);
+  if (!day || day < 1 || day > 31) { toast('❗ 1~31 사이의 숫자를 입력해 주세요'); return; }
+  try {
+    // companies 문서 찾기
+    var snap = await db.collection('companies').where('company', '==', companyName).limit(1).get();
+    if (!snap.empty) {
+      await db.collection('companies').doc(snap.docs[0].id).update({ fixedPaymentDay: day });
+    }
+    // 다음 달 N일 계산
+    var now = new Date();
+    var nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, day);
+    var dueDate = nextMonth.toISOString().slice(0, 10);
+    // 미지정 건만 batch update
+    var batch = db.batch();
+    var cnt = 0;
+    _arAllReceipts.filter(function(r){ return r.companyName === companyName && !r.paymentDueDate; })
+      .forEach(function(r) {
+        batch.update(db.collection('receipts').doc(r._id), { paymentDueDate: dueDate });
+        r.paymentDueDate = dueDate;
+        cnt++;
+      });
+    if (cnt > 0) await batch.commit();
+    toast('✅ 매월 ' + day + '일 고정 결제일 설정 완료 (' + cnt + '건 적용)');
+    _arKpiData = calcKpiCategories(_arAllReceipts);
+    renderKpiCards(_arKpiData);
+    updateAlertBanner(_arKpiData);
+    renderArTable();
+  } catch(e) { toast('❗ 저장 실패: ' + e.message); }
+}
+
+function filterByKpi(category) {
+  _arCurrentKpiFilter = (_arCurrentKpiFilter === category) ? null : category;
+  renderKpiCards(_arKpiData);
+  renderArTable();
+}
+
+function filterByTrafficLight(color) {
+  _arCurrentTlFilter = color;
+  document.querySelectorAll('.ar-tl-btn').forEach(function(btn) {
+    btn.classList.remove('active-tl');
+    btn.style.background = '#fff'; btn.style.color = '#5f6b7a'; btn.style.borderColor = '#e2e6ed';
+  });
+  var activeBtn = document.getElementById('arTl' + color.charAt(0).toUpperCase() + color.slice(1));
+  if (activeBtn) { activeBtn.classList.add('active-tl'); activeBtn.style.background='#1a73e8'; activeBtn.style.color='#fff'; activeBtn.style.borderColor='#1a73e8'; }
+  renderArTable();
+}
+
+async function openActivityModal(companyName) {
+  _arActivityCompany = companyName;
+  var comp = _arCompanyMap[companyName] || {};
+  var totalAmt = (comp.receipts || []).reduce(function(s,r){return s+(r.feeTotal||0);},0);
+
+  document.getElementById('arModalSubtitle').textContent = companyName + ' · 미수금 ' + totalAmt.toLocaleString() + '원';
+
+  // 기본값 초기화
+  var now = new Date();
+  document.getElementById('arActDate').value = _arToday();
+  document.getElementById('arActTime').value = now.toTimeString().substring(0, 5);
+  document.getElementById('arActWriter').value = _arSelectedUser || CURRENT_USER.name;
+  // 로그인 연동 후: document.getElementById('arActWriter').value = firebase.auth().currentUser.displayName;
+  document.getElementById('arContactName').value = '';
+  document.getElementById('arActNote').value = '';
+  document.getElementById('arHasPromise').checked = false;
+  document.getElementById('arPromiseBox').style.display = 'none';
+  document.getElementById('arPromiseDate').value = '';
+  document.getElementById('arPromiseAmount').value = '';
+
+  // 라디오칩 초기화
+  document.querySelectorAll('.ar-radio-chip').forEach(function(el) { el.classList.remove('selected'); el.querySelector('input').checked = false; });
+
+  // 이전 활동 히스토리 로드
+  loadActivityHistory(companyName);
+
+  document.getElementById('arActivityOverlay').classList.add('show');
+}
+
+async function loadActivityHistory(companyName) {
+  var section = document.getElementById('arHistorySection');
+  var list = document.getElementById('arHistoryList');
+  list.innerHTML = '';
+  try {
+    var snap = await db.collection('collectionActivities')
+      .where('companyName', '==', companyName)
+      .orderBy('activityDate', 'desc')
+      .limit(10)
+      .get();
+    if (snap.empty) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      var color = _arContactColors[d.contactMethod] || '#f5f5f5';
+      var emoji = _arContactEmoji[d.contactMethod] || '📋';
+      var awareColor = d.contactAware === '인지' ? '#e8f5e9' : (d.contactAware === '미인지' ? '#fff3e0' : '#fce4ec');
+      var awareTextColor = d.contactAware === '인지' ? '#2e7d32' : (d.contactAware === '미인지' ? '#e65100' : '#c62828');
+      var promiseTag = d.hasPromise ? '<span style="background:#f3e5f5;color:#7b1fa2;border-radius:4px;font-size:10px;padding:2px 6px">📅 ' + _arFmt(d.promiseDate) + ' ' + (d.promiseAmount ? d.promiseAmount.toLocaleString()+'원' : '') + ' 약속</span>' : '';
+      var item = document.createElement('div');
+      item.style.cssText = 'display:flex;gap:12px;margin-bottom:12px';
+      item.innerHTML =
+        '<div style="width:30px;height:30px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">' + emoji + '</div>' +
+        '<div style="background:#f8f9fb;border-radius:10px;padding:10px 14px;border:1px solid #eef0f4;flex:1">' +
+        '<div style="font-size:10px;color:#8892a4;margin-bottom:4px">' + _arFmt(d.activityDate) + ' · ' + (d.createdBy||'') + ' · ' + (d.contactName||'') + '</div>' +
+        '<div style="font-size:12px;line-height:1.6;margin-bottom:6px">' + (d.note || '(메모 없음)') + '</div>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
+        '<span style="background:' + color + ';border-radius:4px;font-size:10px;padding:2px 6px">' + (d.contactMethod||'') + '</span>' +
+        '<span style="background:' + awareColor + ';color:' + awareTextColor + ';border-radius:4px;font-size:10px;padding:2px 6px">' + (d.contactAware||'') + '</span>' +
+        promiseTag +
+        '</div></div>';
+      list.appendChild(item);
+    });
+  } catch(e) { section.style.display = 'none'; }
+}
+
+async function saveActivityRecord() {
+  var contactName = document.getElementById('arContactName').value.trim();
+  if (!contactName) { toast('❗ 상대방 이름을 입력해 주세요'); return; }
+  var writer = document.getElementById('arActWriter').value.trim();
+  if (!writer) { toast('❗ 담당자를 선택해 주세요'); return; }
+
+  var contactMethod = (document.querySelector('input[name="arContactMethod"]:checked') || {}).value || '';
+  var contactAware  = (document.querySelector('input[name="arContactAware"]:checked') || {}).value || '';
+  var payMethod     = (document.querySelector('input[name="arPayMethod"]:checked') || {}).value || '';
+  var hasPromise    = document.getElementById('arHasPromise').checked;
+  var promiseAmt    = parseInt((document.getElementById('arPromiseAmount').value || '0').replace(/,/g,'')) || 0;
+  var comp = _arCompanyMap[_arActivityCompany] || {};
+  var currentAR = (comp.receipts || []).reduce(function(s,r){return s+(r.feeTotal||0);},0);
+
+  var data = {
+    companyName:   _arActivityCompany,
+    salesRep:      writer,
+    activityDate:  document.getElementById('arActDate').value,
+    activityTime:  document.getElementById('arActTime').value,
+    contactMethod: contactMethod,
+    contactName:   contactName,
+    contactAware:  contactAware,
+    hasPromise:    hasPromise,
+    promiseDate:   hasPromise ? document.getElementById('arPromiseDate').value : null,
+    promiseAmount: hasPromise ? promiseAmt : 0,
+    paymentMethod: hasPromise ? payMethod : '',
+    note:          document.getElementById('arActNote').value.trim(),
+    currentAR:     currentAR,
+    createdBy:     writer,
+    createdAt:     firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    await db.collection('collectionActivities').add(data);
+    document.getElementById('arActivityOverlay').classList.remove('show');
+    toast('✅ 활동이 기록되었습니다');
+    // 최근 활동일 갱신
+    if (_arCompanyMap[_arActivityCompany]) _arCompanyMap[_arActivityCompany].recentActivity = data.activityDate;
+    renderArTable();
+  } catch(e) { toast('❗ 저장 실패: ' + e.message); }
+}
+
+// 라디오칩 클릭 핸들러 (이벤트 위임)
+document.addEventListener('click', function(e) {
+  var chip = e.target.closest('.ar-radio-chip');
+  if (!chip) return;
+  var radio = chip.querySelector('input[type="radio"]');
+  if (!radio) return;
+  radio.checked = true;
+  document.querySelectorAll('.ar-radio-chip input[name="' + radio.name + '"]').forEach(function(inp) {
+    inp.closest('.ar-radio-chip').classList.remove('selected');
+  });
+  chip.classList.add('selected');
+});
 function wlInit() {
   initDiary().then(function() {
     populateDiaryMyNameSel();
