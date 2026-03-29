@@ -410,8 +410,12 @@ function renderSidebar() {
               isActive = true;
             }
           }
-        } else if (!currentHash || !_hasHashMatchInMenu(currentFile, currentHash)) {
-          // href에 hash가 없고, 현재 URL에 hash가 없거나 다른 메뉴에서 매칭되지 않을 때
+        } else if (!currentHash) {
+          isActive = true;
+        } else if (item.subTabs && item.subTabs.some(function(t) { return t.tab === currentHash; })) {
+          // href에 hash 없고 subTabs에 현재 hash 포함 → active (hash 기반 탭 페이지)
+          isActive = true;
+        } else if (!_hasHashMatchInMenu(currentFile, currentHash)) {
           isActive = true;
         }
       }
