@@ -1611,10 +1611,25 @@ function openDetailPanel(id, sampleIdx) {
     var teamMemo = r.teamMemo || {};
     var teamMemoLog = r.teamMemoLog || {};
 
-    // 메모 표시 형식: "내용(성명)" 또는 그냥 내용
+    // 메모 표시 형식: "내용(성명)"
     function _memoDisplay(text, by) {
         if (!text) return '';
         return by ? (text + '(' + by + ')') : text;
+    }
+
+    // 팀별 사용자 선택 셀렉트 빌드 (users 로드 후 채워짐)
+    function _buildUserSelect(key, dept) {
+        var savedKey = 'bfl_memo_user_' + key;
+        var savedName = localStorage.getItem(savedKey) || '';
+        var users = _memoUsers.filter(function(u) { return u.department === dept; });
+        var opts = '<option value="">담당자 선택</option>';
+        users.forEach(function(u) {
+            opts += '<option value="' + u.name + '"' + (u.name === savedName ? ' selected' : '') + '>' + u.name + '</option>';
+        });
+        return '<select id="memo-user-' + key + '" ' +
+            'style="padding:2px 6px;border:1px solid #cdd5df;border-radius:4px;font-size:11px;font-family:inherit;color:#374151;background:#fff;margin-left:6px;cursor:pointer" ' +
+            'onchange="localStorage.setItem(\'bfl_memo_user_' + key + '\',this.value)">' +
+            opts + '</select>';
     }
 
     var memoHtml = '';
@@ -1623,18 +1638,20 @@ function openDetailPanel(id, sampleIdx) {
     var _recDisplayText = _memoDisplay(_receiptMemoText, _memoBy);
     memoHtml +=
         '<div style="margin-bottom:14px">' +
-        '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span></label>' +
-        '<textarea class="dp-memo-area" id="memo-area-receipt" readonly>' + (_recDisplayText) + '</textarea>' +
+        '<div style="display:flex;align-items:center;margin-bottom:4px">' +
+        '<label style="font-size:11px;color:#5f6b7a">접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span></label>' +
+        _buildUserSelect('receipt', '고객지원팀') + '</div>' +
+        '<textarea class="dp-memo-area" id="memo-area-receipt">' + _recDisplayText + '</textarea>' +
         '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-        '<button class="dp-memo-save-btn" id="memo-save-btn-receipt" style="display:none" onclick="saveMemoField(\'receipt\')">저장</button>' +
+        '<button class="dp-memo-save-btn" onclick="saveMemoField(\'receipt\')">저장</button>' +
         (_memoAt ? '<div class="dp-memo-author">' + _memoAt + '</div>' : '') +
         '</div></div>';
 
     // 팀 메모
     var _teamDefs = [
-        { key: 'team_품질팀',   label: '품질팀 메모',   team: '품질팀',   teamLabel: '품질보증팀' },
-        { key: 'team_마케팅팀', label: '마케팅팀 메모', team: '마케팅팀', teamLabel: '마케팅팀' },
-        { key: 'team_재무팀',   label: '재무팀 메모',   team: '재무팀',   teamLabel: '재무팀' }
+        { key: 'team_품질팀',   label: '품질팀 메모',   team: '품질팀',   dept: '품질보증팀' },
+        { key: 'team_마케팅팀', label: '마케팅팀 메모', team: '마케팅팀', dept: '마케팅팀' },
+        { key: 'team_재무팀',   label: '재무팀 메모',   team: '재무팀',   dept: '재무팀' }
     ];
     _teamDefs.forEach(function(def) {
         var tLog = teamMemoLog[def.team] || {};
@@ -1642,39 +1659,39 @@ function openDetailPanel(id, sampleIdx) {
         var tDisplayText = _memoDisplay(tText, tLog.by || '');
         memoHtml +=
             '<div style="margin-bottom:14px">' +
-            '<label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.teamLabel + ')</span></label>' +
-            '<textarea class="dp-memo-area" id="memo-area-' + def.key + '" readonly>' + tDisplayText + '</textarea>' +
+            '<div style="display:flex;align-items:center;margin-bottom:4px">' +
+            '<label style="font-size:11px;color:#5f6b7a">' + def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.dept + ')</span></label>' +
+            _buildUserSelect(def.key, def.dept) + '</div>' +
+            '<textarea class="dp-memo-area" id="memo-area-' + def.key + '">' + tDisplayText + '</textarea>' +
             '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-            '<button class="dp-memo-save-btn" id="memo-save-btn-' + def.key + '" style="display:none" onclick="saveMemoField(\'' + def.key + '\')">저장</button>' +
+            '<button class="dp-memo-save-btn" onclick="saveMemoField(\'' + def.key + '\')">저장</button>' +
             (tLog.at ? '<div class="dp-memo-author">' + tLog.at + '</div>' : '') +
             '</div></div>';
     });
 
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
 
-    // 저장된 사용자 복원 + 버튼 권한 갱신
-    if (savedUid && _memoUsers.length > 0) {
-        _memoCurrentUser = _memoUsers.find(function(u) { return u.id === savedUid; }) || null;
-    }
-    _refreshMemoSaveBtns();
-
-    // 사용자 목록이 아직 없으면 로드 후 드롭다운 갱신
-    if (_memoUsers.length === 0) {
-        loadMemoUsers().then(function() {
-            var sel = document.querySelector('#dp-tab-memo select');
+    // 사용자 목록 로드 후 셀렉트 채우기
+    loadMemoUsers().then(function() {
+        // 접수메모 셀렉트 (고객지원팀)
+        var allDefs = [
+            { key: 'receipt',      dept: '고객지원팀' },
+            { key: 'team_품질팀',   dept: '품질보증팀' },
+            { key: 'team_마케팅팀', dept: '마케팅팀' },
+            { key: 'team_재무팀',   dept: '재무팀' }
+        ];
+        allDefs.forEach(function(d) {
+            var sel = document.getElementById('memo-user-' + d.key);
             if (!sel) return;
-            var opts = '<option value="">-- 사용자 선택 --</option>';
-            var sid = localStorage.getItem('bfl_memo_user_id') || '';
-            _memoUsers.forEach(function(u) {
-                opts += '<option value="' + u.id + '"' + (u.id === sid ? ' selected' : '') + '>' + u.name + ' (' + (u.department || '') + ')</option>';
+            var savedName = localStorage.getItem('bfl_memo_user_' + d.key) || '';
+            var users = _memoUsers.filter(function(u) { return u.department === d.dept; });
+            var opts = '<option value="">담당자 선택</option>';
+            users.forEach(function(u) {
+                opts += '<option value="' + u.name + '"' + (u.name === savedName ? ' selected' : '') + '>' + u.name + '</option>';
             });
             sel.innerHTML = opts;
-            if (sid) {
-                _memoCurrentUser = _memoUsers.find(function(u) { return u.id === sid; }) || null;
-                _refreshMemoSaveBtns();
-            }
         });
-    }
+    });
 
     // 수정이력 탭
     var editLog = r.editLog || [];
@@ -2053,13 +2070,13 @@ function saveMemoField(key) {
     var textEl = document.getElementById('memo-area-' + key);
     if (!textEl) return;
 
-    // 사용자 확인
-    if (!_memoCurrentUser) { showToast('먼저 메모 작성자를 선택하세요', 'error'); return; }
-    var by = _memoCurrentUser.name;
+    // 섹션별 담당자 선택 값 읽기
+    var userSel = document.getElementById('memo-user-' + key);
+    var by = userSel ? userSel.value.trim() : '';
+    if (!by) { showToast('담당자를 먼저 선택하세요', 'error'); return; }
 
     // textarea 값에서 "내용(성명)" 형식의 성명 부분 제거 → 순수 텍스트만 추출
     var rawText = textEl.value.trim();
-    // 끝에 "(성명)" 패턴이 붙어있으면 제거
     var text = rawText.replace(/\([^)]+\)$/, '').trim();
 
     var at = new Date().toISOString().slice(0,16).replace('T',' ');
