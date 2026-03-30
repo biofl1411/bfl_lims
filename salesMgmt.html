@@ -6816,31 +6816,40 @@ async function _loadRecentActivities() {
     var companies = Object.keys(_arCompanyMap);
     if (!companies.length) return;
     var today = _arToday();
-    // 청크 10개씩 조회
+    // 청크 10개씩 조회 (orderBy 제거 → 복합 인덱스 불필요, 클라이언트 정렬)
     var chunks = [];
     for (var i = 0; i < companies.length; i += 10) chunks.push(companies.slice(i, i+10));
     for (var ci = 0; ci < chunks.length; ci++) {
       var snap = await db.collection('collectionActivities')
         .where('companyName', 'in', chunks[ci])
-        .orderBy('activityDate', 'desc')
         .get();
+      // 업체별로 활동 목록 수집 후 최신순 정렬
+      var byCompany = {};
       snap.forEach(function(doc) {
         var d = doc.data();
         var cn = d.companyName;
+        if (!byCompany[cn]) byCompany[cn] = [];
+        byCompany[cn].push(d);
+      });
+      Object.keys(byCompany).forEach(function(cn) {
         if (!_arCompanyMap[cn]) return;
-        // 최근 활동일 (첫 번째 = 최신)
-        if (!_arCompanyMap[cn].recentActivity) {
-          _arCompanyMap[cn].recentActivity = d.activityDate || '';
-        }
-        // 미이행 약속: hasPromise=true & promiseDate <= 오늘 & 아직 저장 안 된 것
-        if (d.hasPromise && d.promiseDate && d.promiseDate <= today) {
-          if (!_arPromiseMap[cn]) {
+        // 최신순 정렬
+        byCompany[cn].sort(function(a, b) {
+          return (b.activityDate || '') > (a.activityDate || '') ? 1 : -1;
+        });
+        // 최근 활동일
+        _arCompanyMap[cn].recentActivity = byCompany[cn][0].activityDate || '';
+        // 미이행 약속: hasPromise=true & promiseDate <= 오늘
+        byCompany[cn].forEach(function(d) {
+          if (d.hasPromise && d.promiseDate && d.promiseDate <= today && !_arPromiseMap[cn]) {
             _arPromiseMap[cn] = { promiseDate: d.promiseDate, promiseAmount: d.promiseAmount || 0 };
           }
-        }
+        });
       });
     }
-  } catch(e) { /* collectionActivities 없으면 무시 */ }
+  } catch(e) {
+    console.error('[미수금] _loadRecentActivities 오류:', e.message);
+  }
 }
 
 function calcKpiCategories(receipts) {
@@ -7172,14 +7181,19 @@ async function loadActivityHistory(companyName) {
   var list = document.getElementById('arHistoryList');
   list.innerHTML = '';
   try {
+    // orderBy 제거 → 복합 인덱스 불필요, 클라이언트에서 정렬
     var snap = await db.collection('collectionActivities')
       .where('companyName', '==', companyName)
-      .orderBy('activityDate', 'desc')
-      .limit(10)
+      .limit(20)
       .get();
     if (snap.empty) { section.style.display = 'none'; return; }
     section.style.display = '';
-    snap.forEach(function(doc) {
+    // 최신순 정렬 (클라이언트)
+    var docs = snap.docs.slice().sort(function(a, b) {
+      var da = a.data().activityDate || '', db2 = b.data().activityDate || '';
+      return da > db2 ? -1 : 1;
+    }).slice(0, 10);
+    docs.forEach(function(doc) {
       var d = doc.data();
       var color = _arContactColors[d.contactMethod] || '#f5f5f5';
       var emoji = _arContactEmoji[d.contactMethod] || '📋';
