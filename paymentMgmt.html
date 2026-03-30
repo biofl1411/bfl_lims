@@ -604,8 +604,14 @@ function applyFilter() {
 }
 
 function getTotalFee(d) {
-    // discountFinalPrice: 할인 후 최종가 (우선), feeTotal: 수수료합계, feeOriginal: 원래금액
-    return Number(d.discountFinalPrice || d.feeTotal || d.feeOriginal || d.totalFee || d.totalAmount || 0);
+    // 할인 최종가 우선
+    if (d.discountFinalPrice) return Number(d.discountFinalPrice);
+    // 시료별 fee 합산이 있으면 우선 사용 (feeTotal이 시료 1개 기준으로 저장된 경우 보정)
+    if (d.samples && d.samples.length > 0) {
+        var sampleSum = d.samples.reduce(function(acc, s) { return acc + Number(s.fee || 0); }, 0);
+        if (sampleSum > 0) return sampleSum;
+    }
+    return Number(d.feeTotal || d.feeOriginal || d.totalFee || d.totalAmount || 0);
 }
 
 function getPaidAmount(d) {
