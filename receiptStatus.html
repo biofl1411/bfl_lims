@@ -196,6 +196,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <select id="filter-rep" onchange="applyFilter()">
                 <option value="">전체 담당자</option>
             </select>
+            <select id="filter-pay" onchange="applyFilter()">
+                <option value="">전체 결제</option>
+                <option value="완납">완납</option>
+                <option value="부분입금">부분입금</option>
+                <option value="미입금">미입금</option>
+                <option value="미결제">미결제(부분+미입금)</option>
+            </select>
             <button class="btn btn-secondary btn-sm" onclick="resetFilters()">초기화</button>
             <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
                 <div style="position:relative;display:flex;align-items:center">
@@ -590,6 +597,23 @@ var ALL_COLUMNS = [
     { key: 'payStatus',    label: '결제',       visible: true,  width: '70px' }
 ];
 
+function getTotalFee(d) {
+    if (d.discountFinalPrice) return Number(d.discountFinalPrice);
+    if (d.samples && d.samples.length > 0) {
+        var itemSum = 0, hasItemFees = false;
+        d.samples.forEach(function(s) {
+            var items = s.testItems || s.refTestItems || [];
+            if (Array.isArray(items)) {
+                items.forEach(function(t) {
+                    if (t && Number(t.fee)) { itemSum += Number(t.fee); hasItemFees = true; }
+                });
+            }
+        });
+        if (hasItemFees && itemSum > 0) return itemSum;
+    }
+    return Number(d.feeTotal || d.feeOriginal || d.totalFee || d.totalAmount || 0);
+}
+
 var _allReceipts = [];
 var _filteredReceipts = [];
 var _sortKey = 'receiptDate';
@@ -677,17 +701,19 @@ async function loadReceipts() {
 
         var rawReceipts = await fsGetReceipts({ limit: 500 });
 
-        // ── 1단계: 거래처별 미수금 집계 (수수료>0 & 결제일 없음 = 미수금) ──
+        // ── 1단계: 거래처별 미수금 집계 (실제 미입금액 기준) ──
         _companyReceivables = {};
         rawReceipts.forEach(function(r) {
             var cust = findCompanyForReceipt(r);
             if (!cust) return;
             var key = cust.id || (cust.company || '').trim();
             if (!_companyReceivables[key]) _companyReceivables[key] = { oldestDate: null, totalAmount: 0 };
-            var fee = r.feeTotal || 0;
-            var hasPaid = !!(r.payDate); // 결제일이 있으면 결제 완료
-            if (fee > 0 && !hasPaid) {
-                _companyReceivables[key].totalAmount += fee;
+            var fee = getTotalFee(r);
+            var paidAmt = (r.payments || []).reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+            if (!paidAmt && r.payDate) paidAmt = fee; // 방안A 호환
+            var unpaid = Math.max(0, fee - paidAmt);
+            if (unpaid > 0) {
+                _companyReceivables[key].totalAmount += unpaid;
                 var rd = r.receiptDate || '';
                 if (rd && (!_companyReceivables[key].oldestDate || rd < _companyReceivables[key].oldestDate)) {
                     _companyReceivables[key].oldestDate = rd;
@@ -721,9 +747,14 @@ async function loadReceipts() {
             // 등급: Firestore 저장 값 사용 (companyMgmt에서 계산/저장)
             var grade = cust ? (cust.grade || 'F') : '';
             // 수수료 계산 (공급가액/세액/총계)
-            var ft = r.feeTotal || 0;
+            var ft = getTotalFee(r);
             var feeSupply = ft ? Math.round(ft / 1.1) : 0;
             var feeVat = ft ? ft - feeSupply : 0;
+            // 입금 상태 계산
+            var _paidAmt = (r.payments || []).reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+            if (!_paidAmt && r.payDate) _paidAmt = ft; // 방안A 호환
+            var _payKey = ft > 0 ? (_paidAmt >= ft ? '완납' : _paidAmt > 0 ? '부분입금' : '미입금') : '없음';
+            var _unpaid = Math.max(0, ft - _paidAmt);
 
             var samples = r.samples && r.samples.length > 0 ? r.samples : [{}];
             var totalCount = r.sampleTotalCount || samples.length || 1;
@@ -750,6 +781,10 @@ async function loadReceipts() {
                 row.feeSupply = feeSupply;
                 row.feeVat = feeVat;
                 row.feeTotal = ft;
+                // 입금 상태
+                row._paidAmount = _paidAmt;
+                row._unpaidAmount = _unpaid;
+                row._payStatusKey = _payKey;
                 // 시료별 긴급여부 (시료에 개별 설정이 있으면 우선)
                 var sampleUrgent = s['urgent-value'] || s.urgentValue || '';
                 if (sampleUrgent) row.urgent = sampleUrgent;
@@ -901,10 +936,15 @@ function applyFilter() {
     var urgentFilter = document.getElementById('filter-urgent').value;
     var trafficFilter = document.getElementById('filter-traffic').value;
     var repFilter = document.getElementById('filter-rep').value;
+    var payFilter = document.getElementById('filter-pay').value;
 
     _filteredReceipts = _allReceipts.filter(function(r) {
         if (status && r.status !== status) return false;
         if (field && r.testField !== field) return false;
+        if (payFilter) {
+            if (payFilter === '미결제') { if (r._payStatusKey !== '부분입금' && r._payStatusKey !== '미입금') return false; }
+            else if (r._payStatusKey !== payFilter) return false;
+        }
         if (from && r.receiptDate < from) return false;
         if (to && r.receiptDate > to) return false;
         if (urgentFilter) {
@@ -1273,8 +1313,12 @@ function renderTable() {
             } else if (col.key === 'billCompany') {
                 val = resolveBillCompanyName(r);
             } else if (col.key === 'payStatus') {
-                if (r.payDate) val = '✅완료';
-                else if (r.feeTotal > 0) val = '<span style="color:#e53935;font-weight:700">미수금</span>';
+                if (r._payStatusKey === '완납') val = '✅완납';
+                else if (r._payStatusKey === '부분입금') {
+                    var pct = r.feeTotal > 0 ? Math.round(r._paidAmount / r.feeTotal * 100) : 0;
+                    val = '<span style="color:#d97706;font-weight:700">부분(' + pct + '%)</span>';
+                }
+                else if (r._payStatusKey === '미입금') val = '<span style="color:#e53935;font-weight:700">미수금</span>';
                 else val = '-';
             }
             bhtml += '<td>' + val + '</td>';
@@ -1583,7 +1627,14 @@ function openDetailPanel(id, sampleIdx) {
         dpRow('세액', r.feeVat ? Number(r.feeVat).toLocaleString() + '원' : '-') +
         '<div class="dp-lbl">총계</div><div class="dp-val" style="font-size:18px;font-weight:700;color:#1a73e8">' + (r.feeTotal ? Number(r.feeTotal).toLocaleString() + '원' : '-') + '</div>' +
         dpRow('결제방법', r.payMethod) +
-        dpRow('결제일', r.payDate || '<span style="color:#e53935">미수금</span>') +
+        (function(){
+            if (r._payStatusKey === '완납') return dpRow('결제', '✅완납' + (r.payDate ? ' (' + r.payDate + ')' : ''));
+            if (r._payStatusKey === '부분입금') {
+                var pct = r.feeTotal > 0 ? Math.round(r._paidAmount / r.feeTotal * 100) : 0;
+                return dpRow('결제', '<span style="color:#d97706;font-weight:700">부분입금 ' + pct + '% (' + Number(r._paidAmount).toLocaleString() + '원 / 미수 ' + Number(r._unpaidAmount).toLocaleString() + '원)</span>');
+            }
+            return dpRow('결제', '<span style="color:#e53935">미수금 ' + (r.feeTotal ? Number(r.feeTotal).toLocaleString() + '원' : '') + '</span>');
+        })() +
         '</div>' +
         '<div class="dp-section-title">계산서 정보</div>' +
         '<div class="dp-grid">' +
