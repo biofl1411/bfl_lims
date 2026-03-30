@@ -4625,6 +4625,7 @@ var _diaryYear = new Date().getFullYear();
 var _diaryMonth = new Date().getMonth() + 1;
 var _diaryDate = null;
 var _diaryDoc = null;
+var _prevDiaryDoc = null; // 전날 일지 (익일계획 → 오늘 자동 채우기)
 var _diaryCardIdx = 0;
 var _diaryPurposes = [];
 var _diaryCompanies = [];
@@ -5023,13 +5024,25 @@ async function openDiaryDetail(docId) {
   var authorEl = document.getElementById('diaryDetailAuthor');
   if (authorEl) authorEl.textContent = '작성자: 사용자';
 
-  // Firestore 로드
+  // Firestore 로드 (오늘 + 전날)
+  _prevDiaryDoc = null;
   try {
     var docRef = db.collection('salesDiaries').doc(docId);
     var snap = await docRef.get();
     if (snap.exists) {
       _diaryDoc = snap.data();
       _diaryDoc._id = docId;
+    }
+    // 전날 날짜 계산
+    var d0 = new Date(docId.slice(0,4)+'-'+docId.slice(4,6)+'-'+docId.slice(6,8));
+    d0.setDate(d0.getDate() - 1);
+    var prevId = d0.getFullYear().toString() +
+      String(d0.getMonth()+1).padStart(2,'0') +
+      String(d0.getDate()).padStart(2,'0');
+    var prevSnap = await db.collection('salesDiaries').doc(prevId).get();
+    if (prevSnap.exists) {
+      _prevDiaryDoc = prevSnap.data();
+      _prevDiaryDoc._id = prevId;
     }
   } catch(e) { console.error(e); }
 
@@ -5042,10 +5055,17 @@ function renderDiaryDetailForm() {
   if (cards) cards.innerHTML = '';
   _diaryCardIdx = 0;
 
-  // 업체 카드
+  // 업체 카드 — 저장된 데이터 없으면 전날 익일계획(기존거래처) 자동 로드
   var companies = d.companies || [];
   if (companies.length === 0) {
-    addDiaryCompanyCard(); // 최소 1개
+    var prevExisting = (_prevDiaryDoc && _prevDiaryDoc.tomorrowExisting) || [];
+    if (prevExisting.length > 0) {
+      prevExisting.forEach(function(t) {
+        addDiaryCompanyCard({ companyName: t.companyName || '', region: '', collectMethod: t.collectMethod || '', note: t.note || '' });
+      });
+    } else {
+      addDiaryCompanyCard(); // 최소 1개 빈 카드
+    }
   } else {
     companies.forEach(function(c) { addDiaryCompanyCard(c); });
   }
@@ -5069,8 +5089,38 @@ function renderDiaryDetailForm() {
 
   updateDiarySumBlock();
 
+  // 전날 익일계획 > 신규영업 목록 → 섹션4 상단 표시
+  renderPrevNewSalesList();
+
   // 이전 영업일지 신규 영업 계획 로드
   loadPrevNewSalesPlan();
+}
+
+// ── 전날 익일계획 > 신규영업 목록 → 섹션4 상단 표시 ──
+function renderPrevNewSalesList() {
+  var sec = document.getElementById('newSalesPlanSection');
+  if (!sec) return;
+  var prevNew = (_prevDiaryDoc && _prevDiaryDoc.tomorrowNew) || [];
+  if (prevNew.length === 0) { sec.innerHTML = ''; return; }
+
+  var prevDate = _prevDiaryDoc._id || '';
+  var pd = prevDate.length === 8
+    ? (parseInt(prevDate.slice(4,6))) + '월 ' + parseInt(prevDate.slice(6,8)) + '일'
+    : '전날';
+
+  var html = '<div style="background:#f3e5f5;border:1px solid #ce93d8;border-radius:10px;padding:10px 14px;margin-bottom:10px">';
+  html += '<div style="font-size:11px;font-weight:700;color:#6a1b9a;margin-bottom:8px">📋 ' + pd + ' 신규영업 계획 (' + prevNew.length + '개 업체)</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:4px">';
+  prevNew.forEach(function(t) {
+    var nm = t.nm || t.companyName || '';
+    var method = t.contactMethod || '';
+    html += '<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e1bee7;border-radius:6px;padding:6px 10px;font-size:12px">';
+    html += '<span style="font-weight:600;color:#1a2332;flex:1">' + escHtml(nm) + '</span>';
+    if (method) html += '<span style="background:#f3e5f5;color:#6a1b9a;border-radius:4px;font-size:10px;padding:2px 7px">' + escHtml(method) + '</span>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  sec.innerHTML = html;
 }
 
 // ── 이전 영업일지 신규 영업 계획 불러오기 ──
