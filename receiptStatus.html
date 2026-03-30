@@ -1248,7 +1248,8 @@ function renderTable() {
             } else if (col.key === 'grade') {
                 val = gradeRenderBadge(val || 'C', null, null);
             } else if (col.key === 'feeSupply' || col.key === 'feeVat' || col.key === 'feeTotal') {
-                val = val ? Number(val).toLocaleString() + '원' : '-';
+                // 수수료는 시료 1번째 행에만 표시 (다시 동일 접수 시료 행에 중복 표시 방지)
+                val = r._sampleIdx === 0 ? (val ? Number(val).toLocaleString() + '원' : '-') : '';
             } else if (col.key === 'urgent') {
                 if (val === '시간긴급') val = '<span style="color:#e65100;font-weight:700">🔥시간</span>';
                 else if (val === '미생물긴급') val = '<span style="color:#8b5cf6;font-weight:700">🧫미생물</span>';
@@ -1369,9 +1370,9 @@ function updateSummaryBar() {
     _filteredReceipts.forEach(function(r) {
         var rk = r.id + '_' + r._sampleIdx;
         if (_selectedRows.has(rk)) {
-            sumSupply += (r.feeSupply || 0);
-            sumVat += (r.feeVat || 0);
-            sumTotal += (r.feeTotal || 0);
+            sumSupply += (r._sampleIdx === 0 ? (r.feeSupply || 0) : 0);
+            sumVat    += (r._sampleIdx === 0 ? (r.feeVat    || 0) : 0);
+            sumTotal  += (r._sampleIdx === 0 ? (r.feeTotal  || 0) : 0);
         }
     });
     document.getElementById('summary-count').textContent = count + '건 선택';
@@ -2174,9 +2175,9 @@ function downloadExcel() {
             r.testField || '',
             r.testPurpose || '',
             r.sampleTotalCount || 1,
-            r.feeSupply || 0,
-            r.feeVat || 0,
-            r.feeTotal || 0,
+            r._sampleIdx === 0 ? (r.feeSupply || 0) : '',
+            r._sampleIdx === 0 ? (r.feeVat    || 0) : '',
+            r._sampleIdx === 0 ? (r.feeTotal  || 0) : '',
             r.payDate || '미수금',
             r.salesRep || '',
             r.processingDeadline || '',
