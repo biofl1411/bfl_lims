@@ -7035,9 +7035,12 @@ function _buildSubTable(cn, comp, cid) {
   tbl.style.cssText = 'width:100%;background:#fff;border:1px solid #e2e6ed;border-radius:8px;overflow:hidden;border-collapse:collapse';
   tbl.innerHTML = '<thead><tr style="background:#e3f2fd;color:#1565c0;font-size:10px;font-weight:700">' +
     '<th style="padding:8px 12px;text-align:left">접수번호</th>' +
-    '<th style="padding:8px 12px;text-align:left">접수일</th>' +
+    '<th style="padding:8px 12px;text-align:center">접수일</th>' +
     '<th style="padding:8px 12px;text-align:left">품목명</th>' +
     '<th style="padding:8px 12px;text-align:right">금액</th>' +
+    '<th style="padding:8px 12px;text-align:center">처리기한</th>' +
+    '<th style="padding:8px 12px;text-align:center">계산서발행일</th>' +
+    '<th style="padding:8px 12px;text-align:center">성적서발행</th>' +
     '<th style="padding:8px 12px;text-align:center">예상수금일</th>' +
     '<th style="padding:8px 12px;text-align:center">저장</th>' +
     '</tr></thead><tbody></tbody>';
@@ -7048,11 +7051,43 @@ function _buildSubTable(cn, comp, cid) {
     var tr = document.createElement('tr');
     tr.style.borderTop = '1px solid #f0f0f0';
     var inputId = 'due-' + r._id;
+
+    // 처리기한 D-day
+    var deadlineCell = '-';
+    if (r.processingDeadline) {
+      var today = new Date(_arToday());
+      var dl = new Date(r.processingDeadline);
+      var diff = Math.floor((dl - today) / 86400000);
+      var dlFmt = _arFmt(r.processingDeadline);
+      if (diff < 0) {
+        deadlineCell = '<span style="color:#e53935;font-weight:700">' + dlFmt + '<br>D+' + Math.abs(diff) + ' 초과</span>';
+      } else if (diff === 0) {
+        deadlineCell = '<span style="color:#f57c00;font-weight:700">' + dlFmt + '<br>D-day</span>';
+      } else if (diff <= 3) {
+        deadlineCell = '<span style="color:#fb8c00;font-weight:600">' + dlFmt + '<br>D-' + diff + '</span>';
+      } else {
+        deadlineCell = '<span style="color:#555">' + dlFmt + '<br><span style="color:#8892a4">D-' + diff + '</span></span>';
+      }
+    }
+
+    // 계산서발행일
+    var billingCell = r.billingDate
+      ? '<span style="color:#1565c0">' + _arFmt(r.billingDate) + '</span>'
+      : '<span style="color:#e53935;font-size:10px">미발행</span>';
+
+    // 성적서발행여부
+    var reportCell = r.reportSentAt
+      ? '<span style="color:#2e7d32;font-weight:600">✔ 발행</span>'
+      : '<span style="color:#8892a4;font-size:10px">미발행</span>';
+
     tr.innerHTML =
       '<td style="padding:8px 12px;color:#1a73e8;font-weight:600;font-size:11px">' + (r.receiptNo || r._id) + '</td>' +
-      '<td style="padding:8px 12px;font-size:11px">' + _arFmt(r.receiptDate) + '</td>' +
-      '<td style="padding:8px 12px;font-size:11px">' + (r.companyName || '') + '</td>' +
+      '<td style="padding:8px 12px;font-size:11px;text-align:center">' + _arFmt(r.receiptDate) + '</td>' +
+      '<td style="padding:8px 12px;font-size:11px">' + (r.sampleName || r.itemName || r.companyName || '') + '</td>' +
       '<td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:600">' + (r.feeTotal||0).toLocaleString() + '원</td>' +
+      '<td style="padding:8px 12px;text-align:center;font-size:11px;line-height:1.4">' + deadlineCell + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;font-size:11px">' + billingCell + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;font-size:11px">' + reportCell + '</td>' +
       '<td style="padding:8px 12px;text-align:center"><input type="date" id="' + inputId + '" value="' + (r.paymentDueDate || '') + '" style="width:130px;padding:5px 8px;border:1px solid ' + (hasDue?'#4caf50':'#e2e6ed') + ';border-radius:6px;font-size:11px;background:' + (hasDue?'#f1f8e9':'#fff') + ';font-family:inherit" onchange="this.style.borderColor=this.value?\'#4caf50\':\'#e2e6ed\';this.style.background=this.value?\'#f1f8e9\':\'#fff\'"></td>' +
       '<td style="padding:8px 12px;text-align:center"><button class="btn btn-success btn-sm" onclick="savePaymentDueDate(\'' + r._id + '\',document.getElementById(\'' + inputId + '\').value,\'' + (cn.replace(/'/g,"\\'")) + '\')">저장</button></td>';
     tbdy.appendChild(tr);
