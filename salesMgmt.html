@@ -4831,7 +4831,7 @@ async function loadDiaryList() {
       // 매출 합계
       var total = 0;
       companies.forEach(function(c) {
-        if (c.purposeSales) Object.values(c.purposeSales).forEach(function(v) { total += (v.amount || 0); });
+        total += (c.salesAmtWithVat || 0);
       });
       var revHtml = total > 0 ? '<span style="font-weight:700;color:#1565c0">' + total.toLocaleString() + '원</span>' : '<span style="color:#c8d6e5">\u2014</span>';
 
@@ -4899,7 +4899,7 @@ async function loadCenterSummary() {
       if (!personMap[author]) personMap[author] = { sales: 0, latestDate: '' };
       var total = 0;
       (data.companies || []).forEach(function(c) {
-        if (c.purposeSales) Object.values(c.purposeSales).forEach(function(v) { total += (v.amount || 0); });
+          total += (c.salesAmtWithVat || 0);
       });
       personMap[author].sales += total;
       if (!personMap[author].latestDate || data.date > personMap[author].latestDate) {
@@ -4972,7 +4972,7 @@ function updateDiaryStats(docs) {
   docs.forEach(function(doc) {
     (doc.companies || []).forEach(function(c) {
       if (c.collectMethod === '방문') visits++;
-      if (c.purposeSales) Object.values(c.purposeSales).forEach(function(v) { revenue += (v.amount||0); });
+      revenue += (c.salesAmtWithVat || 0);
       if (c.type === 'new') newBiz++;
     });
     if (doc.newSalesActivity) newBiz++;
@@ -5216,29 +5216,9 @@ function addDiaryCompanyCard(data) {
     methodOpts += '<option' + sel + '>' + m + '</option>';
   });
 
-  // 검사목적별 매출 (4열 그리드, 접수취소 제외, 부가세 포함 입력)
-  var savedPS = d.purposeSales || {};
-  var filteredP = _diaryPurposes.filter(function(p) { return (p.n||'').indexOf('접수취소') === -1; });
-  var ptHtml = '';
-  if (filteredP.length === 0) {
-    ptHtml = '<div style="text-align:center;color:#8892a4;font-size:11px;padding:12px">검사목적 관리에서 먼저 검사목적을 등록하세요.</div>';
-  } else {
-    ptHtml = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 14px">';
-    filteredP.forEach(function(p,pi) {
-      var pn = p.n || '';
-      var pColor = p.color || DIARY_PURPOSE_PALETTE[pi % DIARY_PURPOSE_PALETTE.length].color;
-      var pTc = p.textColor || DIARY_PURPOSE_PALETTE[pi % DIARY_PURPOSE_PALETTE.length].textColor;
-      var saved = savedPS[pn] || {};
-      var amt = saved.amount || '';
-      ptHtml += '<div style="display:flex;align-items:center;gap:6px">';
-      ptHtml += '<span style="background:' + pColor + ';color:' + pTc + ';padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap;width:120px;min-width:120px;max-width:120px;text-align:center;overflow:hidden;text-overflow:ellipsis;display:inline-block;box-sizing:border-box" title="' + escHtml(pn) + '">' + escHtml(pn) + '</span>';
-      ptHtml += '<input data-uid="' + uid + '" data-pn="' + escHtml(pn) + '" data-field="amount" value="' + amt + '" oninput="onDiaryAmtChange(this)" placeholder="0" style="padding:6px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px;text-align:right;flex:1;min-width:80px">';
-      ptHtml += '<span style="font-size:10px;color:#8892a4;white-space:nowrap">원</span>';
-      ptHtml += '</div>';
-    });
-    ptHtml += '</div>';
-  }
-  ptHtml += '<div id="dc-sub-' + uid + '" style="text-align:right;font-size:12px;font-weight:700;color:#1565c0;margin-top:6px"></div>';
+  // 매출 입력 (부가세포함 입력 → 부가세별도 자동계산)
+  var savedVat = d.salesAmtWithVat || '';
+  var savedEx  = d.salesAmtExVat  || '';
 
   card.innerHTML =
     '<div class="sub-card-hd">' +
@@ -5268,9 +5248,15 @@ function addDiaryCompanyCard(data) {
           '<select id="dc-method-' + uid + '" style="padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;width:100%">' + methodOpts + '</select>' +
         '</div>' +
       '</div>' +
-      '<div style="margin-bottom:8px">' +
-        '<label style="font-size:10px;color:#8892a4;display:block;margin-bottom:4px">검사목적별 매출 (부가세 포함)</label>' +
-        ptHtml +
+      '<div style="display:flex;gap:12px;margin-bottom:8px;align-items:flex-end">' +
+        '<div style="flex:1">' +
+          '<label style="font-size:10px;color:#8892a4;display:block;margin-bottom:4px">매출 (단위:원 / 부가세 포함)</label>' +
+          '<input id="dc-sales-vat-' + uid + '" data-uid="' + uid + '" data-field="salesAmtWithVat" value="' + (savedVat ? Number(savedVat).toLocaleString('ko-KR') : '') + '" placeholder="0" oninput="onDiarySalesVatChange(this)" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px;text-align:right;box-sizing:border-box">' +
+        '</div>' +
+        '<div style="flex:1">' +
+          '<label style="font-size:10px;color:#8892a4;display:block;margin-bottom:4px">매출 (단위:원 / 부가세 별도) <span style="color:#1a73e8">자동계산</span></label>' +
+          '<input id="dc-sales-ex-' + uid + '" data-uid="' + uid + '" data-field="salesAmtExVat" value="' + (savedEx ? Number(savedEx).toLocaleString('ko-KR') : '') + '" readonly placeholder="부가세 포함 입력 시 자동계산" style="width:100%;padding:7px 10px;border:1px solid #e2e6ed;border-radius:6px;font-size:13px;text-align:right;background:#f8f9fb;color:#1565c0;font-weight:600;box-sizing:border-box">' +
+        '</div>' +
       '</div>' +
       // 특이사항 + 파일 첨부
       '<div class="fg" style="margin:0"><label>특이사항</label>' +
@@ -5717,53 +5703,40 @@ function onDiaryAmtChange(inp) {
   var raw = inp.value.replace(/[^0-9]/g,'');
   if (raw) inp.value = Number(raw).toLocaleString('ko-KR');
   else inp.value = '';
-  var uid = inp.getAttribute('data-uid');
-  refreshCardSubtotal(uid);
   updateDiarySumBlock();
 }
 
-function refreshCardSubtotal(uid) {
-  var card = document.getElementById('dc-' + uid);
-  if (!card) return;
-  var inputs = card.querySelectorAll('input[data-field="amount"]');
-  var sub = 0;
-  inputs.forEach(function(inp) { sub += (Number(inp.value.replace(/,/g,'')) || 0); });
-  var el = document.getElementById('dc-sub-' + uid);
-  if (el) el.textContent = sub > 0 ? '\uc18c\uacc4: ' + sub.toLocaleString() + '\uc6d0' : '';
+function onDiarySalesVatChange(inp) {
+  var raw = inp.value.replace(/[^0-9]/g,'');
+  if (raw) inp.value = Number(raw).toLocaleString('ko-KR');
+  else inp.value = '';
+  var uid = inp.getAttribute('data-uid');
+  var vatAmt = Number(raw) || 0;
+  var exAmt = vatAmt > 0 ? Math.round(vatAmt / 1.1) : 0;
+  var exInp = document.getElementById('dc-sales-ex-' + uid);
+  if (exInp) exInp.value = exAmt > 0 ? exAmt.toLocaleString('ko-KR') : '';
+  updateDiarySumBlock();
 }
 
 function updateDiarySumBlock() {
   var block = document.getElementById('diarySumBlock');
   if (!block) return;
 
-  var sums = {};
-  var total = 0;
-  document.querySelectorAll('#diaryCompanyCards input[data-field="amount"]').forEach(function(inp) {
-    var pn = inp.getAttribute('data-pn');
-    var v = Number(inp.value.replace(/,/g,'')) || 0;
-    if (v > 0) {
-      sums[pn] = (sums[pn]||0) + v;
-      total += v;
-    }
+  var totalVat = 0;
+  document.querySelectorAll('#diaryCompanyCards input[data-field="salesAmtWithVat"]').forEach(function(inp) {
+    totalVat += Number(inp.value.replace(/,/g,'')) || 0;
   });
 
-  if (total === 0) {
-    block.innerHTML = '<div style="color:#8892a4;font-size:12px;text-align:center;padding:14px">\uc5c5\uccb4\ubcc4 \uae08\uc561\uc744 \uc785\ub825\ud558\uba74 \uc790\ub3d9 \ucde8\ud569\ub429\ub2c8\ub2e4.</div>';
+  if (totalVat === 0) {
+    block.innerHTML = '<div style="color:#8892a4;font-size:12px;text-align:center;padding:14px">업체별 매출을 입력하면 자동 취합됩니다.</div>';
     return;
   }
 
+  var supply = Math.round(totalVat / 1.1);
+  var vat = totalVat - supply;
   var html = '';
-  Object.keys(sums).forEach(function(pn) {
-    var p = _diaryPurposes.find(function(x){return x.n===pn;});
-    var pi = _diaryPurposes.indexOf(p);
-    var c = (p && p.color) || DIARY_PURPOSE_PALETTE[(pi>=0?pi:0) % DIARY_PURPOSE_PALETTE.length].color;
-    var tc = (p && p.textColor) || DIARY_PURPOSE_PALETTE[(pi>=0?pi:0) % DIARY_PURPOSE_PALETTE.length].textColor;
-    html += '<div class="sum-row"><span><span style="background:'+c+';color:'+tc+';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600">'+escHtml(pn)+'</span></span><span style="font-weight:600">'+sums[pn].toLocaleString()+'\uc6d0</span></div>';
-  });
-  html += '<div class="sum-total"><span>합계 (부가세 포함)</span><span>' + total.toLocaleString() + '원</span></div>';
-  var supply = Math.round(total / 1.1);
-  var vat = total - supply;
-  html += '<div class="sum-vat">공급가액: ' + supply.toLocaleString() + '원 · 세액: ' + vat.toLocaleString() + '원</div>';
+  html += '<div class="sum-total"><span>합계 (부가세 포함)</span><span>' + totalVat.toLocaleString() + '원</span></div>';
+  html += '<div class="sum-vat">공급가액 (부가세 별도): ' + supply.toLocaleString() + '원 · 세액: ' + vat.toLocaleString() + '원</div>';
   block.innerHTML = html;
 }
 
@@ -5793,14 +5766,10 @@ function collectDiaryFormData(status) {
       }
     }
 
-    var ps = {};
-    card.querySelectorAll('input[data-field="amount"]').forEach(function(inp) {
-      var pn = inp.getAttribute('data-pn');
-      var amt = Number(inp.value.replace(/,/g,'')) || 0;
-      var memoInp = card.querySelector('input[data-pn="' + pn + '"][data-field="memo"]');
-      var memo = memoInp ? memoInp.value : '';
-      if (amt > 0 || memo) ps[pn] = { amount: amt, memo: memo };
-    });
+    var vatInp = document.getElementById('dc-sales-vat-' + uid);
+    var exInp  = document.getElementById('dc-sales-ex-'  + uid);
+    var salesAmtWithVat = vatInp ? (Number((vatInp.value||'').replace(/,/g,'')) || 0) : 0;
+    var salesAmtExVat   = exInp  ? (Number((exInp.value||'').replace(/,/g,''))  || 0) : 0;
 
     var compName = comp ? comp.value : '';
     var compId = '';
@@ -5817,7 +5786,8 @@ function collectDiaryFormData(status) {
       companyName: compName,
       region: addr ? addr.value : '',
       collectMethod: method ? method.value : '',
-      purposeSales: ps,
+      salesAmtWithVat: salesAmtWithVat,
+      salesAmtExVat: salesAmtExVat,
       note: note ? note.value : '',
       proposal: (document.getElementById('dc-proposal-' + uid) || {}).value || '',
       compareQuote: !!(document.getElementById('dc-compare-toggle-' + uid) || {}).checked,
