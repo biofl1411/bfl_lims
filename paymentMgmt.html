@@ -863,6 +863,15 @@ async function processPayment() {
         var remain = Math.max(0, total - paid);
         var pct = total > 0 ? Math.min(100, Math.round(paid / total * 100)) : 100;
         var barColor = pct >= 100 ? '#10b981' : pct > 0 ? '#f59e0b' : '#e5e7eb';
+
+        // ── 방안 A: 전액 입금 완료 시 접수현황(receiptStatus) 연동 필드 동기화 ──
+        if (total > 0 && paid >= total) {
+            var syncUpdate = { payDate: date, payMethod: method };
+            await db.collection('receipts').doc(currentReceiptId).update(syncUpdate);
+            r.data.payDate = date;
+            r.data.payMethod = method;
+        }
+
         document.getElementById('modal-remain').textContent = formatMoney(remain);
         document.getElementById('modal-remain').className = 'val ' + (remain > 0 ? 'red' : 'green');
         document.getElementById('pay-amount').value = remain > 0 ? remain.toLocaleString() : '';
@@ -902,6 +911,17 @@ async function deletePayment(idx) {
         var total = getTotalFee(d);
         var paid = getPaidAmount(d);
         var remain = Math.max(0, total - paid);
+
+        // ── 방안 A: 입금 삭제로 미완료 상태가 되면 접수현황 연동 필드 초기화 ──
+        if (total > 0 && paid < total && r.data.payDate) {
+            await db.collection('receipts').doc(currentReceiptId).update({
+                payDate: firebase.firestore.FieldValue.delete(),
+                payMethod: firebase.firestore.FieldValue.delete()
+            });
+            delete r.data.payDate;
+            delete r.data.payMethod;
+        }
+
         document.getElementById('modal-remain').textContent = formatMoney(remain);
         renderPayHistory(d.payments);
         renderTable();
