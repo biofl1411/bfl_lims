@@ -245,6 +245,7 @@ const SIDEBAR_MENU = [
       { label: '매출처원장',           href: 'ledgerMgmt.html',  page: 'finance-ledger' },
       { label: '입금 관리',           href: 'paymentMgmt.html',    page: 'finance-payment' },
       { label: '세금계산서',          href: 'taxInvoice.html',     page: 'finance-tax' },
+      { label: '접수현황',            href: 'receiptFinance.html', page: 'finance-receipt' },
       { label: '입금 통계',           href: 'paymentStats.html',   page: 'finance-stats' }
     ]
   },
