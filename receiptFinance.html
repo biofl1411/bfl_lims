@@ -250,6 +250,7 @@ tr:hover{background:#fafbfc}
                 <th>검사목적</th>
                 <th>담당자</th>
                 <th class="text-right">수수료</th>
+                <th class="text-center">입금현황</th>
                 <th>결제방법</th>
                 <th>계산서유형</th>
                 <th>발행예정일</th>
@@ -284,6 +285,7 @@ tr:hover{background:#fafbfc}
                 <th>업체명</th>
                 <th>발행 대상</th>
                 <th class="text-right">수수료</th>
+                <th class="text-center">입금현황</th>
                 <th>결제방법</th>
                 <th>계산서유형</th>
                 <th>발행예정일</th>
@@ -292,7 +294,7 @@ tr:hover{background:#fafbfc}
               </tr>
             </thead>
             <tbody id="allTbody">
-              <tr><td colspan="10" class="empty-msg">데이터 로딩 중...</td></tr>
+              <tr><td colspan="11" class="empty-msg">데이터 로딩 중...</td></tr>
             </tbody>
           </table>
         </div>
@@ -866,7 +868,7 @@ function renderUninputTab() {
   var list = _filteredReceipts.filter(function(r) { return isMissingInfo(r.data); });
   var tbody = document.getElementById('uninputTbody');
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" class="empty-msg">미입력 건이 없습니다 ✅</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty-msg">미입력 건이 없습니다 ✅</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function(r) {
@@ -894,6 +896,7 @@ function renderUninputTab() {
       '<td style="font-size:11px;color:#5f6b7a">' + escHtml(testPurpose || '-') + '</td>' +
       '<td style="font-size:11px;color:#5f6b7a">' + escHtml(d.salesRep || '-') + '</td>' +
       '<td class="text-right" style="font-weight:600">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
       '<td>' + pmSel + '</td>' +
       '<td>' + itSel + '</td>' +
       '<td>' + dtInp + '</td>' +
@@ -974,7 +977,7 @@ function renderAllTab() {
   document.getElementById('allTabInfo').textContent = list.length + '건 / ' + totalAmt.toLocaleString() + '원';
   var tbody = document.getElementById('allTbody');
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-msg">검색 결과가 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-msg">검색 결과가 없습니다</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function(r) {
@@ -994,6 +997,7 @@ function renderAllTab() {
       '<td><span style="font-weight:600">' + escHtml(d.companyName || '') + '</span>' + altBadge + '<div style="font-size:10px;color:#8892a4">' + escHtml(d.salesRep || '') + '</div></td>' +
       '<td>' + escHtml(billTarget || '') + '</td>' +
       '<td class="text-right" style="font-weight:600">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
       '<td>' + pmTag + '</td>' +
       '<td>' + itTag + '</td>' +
       '<td style="color:#5f6b7a">' + (d.invoiceDate ? fmtDate(d.invoiceDate) : '-') + '</td>' +
@@ -1559,6 +1563,32 @@ function getSupplyAmount(d) { return Math.round(getTotalFee(d) / 1.1); }
 function getTaxAmount(d) { return getTotalFee(d) - getSupplyAmount(d); }
 
 function isMissingInfo(d) { return !d.payMethod || !d.invoiceType; }
+
+/* 입금현황 헬퍼 */
+function getPaidAmountRF(d) {
+  var sum = 0;
+  (d.payments || []).forEach(function(p) { sum += Number(p.amount || 0); });
+  // 방안 A 연동: payDate가 있으면 전액 입금으로 간주
+  if (!sum && d.payDate) sum = getTotalFee(d);
+  return sum;
+}
+function getPayStatusTagRF(d) {
+  var total = getTotalFee(d);
+  if (total <= 0) return '<span style="color:#9ca3af;font-size:11px">-</span>';
+  var paid = getPaidAmountRF(d);
+  if (paid >= total) {
+    var dates = (d.payments || []).map(function(p){ return p.date || ''; }).filter(Boolean).sort();
+    var lastDate = dates.length ? dates[dates.length-1] : (d.payDate || '');
+    var dateSub = lastDate ? '<div style="font-size:10px;color:#5f6b7a;margin-top:1px">' + lastDate.substring(5) + '</div>' : '';
+    return '<span style="background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">입금완료</span>' + dateSub;
+  }
+  if (paid > 0) {
+    var pct = Math.round(paid / total * 100);
+    var amtSub = '<div style="font-size:10px;color:#5f6b7a;margin-top:1px">' + Number(paid).toLocaleString() + '원</div>';
+    return '<span style="background:#fef9c3;color:#ca8a04;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">부분(' + pct + '%)</span>' + amtSub;
+  }
+  return '<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">미입금</span>';
+}
 
 function getReceiptStatus(d) {
   if (d.taxCancelled) return '취소';

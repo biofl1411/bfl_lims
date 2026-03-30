@@ -244,6 +244,7 @@ tr:hover{background:#f8f9fb}
                                     <th class="text-center">진행률</th>
                                     <th class="text-center">입금방법</th>
                                     <th>최종입금</th>
+                                    <th class="text-center">계산서</th>
                                     <th class="text-center">상태</th>
                                     <th class="text-center">처리</th>
                                 </tr>
@@ -656,7 +657,7 @@ function getLastPayDate(d) {
 function renderTable() {
     var tbody = document.getElementById('table-body');
     if (filteredList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" class="empty-msg">데이터가 없습니다</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="empty-msg">데이터가 없습니다</td></tr>';
         return;
     }
 
@@ -696,6 +697,20 @@ function renderTable() {
 
         var lastPayHtml = lastPay ? '<span class="last-pay-date">' + lastPay.substring(5) + '</span>' : '<span style="color:#d1d5db">-</span>';
 
+        // 세금계산서 발행 여부
+        var taxBadge;
+        if (d.taxCancelled) {
+            taxBadge = '<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">취소</span>';
+        } else if (d.taxInvoiceIssued) {
+            taxBadge = '<span style="background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">발행완료</span>';
+            if (d.taxInvoiceDate) taxBadge += '<div style="font-size:10px;color:#5f6b7a;margin-top:2px">' + d.taxInvoiceDate.substring(5) + '</div>';
+        } else if (d.invoiceType && d.payMethod) {
+            taxBadge = '<span style="background:#fef9c3;color:#ca8a04;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">발행대기</span>';
+            if (d.invoiceDate) taxBadge += '<div style="font-size:10px;color:#5f6b7a;margin-top:2px">' + d.invoiceDate.substring(5) + '</div>';
+        } else {
+            taxBadge = '<span style="color:#d1d5db;font-size:11px">미입력</span>';
+        }
+
         return '<tr>' +
             '<td style="font-weight:600;white-space:nowrap">' + (d.receiptNo || r.id) + '</td>' +
             '<td style="white-space:nowrap;font-size:12px">' + (d.receiptDate || '-') + '</td>' +
@@ -707,6 +722,7 @@ function renderTable() {
             '<td class="text-center">' + progressHtml + '</td>' +
             '<td class="text-center">' + methodHtml + '</td>' +
             '<td class="text-center">' + lastPayHtml + '</td>' +
+            '<td class="text-center">' + taxBadge + '</td>' +
             '<td class="text-center"><span class="badge ' + badgeCls + '">' + status + '</span></td>' +
             '<td class="text-center"><button class="btn btn-sm btn-primary" onclick="openModal(\'' + r.id + '\')">입금</button></td>' +
             '</tr>';
