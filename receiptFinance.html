@@ -458,6 +458,28 @@ tr:hover{background:#fafbfc}
   </div><!-- /content -->
 </div><!-- /main -->
 
+<!-- 합산 그룹 선택 모달 -->
+<div class="overlay" id="mergeSelectOverlay">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hd">
+      <div>
+        <h3>🔗 합산 발행 묶기</h3>
+        <div class="subtitle" id="mergeSelectSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeMergeSelectModal()">✕</button>
+    </div>
+    <div class="modal-bd">
+      <div style="font-size:12px;color:#5f6b7a;margin-bottom:12px">함께 합산할 접수건을 선택하세요. 선택한 건들이 1장 세금계산서로 묶입니다.</div>
+      <div id="mergeSelectList"></div>
+      <div id="mergeSelectSum" style="text-align:right;font-size:13px;font-weight:700;color:#1a73e8;margin-top:10px;padding-top:10px;border-top:1px solid #e2e6ed"></div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid #eef0f4;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-secondary btn-sm" onclick="closeMergeSelectModal()">취소</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmMergeSelect()">✅ 묶기 확인</button>
+    </div>
+  </div>
+</div>
+
 <!-- 타업체 발행 모달 -->
 <div class="overlay" id="altBizOverlay">
   <div class="modal">
@@ -1024,19 +1046,137 @@ function onBillingTypeChange(id) {
   var sel = document.getElementById('bt-' + id);
   if (!sel) return;
   if (sel.value) sel.classList.add('filled'); else sel.classList.remove('filled');
+  // 합산 선택 시 즉시 묶기 모달 오픈
+  if (sel.value === '합산') {
+    openMergeSelectModal(id);
+    return;
+  }
   // 펼침 영역이 열려 있으면 발행 설정 섹션 갱신
   if (_currentReceiptId === id) {
     var r = _allReceipts.find(function(x) { return x.id === id; });
     var d = r ? r.data : {};
     var section = document.getElementById('exp-billing-section');
     if (section) {
-      var tmp = document.createElement('tbody');
+      var tmp = document.createElement('div');
       tmp.innerHTML = buildExpandBillingSection(id, sel.value, d);
       section.parentNode.replaceChild(tmp.firstChild, section);
       var tx = document.getElementById('exp-taxCategory');
       if (tx) tx.value = d.taxCategory || '과세';
     }
   }
+}
+
+var _mergeSelectReceiptId = null;
+
+function openMergeSelectModal(receiptId) {
+  _mergeSelectReceiptId = receiptId;
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  if (!r) return;
+  var d = r.data;
+  var company = d.companyName || '';
+  document.getElementById('mergeSelectSubtitle').textContent = (d.receiptNo || receiptId) + ' · ' + company;
+
+  // 같은 업체 미발행 건 (현재 건 제외)
+  var candidates = _allReceipts.filter(function(x) {
+    return x.id !== receiptId && x.data.companyName === company
+      && x.data.taxInvoiceIssued !== true && x.data.taxCancelled !== true;
+  });
+
+  var existGroupId = d.mergedGroupId || '';
+  var html = '';
+  // 현재 건 (고정)
+  html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#e8f0fe;border-radius:8px;margin-bottom:6px">';
+  html += '<input type="checkbox" checked disabled style="accent-color:#1a73e8;width:16px;height:16px">';
+  html += '<div style="flex:1"><div style="font-size:12px;font-weight:700;color:#1a73e8">' + escHtml(d.receiptNo || receiptId) + ' <span style="font-weight:400;color:#5f6b7a">현재</span></div>';
+  html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(d)) + (d.billingMemo ? ' · ' + escHtml(d.billingMemo) : '') + '</div></div></div>';
+
+  if (candidates.length === 0) {
+    html += '<div style="font-size:12px;color:#8892a4;padding:12px 0;text-align:center">같은 업체의 다른 접수건이 없습니다.</div>';
+  } else {
+    candidates.forEach(function(x) {
+      var xd = x.data;
+      var inSameGroup = existGroupId && xd.mergedGroupId === existGroupId;
+      html += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:' + (inSameGroup ? '#f0fdf4' : '#f8f9fb') + ';border-radius:8px;margin-bottom:6px;cursor:pointer">';
+      html += '<input type="checkbox" class="merge-candidate-chk" data-id="' + x.id + '" data-fee="' + getTotalFee(xd) + '"' + (inSameGroup ? ' checked' : '') + ' onchange="updateMergeSum()" style="accent-color:#4caf50;width:16px;height:16px">';
+      html += '<div style="flex:1"><div style="font-size:12px;font-weight:600;color:#1a2332">' + escHtml(xd.receiptNo || x.id) + (xd.billingType ? ' <span style="font-size:10px;color:#9c27b0">[' + xd.billingType + ']</span>' : '') + '</div>';
+      html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(xd)) + (xd.billingMemo ? ' · ' + escHtml(xd.billingMemo) : '') + '</div></div>';
+      html += '</label>';
+    });
+  }
+
+  document.getElementById('mergeSelectList').innerHTML = html;
+  updateMergeSum();
+  document.getElementById('mergeSelectOverlay').classList.add('show');
+}
+
+function updateMergeSum() {
+  var r = _allReceipts.find(function(x) { return x.id === _mergeSelectReceiptId; });
+  var sum = r ? getTotalFee(r.data) : 0;
+  document.querySelectorAll('.merge-candidate-chk:checked').forEach(function(chk) {
+    sum += Number(chk.getAttribute('data-fee') || 0);
+  });
+  var cnt = document.querySelectorAll('.merge-candidate-chk:checked').length;
+  document.getElementById('mergeSelectSum').textContent = '합산 ' + (cnt + 1) + '건 · 합계 ' + sum.toLocaleString() + '원';
+}
+
+function closeMergeSelectModal() {
+  // 취소 시 billingType 셀렉트를 이전 값으로 되돌림
+  if (_mergeSelectReceiptId) {
+    var r = _allReceipts.find(function(x) { return x.id === _mergeSelectReceiptId; });
+    var prev = r ? (r.data.billingType || '') : '';
+    var sel = document.getElementById('bt-' + _mergeSelectReceiptId);
+    if (sel) { sel.value = prev; if (prev) sel.classList.add('filled'); else sel.classList.remove('filled'); }
+  }
+  document.getElementById('mergeSelectOverlay').classList.remove('show');
+  _mergeSelectReceiptId = null;
+}
+
+async function confirmMergeSelect() {
+  if (!_mergeSelectReceiptId) return;
+  var id = _mergeSelectReceiptId;
+  var r = _allReceipts.find(function(x) { return x.id === id; });
+  if (!r) return;
+
+  var checkedIds = [];
+  document.querySelectorAll('.merge-candidate-chk:checked').forEach(function(chk) {
+    checkedIds.push(chk.getAttribute('data-id'));
+  });
+
+  var groupId = r.data.mergedGroupId || ('grp_' + Date.now());
+
+  try {
+    var batch = db.batch();
+    // 현재 건
+    batch.update(db.collection('receipts').doc(id), {
+      billingType: '합산', mergedGroupId: groupId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    r.data.billingType = '합산'; r.data.mergedGroupId = groupId;
+
+    // 선택한 건들
+    checkedIds.forEach(function(cid) {
+      batch.update(db.collection('receipts').doc(cid), {
+        billingType: '합산', mergedGroupId: groupId,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      var ci = _allReceipts.findIndex(function(x) { return x.id === cid; });
+      if (ci >= 0) { _allReceipts[ci].data.billingType = '합산'; _allReceipts[ci].data.mergedGroupId = groupId; }
+    });
+
+    await batch.commit();
+
+    // 인라인 행 셀렉트 갱신
+    var sel = document.getElementById('bt-' + id);
+    if (sel) { sel.value = '합산'; sel.classList.add('filled'); }
+
+    document.getElementById('mergeSelectOverlay').classList.remove('show');
+    _mergeSelectReceiptId = null;
+    renderKpiCards();
+    doSearch();
+    showToast('✅ ' + (checkedIds.length + 1) + '건 합산그룹 저장 완료');
+    // 합산발행 탭으로 이동
+    switchTab('merged');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
 }
 
 function buildInvoiceTypeSelect(id, cur) {
@@ -2417,6 +2557,7 @@ function escHtml(s) {
 
 // 오버레이 배경 클릭으로 닫기
 document.getElementById('altBizOverlay').addEventListener('click', function(e) { if (e.target === this) closeAltBizModal(); });
+document.getElementById('mergeSelectOverlay').addEventListener('click', function(e) { if (e.target === this) closeMergeSelectModal(); });
 
 
 // 초기화
