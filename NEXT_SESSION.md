@@ -38,6 +38,11 @@
 - **매출처 원장/거래내역서 담당자 정보 — 영업담당**: 로그인 사용자(이름)를 `li-salesrep`, `ti-salesrep`에 자동 입력
   - 현재는 접수 데이터의 `salesRep` 필드에서 최근 값 표시 중
   - 로그인 구축 후 → `auth.currentUser.displayName` 또는 users 컬렉션 이름으로 대체
+- **시험 진행 현황 담당자 필터링**: 항목배정(설정)에서 담당자 배정 완료 후, 시험 진행 현황(결과 입력·시험일지)에서 로그인 사용자 본인에게 배정된 항목·시료만 표시
+  - 현재: 담당자 구분 없이 전체 표시
+  - 구현 위치: `testResultInput.html`, `testDiary.html`
+  - 로그인 구축 후 → `auth.currentUser.uid` 또는 users 컬렉션에서 담당자명 매칭 → `itemAssign`(항목배정) 데이터와 join하여 본인 항목만 필터
+  - 참고: 항목배정 데이터는 `settings/itemAssignments` 또는 `itemAssign` 컬렉션에 `{ itemCode, assignee }` 형태로 저장 예정
 
 
 
