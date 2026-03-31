@@ -118,6 +118,7 @@ tr:hover{background:#f8f9fb}
         <div class="tab-bar">
             <div class="tab-item active" data-tab="aging" onclick="switchTab('aging')">결제주기</div>
             <div class="tab-item" data-tab="pattern" onclick="switchTab('pattern')">입금패턴</div>
+            <div class="tab-item" data-tab="predict" onclick="switchTab('predict')">입금예측</div>
             <div class="tab-item" data-tab="bond" onclick="switchTab('bond')">채권주기</div>
             <div class="tab-item" data-tab="method" onclick="switchTab('method')">결제수단별</div>
             <div class="tab-item" data-tab="dept" onclick="switchTab('dept')">부서별</div>
@@ -205,6 +206,78 @@ tr:hover{background:#f8f9fb}
                                 <th class="text-right">최근 입금일</th>
                             </tr></thead>
                             <tbody id="pattern-company-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 탭: 입금예측 ===== -->
+        <div class="tab-panel" id="panel-predict">
+            <div class="kpi-row" id="predict-kpi"></div>
+            <!-- 학습 모델 요약 카드 -->
+            <div class="card" style="margin-bottom:16px">
+                <div class="card-hd">
+                    <h3>학습 기반 입금 예측</h3>
+                    <div class="right" style="font-size:11px;color:#6b7280">
+                        과거 결제 데이터에서 업체별 패턴을 학습하여 예상 입금일·금액을 산출합니다
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <div id="predict-model-summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+                    <div style="font-size:11px;color:#9ca3af;padding:6px 0;border-top:1px solid #f0f2f5;margin-top:4px">
+                        ※ 신뢰도: 학습 데이터 많을수록·결제주기 일관성 높을수록 상승 &nbsp;|&nbsp;
+                        σ(표준편차) 작을수록 예측 정확도 향상 &nbsp;|&nbsp;
+                        날짜 범위를 넓힐수록 더 많은 데이터로 학습됩니다
+                    </div>
+                </div>
+            </div>
+            <!-- 이번달 예상 입금 스케줄 -->
+            <div class="card" style="margin-bottom:16px">
+                <div class="card-hd">
+                    <h3>예상 입금 스케줄 <span id="predict-month-label" style="font-weight:400;font-size:12px;color:#6b7280"></span></h3>
+                    <div class="right">
+                        <label style="font-size:11px;color:#6b7280;display:flex;align-items:center;gap:6px">
+                            <input type="checkbox" id="predict-thismonth-only" checked onchange="renderPredictTab()">
+                            이번달만 표시
+                        </label>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead><tr>
+                                <th>업체명</th>
+                                <th>접수번호</th>
+                                <th>접수일</th>
+                                <th class="text-right">미수금</th>
+                                <th class="text-center">예상 입금일</th>
+                                <th class="text-right">예상 입금액</th>
+                                <th class="text-center">평균주기(μ±σ)</th>
+                                <th class="text-center">신뢰도</th>
+                            </tr></thead>
+                            <tbody id="predict-schedule-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- 업체별 학습 모델 -->
+            <div class="card">
+                <div class="card-hd"><h3>업체별 학습 모델 파라미터</h3></div>
+                <div class="card-bd">
+                    <div class="tbl-wrap">
+                        <table>
+                            <thead><tr>
+                                <th>업체명</th>
+                                <th class="text-center">학습 건수</th>
+                                <th class="text-center">평균주기(μ)</th>
+                                <th class="text-center">표준편차(σ)</th>
+                                <th class="text-center">주 입금요일</th>
+                                <th class="text-center">주 입금일자</th>
+                                <th class="text-right">실측 입금률</th>
+                                <th class="text-center">신뢰도</th>
+                            </tr></thead>
+                            <tbody id="predict-model-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -417,6 +490,238 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-panel').forEach(function(el) { el.classList.toggle('active', el.id === 'panel-' + tabId); });
     if (tabId === 'settings') renderSettingsTab();
     if (tabId === 'pattern') renderPatternTab();
+    if (tabId === 'predict') renderPredictTab();
+}
+
+// ---- 입금예측 탭 (학습 기반) ----
+function renderPredictTab() {
+    var today = new Date();
+    var todayStr = today.toISOString().split('T')[0];
+    var thisYM = todayStr.substring(0,7);
+    var onlyThis = document.getElementById('predict-thismonth-only') && document.getElementById('predict-thismonth-only').checked;
+    var lbl = document.getElementById('predict-month-label');
+    if (lbl) lbl.textContent = onlyThis ? '(이번달: ' + thisYM + ')' : '(전체 미수금)';
+
+    // ① 업체별 학습 데이터 수집
+    var compModels = {};
+    _receipts.forEach(function(r) {
+        var d = r.data || r;
+        var co = d.companyName || d.company || '(미상)';
+        if (!compModels[co]) compModels[co] = {
+            cycles: [],            // 접수→입금 소요일수 배열
+            dowHist: [0,0,0,0,0,0,0],  // 요일별 입금 횟수
+            domHist: new Array(32).fill(0), // 일자(1~31)별 입금 횟수
+            totalBilled: 0,
+            totalPaid: 0,
+            unpaidReceipts: [],
+            lastPayDate: ''
+        };
+        var m = compModels[co];
+        var fee = _getTotalFee(d);
+        var payments = d.payments || [];
+        var rd = d.receiptDate || '';
+        m.totalBilled += fee;
+
+        payments.forEach(function(p) {
+            var amt = Number(p.amount || 0);
+            m.totalPaid += amt;
+            if (!p.date) return;
+            // 결제주기 학습: 접수일 → 입금일 소요일수
+            if (rd) {
+                var diff = Math.floor((new Date(p.date) - new Date(rd)) / 86400000);
+                if (diff >= 0 && diff <= 730) m.cycles.push(diff);
+            }
+            // 요일 패턴 학습
+            var dow = new Date(p.date).getDay();
+            m.dowHist[dow]++;
+            // 월중 일자 패턴 학습
+            var dom = parseInt((p.date.split('-')[2]) || 0);
+            if (dom >= 1 && dom <= 31) m.domHist[dom]++;
+            if (p.date > m.lastPayDate) m.lastPayDate = p.date;
+        });
+
+        // 미수금 접수 건 수집
+        var paid = _getPaidAmount(d);
+        var remain = fee - paid;
+        if (remain > 0 && rd) {
+            m.unpaidReceipts.push({
+                receiptNo: d.receiptNo || r.id,
+                receiptDate: rd,
+                fee: fee, paid: paid, remain: remain
+            });
+        }
+    });
+
+    // ② 모델 파라미터 산출 (학습 결과)
+    var DOW_LBL = ['일','월','화','수','목','금','토'];
+    Object.keys(compModels).forEach(function(co) {
+        var m = compModels[co];
+        // 평균 결제주기 μ
+        if (m.cycles.length > 0) {
+            m.mu = m.cycles.reduce(function(s,v){return s+v;},0) / m.cycles.length;
+            var variance = m.cycles.reduce(function(s,v){return s+Math.pow(v-m.mu,2);},0) / m.cycles.length;
+            m.sigma = Math.sqrt(variance);
+        } else { m.mu = null; m.sigma = null; }
+        // 주 입금 요일 (확률 최대치)
+        var dowMax = Math.max.apply(null, m.dowHist);
+        m.topDow = dowMax > 0 ? m.dowHist.indexOf(dowMax) : -1;
+        var dowTotal = m.dowHist.reduce(function(s,v){return s+v;},0);
+        m.dowProb = m.dowHist.map(function(v){return dowTotal>0?v/dowTotal:0;});
+        // 주 입금 일자 (1~31)
+        var domMax = 0, domBest = -1;
+        for (var dd=1; dd<=31; dd++) {
+            if (m.domHist[dd] > domMax) { domMax = m.domHist[dd]; domBest = dd; }
+        }
+        m.topDom = domBest;
+        // 실측 입금률
+        m.payRate = m.totalBilled > 0 ? m.totalPaid / m.totalBilled : 0;
+        // 신뢰도 점수 (0~100): 학습 건수 + σ 일관성
+        if (m.mu !== null && m.cycles.length >= 2) {
+            var cv = m.sigma / (m.mu || 1);              // 변동계수: 작을수록 일관성 높음
+            var cvScore = Math.max(0, 100 - cv * 60);    // CV 패널티
+            var cntScore = Math.min(50, m.cycles.length * 5); // 최대 50점 (10건 이상)
+            m.confidence = Math.min(100, Math.round(cvScore * 0.6 + cntScore));
+        } else if (m.cycles.length === 1) {
+            m.confidence = 20;
+        } else {
+            m.confidence = 0;
+        }
+    });
+
+    // ③ 예측: 미수금 접수건 → 예상 입금일·금액 산출
+    var predictions = [];
+    Object.keys(compModels).forEach(function(co) {
+        var m = compModels[co];
+        if (m.unpaidReceipts.length === 0) return;
+        m.unpaidReceipts.forEach(function(rc) {
+            var predictDateStr = '';
+            var predictAmount = 0;
+            if (m.mu !== null) {
+                // 예상 입금일 = 접수일 + 학습된 평균주기(μ)
+                var predBase = new Date(rc.receiptDate);
+                predBase.setDate(predBase.getDate() + Math.round(m.mu));
+                // 이미 지난 날짜면 오늘+1일 기준으로 재산정
+                if (predBase <= today) {
+                    predBase = new Date(today);
+                    predBase.setDate(predBase.getDate() + 1);
+                }
+                // 주 입금요일로 미세 보정 (학습 건수 3건 이상, ±3일 이내)
+                if (m.cycles.length >= 3 && m.topDow >= 0) {
+                    var targetDow = m.topDow;
+                    var curDow = predBase.getDay();
+                    var daysUntil = (targetDow - curDow + 7) % 7;
+                    if (daysUntil === 0) daysUntil = 7;
+                    if (daysUntil <= 3) predBase.setDate(predBase.getDate() + daysUntil);
+                }
+                predictDateStr = predBase.toISOString().split('T')[0];
+            }
+            // 예상 입금액 = 미수금 × 학습된 입금률 (단, 입금률이 없으면 기본 85%)
+            var rate = m.payRate > 0.05 ? Math.min(1, m.payRate) : 0.85;
+            predictAmount = Math.round(rc.remain * rate);
+            var isThisMonth = predictDateStr && predictDateStr.substring(0,7) === thisYM;
+            var isFuture = predictDateStr >= todayStr;
+            predictions.push({
+                company: co, receiptNo: rc.receiptNo, receiptDate: rc.receiptDate,
+                remain: rc.remain, predictDate: predictDateStr, predictAmount: predictAmount,
+                isThisMonth: isThisMonth, isFuture: isFuture,
+                mu: m.mu, sigma: m.sigma, confidence: m.confidence,
+                topDow: m.topDow, payRate: m.payRate, cycleCount: m.cycles.length
+            });
+        });
+    });
+
+    // 정렬: 예상 입금일 오름차순
+    predictions.sort(function(a,b){
+        if (!a.predictDate && !b.predictDate) return 0;
+        if (!a.predictDate) return 1;
+        if (!b.predictDate) return -1;
+        return a.predictDate > b.predictDate ? 1 : -1;
+    });
+
+    // 필터: 이번달만 / 전체
+    var filtered = onlyThis ? predictions.filter(function(p){return p.isThisMonth;}) : predictions;
+
+    // ④ KPI
+    var thisMonthPreds = predictions.filter(function(p){return p.isThisMonth;});
+    var thisMonthTotal = thisMonthPreds.reduce(function(s,p){return s+p.predictAmount;},0);
+    var totalUnpaid = predictions.reduce(function(s,p){return s+p.remain;},0);
+    var learnedCo = Object.keys(compModels).filter(function(co){return compModels[co].cycles.length>0;}).length;
+    var avgConf = filtered.length > 0 ? Math.round(filtered.reduce(function(s,p){return s+p.confidence;},0)/filtered.length) : 0;
+
+    document.getElementById('predict-kpi').innerHTML =
+        '<div class="kpi-card"><div class="kpi-label">이번달 예상 입금</div><div class="kpi-value" style="color:#1a73e8;font-size:18px">' + fmtMoney(thisMonthTotal) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">이번달 예측 건수</div><div class="kpi-value">' + thisMonthPreds.length + '건</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">총 미수금</div><div class="kpi-value" style="color:#ef4444;font-size:18px">' + fmtMoney(totalUnpaid) + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">학습된 업체 수</div><div class="kpi-value">' + learnedCo + '개사</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">평균 신뢰도</div><div class="kpi-value" style="color:' + (avgConf>=70?'#059669':avgConf>=40?'#d97706':'#9ca3af') + '">' + avgConf + '점</div></div>';
+
+    // ⑤ 학습 모델 요약 배지
+    var modelSummaryEl = document.getElementById('predict-model-summary');
+    if (modelSummaryEl) {
+        var learnedList = Object.keys(compModels).filter(function(co){return compModels[co].cycles.length>0;});
+        var badges = learnedList.slice(0,12).map(function(co){
+            var m = compModels[co];
+            var c = m.confidence;
+            var bg = c>=70?'#ecfdf5':c>=40?'#fffbeb':'#f3f4f6';
+            var col = c>=70?'#059669':c>=40?'#d97706':'#6b7280';
+            return '<span style="padding:4px 10px;border-radius:6px;background:'+bg+';color:'+col+';font-size:11px;font-weight:600">' +
+                co + ' <span style="opacity:0.7">'+m.cycles.length+'건·'+c+'점</span></span>';
+        }).join('');
+        if (learnedList.length > 12) badges += '<span style="font-size:11px;color:#9ca3af">외 '+(learnedList.length-12)+'개사</span>';
+        modelSummaryEl.innerHTML = badges || '<span style="color:#9ca3af;font-size:12px">학습된 업체 없음</span>';
+    }
+
+    // ⑥ 예상 입금 스케줄 테이블
+    var schedHtml = '';
+    filtered.forEach(function(p) {
+        var cConf = p.confidence >= 70 ? '#059669' : p.confidence >= 40 ? '#d97706' : '#9ca3af';
+        var confBar = '<div style="display:inline-block;width:50px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:4px"><div style="height:100%;width:'+p.confidence+'%;background:'+cConf+';border-radius:3px"></div></div>';
+        var muStr = p.mu !== null ? Math.round(p.mu)+'일' : '-';
+        var sigmaStr = p.sigma !== null ? '±'+Math.round(p.sigma)+'일' : '';
+        var rowBg = p.isThisMonth ? 'background:#f0f9ff' : '';
+        var dateColor = p.isThisMonth ? 'color:#1a73e8;font-weight:700' : p.predictDate ? 'color:#374151' : 'color:#9ca3af';
+        schedHtml += '<tr style="'+rowBg+'">' +
+            '<td style="font-weight:600">' + p.company + '</td>' +
+            '<td style="color:#6b7280;font-size:11px">' + p.receiptNo + '</td>' +
+            '<td>' + p.receiptDate + '</td>' +
+            '<td class="text-right" style="color:#ef4444">' + fmtMoney(p.remain) + '</td>' +
+            '<td class="text-center"><span style="'+dateColor+'">' + (p.predictDate || '예측불가') + '</span></td>' +
+            '<td class="text-right" style="color:#059669;font-weight:600">' + (p.predictDate ? fmtMoney(p.predictAmount) : '-') + '</td>' +
+            '<td class="text-center" style="font-size:11px;color:#374151">' + muStr + ' ' + sigmaStr + '</td>' +
+            '<td class="text-center"><span style="font-weight:600;color:'+cConf+'">'+p.confidence+'점</span>' + confBar + '</td>' +
+            '</tr>';
+    });
+    document.getElementById('predict-schedule-body').innerHTML = schedHtml ||
+        '<tr><td colspan="8" class="empty-msg" style="padding:30px">' + (onlyThis ? '이번달 예측 건수가 없습니다' : '미수금 없음') + '</td></tr>';
+
+    // ⑦ 업체별 학습 모델 파라미터 테이블
+    var modelRows = Object.keys(compModels)
+        .filter(function(co){return compModels[co].cycles.length>0;})
+        .sort(function(a,b){return compModels[b].confidence - compModels[a].confidence;});
+    var modelHtml = '';
+    modelRows.forEach(function(co) {
+        var m = compModels[co];
+        var muStr = m.mu !== null ? Math.round(m.mu)+'일' : '-';
+        var sigmaStr = m.sigma !== null ? Math.round(m.sigma)+'일' : '-';
+        var rateStr = Math.round(m.payRate*100)+'%';
+        var rateColor = m.payRate>=0.9?'#059669':m.payRate>=0.7?'#d97706':'#ef4444';
+        var cConf = m.confidence>=70?'#059669':m.confidence>=40?'#d97706':'#9ca3af';
+        var dowLabel = m.topDow >= 0 ? DOW_LBL[m.topDow]+'요일' : '-';
+        var domLabel = m.topDom > 0 ? m.topDom+'일' : '-';
+        var confBar = '<div style="display:inline-block;width:50px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:4px"><div style="height:100%;width:'+m.confidence+'%;background:'+cConf+';border-radius:3px"></div></div>';
+        modelHtml += '<tr>' +
+            '<td style="font-weight:600">' + co + '</td>' +
+            '<td class="text-center">' + m.cycles.length + '건</td>' +
+            '<td class="text-center" style="font-weight:700;color:#1a73e8">' + muStr + '</td>' +
+            '<td class="text-center" style="color:#6b7280">' + sigmaStr + '</td>' +
+            '<td class="text-center"><span style="font-weight:600;color:#7c3aed">' + dowLabel + '</span></td>' +
+            '<td class="text-center"><span style="font-weight:600;color:#0891b2">' + domLabel + '</span></td>' +
+            '<td class="text-right" style="color:'+rateColor+';font-weight:600">' + rateStr + '</td>' +
+            '<td class="text-center"><span style="font-weight:600;color:'+cConf+'">'+m.confidence+'점</span>' + confBar + '</td>' +
+            '</tr>';
+    });
+    document.getElementById('predict-model-body').innerHTML = modelHtml ||
+        '<tr><td colspan="8" class="empty-msg" style="padding:30px">학습 데이터 부족 (조회 기간을 넓혀주세요)</td></tr>';
 }
 
 // ---- 입금패턴 탭 ----
