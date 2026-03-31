@@ -217,7 +217,10 @@ tr:hover{background:#fafbfc}
           <option value="현금">현금</option>
         </select>
         <button class="btn btn-secondary btn-sm" onclick="resetSearch()">초기화</button>
-        <input class="rf-filter-srch" type="text" id="srchKeyword" placeholder="접수번호, 업체명 검색..." oninput="doSearch()" onkeydown="if(event.key==='Enter')doSearch()">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px">
+          <input class="rf-filter-srch" type="text" id="srchKeyword" placeholder="검색 후 Enter로 태그 추가..." oninput="doSearch()" onkeydown="onSearchKeydown(event)" style="width:100%">
+          <div id="search-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
+        </div>
         <span class="rf-result-text" id="srchResultText">0건 / 0원</span>
       </div>
     </div>
@@ -685,10 +688,97 @@ function renderKpiCards() {
 }
 
 /* =====================================================
+   태그 검색
+===================================================== */
+var _searchTags = [];
+
+var SEARCH_ALIASES = {
+  // 검사목적
+  '자가': '자가품질위탁검사용',
+  '자가품질': '자가품질위탁검사용',
+  '위탁': '위탁검사',
+  '성분': '영양성분',
+  '수출': '수출용',
+  '수입': '수입식품',
+  '관능': '관능검사',
+  '미생물': '미생물검사',
+  '중금속': '중금속검사',
+  '농약': '농약잔류물',
+  '잔농': '잔류농약',
+  '식품첨가물': '식품첨가물검사',
+  '방사능': '방사능검사',
+  '항생': '항생물질',
+  '알티': 'allergen(rt-pcr)',
+  '엘라': 'allergen(elisa)',
+  // 업종
+  '제조': '식품제조가공업',
+  '즉판': '즉석판매제조가공업',
+  '축물': '축산물가공업',
+  '유통': '유통판매원',
+  // 긴급
+  '시간': '시간긴급'
+};
+
+function expandAlias(val) {
+  var v = val.trim().toLowerCase();
+  var alias = SEARCH_ALIASES[val.trim()] || SEARCH_ALIASES[v];
+  return alias ? [val.trim(), alias] : [val.trim()];
+}
+
+function onSearchKeydown(e) {
+  var inp = document.getElementById('srchKeyword');
+  var val = (inp.value || '').trim();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!val) return;
+    if (_searchTags.some(function(t) { return t.raw === val; })) { inp.value = ''; return; }
+    _searchTags.push({ raw: val, terms: expandAlias(val) });
+    inp.value = '';
+    renderSearchTags();
+    doSearch();
+  } else if (e.key === 'Backspace' && !val && _searchTags.length > 0) {
+    _searchTags.pop();
+    renderSearchTags();
+    doSearch();
+  }
+}
+
+function removeSearchTag(idx) {
+  _searchTags.splice(idx, 1);
+  renderSearchTags();
+  doSearch();
+}
+
+function renderSearchTags() {
+  var container = document.getElementById('search-tags');
+  if (!container) return;
+  if (_searchTags.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = _searchTags.map(function(t, i) {
+    var label = t.terms.length > 1 ? t.raw + ' (' + t.terms[1] + ')' : t.raw;
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:#e8f0fe;color:#1565c0;border:1px solid #bbdefb;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600">'
+      + escHtml(label)
+      + '<button type="button" onclick="removeSearchTag(' + i + ')" style="background:none;border:none;cursor:pointer;color:#1565c0;font-size:13px;padding:0;line-height:1">&times;</button>'
+      + '</span>';
+  }).join('');
+}
+
+// 부분 매칭: 5글자 미만은 2-gram 퍼지, 5글자 이상은 정확 포함만
+function fuzzyMatch(term, hay) {
+  term = term.toLowerCase(); hay = hay.toLowerCase();
+  if (hay.indexOf(term) >= 0) return true;
+  if (term.length >= 5) return false;
+  if (term.length < 2) return false;
+  for (var i = 0; i < term.length - 1; i++) {
+    if (hay.indexOf(term.slice(i, i + 2)) >= 0) return true;
+  }
+  return false;
+}
+
+/* =====================================================
    검색
 ===================================================== */
 function doSearch() {
-  var keyword = document.getElementById('srchKeyword').value.trim().toLowerCase();
+  var typingSearch = document.getElementById('srchKeyword').value.trim().toLowerCase();
   var from = document.getElementById('srchFrom').value;
   var to = document.getElementById('srchTo').value;
   var salesRep = document.getElementById('srchSalesRep').value;
@@ -698,17 +788,6 @@ function doSearch() {
 
   _filteredReceipts = _allReceipts.filter(function(r) {
     var d = r.data;
-    if (keyword) {
-      var productNm = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
-      var haystack = [
-        d.receiptNo || '',
-        d.companyName || '',
-        d.salesRep || '',
-        d.testPurpose || d.purpose || '',
-        productNm
-      ].join(' ').toLowerCase();
-      if (haystack.indexOf(keyword) < 0) return false;
-    }
     if (from && (d.receiptDate || '') < from) return false;
     if (to && (d.receiptDate || '') > to) return false;
     if (salesRep && d.salesRep !== salesRep) return false;
@@ -718,6 +797,45 @@ function doSearch() {
     }
     if (invoiceType && d.invoiceType !== invoiceType) return false;
     if (payMethod && d.payMethod !== payMethod) return false;
+
+    // 태그 검색 + 실시간 검색
+    if (_searchTags.length > 0 || typingSearch) {
+      // 검사항목명 추출
+      var _itemNames = '';
+      (d.samples || []).forEach(function(s) {
+        var items = s.testItems || s.refTestItems || [];
+        items.forEach(function(t) {
+          _itemNames += ' ' + (t.itemName || t.name || '').replace(/\|+/g,'').trim();
+        });
+      });
+      // 금액 (합계·공급가액·세액)
+      var total = getTotalFee(d);
+      var supply = getSupplyAmount(d);
+      var tax = getTaxAmount(d);
+      var _feeStr = [total, supply, tax].filter(Boolean).map(function(n){
+        return n.toString() + ' ' + n.toLocaleString();
+      }).join(' ');
+      var productNm = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
+      var hay = [
+        d.receiptNo, d.companyName, d.salesRep,
+        d.testPurpose || d.purpose, productNm,
+        d.foodType, d.billCompany, d.bizNo,
+        d.licBizForm, d.payMethod, d.invoiceType,
+        _itemNames, _feeStr
+      ].map(function(v){ return (v||'').toLowerCase(); }).join(' ');
+
+      // 태그 AND 검색
+      for (var ti = 0; ti < _searchTags.length; ti++) {
+        var terms = _searchTags[ti].terms;
+        var matched = terms.some(function(term) { return fuzzyMatch(term, hay); });
+        if (!matched) return false;
+      }
+      // 실시간 검색
+      if (typingSearch) {
+        var typingTerms = expandAlias(typingSearch);
+        if (!typingTerms.some(function(term) { return fuzzyMatch(term, hay); })) return false;
+      }
+    }
     return true;
   });
 
@@ -729,6 +847,8 @@ function doSearch() {
 
 function resetSearch() {
   document.getElementById('srchKeyword').value = '';
+  _searchTags = [];
+  renderSearchTags();
   setDefaultDates();
   document.getElementById('srchSalesRep').value = '';
   document.getElementById('srchStatus').value = '';
