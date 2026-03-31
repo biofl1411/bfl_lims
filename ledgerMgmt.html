@@ -1020,21 +1020,35 @@ async function _loadCompanyInfo(companyName, receiptsSnap) {
 
     try {
         var compSnap = await db.collection('companies')
-            .where('name', '==', companyName).limit(1).get();
+            .where('company', '==', companyName).limit(1).get();
         if (compSnap.empty) {
             compSnap = await db.collection('companies')
-                .where('company', '==', companyName).limit(1).get();
+                .where('companyName', '==', companyName).limit(1).get();
+        }
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('name', '==', companyName).limit(1).get();
+        }
+
+        // 접수 데이터에서 업체 기본정보 보완 (업체 미등록 시 fallback)
+        var fallbackBizNo = '', fallbackCeo = '', fallbackPhone = '', fallbackAddr = '';
+        if (receiptsSnap && receiptsSnap.docs && receiptsSnap.docs.length > 0) {
+            var rd = receiptsSnap.docs[0].data();
+            fallbackBizNo = rd.bizNo || rd.businessNo || '';
+            fallbackCeo = rd.ceo || rd.repName || '';
+            fallbackPhone = rd.companyPhone || rd.contactPhone || rd.phone || '';
+            fallbackAddr = rd.companyAddress || rd.address || '';
         }
 
         if (!compSnap.empty) {
             var c = compSnap.docs[0].data();
-            var bizNo = c.businessNo || c.bizNo || '';
+            var bizNo = c.bizNo || c.businessNo || fallbackBizNo;
             if (bizNo) document.getElementById('li-bizno').textContent = bizNo;
-            var ceo = c.ceo || c.repName || '';
+            var ceo = c.repName || c.ceo || fallbackCeo;
             if (ceo) document.getElementById('li-ceo').textContent = ceo;
-            var phone = c.phone || c.contactPhone || c.tel || '';
+            var phone = c.contactPhone || c.phone || c.tel || fallbackPhone;
             if (phone) document.getElementById('li-phone').textContent = phone;
-            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
+            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim() || fallbackAddr;
             if (addr) document.getElementById('li-addr').textContent = addr;
 
             var contactName = '', contactPhone = '', contactEmail = '';
@@ -1120,16 +1134,20 @@ async function _loadTxnCompanyInfo(companyName, receiptsSnap) {
 
     try {
         var compSnap = await db.collection('companies')
-            .where('name', '==', companyName).limit(1).get();
+            .where('company', '==', companyName).limit(1).get();
         if (compSnap.empty) {
             compSnap = await db.collection('companies')
-                .where('company', '==', companyName).limit(1).get();
+                .where('companyName', '==', companyName).limit(1).get();
+        }
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('name', '==', companyName).limit(1).get();
         }
         if (!compSnap.empty) {
             var c = compSnap.docs[0].data();
-            if (c.businessNo || c.bizNo) document.getElementById('ti-bizno').textContent = c.businessNo || c.bizNo;
-            if (c.ceo || c.repName) document.getElementById('ti-ceo').textContent = c.ceo || c.repName;
-            if (c.phone || c.contactPhone || c.tel) document.getElementById('ti-phone').textContent = c.phone || c.contactPhone || c.tel;
+            if (c.bizNo || c.businessNo) document.getElementById('ti-bizno').textContent = c.bizNo || c.businessNo;
+            if (c.repName || c.ceo) document.getElementById('ti-ceo').textContent = c.repName || c.ceo;
+            if (c.contactPhone || c.phone || c.tel) document.getElementById('ti-phone').textContent = c.contactPhone || c.phone || c.tel;
             var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
             if (addr) document.getElementById('ti-addr').textContent = addr;
 
