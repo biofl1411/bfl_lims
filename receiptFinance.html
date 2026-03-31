@@ -1389,11 +1389,9 @@ function updateUnsetBadge() {
 }
 
 function renderMergedTab() {
-  // 미발행 건 중 결제정보 있는 건들을 업체별 그룹화
   var list = _allReceipts.filter(function(r) {
     var d = r.data;
-    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true
-      && d.billingType === '합산';
+    return d.billingType === '합산' && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
   });
   var container = document.getElementById('mergedGroupContainer');
   if (list.length === 0) {
@@ -1401,54 +1399,71 @@ function renderMergedTab() {
     document.getElementById('mergedSelectedInfo').textContent = '선택: 0건 / 0원';
     return;
   }
-  // 업체별 그룹핑 (billEdit 적용 업체명 기준)
+  // mergedGroupId 기반 그룹핑, 없는 건은 '미그룹' 처리
   var groups = {};
+  var ungrouped = [];
   list.forEach(function(r) {
-    var d = r.data;
-    var companyKey = (d.billEditEnabled && d.billEdit) ? (d.billEdit.company || d.companyName || '') : (d.companyName || '');
-    if (!groups[companyKey]) groups[companyKey] = [];
-    groups[companyKey].push(r);
+    var gid = r.data.mergedGroupId;
+    if (gid) {
+      if (!groups[gid]) groups[gid] = [];
+      groups[gid].push(r);
+    } else {
+      ungrouped.push(r);
+    }
   });
-  var html = '';
-  Object.keys(groups).sort().forEach(function(company) {
-    var items = groups[company];
+
+  function buildGroupBlock(items, groupKey, label) {
     var totalSupply = items.reduce(function(s, r) { return s + getSupplyAmount(r.data); }, 0);
     var totalTax = items.reduce(function(s, r) { return s + getTaxAmount(r.data); }, 0);
-    html += '<div class="merged-group">';
-    html += '<div class="merged-group-hd">';
-    html += '<input type="checkbox" class="row-check merged-group-chk" data-company="' + escHtml(company) + '" onchange="toggleMergedGroup(this)" style="margin-right:6px">';
-    html += '<span class="company-name">' + escHtml(company) + '</span>';
-    html += '<span class="count-badge">' + items.length + '건</span>';
-    html += '<span class="sum-amount">' + (totalSupply + totalTax).toLocaleString() + '원 (공급 ' + totalSupply.toLocaleString() + ' + 세액 ' + totalTax.toLocaleString() + ')</span>';
-    html += '</div>';
-    html += '<div class="merged-group-body">';
-    html += '<div class="rf-scroll-table"><table><thead><tr>';
-    html += '<th class="text-center" style="width:32px"></th>';
-    html += '<th>접수번호</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th>';
-    html += '</tr></thead><tbody>';
+    var company = items[0] ? ((items[0].data.billEditEnabled && items[0].data.billEdit) ? items[0].data.billEdit.company : items[0].data.companyName) || '' : '';
+    var h = '<div class="merged-group">';
+    h += '<div class="merged-group-hd">';
+    h += '<input type="checkbox" class="row-check merged-group-chk" data-group="' + escHtml(groupKey) + '" onchange="toggleMergedGroup(this)" style="margin-right:6px" checked>';
+    h += '<span class="company-name">' + escHtml(label || company) + '</span>';
+    h += '<span class="count-badge">' + items.length + '건</span>';
+    h += '<span class="sum-amount">' + (totalSupply + totalTax).toLocaleString() + '원 (공급 ' + totalSupply.toLocaleString() + ' + 세액 ' + totalTax.toLocaleString() + ')</span>';
+    h += '</div><div class="merged-group-body">';
+    h += '<div class="rf-scroll-table"><table><thead><tr>';
+    h += '<th class="text-center" style="width:32px"></th>';
+    h += '<th>접수번호</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th>메모</th>';
+    h += '</tr></thead><tbody>';
     items.forEach(function(r) {
       var d = r.data;
       var supply = getSupplyAmount(d); var taxAmt = getTaxAmount(d);
-      html += '<tr>';
-      html += '<td class="text-center"><input type="checkbox" class="row-check merged-chk" data-id="' + r.id + '" data-company="' + escHtml(company) + '" onchange="updateMergedSelectedInfo()" checked></td>';
-      html += '<td style="font-size:11px;color:#1a73e8">' + escHtml(d.receiptNo || r.id) + '</td>';
-      html += '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>';
-      html += '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>';
-      html += '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>';
-      html += '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || '-') + '</td>';
-      html += '</tr>';
+      h += '<tr>';
+      h += '<td class="text-center"><input type="checkbox" class="row-check merged-chk" data-id="' + r.id + '" data-group="' + escHtml(groupKey) + '" onchange="updateMergedSelectedInfo()" checked></td>';
+      h += '<td style="font-size:11px;color:#1a73e8">' + escHtml(d.receiptNo || r.id) + '</td>';
+      h += '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>';
+      h += '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>';
+      h += '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>';
+      h += '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || '-') + '</td>';
+      h += '<td style="font-size:11px;color:#8892a4">' + escHtml(d.billingMemo || '') + '</td>';
+      h += '</tr>';
     });
-    html += '</tbody></table></div>';
-    html += '</div></div>';
+    h += '</tbody></table></div></div></div>';
+    return h;
+  }
+
+  var html = '';
+  // 그룹 있는 건들
+  Object.keys(groups).forEach(function(gid) {
+    html += buildGroupBlock(groups[gid], gid, null);
   });
+  // 미그룹 건들 (개별 표시)
+  if (ungrouped.length > 0) {
+    html += '<div style="font-size:11px;font-weight:600;color:#e65100;margin:12px 0 6px">⚠️ 미그룹 — 아래 건들은 합산 그룹이 지정되지 않았습니다. 접수번호 클릭 후 펼침에서 묶을 건을 선택해 주세요.</div>';
+    ungrouped.forEach(function(r) {
+      html += buildGroupBlock([r], 'ug_' + r.id, (r.data.companyName || '') + ' (' + (r.data.receiptNo || r.id) + ')');
+    });
+  }
   container.innerHTML = html;
   updateMergedSelectedInfo();
 }
 
 function toggleMergedGroup(groupChk) {
-  var company = groupChk.getAttribute('data-company');
+  var group = groupChk.getAttribute('data-group');
   var checked = groupChk.checked;
-  document.querySelectorAll('.merged-chk[data-company="' + company + '"]').forEach(function(chk) { chk.checked = checked; });
+  document.querySelectorAll('.merged-chk[data-group="' + group + '"]').forEach(function(chk) { chk.checked = checked; });
   updateMergedSelectedInfo();
 }
 
@@ -2164,25 +2179,44 @@ function buildExpandBillingSection(receiptId, billingType, d) {
     html += '</div>';
   } else if (bt === '합산') {
     var companyName = d.companyName || '';
+    var currentGroupId = d.mergedGroupId || '';
     var sameList = _allReceipts.filter(function(r) {
       return r.id !== receiptId && r.data.companyName === companyName && r.data.billingType === '합산' && r.data.taxInvoiceIssued !== true && r.data.taxCancelled !== true;
     });
-    html += '<div style="margin-top:8px;font-size:11px;color:#374151"><strong>' + escHtml(companyName) + '</strong> 합산 대상 건:';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">';
-    html += '<span style="background:#e8f0fe;border:1px solid #1a73e8;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;color:#1a73e8">' + escHtml(d.receiptNo||receiptId) + ' (현재)</span>';
+    html += '<div style="margin-top:8px;background:#fff;border:1px solid #e2e6ed;border-radius:8px;padding:10px 14px">';
+    html += '<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:8px">🔗 합산할 건 선택 <span style="font-weight:400;color:#8892a4">(' + escHtml(companyName) + ' 미발행 건)</span></div>';
+    // 현재 건 (고정, 항상 포함)
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#e8f0fe;border-radius:6px;margin-bottom:4px;cursor:default">';
+    html += '<input type="checkbox" checked disabled style="accent-color:#1a73e8">';
+    html += '<span style="font-size:12px;font-weight:600;color:#1a73e8">' + escHtml(d.receiptNo||receiptId) + '</span>';
+    html += '<span style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(d)) + '</span>';
+    html += '<span style="font-size:10px;color:#1a73e8;margin-left:auto">현재</span>';
+    html += '</label>';
     if (sameList.length === 0) {
-      html += '<span style="color:#e53935;font-size:11px;padding:3px 0">같은 업체의 다른 합산 건 없음</span>';
+      html += '<div style="font-size:11px;color:#8892a4;padding:6px 8px">같은 업체의 다른 합산 건이 없습니다.</div>';
     } else {
       sameList.forEach(function(r) {
-        html += '<span style="background:#f0fdf4;border:1px solid #4caf50;border-radius:6px;padding:3px 10px;font-size:11px;color:#2e7d32">' + escHtml(r.data.receiptNo||r.id) + '</span>';
+        var rd = r.data;
+        var inSameGroup = currentGroupId && rd.mergedGroupId === currentGroupId;
+        var inOtherGroup = rd.mergedGroupId && rd.mergedGroupId !== currentGroupId;
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:4px;cursor:pointer;' + (inSameGroup ? 'background:#f0fdf4' : 'background:#f8f9fb') + '">';
+        html += '<input type="checkbox" class="merged-select-chk" data-id="' + r.id + '"' + (inSameGroup ? ' checked' : '') + ' style="accent-color:#4caf50">';
+        html += '<span style="font-size:12px;color:#1a2332">' + escHtml(rd.receiptNo||r.id) + '</span>';
+        html += '<span style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(rd)) + '</span>';
+        if (inOtherGroup) html += '<span style="font-size:10px;color:#e65100;margin-left:auto">다른 그룹</span>';
+        else if (inSameGroup) html += '<span style="font-size:10px;color:#2e7d32;margin-left:auto">같은 그룹</span>';
+        html += '</label>';
       });
     }
-    html += '</div></div>';
+    html += '<div id="merged-sum-preview" style="font-size:11px;font-weight:600;color:#1a73e8;margin-top:6px;text-align:right"></div>';
+    html += '</div>';
     html += '<div style="' + rowStyle + '">';
     html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">과세구분</label>' + txSel + '</div>';
     html += dateField;
     html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">메모</label>' + memoInp + '</div>';
     html += '</div>';
+    // 합산 금액 미리보기 스크립트
+    html += '<script>setTimeout(function(){var chks=document.querySelectorAll(".merged-select-chk");function upd(){var sum=' + getTotalFee(d) + ';chks.forEach(function(c){if(c.checked){var r=_allReceipts.find(function(x){return x.id===c.getAttribute("data-id")});if(r)sum+=getTotalFee(r.data);}});var el=document.getElementById("merged-sum-preview");if(el)el.textContent="합산 예상금액: "+sum.toLocaleString()+"원";}chks.forEach(function(c){c.onchange=upd;});upd();},100);<\/script>';
   } else if (bt === '특정일') {
     html += '<div style="font-size:11px;color:#5f6b7a;margin-top:8px">발행할 날짜를 지정하세요. 발행관리 &gt; 특정일발행 탭에서 해당 날짜 조회 시 표시됩니다.</div>';
     html += '<div style="' + rowStyle + '">';
@@ -2251,6 +2285,21 @@ async function saveDetailModal() {
   // invoiceDate: 월말은 exp-invoiceDate(readonly), 나머지는 직접
   var invoiceDate = (document.getElementById('exp-invoiceDate') || {}).value || '';
   try {
+    // 합산 그룹 처리
+    var mergedGroupId = null;
+    var uncheckedIds = []; // 기존 그룹에서 제외된 건들
+    if (billingType === '합산') {
+      var checkedChks = document.querySelectorAll('.merged-select-chk:checked');
+      var uncheckedChks = document.querySelectorAll('.merged-select-chk:not(:checked)');
+      if (checkedChks.length > 0) {
+        // 기존 그룹ID 유지 또는 신규 생성
+        var r0 = _allReceipts.find(function(x) { return x.id === id; });
+        mergedGroupId = (r0 && r0.data.mergedGroupId) || ('grp_' + Date.now());
+      }
+      uncheckedChks.forEach(function(c) { uncheckedIds.push(c.getAttribute('data-id')); });
+    }
+
+    var batch = db.batch();
     var updateData = {
       taxCategory: taxCategory,
       invoiceDate: invoiceDate || null,
@@ -2262,7 +2311,33 @@ async function saveDetailModal() {
     else updateData.billingType = firebase.firestore.FieldValue.delete();
     if (billingMemo) updateData.billingMemo = billingMemo;
     else updateData.billingMemo = firebase.firestore.FieldValue.delete();
-    await db.collection('receipts').doc(id).update(updateData);
+    if (mergedGroupId) updateData.mergedGroupId = mergedGroupId;
+    else updateData.mergedGroupId = firebase.firestore.FieldValue.delete();
+
+    batch.update(db.collection('receipts').doc(id), updateData);
+
+    // 체크된 다른 건들에도 동일 그룹ID 저장
+    if (mergedGroupId) {
+      document.querySelectorAll('.merged-select-chk:checked').forEach(function(c) {
+        var cid = c.getAttribute('data-id');
+        batch.update(db.collection('receipts').doc(cid), {
+          mergedGroupId: mergedGroupId,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+    }
+    // 체크 해제된 건들은 그룹에서 제거
+    uncheckedIds.forEach(function(cid) {
+      var cr = _allReceipts.find(function(x) { return x.id === cid; });
+      if (cr && cr.data.mergedGroupId) {
+        batch.update(db.collection('receipts').doc(cid), {
+          mergedGroupId: firebase.firestore.FieldValue.delete(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    });
+    await batch.commit();
+    // 현재 건 메모리 업데이트
     var idx = _allReceipts.findIndex(function(r) { return r.id === id; });
     if (idx >= 0) {
       _allReceipts[idx].data.payMethod   = payMethod   || null;
@@ -2271,7 +2346,21 @@ async function saveDetailModal() {
       _allReceipts[idx].data.invoiceDate = invoiceDate || null;
       _allReceipts[idx].data.billingType = billingType || undefined;
       _allReceipts[idx].data.billingMemo = billingMemo || undefined;
+      if (mergedGroupId) _allReceipts[idx].data.mergedGroupId = mergedGroupId;
+      else delete _allReceipts[idx].data.mergedGroupId;
     }
+    // 체크된 건들 메모리 업데이트
+    if (mergedGroupId) {
+      document.querySelectorAll('.merged-select-chk:checked').forEach(function(c) {
+        var ci = _allReceipts.findIndex(function(x) { return x.id === c.getAttribute('data-id'); });
+        if (ci >= 0) _allReceipts[ci].data.mergedGroupId = mergedGroupId;
+      });
+    }
+    // 제외된 건들 메모리 업데이트
+    uncheckedIds.forEach(function(cid) {
+      var ci = _allReceipts.findIndex(function(x) { return x.id === cid; });
+      if (ci >= 0) delete _allReceipts[ci].data.mergedGroupId;
+    });
     // 인라인 행 동기화 (미입력탭)
     var pmSel = document.getElementById('pm-' + id);
     var itSel = document.getElementById('it-' + id);
