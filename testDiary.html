@@ -2834,10 +2834,15 @@ function _buildMicroForm(analyzed) {
   _MICRO_DILUTIONS.forEach(function(dil, di) {
     var dilLabel = dil === 1 ? '<span style="color:#7c3aed;font-weight:700">원액</span>' : '1:' + dil.toLocaleString();
     var rowBg = dil === 1 ? 'background:#faf5ff;' : 'background:#f9fafb;';
-    h += '<tr><td style="' + rowBg + 'padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">' + dilLabel + '</td>';
+    var disabledStyle = 'opacity:0.35;pointer-events:none;';
+    h += '<tr id="mc-row-' + di + '" style="' + disabledStyle + '">';
+    h += '<td style="' + rowBg + 'padding:4px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">'
+       + '<label style="display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;pointer-events:auto">'
+       + '<input type="checkbox" id="mc-row-en-' + di + '" onchange="_mcToggleRow(' + di + ')" style="width:14px;height:14px;cursor:pointer;pointer-events:auto;accent-color:#1d4ed8">'
+       + dilLabel + '</label></td>';
     for (var n = 1; n <= nCount; n++) {
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-0" value="ND" onfocus="_mcFocus(this)" onblur="_mcBlur(this,' + n + ',' + di + ')" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px;color:#9ca3af;background:#f9fafb"></td>';
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-1" value="ND" onfocus="_mcFocus(this)" onblur="_mcBlur(this,' + n + ',' + di + ')" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px;color:#9ca3af;background:#f9fafb"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-0" value="ND" disabled onfocus="_mcFocus(this)" onblur="_mcBlur(this,' + n + ',' + di + ')" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px;color:#9ca3af;background:#f3f4f6"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-1" value="ND" disabled onfocus="_mcFocus(this)" onblur="_mcBlur(this,' + n + ',' + di + ')" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px;color:#9ca3af;background:#f3f4f6"></td>';
     }
     h += '</tr>';
   });
@@ -2880,6 +2885,25 @@ function _mcBlur(inp, n, di) {
     _mcCalcAll(window._mcNCount, window._mcRule);
   }
 }
+function _mcToggleRow(di) {
+  var chk = document.getElementById('mc-row-en-' + di);
+  var enabled = chk && chk.checked;
+  var row = document.getElementById('mc-row-' + di);
+  if (row) row.style.opacity = enabled ? '' : '0.35';
+  var nCount = window._mcNCount || 1;
+  for (var n = 1; n <= nCount; n++) {
+    [0,1].forEach(function(p) {
+      var inp = document.getElementById('mc-' + n + '-' + di + '-' + p);
+      if (!inp) return;
+      inp.disabled = !enabled;
+      inp.style.background = enabled ? '#f9fafb' : '#f3f4f6';
+      inp.style.pointerEvents = enabled ? '' : 'none';
+      if (!enabled) { inp.value = 'ND'; inp.style.color = '#9ca3af'; inp.style.borderColor = '#e5e7eb'; }
+    });
+  }
+  _mcCalcAll(window._mcNCount, window._mcRule);
+}
+
 function _mcUpdateRange(n, di) {
   [0,1].forEach(function(p) {
     var inp = document.getElementById('mc-'+n+'-'+di+'-'+p);
@@ -2925,8 +2949,8 @@ function _mcCalcOne(n) {
   var allOver300 = true, allUnder15 = true, hasAnyValue = false;
   var firstDi = -1;
   _MICRO_DILUTIONS.forEach(function(dil, di) {
-    var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-    if (nd) return;
+    var rowChk = document.getElementById('mc-row-en-' + di);
+    if (!rowChk || !rowChk.checked) return;
     [0,1].forEach(function(p) {
       var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
       var num = _mcGetVal(v);
@@ -2956,8 +2980,8 @@ function _mcCalcOne(n) {
   if (allOver300) {
     var closestVal = null, closestDi = -1;
     _MICRO_DILUTIONS.forEach(function(dil, di) {
-      var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-      if (nd) return;
+      var rowChk = document.getElementById('mc-row-en-' + di);
+      if (!rowChk || !rowChk.checked) return;
       [0,1].forEach(function(p) {
         var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
         var num = _mcGetVal(v);
@@ -2974,8 +2998,8 @@ function _mcCalcOne(n) {
 
   _MICRO_DILUTIONS.forEach(function(dil, di) {
     if (firstDi >= 0) return;
-    var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-    if (nd) return;
+    var rowChk = document.getElementById('mc-row-en-' + di);
+    if (!rowChk || !rowChk.checked) return;
     var v0 = (document.getElementById('mc-' + n + '-' + di + '-0') || {}).value || '';
     var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
     if (_mcInRange(v0) || _mcInRange(v1)) firstDi = di;
@@ -2983,8 +3007,8 @@ function _mcCalcOne(n) {
 
   if (firstDi === -1) {
     for (var di2 = 0; di2 < _MICRO_DILUTIONS.length; di2++) {
-      var nd2 = (document.getElementById('mc-nd-' + n + '-' + di2) || {}).checked;
-      if (nd2) continue;
+      var rowChk2 = document.getElementById('mc-row-en-' + di2);
+      if (!rowChk2 || !rowChk2.checked) continue;
       var v0b = (document.getElementById('mc-' + n + '-' + di2 + '-0') || {}).value || '';
       var v1b = (document.getElementById('mc-' + n + '-' + di2 + '-1') || {}).value || '';
       if (v0b !== '' || v1b !== '') { firstDi = di2; break; }
@@ -3002,19 +3026,20 @@ function _mcCalcOne(n) {
 
   var sigmaC = 0, n1p = 0, n2p = 0;
   [0,1].forEach(function(p) {
-    var nd = (document.getElementById('mc-nd-'+n+'-'+firstDi)||{}).checked;
     var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
     var num = _mcGetVal(v);
-    if (!nd && num !== null) { n1p++; sigmaC += num; }
+    if (num !== null) { n1p++; sigmaC += num; }
   });
   var secDi = firstDi + 1;
   if (secDi < _MICRO_DILUTIONS.length) {
-    [0,1].forEach(function(p) {
-      var nd = (document.getElementById('mc-nd-'+n+'-'+secDi)||{}).checked;
-      var v = (document.getElementById('mc-'+n+'-'+secDi+'-'+p)||{}).value||'';
-      var num = _mcGetVal(v);
-      if (!nd && num !== null && _mcInRange(v)) { n2p++; sigmaC += num; }
-    });
+    var secChk = document.getElementById('mc-row-en-' + secDi);
+    if (secChk && secChk.checked) {
+      [0,1].forEach(function(p) {
+        var v = (document.getElementById('mc-'+n+'-'+secDi+'-'+p)||{}).value||'';
+        var num = _mcGetVal(v);
+        if (num !== null && _mcInRange(v)) { n2p++; sigmaC += num; }
+      });
+    }
   }
   if (n1p === 0) return null;
   var denom = (1 * n1p) + (0.1 * n2p);
