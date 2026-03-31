@@ -703,57 +703,59 @@ async function loadTxnStatement() {
         // 업체정보 헤더 로드
         await _loadTxnCompanyInfo(company, allSnap);
 
-        var rows = [];
-
+        // 접수건별로 그룹핑
+        var receiptMap = {};
         allSnap.forEach(function(doc) {
             var d = doc.data();
             var rDate = d.receiptDate || '';
             var fee = _getFee(d);
+            var receiptNo = d.receiptNo || doc.id;
 
-            // 매출 행
-            if (rDate >= fromDate && rDate <= toDate) {
-                rows.push({
-                    date: rDate, type: '매출', receiptNo: d.receiptNo || '',
-                    companyName: company, productName: _getProductName(d),
-                    testItems: _getTestItems(d), testField: d.testField || d.sampleType || '',
-                    testPurpose: d.testPurpose || d.purpose || d.inspectionPurpose || '',
-                    salesRep: d.salesRep || '', payMethod: '',
-                    sales: fee, payment: 0, memo: '', sortKey: rDate + '0'
-                });
-            }
-
-            // 입금 행
-            (d.payments || []).forEach(function(p) {
-                var pDate = p.date || '';
-                if (pDate >= fromDate && pDate <= toDate) {
-                    rows.push({
-                        date: pDate, type: '입금', receiptNo: d.receiptNo || '',
-                        companyName: company, productName: '',
-                        testItems: '', testField: '', testPurpose: '',
-                        salesRep: '', payMethod: p.method || '', cardCompany: p.cardCompany || '',
-                        sales: 0, payment: Number(p.amount) || 0,
-                        memo: p.memo || '', sortKey: pDate + '1'
-                    });
-                }
+            // 기간 내 매출 또는 기간 내 입금이 있는 건만 포함
+            var salesInRange = rDate >= fromDate && rDate <= toDate;
+            var paymentsInRange = (d.payments || []).filter(function(p) {
+                return (p.date || '') >= fromDate && (p.date || '') <= toDate;
             });
+
+            if (!salesInRange && paymentsInRange.length === 0) return;
+
+            if (!receiptMap[receiptNo]) {
+                receiptMap[receiptNo] = {
+                    receiptDate: rDate,
+                    receiptNo: receiptNo,
+                    productName: _getProductName(d),
+                    testItems: _getTestItems(d),
+                    testField: d.testField || d.sampleType || '',
+                    testPurpose: d.testPurpose || d.purpose || d.inspectionPurpose || '',
+                    sales: salesInRange ? fee : 0,
+                    salesInRange: salesInRange,
+                    payments: paymentsInRange,
+                    memo: ''
+                };
+            }
         });
 
-        // 타입 필터
-        if (typeFilter === 'sales') rows = rows.filter(function(r) { return r.type === '매출'; });
-        else if (typeFilter === 'payment') rows = rows.filter(function(r) { return r.type === '입금'; });
+        var rows = Object.values(receiptMap);
 
-        // 정렬: 거래일 내림차순
+        // 타입 필터
+        if (typeFilter === 'sales') rows = rows.filter(function(r) { return r.salesInRange; });
+        else if (typeFilter === 'payment') rows = rows.filter(function(r) { return r.payments.length > 0; });
+
+        // 정렬: 접수일 내림차순
         rows.sort(function(a, b) {
-            if (a.date > b.date) return -1;
-            if (a.date < b.date) return 1;
-            return a.sortKey > b.sortKey ? -1 : 1;
+            if (a.receiptDate > b.receiptDate) return -1;
+            if (a.receiptDate < b.receiptDate) return 1;
+            return 0;
         });
 
         _txnRows = rows;
 
         // KPI 계산
         var totalSales = 0, totalPayment = 0;
-        rows.forEach(function(r) { totalSales += r.sales; totalPayment += r.payment; });
+        rows.forEach(function(r) {
+            totalSales += r.sales;
+            r.payments.forEach(function(p) { totalPayment += Number(p.amount) || 0; });
+        });
         var balance = totalSales - totalPayment;
 
         document.getElementById('txn-kpi-count').textContent = rows.length.toLocaleString('ko-KR');
@@ -769,39 +771,73 @@ async function loadTxnStatement() {
             return;
         }
 
-        // 테이블 렌더링
+        // 테이블 렌더링 — 접수건 1건 = 1행
         var html = '<div class="tbl-wrap"><table class="txn-tbl"><thead><tr>';
-        html += '<th style="width:30px">No</th>';
+        html += '<th style="width:28px">No</th>';
         html += '<th style="width:82px">거래일</th>';
-        html += '<th style="width:45px">구분</th>';
+        html += '<th style="width:36px">구분</th>';
         html += '<th>적 요</th>';
-        html += '<th style="width:60px">입금수단</th>';
-        html += '<th style="width:180px"><div style="display:flex;justify-content:space-between"><span>매출</span><span>입금</span></div></th>';
+        html += '<th class="text-right" style="width:80px">금액</th>';
+        html += '<th style="width:82px">결제일</th>';
+        html += '<th style="width:50px">구분</th>';
+        html += '<th style="width:55px">입금수단</th>';
+        html += '<th class="text-right" style="width:80px">입금액</th>';
         html += '<th>비고</th>';
         html += '</tr></thead><tbody>';
 
-        var runBalance = 0;
         rows.forEach(function(row, idx) {
-            runBalance += row.sales - row.payment;
-            var cls = row.type === '입금' ? ' class="row-payment"' : '';
-            var summary = _buildTxnSummary(row);
-            var salesStr = row.sales ? _ledgerFmt(row.sales) : '';
-            var payStr = row.payment ? '<span style="color:#2563eb">' + _ledgerFmt(row.payment) + '</span>' : '';
-            html += '<tr' + cls + '>';
+            var totalPay = row.payments.reduce(function(s,p){ return s+(Number(p.amount)||0); }, 0);
+            var payDates = [...new Set(row.payments.map(function(p){ return p.date||''; }).filter(Boolean))].join(', ');
+            var methods = [...new Set(row.payments.map(function(p){ return p.method||''; }).filter(Boolean))];
+            var cardCos = [...new Set(row.payments.map(function(p){ return p.cardCompany||''; }).filter(Boolean))];
+            var methodStr = methods.join('/');
+            if (cardCos.length) methodStr += '(' + cardCos.join('/') + ')';
+            var memos = row.payments.map(function(p){ return p.memo||''; }).filter(Boolean).join(', ');
+
+            var isPaid = totalPay >= row.sales && row.sales > 0;
+            var isPartial = totalPay > 0 && totalPay < row.sales;
+            var payTypeStr, payTypeCls;
+            if (!row.salesInRange) {
+                payTypeStr = '입금'; payTypeCls = 'color:#2563eb;font-weight:600';
+            } else if (isPaid) {
+                payTypeStr = '입금완료'; payTypeCls = 'color:#16a34a;font-weight:600';
+            } else if (isPartial) {
+                payTypeStr = '부분입금'; payTypeCls = 'color:#d97706;font-weight:600';
+            } else {
+                payTypeStr = '미입금'; payTypeCls = 'color:#dc2626;font-weight:600';
+            }
+
+            // 적요
+            var parts = [];
+            if (row.receiptNo) parts.push('[' + row.receiptNo + ']');
+            if (row.productName) parts.push(row.productName);
+            var sub = [row.testField, row.testPurpose].filter(Boolean).join('/');
+            if (sub) parts.push('<span style="color:#6b7280;font-size:11px">' + sub + '</span>');
+            if (row.testItems && Array.isArray(row.testItems) && row.testItems.length) {
+                parts.push('<span style="color:#9ca3af;font-size:10px">' + row.testItems.slice(0,3).join(', ') + (row.testItems.length>3?'…':'') + '</span>');
+            }
+            var summary = parts.join(' ');
+
+            html += '<tr>';
             html += '<td>' + (idx + 1) + '</td>';
-            html += '<td>' + row.date + '</td>';
-            html += '<td>' + row.type + '</td>';
+            html += '<td>' + row.receiptDate + '</td>';
+            html += '<td><span style="color:#374151;font-weight:600">매출</span></td>';
             html += '<td>' + summary + '</td>';
-            html += '<td>' + _methodTag(row.payMethod) + '</td>';
-            html += '<td><div style="display:flex;justify-content:space-between;gap:8px"><span style="text-align:right;flex:1">' + salesStr + '</span><span style="text-align:right;flex:1">' + payStr + '</span></div></td>';
-            html += '<td>' + row.memo + '</td>';
+            html += '<td class="text-right">' + (row.sales ? _ledgerFmt(row.sales) : '') + '</td>';
+            html += '<td style="color:#6b7280;font-size:11px">' + payDates + '</td>';
+            html += '<td><span style="' + payTypeCls + ';font-size:11px">' + payTypeStr + '</span></td>';
+            html += '<td>' + (methodStr ? _methodTag(methods[0]) : '') + '</td>';
+            html += '<td class="text-right" style="color:#2563eb">' + (totalPay ? _ledgerFmt(totalPay) : '') + '</td>';
+            html += '<td style="font-size:11px;color:#6b7280">' + memos + '</td>';
             html += '</tr>';
         });
 
         // 합계행
         html += '<tr class="row-total">';
-        html += '<td colspan="5" class="text-right">합 계</td>';
-        html += '<td><div style="display:flex;justify-content:space-between;gap:8px"><span style="text-align:right;flex:1">' + _ledgerFmt(totalSales) + '</span><span style="text-align:right;flex:1;color:#2563eb">' + _ledgerFmt(totalPayment) + '</span></div></td>';
+        html += '<td colspan="4" class="text-right">합 계</td>';
+        html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
+        html += '<td colspan="3"></td>';
+        html += '<td class="text-right" style="color:#2563eb">' + _ledgerFmt(totalPayment) + '</td>';
         html += '<td></td>';
         html += '</tr>';
 
@@ -1148,21 +1184,22 @@ function exportTxnExcel() {
     var from = document.getElementById('txn-from').value;
     var to = document.getElementById('txn-to').value;
 
-    var data = [['No', '거래일', '구분', '적요', '입금수단', '매출', '입금', '비고']];
+    var data = [['No', '거래일', '구분', '적요', '금액', '결제일', '구분(입금)', '입금수단', '입금액', '비고']];
     _txnRows.forEach(function(r, i) {
-        var summary = '';
-        if (r.type === '입금') {
-            summary = [r.payMethod, r.memo, r.receiptNo].filter(Boolean).join(' · ');
-        } else {
-            var parts = [];
-            if (r.receiptNo) parts.push('[' + r.receiptNo + ']');
-            if (r.productName) parts.push(r.productName);
-            var sub = [r.testField, r.testPurpose].filter(Boolean).join('/');
-            if (sub) parts.push(sub);
-            if (r.testItems) parts.push(r.testItems);
-            summary = parts.join(' ');
-        }
-        data.push([i+1, r.date, r.type, summary, r.payMethod, r.sales || '', r.payment || '', r.memo]);
+        var parts = [];
+        if (r.receiptNo) parts.push('[' + r.receiptNo + ']');
+        if (r.productName) parts.push(r.productName);
+        var sub = [r.testField, r.testPurpose].filter(Boolean).join('/');
+        if (sub) parts.push(sub);
+        var summary = parts.join(' ');
+        var totalPay = r.payments ? r.payments.reduce(function(s,p){ return s+(Number(p.amount)||0); }, 0) : 0;
+        var payDates = r.payments ? [...new Set(r.payments.map(function(p){ return p.date||''; }).filter(Boolean))].join(', ') : '';
+        var methods = r.payments ? [...new Set(r.payments.map(function(p){ return p.method||''; }).filter(Boolean))].join('/') : '';
+        var isPaid = totalPay >= r.sales && r.sales > 0;
+        var isPartial = totalPay > 0 && totalPay < r.sales;
+        var payType = isPaid ? '입금완료' : isPartial ? '부분입금' : totalPay > 0 ? '입금' : '미입금';
+        var memos = r.payments ? r.payments.map(function(p){ return p.memo||''; }).filter(Boolean).join(', ') : '';
+        data.push([i+1, r.receiptDate||'', '매출', summary, r.sales||'', payDates, payType, methods, totalPay||'', memos]);
     });
 
     var ws = XLSX.utils.aoa_to_sheet(data);
