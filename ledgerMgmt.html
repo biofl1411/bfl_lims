@@ -776,7 +776,8 @@ async function loadTxnStatement() {
         html += '<th style="width:45px">구분</th>';
         html += '<th>적 요</th>';
         html += '<th style="width:60px">입금수단</th>';
-        html += '<th class="text-right" style="width:90px">금액</th>';
+        html += '<th class="text-right" style="width:85px">매출</th>';
+        html += '<th class="text-right" style="width:85px">입금</th>';
         html += '<th>비고</th>';
         html += '</tr></thead><tbody>';
 
@@ -785,26 +786,22 @@ async function loadTxnStatement() {
             runBalance += row.sales - row.payment;
             var cls = row.type === '입금' ? ' class="row-payment"' : '';
             var summary = _buildTxnSummary(row);
-            var amount = row.type === '입금' ? row.payment : row.sales;
             html += '<tr' + cls + '>';
             html += '<td>' + (idx + 1) + '</td>';
             html += '<td>' + row.date + '</td>';
             html += '<td>' + row.type + '</td>';
             html += '<td>' + summary + '</td>';
             html += '<td>' + _methodTag(row.payMethod) + '</td>';
-            html += '<td class="text-right">' + _ledgerFmt(amount) + '</td>';
+            html += '<td class="text-right">' + (row.sales ? _ledgerFmt(row.sales) : '') + '</td>';
+            html += '<td class="text-right">' + (row.payment ? _ledgerFmt(row.payment) : '') + '</td>';
             html += '<td>' + row.memo + '</td>';
             html += '</tr>';
         });
 
-        // 합계행: 매출합계 / 입금합계 두 줄
+        // 합계행
         html += '<tr class="row-total">';
-        html += '<td colspan="5" class="text-right">매출 합계</td>';
+        html += '<td colspan="5" class="text-right">합 계</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
-        html += '<td></td>';
-        html += '</tr>';
-        html += '<tr class="row-total">';
-        html += '<td colspan="5" class="text-right">입금 합계</td>';
         html += '<td class="text-right" style="color:#2563eb">' + _ledgerFmt(totalPayment) + '</td>';
         html += '<td></td>';
         html += '</tr>';
@@ -1152,7 +1149,7 @@ function exportTxnExcel() {
     var from = document.getElementById('txn-from').value;
     var to = document.getElementById('txn-to').value;
 
-    var data = [['No', '거래일', '구분', '적요', '입금수단', '금액', '비고']];
+    var data = [['No', '거래일', '구분', '적요', '입금수단', '매출', '입금', '비고']];
     _txnRows.forEach(function(r, i) {
         var summary = '';
         if (r.type === '입금') {
@@ -1166,8 +1163,7 @@ function exportTxnExcel() {
             if (r.testItems) parts.push(r.testItems);
             summary = parts.join(' ');
         }
-        var amount = r.type === '입금' ? (r.payment || '') : (r.sales || '');
-        data.push([i+1, r.date, r.type, summary, r.payMethod, amount, r.memo]);
+        data.push([i+1, r.date, r.type, summary, r.payMethod, r.sales || '', r.payment || '', r.memo]);
     });
 
     var ws = XLSX.utils.aoa_to_sheet(data);
