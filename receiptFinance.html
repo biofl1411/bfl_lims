@@ -756,6 +756,7 @@ async function loadReceiptsData() {
     _allReceipts = snap.docs.map(function(doc) { return { id: doc.id, data: doc.data() }; });
 
     // payments 있는데 payMethod 없는 건 자동 추론 + Firestore 저장
+    // 또는 invoiceType 있는데 payMethod 없는 건 역방향 정정
     var batch = db.batch();
     var autoFilled = 0;
     _allReceipts.forEach(function(r) {
@@ -772,11 +773,25 @@ async function loadReceiptsData() {
           });
           autoFilled++;
         }
+      } else if (!d.payMethod && d.invoiceType) {
+        // invoiceType은 있는데 payMethod 없는 불일치 → 역방향 정정
+        var pmFromIt = '';
+        if (d.invoiceType === '카드전표' || d.invoiceType === '카드+계산서') pmFromIt = '카드';
+        else if (d.invoiceType === '현금영수증') pmFromIt = '현금';
+        else if (d.invoiceType === '세금계산서') pmFromIt = '온라인입금';
+        if (pmFromIt) {
+          d.payMethod = pmFromIt;
+          batch.update(db.collection('receipts').doc(r.id), {
+            payMethod: pmFromIt,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          autoFilled++;
+        }
       }
     });
     if (autoFilled > 0) {
       await batch.commit();
-      console.log('[자동추론] ' + autoFilled + '건 결제방법/계산서유형 자동 설정 완료');
+      console.log('[자동정정] ' + autoFilled + '건 결제방법/계산서유형 정합성 수정 완료');
     }
 
     buildSalesRepOptions();
@@ -1032,7 +1047,7 @@ function renderUninputTab() {
       ? '<button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">✏️ 수정</button>'
       : '<button style="background:#fff3e0;color:#e65100;border:1px solid #ffe082;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">🏢 지정</button>';
     var pmSel = buildPayMethodSelect(id, d.payMethod);
-    var itSel = buildInvoiceTypeSelect(id, d.invoiceType);
+    var itSel = buildInvoiceTypeSelect(id, d.payMethod ? d.invoiceType : '');
     var dtToday = new Date().toISOString().slice(0,10);
     var dtVal = d.invoiceDate || dtToday;
     var dtInp = '<input class="inline-date filled" id="id-' + id + '" type="date" value="' + dtVal + '">';
