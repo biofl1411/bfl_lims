@@ -271,7 +271,9 @@ tr:hover{background:#fafbfc}
                 <th class="text-center">입금현황</th>
                 <th>결제방법</th>
                 <th>계산서유형</th>
+                <th>발행유형</th>
                 <th>발행예정일</th>
+                <th>메모</th>
                 <th>타업체 지정</th>
                 <th>저장</th>
               </tr>
@@ -306,7 +308,9 @@ tr:hover{background:#fafbfc}
                 <th class="text-center">입금현황</th>
                 <th>결제방법</th>
                 <th>계산서유형</th>
+                <th>발행유형</th>
                 <th>발행예정일</th>
+                <th>메모</th>
                 <th>상태</th>
                 <th>처리</th>
               </tr>
@@ -1048,9 +1052,11 @@ function renderUninputTab() {
       : '<button style="background:#fff3e0;color:#e65100;border:1px solid #ffe082;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">🏢 지정</button>';
     var pmSel = buildPayMethodSelect(id, d.payMethod);
     var itSel = buildInvoiceTypeSelect(id, d.payMethod ? d.invoiceType : '');
+    var btSel = buildBillingTypeSelect(id, d.billingType);
     var dtToday = new Date().toISOString().slice(0,10);
     var dtVal = d.invoiceDate || dtToday;
     var dtInp = '<input class="inline-date filled" id="id-' + id + '" type="date" value="' + dtVal + '">';
+    var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px">';
     // 제품/시료명: samples[0].productName > d.productName 순
     var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
     // 검사목적: testPurpose > purpose
@@ -1066,7 +1072,9 @@ function renderUninputTab() {
       '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
       '<td>' + pmSel + '</td>' +
       '<td>' + itSel + '</td>' +
+      '<td>' + btSel + '</td>' +
       '<td>' + dtInp + '</td>' +
+      '<td>' + memoInp + '</td>' +
       '<td>' + altBtn + '</td>' +
       '<td style="white-space:nowrap"><button class="btn btn-success btn-sm" onclick="saveRow(\'' + id + '\')">저장</button>' +
       '<button class="btn btn-secondary btn-sm" onclick="resetRow(\'' + id + '\')" style="margin-left:4px">취소</button></td>' +
@@ -1080,6 +1088,20 @@ function buildPayMethodSelect(id, cur) {
   opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
   html += '</select>';
   return html;
+}
+
+function buildBillingTypeSelect(id, cur) {
+  var opts = [['','선택'],['수동','📦 수동'],['합산','🔗 합산'],['특정일','🎯 특정일'],['월말','📅 월말'],['미지정','❓ 미지정']];
+  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="bt-' + id + '" onchange="onBillingTypeChange(\'' + id + '\')">';
+  opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
+  html += '</select>';
+  return html;
+}
+
+function onBillingTypeChange(id) {
+  var sel = document.getElementById('bt-' + id);
+  if (!sel) return;
+  if (sel.value) sel.classList.add('filled'); else sel.classList.remove('filled');
 }
 
 function buildInvoiceTypeSelect(id, cur) {
@@ -1149,28 +1171,40 @@ function onExpPayMethodChange() {
 async function saveRow(receiptId) {
   var pmSel = document.getElementById('pm-' + receiptId);
   var itSel = document.getElementById('it-' + receiptId);
+  var btSel = document.getElementById('bt-' + receiptId);
   var dtInp = document.getElementById('id-' + receiptId);
+  var memoInp = document.getElementById('bm-' + receiptId);
   if (!pmSel || !itSel) return;
   var payMethod = pmSel.value;
   var invoiceType = itSel.value;
+  var billingType = btSel ? btSel.value : '';
+  var billingMemo = memoInp ? memoInp.value.trim() : '';
   var invoiceDate = dtInp ? dtInp.value : '';
   if (!payMethod) { showToast('❗ 결제방법을 선택해 주세요'); return; }
   if (!invoiceType) { showToast('❗ 계산서유형을 선택해 주세요'); return; }
   try {
-    await db.collection('receipts').doc(receiptId).update({
+    var updateData = {
       payMethod: payMethod,
       invoiceType: invoiceType,
       invoiceDate: invoiceDate || null,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if (billingType) updateData.billingType = billingType;
+    else updateData.billingType = firebase.firestore.FieldValue.delete();
+    if (billingMemo) updateData.billingMemo = billingMemo;
+    else updateData.billingMemo = firebase.firestore.FieldValue.delete();
+    await db.collection('receipts').doc(receiptId).update(updateData);
     var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
     if (idx >= 0) {
       _allReceipts[idx].data.payMethod = payMethod;
       _allReceipts[idx].data.invoiceType = invoiceType;
       _allReceipts[idx].data.invoiceDate = invoiceDate || null;
+      _allReceipts[idx].data.billingType = billingType || undefined;
+      _allReceipts[idx].data.billingMemo = billingMemo || undefined;
     }
     if (pmSel) pmSel.classList.add('filled');
     if (itSel) itSel.classList.add('filled');
+    if (btSel && billingType) btSel.classList.add('filled');
     if (dtInp && invoiceDate) dtInp.classList.add('filled');
     renderKpiCards();
     showToast('✅ 저장 완료');
@@ -1183,20 +1217,14 @@ function resetRow(receiptId) {
   var d = r.data;
   var pmSel = document.getElementById('pm-' + receiptId);
   var itSel = document.getElementById('it-' + receiptId);
+  var btSel = document.getElementById('bt-' + receiptId);
   var dtInp = document.getElementById('id-' + receiptId);
-  if (pmSel) {
-    pmSel.value = d.payMethod || '';
-    if (d.payMethod) pmSel.classList.add('filled'); else pmSel.classList.remove('filled');
-  }
-  if (itSel) {
-    itSel.value = d.invoiceType || '';
-    if (d.invoiceType) itSel.classList.add('filled'); else itSel.classList.remove('filled');
-  }
-  if (dtInp) {
-    var dtToday = new Date().toISOString().slice(0,10);
-    dtInp.value = d.invoiceDate || dtToday;
-  }
-  // 펼침 열려 있으면 닫기
+  var memoInp = document.getElementById('bm-' + receiptId);
+  if (pmSel) { pmSel.value = d.payMethod || ''; if (d.payMethod) pmSel.classList.add('filled'); else pmSel.classList.remove('filled'); }
+  if (itSel) { itSel.value = d.invoiceType || ''; if (d.invoiceType) itSel.classList.add('filled'); else itSel.classList.remove('filled'); }
+  if (btSel) { btSel.value = d.billingType || ''; if (d.billingType) btSel.classList.add('filled'); else btSel.classList.remove('filled'); }
+  if (dtInp) { dtInp.value = d.invoiceDate || new Date().toISOString().slice(0,10); }
+  if (memoInp) { memoInp.value = d.billingMemo || ''; }
   if (_currentReceiptId === receiptId) closeDetailModal();
 }
 
@@ -1208,6 +1236,8 @@ async function clearPayInfo(receiptId) {
       payMethod: firebase.firestore.FieldValue.delete(),
       invoiceType: firebase.firestore.FieldValue.delete(),
       invoiceDate: firebase.firestore.FieldValue.delete(),
+      billingType: firebase.firestore.FieldValue.delete(),
+      billingMemo: firebase.firestore.FieldValue.delete(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
@@ -1215,6 +1245,8 @@ async function clearPayInfo(receiptId) {
       delete _allReceipts[idx].data.payMethod;
       delete _allReceipts[idx].data.invoiceType;
       delete _allReceipts[idx].data.invoiceDate;
+      delete _allReceipts[idx].data.billingType;
+      delete _allReceipts[idx].data.billingMemo;
     }
     if (_currentReceiptId === receiptId) closeDetailModal();
     renderKpiCards();
@@ -1232,7 +1264,7 @@ function renderAllTab() {
   document.getElementById('allTabInfo').textContent = list.length + '건 / ' + totalAmt.toLocaleString() + '원';
   var tbody = document.getElementById('allTbody');
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-msg">검색 결과가 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty-msg">검색 결과가 없습니다</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function(r) {
@@ -1242,6 +1274,8 @@ function renderAllTab() {
     var altBadge = d.billEditEnabled ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span>' : '';
     var pmTag = d.payMethod ? getPayMethodTag(d.payMethod) : '<span style="color:#c8d6e5">-</span>';
     var itTag = d.invoiceType ? getInvoiceTypeTag(d.invoiceType) : '<span style="color:#c8d6e5">-</span>';
+    var btTag = getBillingTypeTag(d.billingType);
+    var memoTd = d.billingMemo ? '<span style="font-size:11px;color:#5f6b7a" title="' + escHtml(d.billingMemo) + '">' + escHtml(d.billingMemo.length > 12 ? d.billingMemo.slice(0,12) + '…' : d.billingMemo) + '</span>' : '<span style="color:#c8d6e5">-</span>';
     var actionBtn = '';
     if (st.status === '미입력') actionBtn = '<button class="btn btn-primary btn-sm" onclick="switchTab(\'uninput\')">입력</button>';
     else if (st.status === '발행대기') actionBtn = '<span style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openDetailModal(\'' + id + '\')">수정</button><button class="btn btn-sm" onclick="clearPayInfo(\'' + id + '\')" style="margin-left:4px;background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">취소</button></span>';
@@ -1255,7 +1289,9 @@ function renderAllTab() {
       '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
       '<td>' + pmTag + '</td>' +
       '<td>' + itTag + '</td>' +
+      '<td>' + btTag + '</td>' +
       '<td style="color:#5f6b7a">' + (d.invoiceDate ? fmtDate(d.invoiceDate) : '-') + '</td>' +
+      '<td>' + memoTd + '</td>' +
       '<td><span class="tag ' + st.cls + '">' + st.label + '</span></td>' +
       '<td>' + actionBtn + '</td>' +
       '</tr>';
@@ -1333,7 +1369,7 @@ function renderIssueTab() {
 function updateUnsetBadge() {
   var cnt = _allReceipts.filter(function(r) {
     var d = r.data;
-    return (!d.payMethod || !d.invoiceType) && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+    return !d.billingType && d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
   }).length;
   var badge = document.getElementById('unsetBadge');
   if (badge) badge.textContent = cnt;
@@ -1343,7 +1379,8 @@ function renderMergedTab() {
   // 미발행 건 중 결제정보 있는 건들을 업체별 그룹화
   var list = _allReceipts.filter(function(r) {
     var d = r.data;
-    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true
+      && d.billingType === '합산';
   });
   var container = document.getElementById('mergedGroupContainer');
   if (list.length === 0) {
@@ -1416,11 +1453,11 @@ function updateMergedSelectedInfo() {
 function renderUnsetTab() {
   var list = _allReceipts.filter(function(r) {
     var d = r.data;
-    return (!d.payMethod || !d.invoiceType) && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+    return !d.billingType && d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
   });
   var tbody = document.getElementById('unsetTbody');
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">미지정 건이 없습니다 🎉</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">발행유형 미지정 건이 없습니다 🎉</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function(r) {
@@ -1431,9 +1468,9 @@ function renderUnsetTab() {
       '<td style="font-size:11px">' + escHtml(d.companyName || '') + '</td>' +
       '<td style="font-size:11px;color:#5f6b7a">' + (d.receiptDate || '-') + '</td>' +
       '<td class="text-right" style="font-size:11px">' + total.toLocaleString() + '</td>' +
-      '<td>' + (d.payMethod ? '<span style="color:#2e7d32;font-size:11px">' + escHtml(d.payMethod) + '</span>' : '<span style="color:#e53935;font-size:11px">미입력</span>') + '</td>' +
-      '<td>' + (d.invoiceType ? '<span style="color:#2e7d32;font-size:11px">' + escHtml(d.invoiceType) + '</span>' : '<span style="color:#e53935;font-size:11px">미지정</span>') + '</td>' +
-      '<td><button class="btn btn-sm" style="font-size:11px;padding:2px 8px" onclick="switchTab(\'uninput\')">입력하기</button></td>' +
+      '<td>' + getPayMethodTag(d.payMethod || '') + '</td>' +
+      '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>' +
+      '<td><button class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px" onclick="switchTab(\'uninput\')">발행유형 지정</button></td>' +
       '</tr>';
   }).join('');
 }
@@ -1441,7 +1478,8 @@ function renderUnsetTab() {
 function renderBatchTab() {
   var list = _allReceipts.filter(function(r) {
     var d = r.data;
-    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true
+      && (d.billingType === '수동' || !d.billingType);
   });
   var tbody = document.getElementById('batchTbody');
   if (list.length === 0) {
@@ -1499,7 +1537,7 @@ function loadMonthData() {
   dateInfo.style.display = 'block';
   _monthList = _allReceipts.filter(function(r) {
     var d = r.data;
-    return (d.receiptDate || '').startsWith(ym) && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+    return d.billingType === '월말' && (d.receiptDate || '').startsWith(ym) && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
   });
   var tbody = document.getElementById('monthTbody');
   if (_monthList.length === 0) {
@@ -1529,7 +1567,7 @@ function loadSpecificDateData() {
   if (!dt) { showToast('날짜를 선택해 주세요'); return; }
   _specificList = _allReceipts.filter(function(r) {
     var d = r.data;
-    return d.invoiceDate === dt && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+    return d.billingType === '특정일' && d.invoiceDate === dt && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
   });
   var tbody = document.getElementById('specificTbody');
   if (_specificList.length === 0) {
@@ -2191,6 +2229,15 @@ function getInvoiceTypeTag(type) {
   if (type === '카드전표') return '<span class="tag tag-gray">' + type + '</span>';
   if (type === '카드+계산서') return '<span class="tag tag-purple">' + type + '</span>';
   if (type === '없음') return '<span class="tag tag-gray">' + type + '</span>';
+  return '<span style="color:#c8d6e5">-</span>';
+}
+
+function getBillingTypeTag(type) {
+  if (type === '수동') return '<span class="tag tag-gray">📦 수동</span>';
+  if (type === '합산') return '<span class="tag tag-purple">🔗 합산</span>';
+  if (type === '특정일') return '<span class="tag tag-orange">🎯 특정일</span>';
+  if (type === '월말') return '<span class="tag tag-blue">📅 월말</span>';
+  if (type === '미지정') return '<span class="tag tag-gray">❓ 미지정</span>';
   return '<span style="color:#c8d6e5">-</span>';
 }
 
