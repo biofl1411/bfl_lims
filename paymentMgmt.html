@@ -218,7 +218,10 @@ tr:hover{background:#f8f9fb}
                 </div>
                 <div class="card-bd">
                     <div class="search-bar">
-                        <input type="text" id="search-company" placeholder="업체명 검색">
+                        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px">
+                          <input type="text" id="search-company" placeholder="검색 후 Enter로 태그 추가..." oninput="applyFilter()" onkeydown="onSearchKeydown(event)" style="padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;outline:none;width:100%">
+                          <div id="search-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
+                        </div>
                         <select id="search-status">
                             <option value="">전체 상태</option>
                             <option value="미입금">미입금</option>
@@ -228,24 +231,25 @@ tr:hover{background:#f8f9fb}
                         <input type="date" id="search-from" title="시작일">
                         <span style="color:#9ca3af">~</span>
                         <input type="date" id="search-to" title="종료일">
+                        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('search-from').value='';document.getElementById('search-to').value='';applyFilter()">전체기간</button>
                         <button class="btn btn-primary" onclick="applyFilter()">검색</button>
                     </div>
                     <div class="tbl-wrap">
                         <table class="pay-tbl">
                             <thead>
-                                <tr>
-                                    <th>접수번호</th>
-                                    <th>접수일</th>
-                                    <th>업체명</th>
+                                <tr id="pay-thead-row">
+                                    <th onclick="sortTable('receiptNo')" style="cursor:pointer;user-select:none">접수번호 <span id="sort-receiptNo"></span></th>
+                                    <th onclick="sortTable('receiptDate')" style="cursor:pointer;user-select:none">접수일 <span id="sort-receiptDate">▼</span></th>
+                                    <th onclick="sortTable('companyName')" style="cursor:pointer;user-select:none">업체명 <span id="sort-companyName"></span></th>
                                     <th>검사목적</th>
                                     <th>제품/시료</th>
-                                    <th class="text-right">청구금액</th>
-                                    <th class="text-right">입금액</th>
-                                    <th class="text-center">진행률</th>
+                                    <th class="text-right" onclick="sortTable('_total')" style="cursor:pointer;user-select:none">청구금액 <span id="sort-_total"></span></th>
+                                    <th class="text-right" onclick="sortTable('_paid')" style="cursor:pointer;user-select:none">입금액 <span id="sort-_paid"></span></th>
+                                    <th class="text-center" onclick="sortTable('_pct')" style="cursor:pointer;user-select:none">진행률 <span id="sort-_pct"></span></th>
                                     <th class="text-center">입금방법</th>
-                                    <th>최종입금</th>
+                                    <th onclick="sortTable('_lastPay')" style="cursor:pointer;user-select:none">최종입금 <span id="sort-_lastPay"></span></th>
                                     <th class="text-center">계산서</th>
-                                    <th class="text-center">상태</th>
+                                    <th class="text-center" onclick="sortTable('_status')" style="cursor:pointer;user-select:none">상태 <span id="sort-_status"></span></th>
                                     <th class="text-center">처리</th>
                                 </tr>
                             </thead>
@@ -473,6 +477,8 @@ var _tossDeposits = [];
 // ======================== 전역 변수 ========================
 var allReceipts = [];
 var filteredList = [];
+var _sortKey = 'receiptDate';
+var _sortDir = 'desc';
 var currentReceiptId = null;
 var bankDeposits = [];
 var _companiesCache = {};
@@ -524,7 +530,7 @@ function formatMoney(n) {
 // ======================== 데이터 로드 ========================
 async function loadData() {
     try {
-        var snap = await db.collection('receipts').orderBy('createdAt', 'desc').limit(500).get();
+        var snap = await db.collection('receipts').orderBy('createdAt', 'desc').limit(2000).get();
         allReceipts = [];
         snap.forEach(function(doc) {
             allReceipts.push({ id: doc.id, data: doc.data() });
@@ -576,24 +582,125 @@ async function saveMatchMapping(depositor, companyName, companyId, receiptNo, me
     } catch(e) { console.warn('매칭이력 저장 실패:', e); }
 }
 
+// ======================== 태그 검색 ========================
+var _searchTags = [];
+
+var SEARCH_ALIASES = {
+    '자가': '자가품질위탁검사용', '자가품질': '자가품질위탁검사용',
+    '위탁': '위탁검사', '성분': '영양성분', '수출': '수출용',
+    '수입': '수입식품', '관능': '관능검사', '미생물': '미생물검사',
+    '중금속': '중금속검사', '농약': '농약잔류물', '잔농': '잔류농약',
+    '식품첨가물': '식품첨가물검사', '방사능': '방사능검사',
+    '항생': '항생물질', '알티': 'allergen(rt-pcr)', '엘라': 'allergen(elisa)',
+    '제조': '식품제조가공업', '즉판': '즉석판매제조가공업',
+    '축물': '축산물가공업', '유통': '유통판매원', '시간': '시간긴급'
+};
+
+function expandAlias(val) {
+    var v = val.trim().toLowerCase();
+    var alias = SEARCH_ALIASES[val.trim()] || SEARCH_ALIASES[v];
+    return alias ? [val.trim(), alias] : [val.trim()];
+}
+
+function onSearchKeydown(e) {
+    var inp = document.getElementById('search-company');
+    var val = (inp.value || '').trim();
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!val) return;
+        if (_searchTags.some(function(t) { return t.raw === val; })) { inp.value = ''; return; }
+        _searchTags.push({ raw: val, terms: expandAlias(val) });
+        inp.value = '';
+        renderSearchTags();
+        applyFilter();
+    } else if (e.key === 'Backspace' && !val && _searchTags.length > 0) {
+        _searchTags.pop();
+        renderSearchTags();
+        applyFilter();
+    }
+}
+
+function removeSearchTag(idx) {
+    _searchTags.splice(idx, 1);
+    renderSearchTags();
+    applyFilter();
+}
+
+function renderSearchTags() {
+    var container = document.getElementById('search-tags');
+    if (!container) return;
+    if (_searchTags.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = _searchTags.map(function(t, i) {
+        var label = t.terms.length > 1 ? t.raw + ' (' + t.terms[1] + ')' : t.raw;
+        return '<span style="display:inline-flex;align-items:center;gap:4px;background:#e8f0fe;color:#1565c0;border:1px solid #bbdefb;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600">'
+            + escHtml(label)
+            + '<button type="button" onclick="removeSearchTag(' + i + ')" style="background:none;border:none;cursor:pointer;color:#1565c0;font-size:13px;padding:0;line-height:1">&times;</button>'
+            + '</span>';
+    }).join('');
+}
+
+function fuzzyMatch(term, hay) {
+    term = term.toLowerCase(); hay = hay.toLowerCase();
+    if (hay.indexOf(term) >= 0) return true;
+    if (term.length >= 5) return false;
+    if (term.length < 2) return false;
+    for (var i = 0; i < term.length - 1; i++) {
+        if (hay.indexOf(term.slice(i, i + 2)) >= 0) return true;
+    }
+    return false;
+}
+
+function escHtml(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ======================== 필터/렌더 ========================
 function applyFilter() {
-    var keyword = document.getElementById('search-company').value.trim().toLowerCase();
+    var typingSearch = document.getElementById('search-company').value.trim().toLowerCase();
     var status = document.getElementById('search-status').value;
     var fromVal = document.getElementById('search-from').value;
     var toVal = document.getElementById('search-to').value;
 
     filteredList = allReceipts.filter(function(r) {
         var d = r.data;
-        if (keyword) {
-            var company = (d.companyName || d.company || '').toLowerCase();
-            if (company.indexOf(keyword) === -1) return false;
-        }
         var receiptDate = d.receiptDate || '';
         if (fromVal && receiptDate < fromVal) return false;
         if (toVal && receiptDate > toVal) return false;
-        if (status) {
-            if (getPaymentStatus(d) !== status) return false;
+        if (status && getPaymentStatus(d) !== status) return false;
+
+        if (_searchTags.length > 0 || typingSearch) {
+            // 검사항목명
+            var _itemNames = '';
+            (d.samples || []).forEach(function(s) {
+                (s.testItems || s.refTestItems || []).forEach(function(t) {
+                    _itemNames += ' ' + (t.itemName || t.name || '').replace(/\|+/g,'').trim();
+                });
+            });
+            // 금액
+            var total = getTotalFee(d);
+            var supply = Math.round(total / 1.1);
+            var tax = total - supply;
+            var _feeStr = [total, supply, tax].filter(Boolean).map(function(n){
+                return n.toString() + ' ' + n.toLocaleString();
+            }).join(' ');
+            var productNm = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
+            var hay = [
+                d.receiptNo, d.companyName || d.company, d.salesRep,
+                d.testPurpose || d.purpose, productNm,
+                d.foodType, d.billCompany, d.bizNo,
+                d.licBizForm, d.payMethod, d.invoiceType,
+                _itemNames, _feeStr
+            ].map(function(v){ return (v||'').toLowerCase(); }).join(' ');
+
+            for (var ti = 0; ti < _searchTags.length; ti++) {
+                var terms = _searchTags[ti].terms;
+                var matched = terms.some(function(term) { return fuzzyMatch(term, hay); });
+                if (!matched) return false;
+            }
+            if (typingSearch) {
+                var typingTerms = expandAlias(typingSearch);
+                if (!typingTerms.some(function(term) { return fuzzyMatch(term, hay); })) return false;
+            }
         }
         return true;
     });
@@ -667,6 +774,21 @@ function getLastPayDate(d) {
     return dates.length > 0 ? dates[dates.length - 1] : '';
 }
 
+function sortTable(key) {
+    if (_sortKey === key) {
+        _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        _sortKey = key;
+        _sortDir = key === 'receiptDate' || key === '_lastPay' ? 'desc' : 'asc';
+    }
+    // 화살표 갱신
+    ['receiptNo','receiptDate','companyName','_total','_paid','_pct','_lastPay','_status'].forEach(function(k) {
+        var el = document.getElementById('sort-' + k);
+        if (el) el.textContent = k === _sortKey ? (_sortDir === 'asc' ? '▲' : '▼') : '';
+    });
+    renderTable();
+}
+
 function renderTable() {
     var tbody = document.getElementById('table-body');
     if (filteredList.length === 0) {
@@ -674,7 +796,29 @@ function renderTable() {
         return;
     }
 
-    tbody.innerHTML = filteredList.map(function(r) {
+    // 정렬
+    var sorted = filteredList.slice().sort(function(a, b) {
+        var da = a.data, db = b.data;
+        var va, vb;
+        if (_sortKey === 'receiptNo') { va = da.receiptNo || ''; vb = db.receiptNo || ''; }
+        else if (_sortKey === 'receiptDate') { va = da.receiptDate || ''; vb = db.receiptDate || ''; }
+        else if (_sortKey === 'companyName') { va = (da.companyName || da.company || '').toLowerCase(); vb = (db.companyName || db.company || '').toLowerCase(); }
+        else if (_sortKey === '_total') { va = getTotalFee(da); vb = getTotalFee(db); }
+        else if (_sortKey === '_paid') { va = getPaidAmount(da); vb = getPaidAmount(db); }
+        else if (_sortKey === '_pct') {
+            var ta = getTotalFee(da), tb = getTotalFee(db);
+            va = ta > 0 ? getPaidAmount(da) / ta : 0;
+            vb = tb > 0 ? getPaidAmount(db) / tb : 0;
+        }
+        else if (_sortKey === '_lastPay') { va = getLastPayDate(da); vb = getLastPayDate(db); }
+        else if (_sortKey === '_status') { va = getPaymentStatus(da); vb = getPaymentStatus(db); }
+        else { va = ''; vb = ''; }
+        if (va < vb) return _sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return _sortDir === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    tbody.innerHTML = sorted.map(function(r) {
         var d = r.data;
         var total = getTotalFee(d);
         var paid = getPaidAmount(d);
