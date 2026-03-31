@@ -1549,22 +1549,31 @@ function openDetailModal(receiptId) {
   // 시료 테이블 HTML (testItems 객체 배열 안전 처리)
   var samplesHtml = '';
   if (d.samples && d.samples.length > 0) {
+    var totalFee = getTotalFee(d);
+    var singleSample = d.samples.length === 1;
     var sRows = d.samples.map(function(s) {
       var items = '';
       if (Array.isArray(s.testItems)) {
         items = s.testItems.map(function(t) { return typeof t === 'object' ? (t.name || t.itemName || t.item || '') : String(t||''); }).filter(Boolean).join(', ');
       } else { items = s.testItems || ''; }
-      // 수수료: 다양한 필드명 순서대로 시도
+      // 수수료: 샘플 자체 필드 우선, 없으면 단일 시료일 때 접수 전체 수수료 표시
       var sFee = Number(s.discountFinalPrice || s.feeTotal || s.feeOriginal || s.totalFee || s.totalAmount || s.fee || 0);
+      if (!sFee && singleSample) sFee = totalFee;
       return '<tr>' +
         '<td style="padding:4px 8px;border-top:1px solid #e2e6ed">' + escHtml(s.sampleName || s.productName || '') + '</td>' +
         '<td style="padding:4px 8px;border-top:1px solid #e2e6ed;max-width:320px;white-space:normal">' + escHtml(items) + '</td>' +
         '<td style="padding:4px 8px;border-top:1px solid #e2e6ed;text-align:right">' + (sFee ? sFee.toLocaleString()+'원' : '-') + '</td>' +
         '</tr>';
     }).join('');
+    // 다중 시료일 경우 합계 행 추가
+    var totalRow = (!singleSample && totalFee) ?
+      '<tr style="background:#f8f9fb;font-weight:600">' +
+        '<td colspan="2" style="padding:4px 8px;border-top:2px solid #e2e6ed;color:#5f6b7a">합계</td>' +
+        '<td style="padding:4px 8px;border-top:2px solid #e2e6ed;text-align:right;color:#1a73e8">' + totalFee.toLocaleString() + '원</td>' +
+      '</tr>' : '';
     samplesHtml = '<table style="width:100%;border-collapse:collapse;font-size:11px">' +
       '<thead><tr style="background:#f0f4f8"><th style="padding:4px 8px;text-align:left;font-weight:600">시료명</th><th style="padding:4px 8px;text-align:left;font-weight:600">검사항목</th><th style="padding:4px 8px;text-align:right;font-weight:600">수수료</th></tr></thead>' +
-      '<tbody>' + sRows + '</tbody></table>';
+      '<tbody>' + sRows + totalRow + '</tbody></table>';
   } else {
     samplesHtml = '<span style="font-size:12px;color:#5f6b7a">' + escHtml(d.productName || d.sampleName || '-') + ' · ' + fmtMoney(getTotalFee(d)) + '</span>';
   }
