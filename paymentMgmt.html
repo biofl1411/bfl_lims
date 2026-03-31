@@ -241,14 +241,14 @@ tr:hover{background:#f8f9fb}
                                     <th onclick="sortTable('receiptNo')" style="cursor:pointer;user-select:none">접수번호 <span id="sort-receiptNo"></span></th>
                                     <th onclick="sortTable('receiptDate')" style="cursor:pointer;user-select:none">접수일 <span id="sort-receiptDate">▼</span></th>
                                     <th onclick="sortTable('companyName')" style="cursor:pointer;user-select:none">업체명 <span id="sort-companyName"></span></th>
-                                    <th>검사목적</th>
-                                    <th>제품/시료</th>
+                                    <th onclick="sortTable('_purpose')" style="cursor:pointer;user-select:none">검사목적 <span id="sort-_purpose"></span></th>
+                                    <th onclick="sortTable('_product')" style="cursor:pointer;user-select:none">제품/시료 <span id="sort-_product"></span></th>
                                     <th class="text-right" onclick="sortTable('_total')" style="cursor:pointer;user-select:none">청구금액 <span id="sort-_total"></span></th>
                                     <th class="text-right" onclick="sortTable('_paid')" style="cursor:pointer;user-select:none">입금액 <span id="sort-_paid"></span></th>
                                     <th class="text-center" onclick="sortTable('_pct')" style="cursor:pointer;user-select:none">진행률 <span id="sort-_pct"></span></th>
-                                    <th class="text-center">입금방법</th>
+                                    <th class="text-center" onclick="sortTable('_method')" style="cursor:pointer;user-select:none">입금방법 <span id="sort-_method"></span></th>
                                     <th onclick="sortTable('_lastPay')" style="cursor:pointer;user-select:none">최종입금 <span id="sort-_lastPay"></span></th>
-                                    <th class="text-center">계산서</th>
+                                    <th class="text-center" onclick="sortTable('_tax')" style="cursor:pointer;user-select:none">계산서 <span id="sort-_tax"></span></th>
                                     <th class="text-center" onclick="sortTable('_status')" style="cursor:pointer;user-select:none">상태 <span id="sort-_status"></span></th>
                                     <th class="text-center">처리</th>
                                 </tr>
@@ -782,7 +782,7 @@ function sortTable(key) {
         _sortDir = key === 'receiptDate' || key === '_lastPay' ? 'desc' : 'asc';
     }
     // 화살표 갱신
-    ['receiptNo','receiptDate','companyName','_total','_paid','_pct','_lastPay','_status'].forEach(function(k) {
+    ['receiptNo','receiptDate','companyName','_purpose','_product','_total','_paid','_pct','_method','_lastPay','_tax','_status'].forEach(function(k) {
         var el = document.getElementById('sort-' + k);
         if (el) el.textContent = k === _sortKey ? (_sortDir === 'asc' ? '▲' : '▼') : '';
     });
@@ -810,7 +810,16 @@ function renderTable() {
             va = ta > 0 ? getPaidAmount(da) / ta : 0;
             vb = tb > 0 ? getPaidAmount(db) / tb : 0;
         }
+        else if (_sortKey === '_purpose') { va = (da.testPurpose || da.purpose || '').toLowerCase(); vb = (db.testPurpose || db.purpose || '').toLowerCase(); }
+        else if (_sortKey === '_product') { va = ((da.samples && da.samples[0] && da.samples[0].productName) || da.productName || '').toLowerCase(); vb = ((db.samples && db.samples[0] && db.samples[0].productName) || db.productName || '').toLowerCase(); }
+        else if (_sortKey === '_method') { va = Object.keys(getPaymentMethods(da)).sort().join(','); vb = Object.keys(getPaymentMethods(db)).sort().join(','); }
         else if (_sortKey === '_lastPay') { va = getLastPayDate(da); vb = getLastPayDate(db); }
+        else if (_sortKey === '_tax') {
+            var taxOrder = {'발행완료':0,'발행대기':1,'미입력':2,'취소':3};
+            var taxLabel = function(d) { return d.taxCancelled ? '취소' : d.taxInvoiceIssued ? '발행완료' : (d.invoiceType && d.payMethod) ? '발행대기' : '미입력'; };
+            va = taxOrder[taxLabel(da)] !== undefined ? taxOrder[taxLabel(da)] : 9;
+            vb = taxOrder[taxLabel(db)] !== undefined ? taxOrder[taxLabel(db)] : 9;
+        }
         else if (_sortKey === '_status') { va = getPaymentStatus(da); vb = getPaymentStatus(db); }
         else { va = ''; vb = ''; }
         if (va < vb) return _sortDir === 'asc' ? -1 : 1;
