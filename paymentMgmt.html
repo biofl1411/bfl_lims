@@ -356,11 +356,26 @@ tr:hover{background:#f8f9fb}
                 <div class="form-row">
                     <div class="form-group">
                         <label>입금방법</label>
-                        <select id="pay-method">
+                        <select id="pay-method" onchange="toggleCardCompany()">
                             <option value="카드">카드</option>
                             <option value="현금">현금</option>
                             <option value="계좌이체">계좌이체</option>
                             <option value="은행매칭">은행매칭</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="card-company-group">
+                        <label>카드사</label>
+                        <select id="pay-card-company">
+                            <option value="">선택</option>
+                            <option value="삼성카드">삼성카드</option>
+                            <option value="현대카드">현대카드</option>
+                            <option value="BC카드">BC카드</option>
+                            <option value="신한카드">신한카드</option>
+                            <option value="KB국민카드">KB국민카드</option>
+                            <option value="롯데카드">롯데카드</option>
+                            <option value="하나카드">하나카드</option>
+                            <option value="우리카드">우리카드</option>
+                            <option value="토스페이먼츠">토스페이먼츠</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -519,6 +534,7 @@ document.addEventListener('DOMContentLoaded', function() {
     from.setMonth(from.getMonth() - 3);
     document.getElementById('search-from').value = formatDate(from);
     document.getElementById('pay-date').value = formatDate(today);
+    toggleCardCompany(); // 초기 카드사 표시 여부 설정
 
     document.getElementById('pay-amount').addEventListener('input', function(e) {
         var v = e.target.value.replace(/[^\d]/g, '');
@@ -1039,6 +1055,13 @@ function closeModal() {
     currentReceiptId = null;
 }
 
+function toggleCardCompany() {
+    var method = document.getElementById('pay-method').value;
+    var grp = document.getElementById('card-company-group');
+    if (grp) grp.style.display = (method === '카드') ? '' : 'none';
+    if (method !== '카드') document.getElementById('pay-card-company').value = '';
+}
+
 function toggleAllCompanions(el) {
     document.querySelectorAll('.companion-chk').forEach(function(chk) { chk.checked = el.checked; });
 }
@@ -1084,6 +1107,8 @@ async function processPayment() {
     if (!amount || amount <= 0) { showToast('입금액을 입력하세요'); return; }
 
     var method = document.getElementById('pay-method').value;
+    var cardCompany = (method === '카드') ? document.getElementById('pay-card-company').value : '';
+    if (method === '카드' && !cardCompany) { showToast('카드사를 선택하세요'); return; }
     var date = document.getElementById('pay-date').value;
     var memo = document.getElementById('pay-memo').value.trim();
     var account = document.getElementById('pay-account').value;
@@ -1094,7 +1119,8 @@ async function processPayment() {
     if (!date) { showToast('입금일자를 선택하세요'); return; }
 
     var payment = {
-        amount: amount, method: method, date: date, memo: memo,
+        amount: amount, method: method, cardCompany: cardCompany || null,
+        date: date, memo: memo,
         account: account, depositor: dep1, note2: dep2, branch: branch,
         inputType: '수동',
         createdAt: new Date().toISOString()
