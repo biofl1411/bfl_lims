@@ -1554,7 +1554,22 @@ function openDetailModal(receiptId) {
     var sRows = d.samples.map(function(s) {
       var items = '';
       if (Array.isArray(s.testItems)) {
-        items = s.testItems.map(function(t) { return typeof t === 'object' ? (t.name || t.itemName || t.item || '') : String(t||''); }).filter(Boolean).join(', ');
+        var _antibio = 0, _pestic = 0, _others = [];
+        s.testItems.forEach(function(t) {
+          var name = typeof t === 'object' ? (t.itemName || t.name || t.item || '') : String(t||'');
+          var code = typeof t === 'object' ? (t.testCode || '') : '';
+          if (!name && !code) return;
+          if (code.indexOf('SCF_') === 0) return; // 묶음수수료 항목 제외
+          var prefix = code.replace(/[0-9_]/g,'').toUpperCase();
+          if (prefix.charAt(0) === 'F') _antibio++;       // F계열 → 항생물질
+          else if (prefix.charAt(0) === 'E') _pestic++;   // E계열 → 잔류농약
+          else if (name) _others.push(name);
+        });
+        var _parts = [];
+        if (_pestic > 0) _parts.push('잔류농약 ' + _pestic + '종');
+        if (_antibio > 0) _parts.push('항생물질 ' + _antibio + '종');
+        _parts = _parts.concat(_others);
+        items = _parts.join(', ');
       } else { items = s.testItems || ''; }
       // 수수료: 샘플 자체 필드 우선, 없으면 단일 시료일 때 접수 전체 수수료 표시
       var sFee = Number(s.discountFinalPrice || s.feeTotal || s.feeOriginal || s.totalFee || s.totalAmount || s.fee || 0);
