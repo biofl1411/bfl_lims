@@ -92,6 +92,21 @@ tr:hover{background:#fafbfc}
 .rf-issue-hd h4{font-size:14px;font-weight:700;color:#1a2332}
 .rf-issue-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .rf-issue-body{padding:16px 18px}
+/* 발행관리 서브탭 */
+.issue-subtab-bar{display:flex;gap:4px;border-bottom:2px solid #e2e6ed;margin-bottom:18px;flex-wrap:wrap}
+.issue-subtab{padding:9px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:#8892a4;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap;border-radius:6px 6px 0 0}
+.issue-subtab:hover{color:#1a73e8;background:#f0f4ff}
+.issue-subtab.active{color:#1a73e8;border-bottom-color:#1a73e8;background:#f0f4ff}
+.issue-subtab .sub-badge{display:inline-block;background:#e53935;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+.issue-panel{display:none}
+.issue-panel.active{display:block}
+/* 합산발행 그룹 */
+.merged-group{background:#fff;border:1px solid #e2e6ed;border-radius:10px;margin-bottom:14px;overflow:hidden}
+.merged-group-hd{padding:10px 14px;background:#f5f7fb;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:8px;cursor:pointer}
+.merged-group-hd .company-name{font-size:13px;font-weight:700;color:#1a2332}
+.merged-group-hd .count-badge{font-size:11px;color:#1a73e8;background:#e8f0fe;border-radius:8px;padding:2px 8px}
+.merged-group-hd .sum-amount{margin-left:auto;font-size:13px;font-weight:700;color:#2e7d32}
+.merged-group-body{padding:12px 14px}
 .rf-issue-desc{font-size:12px;color:#5f6b7a;margin-bottom:12px;line-height:1.6}
 .rf-scroll-table{max-height:280px;overflow-y:auto;border:1px solid #e2e6ed;border-radius:8px}
 
@@ -307,132 +322,207 @@ tr:hover{background:#fafbfc}
     <!-- 탭3: 발행관리 -->
     <div class="rf-panel" id="rfPanel-issue">
 
-      <!-- F-1: 일괄발행 -->
-      <div class="rf-issue-block">
-        <div class="rf-issue-hd">
-          <span style="font-size:20px">📦</span>
-          <h4>일괄 발행</h4>
-          <div class="right">
-            <div class="rf-radio-group" id="batchTaxTypeGroup">
-              <label class="rf-radio-label active" id="batchRadio-taxable" onclick="setBatchTaxType('과세')">
-                <input type="radio" name="batchTaxType" value="과세" checked style="display:none"> 과세
-              </label>
-              <label class="rf-radio-label" id="batchRadio-exempt" onclick="setBatchTaxType('면세')">
-                <input type="radio" name="batchTaxType" value="면세" style="display:none"> 면세
-              </label>
-            </div>
-          </div>
-        </div>
-        <div class="rf-issue-body">
-          <div class="rf-issue-desc">결제정보 입력 완료 + 미발행 건 전체를 선택하여 홈택스 파일을 생성합니다.</div>
-          <div class="rf-scroll-table">
-            <table>
-              <thead>
-                <tr>
-                  <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="batchCheckAll" onchange="toggleCheckAll('batch',this.checked)"></th>
-                  <th>접수번호</th>
-                  <th>업체명 (발행대상)</th>
-                  <th>계산서유형</th>
-                  <th class="text-right">공급가액</th>
-                  <th class="text-right">세액</th>
-                  <th>발행예정일</th>
-                </tr>
-              </thead>
-              <tbody id="batchTbody">
-                <tr><td colspan="7" class="empty-msg">발행 대기 건이 없습니다</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-            <span class="selected-info" id="batchSelectedInfo">선택: 0건 / 0원</span>
-            <div style="margin-left:auto;display:flex;gap:8px">
-              <button class="btn btn-warning btn-sm" onclick="downloadBatchExcel()">📥 홈택스 파일 생성</button>
-              <button class="btn btn-success btn-sm" onclick="markBatchIssued()">✅ 발행완료 처리</button>
-            </div>
-          </div>
-        </div>
+      <!-- 서브탭 바 -->
+      <div class="issue-subtab-bar">
+        <button class="issue-subtab active" id="issuetab-manual" onclick="switchIssueTab('manual')">📦 수동발행</button>
+        <button class="issue-subtab" id="issuetab-merged" onclick="switchIssueTab('merged')">🔗 합산발행</button>
+        <button class="issue-subtab" id="issuetab-specific" onclick="switchIssueTab('specific')">🎯 특정일발행</button>
+        <button class="issue-subtab" id="issuetab-month" onclick="switchIssueTab('month')">📅 월말발행</button>
+        <button class="issue-subtab" id="issuetab-unset" onclick="switchIssueTab('unset')">❓ 미지정 <span class="sub-badge" id="unsetBadge">0</span></button>
       </div>
 
-      <!-- F-2: 월말발행 -->
-      <div class="rf-issue-block">
-        <div class="rf-issue-hd">
-          <span style="font-size:20px">📅</span>
-          <h4>월말 발행</h4>
-          <div class="right">
-            <input type="month" class="rf-input" id="monthSelect" style="width:140px">
-            <button class="btn btn-primary btn-sm" onclick="loadMonthData()">조회</button>
+      <!-- 수동발행 패널 -->
+      <div class="issue-panel active" id="issuePanel-manual">
+        <div class="rf-issue-block">
+          <div class="rf-issue-hd">
+            <span style="font-size:20px">📦</span>
+            <h4>수동 발행</h4>
+            <div class="right">
+              <div class="rf-radio-group" id="batchTaxTypeGroup">
+                <label class="rf-radio-label active" id="batchRadio-taxable" onclick="setBatchTaxType('과세')">
+                  <input type="radio" name="batchTaxType" value="과세" checked style="display:none"> 과세
+                </label>
+                <label class="rf-radio-label" id="batchRadio-exempt" onclick="setBatchTaxType('면세')">
+                  <input type="radio" name="batchTaxType" value="면세" style="display:none"> 면세
+                </label>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="rf-issue-body">
-          <div class="rf-issue-desc">특정 월의 접수건 전체를 선택하여 발행합니다. 발행일자는 해당 월 말일로 자동 설정됩니다.</div>
-          <div id="monthDateInfo" style="font-size:11px;color:#1565c0;margin-bottom:10px;display:none"></div>
-          <div class="rf-scroll-table">
-            <table>
-              <thead>
-                <tr>
-                  <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="monthCheckAll" onchange="toggleCheckAll('month',this.checked)"></th>
-                  <th>접수번호</th>
-                  <th>업체명 (발행대상)</th>
-                  <th>계산서유형</th>
-                  <th class="text-right">공급가액</th>
-                  <th class="text-right">세액</th>
-                  <th>발행예정일</th>
-                </tr>
-              </thead>
-              <tbody id="monthTbody">
-                <tr><td colspan="7" class="empty-msg">월을 선택하고 [조회]를 클릭하세요</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-            <span class="selected-info" id="monthSelectedInfo">선택: 0건 / 0원</span>
-            <div style="margin-left:auto;display:flex;gap:8px">
-              <button class="btn btn-warning btn-sm" onclick="downloadMonthExcel()">📥 홈택스 파일 생성</button>
-              <button class="btn btn-success btn-sm" onclick="markMonthIssued()">✅ 발행완료 처리</button>
+          <div class="rf-issue-body">
+            <div class="rf-issue-desc">결제정보 입력 완료 + 미발행 건을 선택하여 건별로 홈택스 파일을 생성합니다.</div>
+            <div class="rf-scroll-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="batchCheckAll" onchange="toggleCheckAll('batch',this.checked)"></th>
+                    <th>접수번호</th>
+                    <th>업체명 (발행대상)</th>
+                    <th>계산서유형</th>
+                    <th class="text-right">공급가액</th>
+                    <th class="text-right">세액</th>
+                    <th>발행예정일</th>
+                  </tr>
+                </thead>
+                <tbody id="batchTbody">
+                  <tr><td colspan="7" class="empty-msg">발행 대기 건이 없습니다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+              <span class="selected-info" id="batchSelectedInfo">선택: 0건 / 0원</span>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <button class="btn btn-warning btn-sm" onclick="downloadBatchExcel()">📥 홈택스 파일 생성</button>
+                <button class="btn btn-success btn-sm" onclick="markBatchIssued()">✅ 발행완료 처리</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </div><!-- /issuePanel-manual -->
 
-      <!-- F-3: 특정일 발행 -->
-      <div class="rf-issue-block">
-        <div class="rf-issue-hd">
-          <span style="font-size:20px">🎯</span>
-          <h4>특정일 발행</h4>
-          <div class="right">
-            <input type="date" class="rf-input" id="specificDateSelect" style="width:140px">
-            <button class="btn btn-primary btn-sm" onclick="loadSpecificDateData()">조회</button>
+      <!-- 합산발행 패널 -->
+      <div class="issue-panel" id="issuePanel-merged">
+        <div class="rf-issue-block">
+          <div class="rf-issue-hd">
+            <span style="font-size:20px">🔗</span>
+            <h4>합산 발행</h4>
+            <div class="right">
+              <span style="font-size:11px;color:#8892a4">같은 업체의 여러 건을 1장 세금계산서로 묶어서 발행</span>
+            </div>
           </div>
-        </div>
-        <div class="rf-issue-body">
-          <div class="rf-issue-desc">발행예정일(invoiceDate)이 특정 날짜로 지정된 건들만 모아서 발행합니다.</div>
-          <div class="rf-scroll-table">
-            <table>
-              <thead>
-                <tr>
-                  <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="specificCheckAll" onchange="toggleCheckAll('specific',this.checked)"></th>
-                  <th>접수번호</th>
-                  <th>업체명 (발행대상)</th>
-                  <th>계산서유형</th>
-                  <th class="text-right">공급가액</th>
-                  <th class="text-right">세액</th>
-                  <th>발행예정일</th>
-                </tr>
-              </thead>
-              <tbody id="specificTbody">
-                <tr><td colspan="7" class="empty-msg">날짜를 선택하고 [조회]를 클릭하세요</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-            <span class="selected-info" id="specificSelectedInfo">선택: 0건 / 0원</span>
-            <div style="margin-left:auto;display:flex;gap:8px">
-              <button class="btn btn-warning btn-sm" onclick="downloadSpecificDateExcel()">📥 홈택스 파일 생성</button>
-              <button class="btn btn-success btn-sm" onclick="markSpecificDateIssued()">✅ 발행완료 처리</button>
+          <div class="rf-issue-body">
+            <div class="rf-issue-desc">업체별로 미발행 건을 그룹화합니다. 그룹 내 건들을 선택하면 공급가액이 합산된 홈택스 파일이 생성됩니다.</div>
+            <div id="mergedGroupContainer">
+              <div style="color:#8892a4;font-size:13px;padding:20px;text-align:center">합산 발행 대기 건이 없습니다</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+              <span class="selected-info" id="mergedSelectedInfo">선택: 0건 / 0원</span>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <button class="btn btn-warning btn-sm" onclick="downloadMergedExcel()">📥 홈택스 파일 생성 (합산)</button>
+                <button class="btn btn-success btn-sm" onclick="markMergedIssued()">✅ 발행완료 처리</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </div><!-- /issuePanel-merged -->
+
+      <!-- 특정일발행 패널 -->
+      <div class="issue-panel" id="issuePanel-specific">
+        <div class="rf-issue-block">
+          <div class="rf-issue-hd">
+            <span style="font-size:20px">🎯</span>
+            <h4>특정일 발행</h4>
+            <div class="right">
+              <input type="date" class="rf-input" id="specificDateSelect" style="width:140px">
+              <button class="btn btn-primary btn-sm" onclick="loadSpecificDateData()">조회</button>
+            </div>
+          </div>
+          <div class="rf-issue-body">
+            <div class="rf-issue-desc">발행예정일이 특정 날짜로 지정된 건들만 모아서 발행합니다.</div>
+            <div class="rf-scroll-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="specificCheckAll" onchange="toggleCheckAll('specific',this.checked)"></th>
+                    <th>접수번호</th>
+                    <th>업체명 (발행대상)</th>
+                    <th>계산서유형</th>
+                    <th class="text-right">공급가액</th>
+                    <th class="text-right">세액</th>
+                    <th>발행예정일</th>
+                  </tr>
+                </thead>
+                <tbody id="specificTbody">
+                  <tr><td colspan="7" class="empty-msg">날짜를 선택하고 [조회]를 클릭하세요</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+              <span class="selected-info" id="specificSelectedInfo">선택: 0건 / 0원</span>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <button class="btn btn-warning btn-sm" onclick="downloadSpecificDateExcel()">📥 홈택스 파일 생성</button>
+                <button class="btn btn-success btn-sm" onclick="markSpecificDateIssued()">✅ 발행완료 처리</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /issuePanel-specific -->
+
+      <!-- 월말발행 패널 -->
+      <div class="issue-panel" id="issuePanel-month">
+        <div class="rf-issue-block">
+          <div class="rf-issue-hd">
+            <span style="font-size:20px">📅</span>
+            <h4>월말 발행</h4>
+            <div class="right">
+              <input type="month" class="rf-input" id="monthSelect" style="width:140px">
+              <button class="btn btn-primary btn-sm" onclick="loadMonthData()">조회</button>
+            </div>
+          </div>
+          <div class="rf-issue-body">
+            <div class="rf-issue-desc">특정 월의 접수건 전체를 선택하여 발행합니다. 발행일자는 해당 월 말일로 자동 설정됩니다.</div>
+            <div id="monthDateInfo" style="font-size:11px;color:#1565c0;margin-bottom:10px;display:none"></div>
+            <div class="rf-scroll-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="monthCheckAll" onchange="toggleCheckAll('month',this.checked)"></th>
+                    <th>접수번호</th>
+                    <th>업체명 (발행대상)</th>
+                    <th>계산서유형</th>
+                    <th class="text-right">공급가액</th>
+                    <th class="text-right">세액</th>
+                    <th>발행예정일</th>
+                  </tr>
+                </thead>
+                <tbody id="monthTbody">
+                  <tr><td colspan="7" class="empty-msg">월을 선택하고 [조회]를 클릭하세요</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+              <span class="selected-info" id="monthSelectedInfo">선택: 0건 / 0원</span>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <button class="btn btn-warning btn-sm" onclick="downloadMonthExcel()">📥 홈택스 파일 생성</button>
+                <button class="btn btn-success btn-sm" onclick="markMonthIssued()">✅ 발행완료 처리</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /issuePanel-month -->
+
+      <!-- 미지정 패널 -->
+      <div class="issue-panel" id="issuePanel-unset">
+        <div class="rf-issue-block">
+          <div class="rf-issue-hd">
+            <span style="font-size:20px">❓</span>
+            <h4>미지정</h4>
+            <div class="right">
+              <span style="font-size:11px;color:#8892a4">결제정보 미입력 건 — 접수현황 미입력 탭에서 입력 후 발행 처리하세요</span>
+            </div>
+          </div>
+          <div class="rf-issue-body">
+            <div class="rf-issue-desc">계산서유형이 지정되지 않은 미발행 건 목록입니다. 결제방법·계산서유형을 지정해야 발행 탭으로 이동됩니다.</div>
+            <div class="rf-scroll-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>접수번호</th>
+                    <th>업체명</th>
+                    <th>접수일</th>
+                    <th class="text-right">금액</th>
+                    <th>결제방법</th>
+                    <th>계산서유형</th>
+                    <th>처리</th>
+                  </tr>
+                </thead>
+                <tbody id="unsetTbody">
+                  <tr><td colspan="7" class="empty-msg">미지정 건이 없습니다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div><!-- /issuePanel-unset -->
 
     </div><!-- /rfPanel-issue -->
   </div><!-- /content -->
@@ -534,6 +624,7 @@ var _currentTab = 'uninput';
 var _batchTaxType = '과세';
 var _monthList = [];
 var _specificList = [];
+var _currentIssueTab = 'manual';
 
 var SUPPLIER = {
   bizNo: '6588700076',
@@ -724,6 +815,7 @@ function renderKpiCards() {
   document.getElementById('kpiPending').textContent = pending.toLocaleString();
   document.getElementById('kpiIssued').textContent = issued.toLocaleString();
   document.getElementById('uninputBadge').textContent = uninput;
+  updateUnsetBadge();
 }
 
 /* =====================================================
@@ -1203,8 +1295,132 @@ function downloadAllExcel() {
 /* =====================================================
    탭3: 발행관리 렌더링
 ===================================================== */
+function switchIssueTab(type) {
+  _currentIssueTab = type;
+  document.querySelectorAll('.issue-subtab').forEach(function(btn) { btn.classList.remove('active'); });
+  document.querySelectorAll('.issue-panel').forEach(function(p) { p.classList.remove('active'); });
+  var btn = document.getElementById('issuetab-' + type);
+  var panel = document.getElementById('issuePanel-' + type);
+  if (btn) btn.classList.add('active');
+  if (panel) panel.classList.add('active');
+  if (type === 'manual') renderBatchTab();
+  else if (type === 'merged') renderMergedTab();
+  else if (type === 'unset') renderUnsetTab();
+}
+
 function renderIssueTab() {
-  renderBatchTab();
+  updateUnsetBadge();
+  if (_currentIssueTab === 'manual') renderBatchTab();
+  else if (_currentIssueTab === 'merged') renderMergedTab();
+  else if (_currentIssueTab === 'unset') renderUnsetTab();
+}
+
+function updateUnsetBadge() {
+  var cnt = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return (!d.payMethod || !d.invoiceType) && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+  }).length;
+  var badge = document.getElementById('unsetBadge');
+  if (badge) badge.textContent = cnt;
+}
+
+function renderMergedTab() {
+  // 미발행 건 중 결제정보 있는 건들을 업체별 그룹화
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+  });
+  var container = document.getElementById('mergedGroupContainer');
+  if (list.length === 0) {
+    container.innerHTML = '<div style="color:#8892a4;font-size:13px;padding:20px;text-align:center">합산 발행 대기 건이 없습니다</div>';
+    document.getElementById('mergedSelectedInfo').textContent = '선택: 0건 / 0원';
+    return;
+  }
+  // 업체별 그룹핑 (billEdit 적용 업체명 기준)
+  var groups = {};
+  list.forEach(function(r) {
+    var d = r.data;
+    var companyKey = (d.billEditEnabled && d.billEdit) ? (d.billEdit.company || d.companyName || '') : (d.companyName || '');
+    if (!groups[companyKey]) groups[companyKey] = [];
+    groups[companyKey].push(r);
+  });
+  var html = '';
+  Object.keys(groups).sort().forEach(function(company) {
+    var items = groups[company];
+    var totalSupply = items.reduce(function(s, r) { return s + getSupplyAmount(r.data); }, 0);
+    var totalTax = items.reduce(function(s, r) { return s + getTaxAmount(r.data); }, 0);
+    html += '<div class="merged-group">';
+    html += '<div class="merged-group-hd">';
+    html += '<input type="checkbox" class="row-check merged-group-chk" data-company="' + escHtml(company) + '" onchange="toggleMergedGroup(this)" style="margin-right:6px">';
+    html += '<span class="company-name">' + escHtml(company) + '</span>';
+    html += '<span class="count-badge">' + items.length + '건</span>';
+    html += '<span class="sum-amount">' + (totalSupply + totalTax).toLocaleString() + '원 (공급 ' + totalSupply.toLocaleString() + ' + 세액 ' + totalTax.toLocaleString() + ')</span>';
+    html += '</div>';
+    html += '<div class="merged-group-body">';
+    html += '<div class="rf-scroll-table"><table><thead><tr>';
+    html += '<th class="text-center" style="width:32px"></th>';
+    html += '<th>접수번호</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th>';
+    html += '</tr></thead><tbody>';
+    items.forEach(function(r) {
+      var d = r.data;
+      var supply = getSupplyAmount(d); var taxAmt = getTaxAmount(d);
+      html += '<tr>';
+      html += '<td class="text-center"><input type="checkbox" class="row-check merged-chk" data-id="' + r.id + '" data-company="' + escHtml(company) + '" onchange="updateMergedSelectedInfo()" checked></td>';
+      html += '<td style="font-size:11px;color:#1a73e8">' + escHtml(d.receiptNo || r.id) + '</td>';
+      html += '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>';
+      html += '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>';
+      html += '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>';
+      html += '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+  updateMergedSelectedInfo();
+}
+
+function toggleMergedGroup(groupChk) {
+  var company = groupChk.getAttribute('data-company');
+  var checked = groupChk.checked;
+  document.querySelectorAll('.merged-chk[data-company="' + company + '"]').forEach(function(chk) { chk.checked = checked; });
+  updateMergedSelectedInfo();
+}
+
+function updateMergedSelectedInfo() {
+  var chks = document.querySelectorAll('.merged-chk:checked');
+  var total = 0;
+  chks.forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) total += getTotalFee(r.data);
+  });
+  document.getElementById('mergedSelectedInfo').textContent = '선택: ' + chks.length + '건 / ' + total.toLocaleString() + '원';
+}
+
+function renderUnsetTab() {
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return (!d.payMethod || !d.invoiceType) && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+  });
+  var tbody = document.getElementById('unsetTbody');
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">미지정 건이 없습니다 🎉</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(function(r) {
+    var d = r.data; var id = r.id;
+    var total = getTotalFee(d);
+    return '<tr>' +
+      '<td style="font-size:11px;color:#1a73e8">' + escHtml(d.receiptNo || id) + '</td>' +
+      '<td style="font-size:11px">' + escHtml(d.companyName || '') + '</td>' +
+      '<td style="font-size:11px;color:#5f6b7a">' + (d.receiptDate || '-') + '</td>' +
+      '<td class="text-right" style="font-size:11px">' + total.toLocaleString() + '</td>' +
+      '<td>' + (d.payMethod ? '<span style="color:#2e7d32;font-size:11px">' + escHtml(d.payMethod) + '</span>' : '<span style="color:#e53935;font-size:11px">미입력</span>') + '</td>' +
+      '<td>' + (d.invoiceType ? '<span style="color:#2e7d32;font-size:11px">' + escHtml(d.invoiceType) + '</span>' : '<span style="color:#e53935;font-size:11px">미지정</span>') + '</td>' +
+      '<td><button class="btn btn-sm" style="font-size:11px;padding:2px 8px" onclick="switchTab(\'uninput\')">입력하기</button></td>' +
+      '</tr>';
+  }).join('');
 }
 
 function renderBatchTab() {
@@ -1484,6 +1700,71 @@ function downloadMonthExcel() {
   showToast(list.length + '건 파일 생성 완료');
 }
 
+function downloadMergedExcel() {
+  // 업체별로 그룹핑 후 그룹당 1행 (공급가액 합산)
+  var chks = document.querySelectorAll('.merged-chk:checked');
+  if (chks.length === 0) { showToast('선택된 건이 없습니다'); return; }
+  // 업체별 그룹핑
+  var groups = {};
+  chks.forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var company = chk.getAttribute('data-company');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (!r) return;
+    if (!groups[company]) groups[company] = [];
+    groups[company].push(r);
+  });
+  var today = new Date(); var td = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+  var headers = buildDuzonHeaders();
+  var dataRows = [];
+  Object.keys(groups).forEach(function(company) {
+    var items = groups[company];
+    if (items.length === 1) {
+      // 단건은 그대로
+      dataRows.push(buildDuzonRow(items[0].data, td, null));
+    } else {
+      // 다건 합산: 공급가액/세액 합산, 품목명 합산
+      var baseData = items[0].data;
+      var totalSupply = items.reduce(function(s, r) { return s + getSupplyAmount(r.data); }, 0);
+      var totalTax = items.reduce(function(s, r) { return s + getTaxAmount(r.data); }, 0);
+      var totalAmt = totalSupply + totalTax;
+      var isTaxExempt = baseData.taxCategory === '면세';
+      var buyer = buildBuyerInfo(baseData);
+      var writeDate = td;
+      var itemNames = items.map(function(r) { return getItemName(r.data); }).join(', ');
+      var receiptNos = items.map(function(r) { return r.data.receiptNo || r.id; }).join(', ');
+      var totalQty = items.reduce(function(s, r) { return s + getSampleCount(r.data); }, 0);
+      var paidAmt = 0;
+      items.forEach(function(r) { (r.data.payments || []).forEach(function(p) { paidAmt += Number(p.amount || 0); }); });
+      var billTypeCode = (paidAmt >= totalAmt && totalAmt > 0) ? 2 : 1;
+      var taxCode = isTaxExempt ? 2 : 1;
+      dataRows.push([
+        '', 'EXCEL', billTypeCode, 1, 1, taxCode, '', '', '',
+        SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
+        '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
+        SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
+        buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
+        '', buyer.bizStatus, buyer.bizType, '', buyer.email,
+        buyer.mobile, buyer.contactName, buyer.phone,
+        writeDate, totalSupply, totalTax,
+        writeDate, itemNames, '', totalQty, Math.round(totalSupply / totalQty), totalSupply, totalTax, '',
+        '','','','','','','','',
+        '','','','','','','','',
+        '','','','','','','','',
+        totalAmt, 0, 0, 0, totalAmt,
+        receiptNos, '', '',
+        'N', '', '', '', '',
+        'END'
+      ]);
+    }
+  });
+  var ws = XLSX.utils.aoa_to_sheet(headers.concat(dataRows));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '세금계산서');
+  XLSX.writeFile(wb, '홈택스_세금계산서_합산_' + td + '_' + Object.keys(groups).length + '사.xlsx');
+  showToast(Object.keys(groups).length + '사 합산 파일 생성 완료');
+}
+
 function downloadSpecificDateExcel() {
   var list = getCheckedList('specific');
   if (list.length === 0) list = _specificList;
@@ -1547,6 +1828,18 @@ function markMonthIssued() {
 function markSpecificDateIssued() {
   var list = getCheckedList('specific');
   if (list.length === 0) list = _specificList;
+  markIssuedList(list);
+}
+
+function markMergedIssued() {
+  var chks = document.querySelectorAll('.merged-chk:checked');
+  if (chks.length === 0) { showToast('선택된 건이 없습니다'); return; }
+  var list = [];
+  chks.forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) list.push(r);
+  });
   markIssuedList(list);
 }
 
