@@ -1122,8 +1122,19 @@ async function processPayment() {
 
     var currentData = allReceipts.find(function(r){ return r.id === currentReceiptId; });
     var currentReceiptNo = (currentData && currentData.data) ? (currentData.data.receiptNo || '') : '';
+
+    // 동업체 건이 함께 처리될 때 → 메인 접수건은 본인 미수잔액만 저장
+    var checkedCompanions = document.querySelectorAll('.companion-chk:checked');
+    var mainAmount = amount;
+    if (checkedCompanions.length > 0 && currentData && currentData.data) {
+        var mainTotal = getTotalFee(currentData.data);
+        var mainPaid = getPaidAmount(currentData.data);
+        var mainRemain = Math.max(0, mainTotal - mainPaid);
+        mainAmount = Math.min(amount, mainRemain);
+    }
+
     var payment = {
-        amount: amount, method: method, cardCompany: cardCompany || null,
+        amount: mainAmount, method: method, cardCompany: cardCompany || null,
         date: date, memo: memo,
         account: account, depositor: dep1, note2: dep2, branch: branch,
         receiptNo: currentReceiptNo,
