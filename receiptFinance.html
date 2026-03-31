@@ -645,10 +645,49 @@ async function loadCompaniesData() {
   } catch(e) { console.warn('업체 로드 실패:', e.message); }
 }
 
+// payments[].method → payMethod 매핑
+function inferPayMethodFromPayments(payments) {
+  if (!payments || !payments.length) return null;
+  var method = (payments[0].method || '').trim();
+  if (method === '카드') return '카드';
+  if (method === '현금') return '현금';
+  return '온라인입금'; // 계좌이체, 이체 등 나머지
+}
+function inferInvoiceType(payMethod) {
+  if (payMethod === '카드') return '카드전표';
+  if (payMethod === '현금') return '현금영수증';
+  return '세금계산서';
+}
+
 async function loadReceiptsData() {
   try {
     var snap = await db.collection('receipts').orderBy('createdAt','desc').limit(2000).get();
     _allReceipts = snap.docs.map(function(doc) { return { id: doc.id, data: doc.data() }; });
+
+    // payments 있는데 payMethod 없는 건 자동 추론 + Firestore 저장
+    var batch = db.batch();
+    var autoFilled = 0;
+    _allReceipts.forEach(function(r) {
+      var d = r.data;
+      if (!d.payMethod && d.payments && d.payments.length > 0) {
+        var pm = inferPayMethodFromPayments(d.payments);
+        var it = inferInvoiceType(pm);
+        if (pm) {
+          d.payMethod = pm;
+          d.invoiceType = it;
+          batch.update(db.collection('receipts').doc(r.id), {
+            payMethod: pm, invoiceType: it,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          autoFilled++;
+        }
+      }
+    });
+    if (autoFilled > 0) {
+      await batch.commit();
+      console.log('[자동추론] ' + autoFilled + '건 결제방법/계산서유형 자동 설정 완료');
+    }
+
     buildSalesRepOptions();
     renderKpiCards();
     doSearch();
