@@ -2782,7 +2782,7 @@ function simCalc(ci) {
    미생물 표준평판법 전용 입력폼 + 모의 계산기
    (formCollector.html에서 이식)
    ══════════════════════════════════════ */
-var _MICRO_DILUTIONS = [10, 100, 1000, 10000, 100000];
+var _MICRO_DILUTIONS = [1, 10, 100, 1000, 10000, 100000]; // 0번=원액(1배)
 
 function _isMicroBiology(testBasis) {
   if (!testBasis) return false;
@@ -2833,19 +2833,27 @@ function _buildMicroForm(analyzed) {
   window._mcRule = rule;
   window._mcNCount = nCount;
   _MICRO_DILUTIONS.forEach(function(dil, di) {
-    h += '<tr><td style="background:#f9fafb;padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">1:' + dil.toLocaleString() + '</td>';
+    var dilLabel = dil === 1 ? '<span style="color:#7c3aed;font-weight:700">원액</span>' : '1:' + dil.toLocaleString();
+    var rowBg = dil === 1 ? 'background:#faf5ff;' : 'background:#f9fafb;';
+    h += '<tr><td style="' + rowBg + 'padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">' + dilLabel + '</td>';
     for (var n = 1; n <= nCount; n++) {
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-0" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-1" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="checkbox" id="mc-nd-' + n + '-' + di + '" onchange="_mcToggleND(' + n + ',' + di + ',window._mcNCount,window._mcRule)" style="width:13px;height:13px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-0" placeholder="숫자/TNTC" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-1" placeholder="숫자/TNTC" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="checkbox" id="mc-nd-' + n + '-' + di + '" onchange="_mcToggleND(' + n + ',' + di + ',window._mcNCount,window._mcRule)" style="width:13px;height:13px" title="ND(불검출)"></td>';
     }
     h += '</tr>';
   });
   h += '<tr style="background:#f0fdf4"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center">채취량(g)</td>';
   for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="mc-w-' + n + '" placeholder="g" style="width:80px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
   h += '</tr>';
-  h += '<tr style="background:#eff6ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;font-size:10px;color:#1d4ed8;text-align:center">결과</td>';
-  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:5px;border:0.5px solid #e5e7eb;text-align:center;font-weight:500;font-size:13px" id="mc-result-' + n + '">-</td>';
+  h += '<tr style="background:#f0f9ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#0369a1;text-align:center">계산식</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:4px 6px;border:0.5px solid #e5e7eb;text-align:center;font-size:10px;color:#6b7280" id="mc-formula-' + n + '">-</td>';
+  h += '</tr>';
+  h += '<tr style="background:#fffbeb"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#92400e;text-align:center">시험결과</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:4px 6px;border:0.5px solid #e5e7eb;text-align:center;font-size:11px;color:#374151" id="mc-raw-' + n + '">-</td>';
+  h += '</tr>';
+  h += '<tr style="background:#eff6ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:700;font-size:10px;color:#1d4ed8;text-align:center">최종판정</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:5px;border:0.5px solid #e5e7eb;text-align:center;font-weight:700;font-size:13px" id="mc-result-' + n + '">-</td>';
   h += '</tr></tbody></table></div>';
   h += '<div id="mc-judge-box" style="margin-top:10px;padding:10px 14px;border-radius:8px;border:1.5px solid #86efac;background:#f0fdf4;display:flex;align-items:center;gap:10px">'
     + '<span id="mc-judge-icon" style="font-size:20px">—</span><div>'
@@ -2859,13 +2867,30 @@ function _mcUpdateRange(n, di) {
   [0,1].forEach(function(p) {
     var inp = document.getElementById('mc-'+n+'-'+di+'-'+p);
     if (!inp || nd) return;
-    var v = inp.value;
-    if (v === '') { inp.style.background=''; inp.style.borderColor=''; return; }
+    var v = inp.value.trim();
+    if (v === '') { inp.style.background=''; inp.style.borderColor=''; inp.style.color=''; return; }
+    var vUp = v.toUpperCase();
+    if (vUp === 'TNTC') {
+      inp.style.background='#fff7ed'; inp.style.borderColor='#fb923c'; inp.style.color='#c2410c';
+      inp.value = 'TNTC'; return;
+    }
     var num = Number(v);
+    if (isNaN(num)) { inp.style.background='#fef2f2'; inp.style.borderColor='#fca5a5'; inp.style.color='#dc2626'; return; }
+    inp.style.color = '';
     if (num >= 15 && num <= 300) { inp.style.background='#f0fdf4'; inp.style.borderColor='#86efac'; }
     else if (num < 15) { inp.style.background='#fffbeb'; inp.style.borderColor='#fcd34d'; }
     else { inp.style.background='#fff7ed'; inp.style.borderColor='#fb923c'; }
   });
+}
+
+// 입력값 → 숫자 변환 (TNTC→9999, ND→null, 숫자→숫자, 나머지→null)
+function _mcGetVal(v) {
+  if (v === '' || v === undefined || v === null) return null;
+  var s = String(v).trim().toUpperCase();
+  if (s === 'TNTC') return 9999;
+  if (s === 'ND') return null;
+  var n = Number(s);
+  return isNaN(n) ? null : n;
 }
 
 function _mcToggleND(n, di, nCount, rule) {
@@ -2883,7 +2908,10 @@ function _mcToggleND(n, di, nCount, rule) {
   _mcCalcAll(nCount, rule);
 }
 
-function _mcInRange(v) { var n = Number(v); return v !== '' && !isNaN(n) && n >= 15 && n <= 300; }
+function _mcInRange(v) {
+  var num = _mcGetVal(v);
+  return num !== null && num >= 15 && num <= 300;
+}
 function _mcRound2(n) {
   if (!n || n <= 0 || isNaN(n)) return 0;
   var mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
@@ -2898,15 +2926,30 @@ function _mcCalcOne(n) {
     if (nd) return;
     [0,1].forEach(function(p) {
       var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
-      if (v === '') return;
-      var num = Number(v);
-      if (isNaN(num)) return;
+      var num = _mcGetVal(v);
+      if (num === null) return;
       hasAnyValue = true;
       if (num <= 300) allOver300 = false;
       if (num >= 15) allUnder15 = false;
     });
   });
   if (!hasAnyValue) return null;
+
+  function _makeResult(sigmaC, denom, dilution, warning) {
+    var isRaw = (dilution === 1); // 원액: 소수점 유지, 유효숫자 미적용
+    var rawVal = (sigmaC / denom) * dilution;
+    var denomStr = denom === 1 ? '1' : (Number.isInteger(denom) ? String(denom) : denom.toFixed(1));
+    var dilStr = dilution === 1 ? '×1(원액)' : '×' + dilution.toLocaleString();
+    var formulaStr = sigmaC + ' ÷ ' + denomStr + ' ' + dilStr + ' = ' + (isRaw ? rawVal.toFixed(2).replace(/\.?0+$/, '') : Math.round(rawVal).toLocaleString());
+    return {
+      sigmaC: sigmaC, denom: denom, dilution: dilution,
+      raw: isRaw ? rawVal : Math.round(rawVal),
+      final: isRaw ? rawVal : _mcRound2(rawVal),
+      isRaw: isRaw, formulaStr: formulaStr,
+      warning: warning || ''
+    };
+  }
+
   if (allOver300) {
     var closestVal = null, closestDi = -1;
     _MICRO_DILUTIONS.forEach(function(dil, di) {
@@ -2914,18 +2957,18 @@ function _mcCalcOne(n) {
       if (nd) return;
       [0,1].forEach(function(p) {
         var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
-        if (v === '') return;
-        var num = Number(v);
-        if (isNaN(num)) return;
+        var num = _mcGetVal(v);
+        if (num === null) return;
         if (closestVal === null || Math.abs(num - 300) < Math.abs(closestVal - 300)) {
           closestVal = num; closestDi = di;
         }
       });
     });
     if (closestDi < 0) return null;
-    var raw = closestVal * _MICRO_DILUTIONS[closestDi];
-    return { sigmaC: closestVal, denom: 1, raw: Math.round(raw), final: _mcRound2(raw), warning: 'over300' };
+    var r = _makeResult(closestVal, 1, _MICRO_DILUTIONS[closestDi], 'over300');
+    return r;
   }
+
   _MICRO_DILUTIONS.forEach(function(dil, di) {
     if (firstDi >= 0) return;
     var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
@@ -2934,63 +2977,89 @@ function _mcCalcOne(n) {
     var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
     if (_mcInRange(v0) || _mcInRange(v1)) firstDi = di;
   });
+
   if (firstDi === -1) {
-    for (var di = 0; di < _MICRO_DILUTIONS.length; di++) {
-      var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-      if (nd) continue;
-      var v0 = (document.getElementById('mc-' + n + '-' + di + '-0') || {}).value || '';
-      var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
-      if (v0 !== '' || v1 !== '') { firstDi = di; break; }
+    for (var di2 = 0; di2 < _MICRO_DILUTIONS.length; di2++) {
+      var nd2 = (document.getElementById('mc-nd-' + n + '-' + di2) || {}).checked;
+      if (nd2) continue;
+      var v0b = (document.getElementById('mc-' + n + '-' + di2 + '-0') || {}).value || '';
+      var v1b = (document.getElementById('mc-' + n + '-' + di2 + '-1') || {}).value || '';
+      if (v0b !== '' || v1b !== '') { firstDi = di2; break; }
     }
     if (firstDi === -1) return null;
-    var n1 = 0, sigC = 0;
+    var cnt = 0, sigC2 = 0;
     [0,1].forEach(function(p) {
       var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
-      if (v !== '' && !isNaN(Number(v))) { n1++; sigC += Number(v); }
+      var num = _mcGetVal(v);
+      if (num !== null) { cnt++; sigC2 += num; }
     });
-    if (n1 === 0) return null;
-    var raw = (sigC / n1) * _MICRO_DILUTIONS[firstDi];
-    return { sigmaC: sigC, raw: Math.round(raw), final: _mcRound2(raw), warning: allUnder15 ? 'under15' : '' };
+    if (cnt === 0) return null;
+    return _makeResult(sigC2, cnt, _MICRO_DILUTIONS[firstDi], allUnder15 ? 'under15' : '');
   }
+
   var sigmaC = 0, n1p = 0, n2p = 0;
   [0,1].forEach(function(p) {
     var nd = (document.getElementById('mc-nd-'+n+'-'+firstDi)||{}).checked;
     var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
-    if (!nd && v !== '' && !isNaN(Number(v))) { n1p++; sigmaC += Number(v); }
+    var num = _mcGetVal(v);
+    if (!nd && num !== null) { n1p++; sigmaC += num; }
   });
   var secDi = firstDi + 1;
   if (secDi < _MICRO_DILUTIONS.length) {
     [0,1].forEach(function(p) {
       var nd = (document.getElementById('mc-nd-'+n+'-'+secDi)||{}).checked;
       var v = (document.getElementById('mc-'+n+'-'+secDi+'-'+p)||{}).value||'';
-      if (!nd && v !== '' && !isNaN(Number(v)) && _mcInRange(v)) { n2p++; sigmaC += Number(v); }
+      var num = _mcGetVal(v);
+      if (!nd && num !== null && _mcInRange(v)) { n2p++; sigmaC += num; }
     });
   }
   if (n1p === 0) return null;
   var denom = (1 * n1p) + (0.1 * n2p);
-  var raw = (sigmaC / denom) * _MICRO_DILUTIONS[firstDi];
-  return { sigmaC: sigmaC, denom: denom, raw: Math.round(raw), final: _mcRound2(raw) };
+  return _makeResult(sigmaC, denom, _MICRO_DILUTIONS[firstDi], '');
 }
 
 function _mcCalcAll(nCount, rule) {
   var m = rule.m || 10000, M = rule.M || 50000, c = rule.c !== undefined ? rule.c : 2;
-  var results = [], over300Count = 0, warnCount = 0, failCount = 0;
+  var results = [], calcResults = [], over300Count = 0, warnCount = 0, failCount = 0;
   for (var n = 1; n <= nCount; n++) {
     var calc = _mcCalcOne(n);
+    var elFormula = document.getElementById('mc-formula-' + n);
+    var elRaw = document.getElementById('mc-raw-' + n);
     var el = document.getElementById('mc-result-' + n);
-    if (el) {
-      if (!calc) {
-        el.textContent = '-'; el.style.color = '#9ca3af';
-      } else if (calc.warning === 'over300') {
-        el.innerHTML = calc.final.toLocaleString() + ' <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px">300초과</span>';
-        el.style.color = '#c2410c'; over300Count++;
-      } else {
-        el.textContent = calc.final.toLocaleString() + ' CFU/g';
-        el.style.color = calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+
+    if (!calc) {
+      if (elFormula) { elFormula.textContent = '-'; elFormula.style.color = '#9ca3af'; }
+      if (elRaw) { elRaw.textContent = '-'; elRaw.style.color = '#9ca3af'; }
+      if (el) { el.textContent = '-'; el.style.color = '#9ca3af'; }
+    } else {
+      // 계산식 행
+      if (elFormula) { elFormula.textContent = calc.formulaStr; elFormula.style.color = '#6b7280'; }
+
+      // 시험결과 행 (원액: 소수점 표시, 그 외: Math.round 값)
+      if (elRaw) {
+        var rawStr = calc.isRaw
+          ? (Number.isInteger(calc.raw) ? calc.raw.toString() : parseFloat(calc.raw.toFixed(2)).toString()) + ' CFU/g'
+          : Math.round(calc.raw).toLocaleString() + ' CFU/g';
+        elRaw.textContent = rawStr;
+        elRaw.style.color = '#374151';
+      }
+
+      // 최종판정 행
+      if (el) {
+        if (calc.warning === 'over300') {
+          el.innerHTML = (calc.isRaw ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString()) : calc.final.toLocaleString()) + ' CFU/g <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px">300초과</span>';
+          el.style.color = '#c2410c'; over300Count++;
+        } else {
+          var finalStr = calc.isRaw
+            ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString()) + ' CFU/g'
+            : calc.final.toLocaleString() + ' CFU/g';
+          el.textContent = finalStr;
+          el.style.color = calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+        }
       }
     }
-    if (calc) { results.push(calc.final); if (calc.final > M) failCount++; else if (calc.final > m) warnCount++; }
-    else results.push(null);
+    if (calc) { results.push(calc.final); calcResults.push(calc); if (calc.final > M) failCount++; else if (calc.final > m) warnCount++; }
+    else { results.push(null); calcResults.push(null); }
   }
   var box = document.getElementById('mc-judge-box');
   var icon = document.getElementById('mc-judge-icon');
@@ -3004,7 +3073,13 @@ function _mcCalcAll(nCount, rule) {
   box.style.background = pass ? '#f0fdf4' : '#fef2f2';
   icon.textContent = pass ? '✓' : '✗'; icon.style.color = pass ? '#15803d' : '#dc2626';
   text.textContent = pass ? '적합' : '부적합'; text.style.color = pass ? '#15803d' : '#dc2626';
-  var resStr = results.map(function(r,i){ return r !== null ? 'n'+(i+1)+'='+r.toLocaleString() : null; }).filter(Boolean).join(', ');
+  var resStr = calcResults.map(function(calc,i){
+    if (calc === null) return null;
+    var valStr = calc.isRaw
+      ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString())
+      : calc.final.toLocaleString();
+    return 'n'+(i+1)+'='+valStr;
+  }).filter(Boolean).join(', ');
   sub.textContent = resStr
     + (over300Count > 0 ? ' | 300초과(밀집평판법) '+over300Count+'건' : '')
     + (failCount > 0 ? ' | M초과 '+failCount+'건' : '')
