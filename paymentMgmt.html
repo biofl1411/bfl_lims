@@ -233,13 +233,11 @@ tr:hover{background:#f8f9fb}
                         <input type="date" id="search-to" title="종료일">
                         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('search-from').value='';document.getElementById('search-to').value='';applyFilter()">전체기간</button>
                         <button class="btn btn-primary" onclick="applyFilter()">검색</button>
-                        <button class="btn btn-success" id="btn-batch-pay" style="display:none" onclick="openBatchModal()">일괄 입금 (<span id="batch-count">0</span>건)</button>
                     </div>
                     <div class="tbl-wrap">
                         <table class="pay-tbl">
                             <thead>
                                 <tr id="pay-thead-row">
-                                    <th style="width:36px;text-align:center"><input type="checkbox" id="chk-all" onchange="toggleAllCheck(this)" style="width:15px;height:15px;accent-color:#1a73e8"></th>
                                     <th onclick="sortTable('receiptNo')" style="cursor:pointer;user-select:none">접수번호 <span id="sort-receiptNo"></span></th>
                                     <th onclick="sortTable('receiptDate')" style="cursor:pointer;user-select:none">접수일 <span id="sort-receiptDate">▼</span></th>
                                     <th onclick="sortTable('companyName')" style="cursor:pointer;user-select:none">업체명 <span id="sort-companyName"></span></th>
@@ -256,7 +254,7 @@ tr:hover{background:#f8f9fb}
                                 </tr>
                             </thead>
                             <tbody id="table-body">
-                                <tr><td colspan="13" class="empty-msg">로딩 중...</td></tr>
+                                <tr><td colspan="12" class="empty-msg">로딩 중...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -341,6 +339,17 @@ tr:hover{background:#f8f9fb}
                 </div>
             </div>
             <div id="modal-detail-area" style="margin-bottom:14px"></div>
+            <!-- 같은 업체 미수금 알림 -->
+            <div id="modal-companion-section" style="display:none;margin-bottom:14px;border:1px solid #fde68a;border-radius:8px;overflow:hidden">
+                <div style="background:#fffbeb;padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #fde68a">
+                    <span style="font-size:14px">⚠️</span>
+                    <span id="modal-companion-msg" style="font-size:12px;font-weight:700;color:#92400e;flex:1"></span>
+                    <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#78350f;cursor:pointer">
+                        <input type="checkbox" id="companion-select-all" checked onchange="toggleAllCompanions(this)" style="accent-color:#d97706">전체선택
+                    </label>
+                </div>
+                <div id="modal-companion-list" style="background:#fff;padding:8px 14px"></div>
+            </div>
             <div class="modal-progress" id="modal-progress-area"></div>
             <div style="background:#f8f9fb;border-radius:8px;padding:14px;margin-bottom:14px">
                 <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px">입금 입력</div>
@@ -407,63 +416,6 @@ tr:hover{background:#f8f9fb}
         <div class="modal-ft">
             <button class="btn btn-secondary" onclick="closeModal()">닫기</button>
             <button class="btn btn-success" onclick="processPayment()">입금 처리</button>
-        </div>
-    </div>
-</div>
-
-<!-- 일괄 입금 모달 -->
-<div class="modal-overlay" id="batch-modal-overlay">
-    <div class="modal" style="width:640px">
-        <div class="modal-hd">
-            <h3 id="batch-modal-title">일괄 입금 처리</h3>
-            <button class="close" onclick="closeBatchModal()">&#10005;</button>
-        </div>
-        <div class="modal-bd">
-            <div style="overflow-x:auto;margin-bottom:14px">
-                <table style="width:100%;border-collapse:collapse;font-size:12px">
-                    <thead><tr style="background:#f8f9fb">
-                        <th style="padding:7px 10px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed">접수번호</th>
-                        <th style="padding:7px 10px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed">업체명</th>
-                        <th style="padding:7px 10px;text-align:right;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed">청구액</th>
-                        <th style="padding:7px 10px;text-align:right;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed">미수금</th>
-                        <th style="padding:7px 10px;text-align:right;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed">입금액</th>
-                    </tr></thead>
-                    <tbody id="batch-modal-list"></tbody>
-                </table>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-                <div class="modal-field">
-                    <label class="modal-lbl">입금일자 <span style="color:#ef4444">*</span></label>
-                    <input type="date" id="batch-pay-date" class="modal-input">
-                </div>
-                <div class="modal-field">
-                    <label class="modal-lbl">입금방법</label>
-                    <select id="batch-pay-method" class="modal-input">
-                        <option value="계좌이체">계좌이체</option>
-                        <option value="현금">현금</option>
-                        <option value="카드">카드</option>
-                        <option value="어음">어음</option>
-                        <option value="기타">기타</option>
-                    </select>
-                </div>
-                <div class="modal-field">
-                    <label class="modal-lbl">입금계좌</label>
-                    <select id="batch-pay-account" class="modal-input">
-                        <option value="">선택</option>
-                        <option value="기업 024-0880-2101017">기업 024-0880-2101017</option>
-                        <option value="우리 1005-702-799176">우리 1005-702-799176</option>
-                        <option value="농협 301-0178-172211">농협 301-0178-172211</option>
-                    </select>
-                </div>
-                <div class="modal-field">
-                    <label class="modal-lbl">메모</label>
-                    <input type="text" id="batch-pay-memo" class="modal-input" placeholder="메모 (선택)">
-                </div>
-            </div>
-        </div>
-        <div class="modal-ft">
-            <button class="btn btn-secondary" onclick="closeBatchModal()">닫기</button>
-            <button class="btn btn-success" onclick="processBatchPayment()">일괄 입금 처리</button>
         </div>
     </div>
 </div>
@@ -540,7 +492,6 @@ var _sortKey = 'receiptDate';
 var _sortDir = 'desc';
 var currentReceiptId = null;
 var bankDeposits = [];
-var _checkedIds = new Set();
 var _companiesCache = {};
 var _trackBankIdx = -1;
 var _matchHistory = {};
@@ -601,7 +552,7 @@ async function loadData() {
         loadDangerCompanies();
     } catch(e) {
         console.error('로드 실패:', e);
-        document.getElementById('table-body').innerHTML = '<tr><td colspan="13" class="empty-msg" style="color:#ef4444">로드 실패: ' + e.message + '</td></tr>';
+        document.getElementById('table-body').innerHTML = '<tr><td colspan="12" class="empty-msg" style="color:#ef4444">로드 실패: ' + e.message + '</td></tr>';
     }
 }
 
@@ -852,7 +803,7 @@ function sortTable(key) {
 function renderTable() {
     var tbody = document.getElementById('table-body');
     if (filteredList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13" class="empty-msg">데이터가 없습니다</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="empty-msg">데이터가 없습니다</td></tr>';
         return;
     }
 
@@ -937,12 +888,20 @@ function renderTable() {
             taxBadge = '<span style="color:#d1d5db;font-size:11px">미입력</span>';
         }
 
-        var chked = _checkedIds.has(r.id) ? 'checked' : '';
         return '<tr>' +
-            '<td style="text-align:center"><input type="checkbox" class="row-chk" data-id="' + r.id + '" ' + chked + ' onchange="toggleRowCheck(this)" style="width:15px;height:15px;accent-color:#1a73e8"></td>' +
             '<td style="font-weight:600;white-space:nowrap">' + (d.receiptNo || r.id) + '</td>' +
             '<td style="white-space:nowrap;font-size:12px">' + (d.receiptDate || '-') + '</td>' +
-            '<td class="company-cell" title="' + (d.companyName || d.company || '') + '">' + (d.companyName || d.company || '-') + '</td>' +
+            (function() {
+                var cName = d.companyName || d.company || '';
+                var sameCoUnpaid = allReceipts.filter(function(x) {
+                    if (x.id === r.id) return false;
+                    var xd = x.data;
+                    if ((xd.companyName || xd.company || '') !== cName) return false;
+                    return Math.max(0, getTotalFee(xd) - getPaidAmount(xd)) > 0;
+                }).length;
+                var badge = sameCoUnpaid > 0 ? ' <span style="background:#fef3c7;color:#d97706;font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;white-space:nowrap">+' + sameCoUnpaid + '건</span>' : '';
+                return '<td class="company-cell" title="' + cName + '">' + (cName || '-') + badge + '</td>';
+            })() +
             '<td class="text-center">' + purposeHtml + '</td>' +
             '<td>' + productHtml + '</td>' +
             '<td class="text-right" style="font-weight:600">' + formatMoney(total) + '</td>' +
@@ -1023,6 +982,41 @@ function openModal(receiptId) {
         '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
     document.getElementById('modal-progress-area').innerHTML = progressHtml;
 
+    // 같은 업체 미수금 건 탐지
+    var companyName = d.companyName || d.company || '';
+    var companions = allReceipts.filter(function(x) {
+        if (x.id === receiptId) return false;
+        var xd = x.data;
+        var xCompany = xd.companyName || xd.company || '';
+        if (xCompany !== companyName) return false;
+        var xTotal = getTotalFee(xd);
+        var xPaid = getPaidAmount(xd);
+        return Math.max(0, xTotal - xPaid) > 0;
+    });
+    var compSection = document.getElementById('modal-companion-section');
+    var compList = document.getElementById('modal-companion-list');
+    var compMsg = document.getElementById('modal-companion-msg');
+    if (companions.length > 0) {
+        compMsg.textContent = companyName + '의 미수금 건이 ' + companions.length + '건 더 있습니다 — 함께 처리하시겠습니까?';
+        compList.innerHTML = companions.map(function(x) {
+            var xd = x.data;
+            var xTotal = getTotalFee(xd);
+            var xPaid = getPaidAmount(xd);
+            var xRemain = Math.max(0, xTotal - xPaid);
+            var purpose = xd.purpose || xd.testPurpose || '';
+            return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
+                '<input type="checkbox" class="companion-chk" data-id="' + x.id + '" data-amt="' + xRemain + '" checked style="accent-color:#d97706;width:14px;height:14px">' +
+                '<span style="font-weight:600;color:#374151;min-width:110px">' + (xd.receiptNo || x.id) + '</span>' +
+                (purpose ? '<span style="background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:10px;font-size:11px">' + purpose + '</span>' : '') +
+                '<span style="margin-left:auto;color:#ef4444;font-weight:700">' + formatMoney(xRemain) + '</span>' +
+                '</div>';
+        }).join('');
+        document.getElementById('companion-select-all').checked = true;
+        compSection.style.display = 'block';
+    } else {
+        compSection.style.display = 'none';
+    }
+
     renderPayHistory(d.payments || []);
     document.getElementById('modal-overlay').classList.add('show');
 }
@@ -1032,118 +1026,8 @@ function closeModal() {
     currentReceiptId = null;
 }
 
-// ======================== 체크박스 / 일괄 입금 ========================
-function toggleRowCheck(el) {
-    var id = el.getAttribute('data-id');
-    if (el.checked) _checkedIds.add(id);
-    else _checkedIds.delete(id);
-    updateBatchBtn();
-}
-
-function toggleAllCheck(el) {
-    var rows = document.querySelectorAll('.row-chk');
-    rows.forEach(function(chk) {
-        chk.checked = el.checked;
-        var id = chk.getAttribute('data-id');
-        if (el.checked) _checkedIds.add(id);
-        else _checkedIds.delete(id);
-    });
-    updateBatchBtn();
-}
-
-function updateBatchBtn() {
-    var btn = document.getElementById('btn-batch-pay');
-    var cnt = document.getElementById('batch-count');
-    if (_checkedIds.size >= 2) {
-        btn.style.display = 'inline-flex';
-        cnt.textContent = _checkedIds.size;
-    } else {
-        btn.style.display = 'none';
-    }
-}
-
-function openBatchModal() {
-    var selected = allReceipts.filter(function(r) { return _checkedIds.has(r.id); });
-    if (selected.length < 2) { showToast('2건 이상 선택하세요'); return; }
-
-    var rowsHtml = selected.map(function(r) {
-        var d = r.data;
-        var total = getTotalFee(d);
-        var paid = getPaidAmount(d);
-        var remain = Math.max(0, total - paid);
-        return '<tr>' +
-            '<td style="padding:6px 10px;font-size:11px;border-bottom:1px solid #f0f2f5">' + (d.receiptNo || r.id) + '</td>' +
-            '<td style="padding:6px 10px;border-bottom:1px solid #f0f2f5">' + (d.companyName || d.company || '-') + '</td>' +
-            '<td style="padding:6px 10px;text-align:right;border-bottom:1px solid #f0f2f5">' + formatMoney(total) + '</td>' +
-            '<td style="padding:6px 10px;text-align:right;color:#ef4444;font-weight:600;border-bottom:1px solid #f0f2f5">' + formatMoney(remain) + '</td>' +
-            '<td style="padding:6px 10px;border-bottom:1px solid #f0f2f5"><input type="text" class="batch-amt-input" data-id="' + r.id + '" value="' + remain.toLocaleString() + '" ' +
-            'style="width:100px;padding:4px 8px;border:1px solid #e2e6ed;border-radius:6px;text-align:right;font-size:12px" ' +
-            'oninput="this.value=this.value.replace(/[^\\d]/g,\'\').replace(/\\B(?=(\\d{3})+(?!\\d))/g,\',\')"></td>' +
-            '</tr>';
-    }).join('');
-
-    document.getElementById('batch-modal-list').innerHTML = rowsHtml;
-    document.getElementById('batch-modal-title').textContent = '일괄 입금 처리 (' + selected.length + '건)';
-    document.getElementById('batch-pay-date').value = new Date().toISOString().split('T')[0];
-    document.getElementById('batch-pay-memo').value = '';
-    document.getElementById('batch-pay-account').value = '';
-    document.getElementById('batch-modal-overlay').classList.add('show');
-}
-
-function closeBatchModal() {
-    document.getElementById('batch-modal-overlay').classList.remove('show');
-}
-
-async function processBatchPayment() {
-    var date = document.getElementById('batch-pay-date').value;
-    var method = document.getElementById('batch-pay-method').value;
-    var memo = document.getElementById('batch-pay-memo').value.trim();
-    var account = document.getElementById('batch-pay-account').value;
-    if (!date) { showToast('입금일자를 선택하세요'); return; }
-
-    var inputs = document.querySelectorAll('.batch-amt-input');
-    var items = [];
-    inputs.forEach(function(inp) {
-        var amt = Number(inp.value.replace(/[^\d]/g, ''));
-        if (amt > 0) items.push({ id: inp.getAttribute('data-id'), amount: amt });
-    });
-    if (items.length === 0) { showToast('입금액을 입력하세요'); return; }
-
-    var success = 0, fail = 0;
-    for (var i = 0; i < items.length; i++) {
-        var item = items[i];
-        var payment = {
-            amount: item.amount, method: method, date: date, memo: memo,
-            account: account, inputType: '수동',
-            createdAt: new Date().toISOString()
-        };
-        try {
-            await db.collection('receipts').doc(item.id).update({
-                payments: firebase.firestore.FieldValue.arrayUnion(payment),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            var r = allReceipts.find(function(x) { return x.id === item.id; });
-            if (r) {
-                if (!r.data.payments) r.data.payments = [];
-                r.data.payments.push(payment);
-                var total = getTotalFee(r.data);
-                var paid = getPaidAmount(r.data);
-                if (total > 0 && paid >= total) {
-                    await db.collection('receipts').doc(item.id).update({ payDate: date, payMethod: method });
-                    r.data.payDate = date; r.data.payMethod = method;
-                }
-            }
-            success++;
-        } catch(e) {
-            console.error('[batch]', e); fail++;
-        }
-    }
-    _checkedIds.clear();
-    closeBatchModal();
-    renderTable();
-    updateSummary();
-    updateTabCounts();
-    showToast('일괄 입금 완료: ' + success + '건' + (fail > 0 ? ', 실패 ' + fail + '건' : ''));
+function toggleAllCompanions(el) {
+    document.querySelectorAll('.companion-chk').forEach(function(chk) { chk.checked = el.checked; });
 }
 
 function renderPayHistory(payments) {
@@ -1240,6 +1124,37 @@ async function processPayment() {
             ' / ' + formatMoney(total) + '</span></div>' +
             '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
         renderPayHistory(d.payments);
+
+        // 동업체 미수금 건 함께 처리
+        var companions = document.querySelectorAll('.companion-chk:checked');
+        for (var ci = 0; ci < companions.length; ci++) {
+            var cid = companions[ci].getAttribute('data-id');
+            var camt = Number(companions[ci].getAttribute('data-amt'));
+            if (!cid || camt <= 0) continue;
+            var cpayment = {
+                amount: camt, method: method, date: date, memo: memo,
+                account: account, inputType: '수동',
+                createdAt: new Date().toISOString()
+            };
+            try {
+                await db.collection('receipts').doc(cid).update({
+                    payments: firebase.firestore.FieldValue.arrayUnion(cpayment),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                var cr = allReceipts.find(function(x) { return x.id === cid; });
+                if (cr) {
+                    if (!cr.data.payments) cr.data.payments = [];
+                    cr.data.payments.push(cpayment);
+                    var ctotal = getTotalFee(cr.data);
+                    var cpaid = getPaidAmount(cr.data);
+                    if (ctotal > 0 && cpaid >= ctotal) {
+                        await db.collection('receipts').doc(cid).update({ payDate: date, payMethod: method });
+                        cr.data.payDate = date; cr.data.payMethod = method;
+                    }
+                }
+            } catch(e) { console.error('[companion pay]', e); }
+        }
+
         renderTable();
         updateSummary();
 
