@@ -1635,6 +1635,20 @@ function openDetailPanel(id, sampleIdx) {
             }
             return dpRow('결제', '<span style="color:#e53935">미수금 ' + (r.feeTotal ? Number(r.feeTotal).toLocaleString() + '원' : '') + '</span>');
         })() +
+        (function(){
+            var pmts = r.payments || [];
+            if (!pmts.length) return '';
+            var rows = pmts.map(function(p, i) {
+                return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:12px">' +
+                    '<span style="color:#6b7280">' + (i+1) + '차  ' + (p.date || '-') + '</span>' +
+                    '<span style="font-weight:600">' + Number(p.amount||0).toLocaleString() + '원</span>' +
+                    '<span style="color:#4b5563;background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:11px">' + (p.method||'-') + '</span>' +
+                    (p.memo ? '<span style="color:#9ca3af;font-size:11px">' + p.memo + '</span>' : '') +
+                    '</div>';
+            }).join('');
+            return '<div class="dp-lbl" style="grid-column:1/-1;margin-top:6px;font-weight:600;color:#374151">입금 이력</div>' +
+                '<div style="grid-column:1/-1;background:#f8fafc;border-radius:6px;padding:6px 10px">' + rows + '</div>';
+        })() +
         '</div>' +
         '<div class="dp-section-title">계산서 정보</div>' +
         '<div class="dp-grid">' +
@@ -2213,7 +2227,7 @@ function closeDetailModal() {
 // 엑셀 다운로드
 // ============================================================================
 function downloadExcel() {
-    var header = ['접수번호','접수일자','상태','거래처','제품명','시험분야','검사목적','시료수','공급가액','세액','총계','결제일','담당자','처리기한','긴급'];
+    var header = ['접수번호','접수일자','상태','거래처','제품명','시험분야','검사목적','시료수','공급가액','세액','총계','결제상태','입금이력','담당자','처리기한','긴급'];
     var data = [header];
     _filteredReceipts.forEach(function(r) {
         data.push([
@@ -2228,7 +2242,12 @@ function downloadExcel() {
             r._sampleIdx === 0 ? (r.feeSupply || 0) : '',
             r._sampleIdx === 0 ? (r.feeVat    || 0) : '',
             r._sampleIdx === 0 ? (r.feeTotal  || 0) : '',
-            r.payDate || '미수금',
+            r._sampleIdx === 0 ? (r._payStatusKey === '완납' ? '완납' : r._payStatusKey === '부분입금' ? '부분입금(' + Math.round(r._paidAmount/r.feeTotal*100) + '%)' : '미수금') : '',
+            r._sampleIdx === 0 ? (function(){
+                var pmts = r.payments || [];
+                if (!pmts.length) return r.payDate ? r.payDate + ' 완납' : '';
+                return pmts.map(function(p){ return (p.date||'-') + ' ' + Number(p.amount||0).toLocaleString() + '원(' + (p.method||'-') + ')'; }).join(' / ');
+            })() : '',
             r.salesRep || '',
             r.processingDeadline || '',
             (r.urgent === '긴급' || r.urgent === 'Y') ? '긴급' : '일반'
