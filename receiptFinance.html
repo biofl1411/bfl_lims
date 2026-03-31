@@ -1054,6 +1054,29 @@ function resetRow(receiptId) {
   if (_currentReceiptId === receiptId) closeDetailModal();
 }
 
+// 전체 탭 취소: 결제정보 초기화 → 미입력으로 복귀
+async function clearPayInfo(receiptId) {
+  if (!confirm('결제정보를 초기화하고 미입력 상태로 되돌리겠습니까?')) return;
+  try {
+    await db.collection('receipts').doc(receiptId).update({
+      payMethod: firebase.firestore.FieldValue.delete(),
+      invoiceType: firebase.firestore.FieldValue.delete(),
+      invoiceDate: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      delete _allReceipts[idx].data.payMethod;
+      delete _allReceipts[idx].data.invoiceType;
+      delete _allReceipts[idx].data.invoiceDate;
+    }
+    if (_currentReceiptId === receiptId) closeDetailModal();
+    renderKpiCards();
+    doSearch();
+    showToast('✅ 결제정보 초기화 완료');
+  } catch(e) { showToast('❗ 초기화 실패: ' + e.message); }
+}
+
 /* =====================================================
    탭2: 전체 렌더링
 ===================================================== */
@@ -1075,7 +1098,7 @@ function renderAllTab() {
     var itTag = d.invoiceType ? getInvoiceTypeTag(d.invoiceType) : '<span style="color:#c8d6e5">-</span>';
     var actionBtn = '';
     if (st.status === '미입력') actionBtn = '<button class="btn btn-primary btn-sm" onclick="switchTab(\'uninput\')">입력</button>';
-    else if (st.status === '발행대기') actionBtn = '<button class="btn btn-secondary btn-sm" onclick="openDetailModal(\'' + id + '\')">수정</button>';
+    else if (st.status === '발행대기') actionBtn = '<span style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openDetailModal(\'' + id + '\')">수정</button><button class="btn btn-sm" onclick="clearPayInfo(\'' + id + '\')" style="margin-left:4px;background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">취소</button></span>';
     else if (st.status === '발행완료') actionBtn = '<button class="btn btn-secondary btn-sm" onclick="cancelIssue(\'' + id + '\')">취소</button>';
     return '<tr data-id="' + id + '">' +
       '<td><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
