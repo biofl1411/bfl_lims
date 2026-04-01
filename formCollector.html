@@ -1570,6 +1570,24 @@ function showReviewPanel(data) {
     '<div class="review-stat ok">계산식: '+calcs.length+'개</div>'+
     (data.judgmentRule?'<div class="review-stat memo">판정기준: '+(data.judgmentRule.standardText||'')+'</div>':'');
 
+  // 검사방법 표시
+  var tmArea = document.getElementById('rv-test-method');
+  if (!tmArea) {
+    tmArea = document.createElement('div');
+    tmArea.id = 'rv-test-method';
+    tmArea.style.cssText = 'margin-top:14px;border:1.5px solid #bfdbfe;border-radius:9px;overflow:hidden';
+    var rvSum = document.getElementById('rv-summary');
+    if (rvSum && rvSum.parentNode) rvSum.parentNode.insertBefore(tmArea, rvSum.nextSibling);
+  }
+  if (data.testMethod) {
+    tmArea.innerHTML = '<div style="background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;padding:7px 13px">📋 검사방법 (시험절차)</div>'
+      + '<textarea id="rv-test-method-text" style="width:100%;min-height:140px;border:none;padding:10px 13px;font-size:12px;font-family:\'Malgun Gothic\',sans-serif;line-height:1.7;resize:vertical;box-sizing:border-box;color:#1a2332">' + (data.testMethod || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</textarea>';
+    tmArea.style.display = '';
+  } else {
+    tmArea.innerHTML = '<div style="background:#f1f5f9;color:#94a3b8;font-size:12px;padding:9px 13px;border-radius:9px">📋 검사방법: PDF에서 검사방법 섹션을 찾지 못했습니다.</div>';
+    tmArea.style.display = '';
+  }
+
   // ★ 미생물 입력폼 삽입
   var testBasisRv = (document.getElementById('inp-test-basis') || {}).value || '';
   var isMicro = isMicroBiology(testBasisRv) || data.isMicroForm;
@@ -1867,6 +1885,10 @@ async function doConfirmSave() {
 
     var testBasis = (document.getElementById('inp-test-basis') || {}).value || '';
     var sampleType = (document.getElementById('inp-sample-type') || {}).value || '';
+
+    // 검토 패널에서 수정한 검사방법 반영
+    var tmTextEl = document.getElementById('rv-test-method-text');
+    if (tmTextEl) _lastAnalyzed.testMethod = tmTextEl.value.trim() || null;
 
     var row = {
       docId: docId,
@@ -2271,8 +2293,9 @@ async function callClaude(textContext) {
     + '   - 측정값: 시료 측정농도, Blank 측정농도, 최종볼륨(mL), 희석배수, 검체 채취량(g) 등\n'
     + '   - 시험시작일, 시험번호(변경)일\n'
     + '   - 계산식 (수식 전체)\n'
-    + '   - 판정 테이블: 분석항목, 기준규격(mg/kg), 결과(mg/kg), 판정\n'
-    + '   - 장비/시약 정보 (있는 경우)\n\n'
+    + '   - 판정 테이블: 분析항목, 기준규격(mg/kg), 결과(mg/kg), 판정\n'
+    + '   - 장비/시약 정보 (있는 경우)\n'
+    + '   - **검사방법(시험절차)**: "검사방법", "시험방법", "시험절차", "분석방법" 등의 제목 하에 기술된 절차 텍스트 전문. 번호 목록·단계·조건 등 원문 그대로 추출\n\n'
     + '5. 테이블 형태의 데이터(표준용액농도, 판정 테이블 등)도 개별 셀 단위로 각각 필드를 만드세요.\n'
     + '6. 빈 양식에 있는 필드인데 작성 완료본에 값이 없으면 exampleValue를 빈 문자열("")로 두되, 필드 자체는 반드시 포함하세요.\n\n'
     + '## 응답 형식\n'
@@ -2317,8 +2340,13 @@ async function callClaude(textContext) {
     + '    "unit": "mg/kg"\n'
     + '  },\n'
     + '  "equipment": ["장비목록"],\n'
-    + '  "reagents": ["시약목록"]\n'
+    + '  "reagents": ["시약목록"],\n'
+    + '  "testMethod": "검사방법/시험절차 원문 전체 (번호·단계·조건 포함, 없으면 null)"\n'
     + '}\n\n'
+    + '## testMethod 작성 규칙\n'
+    + '- PDF에 "검사방법", "시험방법", "시험절차", "분析방법", "2. 검사방법" 등의 섹션이 있으면 해당 내용 전체를 그대로 문자열로 기록하세요.\n'
+    + '- 번호 목록은 "1. ...\n2. ..." 형태로 줄바꿈 포함하여 원문 그대로 유지하세요.\n'
+    + '- 해당 섹션이 없으면 null로 설정하세요.\n\n'
     + '## 최종 검증\n'
     + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.';
 
