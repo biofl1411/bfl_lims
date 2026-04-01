@@ -1032,18 +1032,24 @@ function openTestMethodModal() {
     }
     // 저장된 표의 모든 셀에 contenteditable 보장
     ed.querySelectorAll('td,th').forEach(function(c){ c.contentEditable = 'true'; });
-    // ★ 셀 클릭할 때마다 _tmMergeTargetCell 자동 저장 (라디오 클릭으로 커서 사라져도 유지)
-    ed.removeEventListener('click', ed._tmCellTracker);
+    // ★ 셀 범위 선택: 클릭 = 시작점, Shift+클릭 = 끝점 → 직사각형 하이라이트
+    window._tmSelStart = null; window._tmSelEnd = null;
+    ed.removeEventListener('mousedown', ed._tmCellTracker);
     ed._tmCellTracker = function(e) {
       var cell = e.target.closest('td,th');
-      if (cell) {
-        window._tmMergeTargetCell = cell;
-        // 선택된 셀 하이라이트 (기존 해제 후 적용)
-        ed.querySelectorAll('td.tm-selected,th.tm-selected').forEach(function(c){ c.classList.remove('tm-selected'); });
-        cell.classList.add('tm-selected');
+      if (!cell) return;
+      if (e.shiftKey && window._tmSelStart && window._tmSelStart.closest('table') === cell.closest('table')) {
+        // Shift 클릭 → 끝점 설정
+        window._tmSelEnd = cell;
+      } else {
+        // 일반 클릭 → 시작점 초기화
+        window._tmSelStart = cell;
+        window._tmSelEnd = null;
+        window._tmMergeTargetCell = cell; // 단일 셀 합치기 호환
       }
+      _tmHighlightSelection();
     };
-    ed.addEventListener('click', ed._tmCellTracker);
+    ed.addEventListener('mousedown', ed._tmCellTracker);
   }
   var modal = document.getElementById('test-method-modal');
   if (modal) modal.style.display = 'flex';
@@ -1230,6 +1236,67 @@ function _tmGetCellAtCol(row, colIndex) {
     if (idx > colIndex) return null; // colIndex가 병합셀 내부
   }
   return null;
+}
+
+/* ── 셀 범위 하이라이트 ── */
+function _tmHighlightSelection() {
+  var ed = document.getElementById('tm-editor');
+  ed.querySelectorAll('td.tm-selected,th.tm-selected,td.tm-sel-range,th.tm-sel-range').forEach(function(c){
+    c.classList.remove('tm-selected','tm-sel-range');
+  });
+  var s = window._tmSelStart, e2 = window._tmSelEnd;
+  if (!s) return;
+  if (!e2 || e2 === s) { s.classList.add('tm-selected'); return; }
+  var tbl = s.closest('table');
+  if (!tbl) return;
+  var allRows = Array.from(tbl.rows);
+  var r1 = allRows.indexOf(s.parentElement), r2 = allRows.indexOf(e2.parentElement);
+  var c1 = _tmGetCellColIndex(s), c2 = _tmGetCellColIndex(e2);
+  var minR=Math.min(r1,r2), maxR=Math.max(r1,r2), minC=Math.min(c1,c2), maxC=Math.max(c1,c2);
+  for (var r=minR; r<=maxR; r++) {
+    for (var c=minC; c<=maxC; c++) {
+      var cell = _tmGetCellAtCol(allRows[r], c);
+      if (cell) cell.classList.add('tm-sel-range');
+    }
+  }
+}
+
+/* ── 셀 합치기 (범위 선택 방식) ── */
+function tmMergeSelection(btn) {
+  var s = window._tmSelStart, e2 = window._tmSelEnd;
+  if (!s) { showToast('합칠 셀을 클릭(또는 Shift+클릭으로 범위)하세요', 'warning'); return; }
+
+  // 범위가 선택된 경우 → 바로 합치기
+  if (e2 && e2 !== s) {
+    var tbl = s.closest('table');
+    if (!tbl) return;
+    var allRows = Array.from(tbl.rows);
+    var r1=allRows.indexOf(s.parentElement), r2=allRows.indexOf(e2.parentElement);
+    var c1=_tmGetCellColIndex(s), c2=_tmGetCellColIndex(e2);
+    var minR=Math.min(r1,r2), maxR=Math.max(r1,r2), minC=Math.min(c1,c2), maxC=Math.max(c1,c2);
+    var keepCell = _tmGetCellAtCol(allRows[minR], minC);
+    if (!keepCell) return;
+    // 선택 범위 내 셀 제거 (좌상단 제외)
+    for (var r=minR; r<=maxR; r++) {
+      for (var c=minC; c<=maxC; c++) {
+        if (r===minR && c===minC) continue;
+        var cell = _tmGetCellAtCol(allRows[r], c);
+        if (cell && cell.parentElement) cell.parentElement.removeChild(cell);
+      }
+    }
+    keepCell.rowSpan = maxR-minR+1;
+    keepCell.colSpan = maxC-minC+1;
+    keepCell.contentEditable = 'true';
+    keepCell.classList.remove('tm-sel-range','tm-selected');
+    window._tmSelStart = null; window._tmSelEnd = null;
+    window._tmMergeTargetCell = null;
+    showToast('셀 합치기 완료', 'success');
+    return;
+  }
+
+  // 단일 셀 선택 → 방향/칸수 패널 표시
+  window._tmMergeTargetCell = s;
+  tmShowMergePanel(btn);
 }
 
 /* ── 셀 합치기 패널 ── */
@@ -3929,7 +3996,7 @@ function _printFormTemplateDiary(ft) {
       <button onmousedown="event.preventDefault();tmTableDelCol()" title="열 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 열</button>
       <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
       <!-- 셀 합치기/나누기 -->
-      <button onmousedown="event.preventDefault();tmShowMergePanel(this)" title="셀 합치기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600;position:relative">⊡ 셀 합치기</button>
+      <button onmousedown="event.preventDefault();tmMergeSelection(this)" title="셀 합치기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600;position:relative">⊡ 셀 합치기</button>
       <button onmousedown="event.preventDefault();tmSplitCell()" title="셀 나누기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600">⊟ 셀 나누기</button>
       <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
       <button onmousedown="event.preventDefault();tmInsertHr()" title="구분선" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">— 구분선</button>
@@ -3942,7 +4009,8 @@ function _printFormTemplateDiary(ft) {
         #tm-editor td,#tm-editor th,.tm-view-content td,.tm-view-content th{border:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap}
         #tm-editor th,.tm-view-content th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}
         #tm-editor td:focus,#tm-editor th:focus{outline:2px solid #3b82f6;outline-offset:-2px}
-        #tm-editor td.tm-selected,#tm-editor th.tm-selected{outline:2px solid #f59e0b;outline-offset:-2px;background:rgba(245,158,11,.08)}
+        #tm-editor td.tm-selected,#tm-editor th.tm-selected{outline:2px solid #f59e0b;outline-offset:-2px;background:rgba(245,158,11,.12)}
+        #tm-editor td.tm-sel-range,#tm-editor th.tm-sel-range{outline:2px solid #3b82f6;outline-offset:-2px;background:rgba(59,130,246,.12)}
         #tm-editor h3,.tm-view-content h3{font-size:13px;font-weight:700;color:#1e40af;margin:10px 0 4px;border-bottom:1px solid #bfdbfe;padding-bottom:3px}
         #tm-editor p,.tm-view-content p{margin:4px 0}
         #tm-editor hr,.tm-view-content hr{border:none;border-top:1px solid #cbd5e1;margin:8px 0}
