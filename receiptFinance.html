@@ -765,17 +765,24 @@ async function loadReceiptsData() {
     var groupSynced = 0;
     Object.keys(mergedGroups).forEach(function(gid) {
       var members = mergedGroups[gid];
-      // 그룹에서 결제방법이 있는 대표 건 찾기
-      var leader = members.find(function(r) { return r.data.payMethod && r.data.invoiceType; });
+      // 그룹에서 결제방법이 있는 대표 건 찾기 (invoiceType 없어도 OK)
+      var leader = members.find(function(r) { return r.data.payMethod; });
       if (!leader) return;
+      // invoiceType 없으면 payMethod로 추론
+      var leaderIt = leader.data.invoiceType;
+      if (!leaderIt) {
+        if (leader.data.payMethod === '카드') leaderIt = '카드전표';
+        else if (leader.data.payMethod === '온라인입금') leaderIt = '세금계산서';
+        else if (leader.data.payMethod === '현금') leaderIt = '현금영수증';
+        else leaderIt = '세금계산서';
+      }
       members.forEach(function(r) {
-        if (r.id === leader.id) return;
         if (!r.data.payMethod || !r.data.invoiceType) {
           r.data.payMethod = leader.data.payMethod;
-          r.data.invoiceType = leader.data.invoiceType;
+          r.data.invoiceType = leaderIt;
           batch.update(db.collection('receipts').doc(r.id), {
             payMethod: leader.data.payMethod,
-            invoiceType: leader.data.invoiceType,
+            invoiceType: leaderIt,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           });
           groupSynced++;
@@ -1262,10 +1269,13 @@ function onPayMethodChange(receiptId) {
     if (expPm) expPm.value = pm;
     if (expIt) expIt.value = mappedIt;
   }
-  // 합산 그룹 — 같은 mergedGroupId 전체에 결제방법/계산서유형 일괄 적용 (UI만)
+  // 합산 그룹 — 같은 mergedGroupId 전체에 결제방법/계산서유형 일괄 적용 (UI)
   var r = _allReceipts.find(function(x) { return x.id === receiptId; });
-  if (r && r.data.billingType === '합산' && r.data.mergedGroupId) {
-    var gid = r.data.mergedGroupId;
+  // billingType: data 또는 DOM 드롭다운 중 하나라도 '합산'이면 cascade
+  var btDom = document.getElementById('bt-' + receiptId);
+  var btVal = (btDom ? btDom.value : '') || (r ? r.data.billingType : '');
+  var gid   = r ? r.data.mergedGroupId : null;
+  if (btVal === '합산' && gid) {
     _allReceipts.forEach(function(x) {
       if (x.id !== receiptId && x.data.mergedGroupId === gid) {
         var xPm = document.getElementById('pm-' + x.id);
@@ -1440,10 +1450,12 @@ async function autoSaveRow(receiptId) {
   if (dt)   upd.invoiceDate = dt;   else upd.invoiceDate = FD();
   if (memo) upd.billingMemo = memo; else upd.billingMemo = FD();
 
-  // 합산 그룹 cascade
+  // 합산 그룹 cascade — bt(DOM값) 또는 data 중 하나라도 '합산'이면 cascade
   var r0 = _allReceipts.find(function(x) { return x.id === receiptId; });
-  var mergeGroup = (r0 && bt === '합산' && r0.data.mergedGroupId)
-    ? _allReceipts.filter(function(x) { return x.id !== receiptId && x.data.mergedGroupId === r0.data.mergedGroupId; })
+  var mergeGid = r0 ? r0.data.mergedGroupId : null;
+  var isMergedRow = (bt === '합산' || (r0 && r0.data.billingType === '합산')) && mergeGid;
+  var mergeGroup = isMergedRow
+    ? _allReceipts.filter(function(x) { return x.id !== receiptId && x.data.mergedGroupId === mergeGid; })
     : [];
 
   try {
