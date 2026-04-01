@@ -740,9 +740,23 @@ async function loadReceiptsData() {
         }
       }
     });
-    if (autoFilled > 0) {
+    // billingType='byPurpose' 레거시 값 정규화 (구 sampleReceiptV2 기본값)
+    var legacyFixed = 0;
+    _allReceipts.forEach(function(r) {
+      var d = r.data;
+      if (d.billingType === 'byPurpose' || d.billingType === '목적별') {
+        delete d.billingType;
+        batch.update(db.collection('receipts').doc(r.id), {
+          billingType: firebase.firestore.FieldValue.delete(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        legacyFixed++;
+      }
+    });
+    if (autoFilled > 0 || legacyFixed > 0) {
       await batch.commit();
-      console.log('[자동정정] ' + autoFilled + '건 결제방법/계산서유형 정합성 수정 완료');
+      if (autoFilled > 0) console.log('[자동정정] ' + autoFilled + '건 결제방법/계산서유형 정합성 수정 완료');
+      if (legacyFixed > 0) console.log('[레거시정정] ' + legacyFixed + '건 byPurpose billingType 제거 완료');
     }
 
     buildSalesRepOptions();
@@ -1087,8 +1101,16 @@ function openMergeSelectModal(receiptId) {
   // 현재 건 (고정)
   html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#e8f0fe;border-radius:8px;margin-bottom:6px">';
   html += '<input type="checkbox" checked disabled style="accent-color:#1a73e8;width:16px;height:16px">';
-  html += '<div style="flex:1"><div style="font-size:12px;font-weight:700;color:#1a73e8">' + escHtml(d.receiptNo || receiptId) + ' <span style="font-weight:400;color:#5f6b7a">현재</span></div>';
-  html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(d)) + (d.billingMemo ? ' · ' + escHtml(d.billingMemo) : '') + '</div></div></div>';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:12px;font-weight:700;color:#1a73e8">' + escHtml(d.receiptNo || receiptId) + ' <span style="font-weight:400;color:#5f6b7a">현재</span></div>';
+  html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(d));
+  var _pn = (d.samples && d.samples.length ? d.samples[0].productName : '') || d.productName || '';
+  var _pp = d.testPurpose || d.purpose || '';
+  if (d.receiptDate) html += ' · ' + fmtDate(d.receiptDate);
+  if (_pp) html += ' · ' + escHtml(_pp);
+  if (_pn) html += ' · ' + escHtml(_pn);
+  if (d.billingMemo) html += ' · <em>' + escHtml(d.billingMemo) + '</em>';
+  html += '</div></div></div>';
 
   if (candidates.length === 0) {
     html += '<div style="font-size:12px;color:#8892a4;padding:12px 0;text-align:center">같은 업체의 다른 접수건이 없습니다.</div>';
@@ -1098,8 +1120,16 @@ function openMergeSelectModal(receiptId) {
       var inSameGroup = existGroupId && xd.mergedGroupId === existGroupId;
       html += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:' + (inSameGroup ? '#f0fdf4' : '#f8f9fb') + ';border-radius:8px;margin-bottom:6px;cursor:pointer">';
       html += '<input type="checkbox" class="merge-candidate-chk" data-id="' + x.id + '" data-fee="' + getTotalFee(xd) + '"' + (inSameGroup ? ' checked' : '') + ' onchange="updateMergeSum()" style="accent-color:#4caf50;width:16px;height:16px">';
-      html += '<div style="flex:1"><div style="font-size:12px;font-weight:600;color:#1a2332">' + escHtml(xd.receiptNo || x.id) + (xd.billingType ? ' <span style="font-size:10px;color:#9c27b0">[' + xd.billingType + ']</span>' : '') + '</div>';
-      html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(xd)) + (xd.billingMemo ? ' · ' + escHtml(xd.billingMemo) : '') + '</div></div>';
+      var _xpn = (xd.samples && xd.samples.length ? xd.samples[0].productName : '') || xd.productName || '';
+      var _xpp = xd.testPurpose || xd.purpose || '';
+      html += '<div style="flex:1">';
+      html += '<div style="font-size:12px;font-weight:600;color:#1a2332">' + escHtml(xd.receiptNo || x.id) + (xd.billingType ? ' <span style="font-size:10px;color:#9c27b0;background:#f3e5f5;padding:1px 5px;border-radius:4px">[' + xd.billingType + ']</span>' : '') + '</div>';
+      html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(xd));
+      if (xd.receiptDate) html += ' · ' + fmtDate(xd.receiptDate);
+      if (_xpp) html += ' · ' + escHtml(_xpp);
+      if (_xpn) html += ' · ' + escHtml(_xpn);
+      if (xd.billingMemo) html += ' · <em>' + escHtml(xd.billingMemo) + '</em>';
+      html += '</div></div>';
       html += '</label>';
     });
   }
