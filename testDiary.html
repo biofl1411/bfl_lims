@@ -756,13 +756,18 @@ function renderFormTemplateDetail(ft) {
   html += '<div class="form-row"><div class="form-group"><label>SOP</label><input type="text" value="' + escA(a.sop) + '" readonly></div>';
   html += '<div class="form-group"><label>장비</label><input type="text" value="' + escA((a.equipment || []).join(', ')) + '" readonly></div></div>';
 
-  // 검사방법 (시험절차)
+  // 검사방법 (시험절차) — 없어도 편집 버튼 노출
+  html += '<details' + (a.testMethod ? '' : '') + ' style="border:1px solid #bfdbfe;border-radius:8px;overflow:hidden;margin-bottom:14px">';
+  html += '<summary style="padding:8px 13px;background:#1e40af;color:#fff;font-size:12px;font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center">';
+  html += '<span>📋 검사방법 (시험절차)' + (a.testMethod ? '' : ' <span style="font-size:10px;font-weight:400;opacity:.8">미설정</span>') + '</span>';
+  html += '<button onclick="event.preventDefault();event.stopPropagation();openTestMethodModal()" style="font-size:10px;padding:2px 9px;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:5px;cursor:pointer;margin-right:4px">✏️ 편집</button>';
+  html += '</summary>';
   if (a.testMethod) {
-    html += '<details style="border:1px solid #bfdbfe;border-radius:8px;overflow:hidden;margin-bottom:14px">';
-    html += '<summary style="padding:8px 13px;background:#1e40af;color:#fff;font-size:12px;font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center">📋 검사방법 (시험절차) <span style="font-size:10px;font-weight:400">▼ 펼치기</span></summary>';
     html += '<div style="padding:10px 14px;font-size:12px;line-height:1.8;white-space:pre-wrap;color:#1e293b;background:#f0f9ff">' + escH(a.testMethod) + '</div>';
-    html += '</details>';
+  } else {
+    html += '<div style="padding:10px 14px;font-size:12px;color:#94a3b8;background:#f0f9ff">검사방법이 입력되지 않았습니다. ✏️ 편집 버튼을 눌러 추가하세요.</div>';
   }
+  html += '</details>';
 
   // 표준물질정보 (수정 가능)
   var stdSection = getSectionByTitle(a, '표준물질정보');
@@ -1008,6 +1013,32 @@ function removeRoundingRule(idx) {
 }
 
 /* formTemplates 오버라이드 값 저장 */
+/* ── 검사방법 편집 모달 ── */
+function openTestMethodModal() {
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var current = (ft.analyzed && ft.analyzed.testMethod) || '';
+  var ta = document.getElementById('tm-modal-text');
+  if (ta) ta.value = current;
+  var modal = document.getElementById('test-method-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+async function saveTestMethod() {
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var ta = document.getElementById('tm-modal-text');
+  var val = ta ? ta.value.trim() : '';
+  if (!ft.analyzed) ft.analyzed = {};
+  ft.analyzed.testMethod = val || null;
+  try {
+    await db.collection('formTemplates').doc(ft._id).update({ 'analyzed.testMethod': val || null });
+    showToast('검사방법 저장됨', 'success');
+    document.getElementById('test-method-modal').style.display = 'none';
+    renderFormTemplateDetail(ft);
+  } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+}
+
 /* ── 첨부파일 설정 모달 (기존 기록서 직접 편집) ── */
 function openAttachConfigModal() {
   var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
@@ -3486,6 +3517,34 @@ function _printFormTemplateDiary(ft) {
 }
 
 </script>
+
+<!-- 검사방법 편집 모달 -->
+<div id="test-method-modal" style="display:none;position:fixed;inset:0;z-index:9991;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);width:640px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 18px;background:#1e40af;color:#fff;font-size:14px;font-weight:700;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
+      📋 검사방법 (시험절차) 편집
+      <button onclick="document.getElementById('test-method-modal').style.display='none'" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="padding:14px 18px;background:#eff6ff;border-bottom:1px solid #bfdbfe;font-size:11px;color:#3730a3">
+      기록서의 "검사방법" 또는 "시험절차" 섹션 내용을 그대로 입력하세요.<br>번호 목록(1. 2. 3.), 조건, 온도, 시간 등 원문 그대로 작성하면 인쇄 시 자동 반영됩니다.
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:14px 18px">
+      <textarea id="tm-modal-text" style="width:100%;min-height:320px;padding:10px 12px;border:1px solid #bfdbfe;border-radius:7px;font-size:12px;font-family:'Malgun Gothic',sans-serif;line-height:1.8;resize:vertical;box-sizing:border-box" placeholder="예시:
+1. 검체 전처리
+   - 검체 약 1 g을 정밀히 달아 마이크로웨이브 용기에 넣는다.
+   - 진한 질산 5 mL를 가한다.
+   - 마이크로웨이브: 170°C, 10분
+
+2. ICP-MS 분석 조건
+   - 파장: Pb 208 nm
+   - 검량선: 0, 5, 10, 50, 100 μg/L"></textarea>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="document.getElementById('test-method-modal').style.display='none'" style="padding:7px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:13px;cursor:pointer">취소</button>
+      <button onclick="saveTestMethod()" style="padding:7px 18px;background:#1e40af;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">💾 저장</button>
+    </div>
+  </div>
+</div>
 
 <!-- 첨부파일 설정 모달 -->
 <div id="attach-config-modal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
