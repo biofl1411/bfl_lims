@@ -1193,21 +1193,28 @@ function tmShowMergePanel(btn) {
   var old = document.getElementById('tm-merge-panel');
   if (old) { old.parentNode.removeChild(old); return; }
 
-  // 툴바에 붙이기 (버튼 아닌 툴바 기준 위치)
+  // ★ 패널 열 때 선택된 셀 미리 저장 (이후 포커스 잃어도 유지)
+  window._tmMergeTargetCell = _tmGetActiveCell();
+
   var toolbar = document.getElementById('tm-toolbar');
   if (!toolbar) return;
   toolbar.style.position = 'relative';
 
-  // 버튼 위치 계산
   var btnRect = btn.getBoundingClientRect();
   var toolbarRect = toolbar.getBoundingClientRect();
-  var leftPos = btnRect.left - toolbarRect.left;
+  var leftPos = Math.min(btnRect.left - toolbarRect.left, toolbarRect.width - 230);
+
+  // 선택된 셀 안내 텍스트
+  var cellInfo = window._tmMergeTargetCell
+    ? '<span style="color:#0369a1;font-weight:600">"' + (window._tmMergeTargetCell.textContent.trim().substring(0, 12) || '빈 셀') + '"</span> 기준'
+    : '<span style="color:#dc2626">선택된 셀 없음 — 표 셀을 먼저 클릭하세요</span>';
 
   var panel = document.createElement('div');
   panel.id = 'tm-merge-panel';
-  panel.style.cssText = 'position:absolute;top:calc(100% + 4px);left:' + leftPos + 'px;background:#fff;border:1.5px solid #0369a1;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:99999;padding:12px 16px;min-width:210px;font-size:12px;color:#1e293b';
+  panel.style.cssText = 'position:absolute;top:calc(100% + 4px);left:' + leftPos + 'px;background:#fff;border:1.5px solid #0369a1;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:99999;padding:12px 16px;min-width:220px;font-size:12px;color:#1e293b';
   panel.innerHTML =
-    '<div style="font-weight:700;margin-bottom:10px;color:#0369a1">⊡ 셀 합치기</div>'
+    '<div style="font-weight:700;margin-bottom:8px;color:#0369a1">⊡ 셀 합치기</div>'
+    + '<div style="margin-bottom:10px;font-size:11px;background:#f0f9ff;border-radius:5px;padding:5px 8px">' + cellInfo + '</div>'
     + '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px">'
     + '<label style="width:36px;flex-shrink:0">방향</label>'
     + '<select id="tm-merge-dir" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px">'
@@ -1224,21 +1231,15 @@ function tmShowMergePanel(btn) {
     + '<button id="tm-merge-ok" style="padding:4px 14px;border:none;border-radius:5px;background:#0369a1;color:#fff;cursor:pointer;font-size:12px;font-weight:600">합치기</button>'
     + '</div>';
 
-  // 패널 내부 mousedown 전파 차단 (드롭다운/인풋 선택 시 닫힘 방지)
   panel.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-
   toolbar.appendChild(panel);
 
-  // 버튼 이벤트 (innerHTML onclick 대신 addEventListener)
   document.getElementById('tm-merge-cancel').addEventListener('click', function() {
     var p = document.getElementById('tm-merge-panel');
     if (p) p.parentNode.removeChild(p);
   });
-  document.getElementById('tm-merge-ok').addEventListener('click', function() {
-    tmDoMerge();
-  });
+  document.getElementById('tm-merge-ok').addEventListener('click', function() { tmDoMerge(); });
 
-  // 바깥 mousedown 닫기
   setTimeout(function(){
     document.addEventListener('mousedown', function _close(e){
       var p = document.getElementById('tm-merge-panel');
@@ -1258,8 +1259,9 @@ function tmDoMerge() {
   if (panel) panel.parentNode.removeChild(panel);
   if (isNaN(n) || n < 2) return;
 
-  var cell = _tmGetActiveCell();
-  if (!cell) { showToast('합칠 셀을 먼저 클릭하세요', 'warning'); return; }
+  // 패널 열 때 저장된 셀 우선 사용
+  var cell = window._tmMergeTargetCell || _tmGetActiveCell();
+  if (!cell || !cell.parentElement) { showToast('합칠 셀을 먼저 클릭한 뒤 셀 합치기를 누르세요', 'warning'); return; }
 
   if (dir === 'r') {
     /* 가로 합치기 (colspan) */
@@ -3906,7 +3908,7 @@ function _printFormTemplateDiary(ft) {
     </div>
     <!-- 푸터 -->
     <div style="padding:10px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;align-items:center">
-      <span style="font-size:11px;color:#94a3b8;margin-right:auto">표 셀을 클릭 후 행/열 추가·삭제</span>
+      <span style="font-size:11px;color:#94a3b8;margin-right:auto">셀 클릭 → 셀 합치기/나누기 | 셀 클릭 후 행/열 추가·삭제</span>
       <button onclick="document.getElementById('test-method-modal').style.display='none'" style="padding:6px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:13px;cursor:pointer">취소</button>
       <button onclick="saveTestMethod()" style="padding:6px 18px;background:#1e40af;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">💾 저장</button>
     </div>
