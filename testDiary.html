@@ -763,7 +763,11 @@ function renderFormTemplateDetail(ft) {
   html += '<button onclick="event.preventDefault();event.stopPropagation();openTestMethodModal()" style="font-size:10px;padding:2px 9px;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:5px;cursor:pointer;margin-right:4px">✏️ 편집</button>';
   html += '</summary>';
   if (a.testMethod) {
-    html += '<div style="padding:10px 14px;font-size:12px;line-height:1.8;white-space:pre-wrap;color:#1e293b;background:#f0f9ff">' + escH(a.testMethod) + '</div>';
+    // HTML 형식으로 저장된 경우 innerHTML 렌더링, plain text 감지 시 pre-wrap
+    var tmIsHtml = /<[a-z][\s\S]*>/i.test(a.testMethod);
+    html += '<div class="tm-view-content" style="padding:10px 14px;font-size:12px;line-height:1.8;color:#1e293b;background:#f0f9ff' + (tmIsHtml ? '' : ';white-space:pre-wrap') + '">';
+    html += tmIsHtml ? a.testMethod : escH(a.testMethod);
+    html += '</div>';
   } else {
     html += '<div style="padding:10px 14px;font-size:12px;color:#94a3b8;background:#f0f9ff">검사방법이 입력되지 않았습니다. ✏️ 편집 버튼을 눌러 추가하세요.</div>';
   }
@@ -1018,8 +1022,15 @@ function openTestMethodModal() {
   var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
   if (!ft || !ft._isFormTemplate) return;
   var current = (ft.analyzed && ft.analyzed.testMethod) || '';
-  var ta = document.getElementById('tm-modal-text');
-  if (ta) ta.value = current;
+  var ed = document.getElementById('tm-editor');
+  if (ed) {
+    // plain text (줄바꿈만 있는 구형 데이터) 감지 → HTML 변환
+    if (current && !/<[a-z][\s\S]*>/i.test(current)) {
+      ed.innerHTML = current.split('\n').map(function(l){ return l ? '<p>' + escH(l) + '</p>' : '<p><br></p>'; }).join('');
+    } else {
+      ed.innerHTML = current;
+    }
+  }
   var modal = document.getElementById('test-method-modal');
   if (modal) modal.style.display = 'flex';
 }
@@ -1027,8 +1038,10 @@ function openTestMethodModal() {
 async function saveTestMethod() {
   var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
   if (!ft || !ft._isFormTemplate) return;
-  var ta = document.getElementById('tm-modal-text');
-  var val = ta ? ta.value.trim() : '';
+  var ed = document.getElementById('tm-editor');
+  var val = ed ? ed.innerHTML.trim() : '';
+  // 완전히 빈 경우 null 처리
+  if (val === '' || val === '<br>' || val === '<p><br></p>') val = null;
   if (!ft.analyzed) ft.analyzed = {};
   ft.analyzed.testMethod = val || null;
   try {
@@ -1037,6 +1050,117 @@ async function saveTestMethod() {
     document.getElementById('test-method-modal').style.display = 'none';
     renderFormTemplateDetail(ft);
   } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+}
+
+/* ── 검사방법 편집기 툴바 함수들 ── */
+function tmInsertTable() {
+  var rows = parseInt(prompt('행 수 (기본 3)', '3') || '3');
+  var cols = parseInt(prompt('열 수 (기본 3)', '3') || '3');
+  if (isNaN(rows) || rows < 1) rows = 3;
+  if (isNaN(cols) || cols < 1) cols = 3;
+  var html = '<table><thead><tr>';
+  for (var c = 0; c < cols; c++) html += '<th>항목' + (c+1) + '</th>';
+  html += '</tr></thead><tbody>';
+  for (var r = 0; r < rows; r++) {
+    html += '<tr>';
+    for (var c2 = 0; c2 < cols; c2++) html += '<td>&nbsp;</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table><p><br></p>';
+  document.getElementById('tm-editor').focus();
+  document.execCommand('insertHTML', false, html);
+}
+
+function _tmGetActiveTable() {
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  var node = sel.getRangeAt(0).startContainer;
+  while (node && node !== document.getElementById('tm-editor')) {
+    if (node.nodeName === 'TABLE') return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+
+function _tmGetActiveCell() {
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  var node = sel.getRangeAt(0).startContainer;
+  while (node && node !== document.getElementById('tm-editor')) {
+    if (node.nodeName === 'TD' || node.nodeName === 'TH') return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+
+function tmTableAddRow() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  var tbody = tbl.querySelector('tbody') || tbl;
+  var rows = tbody.rows;
+  var refRow = null;
+  if (cell) {
+    var tr = cell.parentElement;
+    // tbody에 있는 행이면 그 아래에 삽입
+    if (tr && tr.parentElement === tbody) refRow = tr;
+  }
+  var cols = tbl.rows[0] ? tbl.rows[0].cells.length : 1;
+  var newRow = tbody.insertRow(refRow ? Array.from(tbody.rows).indexOf(refRow) + 1 : rows.length);
+  for (var i = 0; i < cols; i++) {
+    var td = newRow.insertCell(i);
+    td.innerHTML = '&nbsp;';
+  }
+}
+
+function tmTableAddCol() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  var colIdx = cell ? cell.cellIndex + 1 : (tbl.rows[0] ? tbl.rows[0].cells.length : 0);
+  Array.from(tbl.rows).forEach(function(row, ri) {
+    var newCell = row.insertCell(colIdx);
+    newCell.innerHTML = ri === 0 && row.parentElement && row.parentElement.tagName === 'THEAD' ? '항목' : '&nbsp;';
+    if (ri === 0 && row.querySelector('th')) {
+      // thead 행이면 th로 교체
+      var th = document.createElement('th');
+      th.innerHTML = '항목';
+      row.replaceChild(th, newCell);
+    }
+  });
+}
+
+function tmTableDelRow() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('삭제할 행의 셀을 클릭하세요', 'warning'); return; }
+  var tr = cell.parentElement;
+  var tbody = tbl.querySelector('tbody') || tbl;
+  if (tbody.rows.length <= 1) { showToast('행이 1개뿐이라 삭제할 수 없습니다', 'warning'); return; }
+  tr.parentElement.removeChild(tr);
+}
+
+function tmTableDelCol() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('삭제할 열의 셀을 클릭하세요', 'warning'); return; }
+  var colIdx = cell.cellIndex;
+  if (tbl.rows[0] && tbl.rows[0].cells.length <= 1) { showToast('열이 1개뿐이라 삭제할 수 없습니다', 'warning'); return; }
+  Array.from(tbl.rows).forEach(function(row) {
+    if (row.cells[colIdx]) row.deleteCell(colIdx);
+  });
+}
+
+function tmInsertBlock(tag) {
+  document.getElementById('tm-editor').focus();
+  document.execCommand('formatBlock', false, tag);
+}
+
+function tmInsertHr() {
+  document.getElementById('tm-editor').focus();
+  document.execCommand('insertHTML', false, '<hr><p><br></p>');
 }
 
 /* ── 첨부파일 설정 모달 (기존 기록서 직접 편집) ── */
@@ -3427,7 +3551,10 @@ function _printFormTemplateDiary(ft) {
   if (a.testMethod) {
     h += '<div style="margin-bottom:14px;border:1.5px solid #bfdbfe;border-radius:7px;overflow:hidden">';
     h += '<div style="background:#1e40af;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📋 검사방법 (시험절차)</div>';
-    h += '<div style="padding:10px 14px;font-size:11px;line-height:1.8;white-space:pre-wrap;color:#1e293b">' + escH(a.testMethod) + '</div>';
+    var tmIsHtmlPrint = /<[a-z][\s\S]*>/i.test(a.testMethod);
+    h += '<div style="padding:10px 14px;font-size:11px;line-height:1.8;color:#1e293b' + (tmIsHtmlPrint ? '' : ';white-space:pre-wrap') + '">';
+    h += tmIsHtmlPrint ? a.testMethod : escH(a.testMethod);
+    h += '</div>';
     h += '</div>';
   }
 
@@ -3520,28 +3647,50 @@ function _printFormTemplateDiary(ft) {
 
 <!-- 검사방법 편집 모달 -->
 <div id="test-method-modal" style="display:none;position:fixed;inset:0;z-index:9991;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);width:640px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
-    <div style="padding:14px 18px;background:#1e40af;color:#fff;font-size:14px;font-weight:700;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);width:800px;max-width:97vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+    <!-- 헤더 -->
+    <div style="padding:12px 18px;background:#1e40af;color:#fff;font-size:14px;font-weight:700;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
       📋 검사방법 (시험절차) 편집
       <button onclick="document.getElementById('test-method-modal').style.display='none'" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1">✕</button>
     </div>
-    <div style="padding:14px 18px;background:#eff6ff;border-bottom:1px solid #bfdbfe;font-size:11px;color:#3730a3">
-      기록서의 "검사방법" 또는 "시험절차" 섹션 내용을 그대로 입력하세요.<br>번호 목록(1. 2. 3.), 조건, 온도, 시간 등 원문 그대로 작성하면 인쇄 시 자동 반영됩니다.
+    <!-- 서식 툴바 -->
+    <div id="tm-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 12px;background:#f8faff;border-bottom:1px solid #dbeafe;align-items:center">
+      <!-- 텍스트 서식 -->
+      <button onmousedown="event.preventDefault();document.execCommand('bold')" title="굵게" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;font-weight:700;cursor:pointer;font-size:13px">B</button>
+      <button onmousedown="event.preventDefault();document.execCommand('italic')" title="기울임" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;font-style:italic;cursor:pointer;font-size:13px">I</button>
+      <button onmousedown="event.preventDefault();document.execCommand('underline')" title="밑줄" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;text-decoration:underline;cursor:pointer;font-size:13px">U</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 4px"></span>
+      <!-- 제목/단락 -->
+      <button onmousedown="event.preventDefault();tmInsertBlock('h3')" title="소제목" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">제목</button>
+      <button onmousedown="event.preventDefault();tmInsertBlock('p')" title="본문" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">본문</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 4px"></span>
+      <!-- 표 관련 -->
+      <button onmousedown="event.preventDefault();tmInsertTable()" title="표 삽입" style="padding:3px 9px;border:1px solid #1e40af;border-radius:5px;background:#eff6ff;color:#1e40af;cursor:pointer;font-size:12px;font-weight:600">⊞ 표 삽입</button>
+      <button onmousedown="event.preventDefault();tmTableAddRow()" title="행 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 행</button>
+      <button onmousedown="event.preventDefault();tmTableAddCol()" title="열 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 열</button>
+      <button onmousedown="event.preventDefault();tmTableDelRow()" title="행 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 행</button>
+      <button onmousedown="event.preventDefault();tmTableDelCol()" title="열 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 열</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 4px"></span>
+      <button onmousedown="event.preventDefault();tmInsertHr()" title="구분선" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">— 구분선</button>
     </div>
+    <!-- 편집 영역 -->
     <div style="flex:1;overflow-y:auto;padding:14px 18px">
-      <textarea id="tm-modal-text" style="width:100%;min-height:320px;padding:10px 12px;border:1px solid #bfdbfe;border-radius:7px;font-size:12px;font-family:'Malgun Gothic',sans-serif;line-height:1.8;resize:vertical;box-sizing:border-box" placeholder="예시:
-1. 검체 전처리
-   - 검체 약 1 g을 정밀히 달아 마이크로웨이브 용기에 넣는다.
-   - 진한 질산 5 mL를 가한다.
-   - 마이크로웨이브: 170°C, 10분
-
-2. ICP-MS 분석 조건
-   - 파장: Pb 208 nm
-   - 검량선: 0, 5, 10, 50, 100 μg/L"></textarea>
+      <div id="tm-editor" contenteditable="true" style="min-height:340px;padding:10px 14px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:12px;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;line-height:1.8;color:#1e293b;outline:none;background:#fff"></div>
+      <style>
+        #tm-editor table,.tm-view-content table{border-collapse:collapse;width:100%;margin:8px 0}
+        #tm-editor td,#tm-editor th,.tm-view-content td,.tm-view-content th{border:1px solid #94a3b8;padding:5px 10px;min-width:60px;vertical-align:middle}
+        #tm-editor th,.tm-view-content th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}
+        #tm-editor td:focus,#tm-editor th:focus{outline:2px solid #3b82f6;outline-offset:-2px}
+        #tm-editor h3,.tm-view-content h3{font-size:13px;font-weight:700;color:#1e40af;margin:10px 0 4px;border-bottom:1px solid #bfdbfe;padding-bottom:3px}
+        #tm-editor p,.tm-view-content p{margin:4px 0}
+        #tm-editor hr,.tm-view-content hr{border:none;border-top:1px solid #cbd5e1;margin:8px 0}
+      </style>
     </div>
-    <div style="padding:12px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end">
-      <button onclick="document.getElementById('test-method-modal').style.display='none'" style="padding:7px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:13px;cursor:pointer">취소</button>
-      <button onclick="saveTestMethod()" style="padding:7px 18px;background:#1e40af;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">💾 저장</button>
+    <!-- 푸터 -->
+    <div style="padding:10px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;align-items:center">
+      <span style="font-size:11px;color:#94a3b8;margin-right:auto">표 셀을 클릭 후 행/열 추가·삭제</span>
+      <button onclick="document.getElementById('test-method-modal').style.display='none'" style="padding:6px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:13px;cursor:pointer">취소</button>
+      <button onclick="saveTestMethod()" style="padding:6px 18px;background:#1e40af;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">💾 저장</button>
     </div>
   </div>
 </div>
