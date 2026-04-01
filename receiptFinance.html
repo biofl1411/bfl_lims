@@ -1330,11 +1330,13 @@ async function clearPayInfo(receiptId) {
   } catch(e) { showToast('❗ 초기화 실패: ' + e.message); }
 }
 
-// 발행유형만 해제 → 미지정으로 이동 (결제방법/계산서유형은 유지)
+// 발행 정보 전체 해제 → 미입력으로 복귀
 async function clearBillingType(receiptId) {
-  if (!confirm('발행유형 지정을 취소하고 미지정으로 되돌리겠습니까?')) return;
+  if (!confirm('등록된 발행 정보를 취소하고 미입력으로 되돌리겠습니까?')) return;
   try {
     await db.collection('receipts').doc(receiptId).update({
+      payMethod: firebase.firestore.FieldValue.delete(),
+      invoiceType: firebase.firestore.FieldValue.delete(),
       billingType: firebase.firestore.FieldValue.delete(),
       mergedGroupId: firebase.firestore.FieldValue.delete(),
       invoiceDate: firebase.firestore.FieldValue.delete(),
@@ -1343,14 +1345,14 @@ async function clearBillingType(receiptId) {
     });
     var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
     if (idx >= 0) {
-      delete _allReceipts[idx].data.billingType;
-      delete _allReceipts[idx].data.mergedGroupId;
-      delete _allReceipts[idx].data.invoiceDate;
-      delete _allReceipts[idx].data.billingMemo;
+      var d = _allReceipts[idx].data;
+      delete d.payMethod; delete d.invoiceType;
+      delete d.billingType; delete d.mergedGroupId;
+      delete d.invoiceDate; delete d.billingMemo;
     }
     renderKpiCards();
     doSearch();
-    showToast('✅ 발행유형 취소 완료 — 미지정으로 이동됨');
+    showToast('✅ 취소 완료 — 미입력으로 이동됨');
   } catch(e) { showToast('❗ 실패: ' + e.message); }
 }
 
