@@ -34,25 +34,33 @@ var storage = (typeof firebase.storage === 'function') ? firebase.storage() : nu
 var _firebaseReady = false;
 var _firebaseAuthReady = false;
 
+// 현재 로그인한 사용자 (전역 참조)
+var _currentUser = null;
+
 /**
- * 익명 인증 → Firestore 연결 확인
- * 보안 규칙: request.auth != null → 인증된 사용자만 접근 허용
- * 사용자는 로그인 화면 없이 자동으로 익명 인증됨
+ * 인증 가드 — 비로그인 시 login.html로 리디렉션
+ * login.html, companyRegForm_v2.html은 공개 페이지이므로 제외
  */
 (function initFirebaseAuth() {
+  var _currentFile = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+  var _publicPages = ['login.html', 'companyregform_v2.html'];
+  var _isPublic = _publicPages.indexOf(_currentFile) !== -1;
+
   auth.onAuthStateChanged(function(user) {
-    if (user) {
-      // 이미 인증됨 (익명 또는 실명)
+    if (user && !user.isAnonymous) {
+      // 정상 로그인됨
+      _currentUser = user;
       _firebaseAuthReady = true;
-      console.log('[Firebase] 인증됨: ' + (user.isAnonymous ? '익명' : user.email) + ' (uid: ' + user.uid + ')');
+      console.log('[Firebase] 로그인: ' + user.email + ' (uid: ' + user.uid + ')');
       _checkFirestoreConnection();
     } else {
-      // 인증 안 됨 → 익명 로그인 시도
-      console.log('[Firebase] 익명 인증 시도...');
-      auth.signInAnonymously().catch(function(err) {
-        console.error('[Firebase] 익명 인증 실패:', err.message);
-        _firebaseReady = false;
-      });
+      // 로그인 안 됨 (또는 익명 사용자)
+      _currentUser = null;
+      if (!_isPublic) {
+        // 현재 페이지를 redirect 파라미터로 넘겨 로그인 후 복귀
+        var redirect = encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash);
+        window.location.replace('login.html?redirect=' + redirect);
+      }
     }
   });
 })();

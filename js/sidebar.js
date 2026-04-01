@@ -143,6 +143,14 @@ body.sidebar-collapsed .main-wrapper{margin-left:64px}
 .unit-body .unit-swap{display:flex;justify-content:center;margin:8px 0}
 .unit-body .unit-swap button{background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.2);border-radius:50%;width:32px;height:32px;font-size:14px;cursor:pointer;color:#4fc3f7;transition:all .15s}
 .unit-body .unit-swap button:hover{background:rgba(79,195,247,0.2);transform:rotate(180deg)}
+/* ── Sidebar User / Logout ── */
+.sidebar-user{flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:6px;background:rgba(0,0,0,0.1)}
+.su-email{font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.su-logout{flex-shrink:0;padding:4px 10px;border:1px solid rgba(239,68,68,0.3);border-radius:6px;background:rgba(239,68,68,0.08);color:#fca5a5;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.su-logout:hover{background:rgba(239,68,68,0.18);border-color:rgba(239,68,68,0.5);color:#ef4444}
+.sidebar.collapsed .sidebar-user{flex-direction:column;padding:8px 4px;gap:4px}
+.sidebar.collapsed .su-email{display:none}
+.sidebar.collapsed .su-logout{font-size:10px;padding:4px 6px}
 /* ── Sidebar Weather Widget ── */
 .sidebar-weather{flex-shrink:0;border-top:1px solid rgba(255,255,255,0.08);padding:14px 20px;background:rgba(0,0,0,0.15)}
 .sidebar-weather .weather-main{display:flex;align-items:center;gap:10px}
@@ -445,6 +453,10 @@ ${subHtmlArr.join('\n')}
     <button class="sw-btn" onclick="toggleUnitPopup()" title="단위변환">📐</button>
     <button class="sw-btn" onclick="window.open('https://192.168.0.96:8443/adminSettings.html','_blank')" title="설정">⚙️</button>
     <button class="sw-btn" onclick="toggleSidebarCollapse()" title="사이드바 접기/펼치기">📌</button>
+  </div>
+  <div class="sidebar-user" id="sidebar-user">
+    <span class="su-email" id="su-email">...</span>
+    <button class="su-logout" onclick="sidebarLogout()" title="로그아웃">↩ 로그아웃</button>
   </div>
   <div class="sidebar-weather" id="sidebar-weather">
     <div class="weather-loading">🌤️ 날씨 로딩...</div>
@@ -791,6 +803,37 @@ async function loadSidebarWeather() {
 }
 
 // ============================================================
+// 4-1. 사이드바 사용자 이메일 표시
+// ============================================================
+function _renderSidebarUser() {
+  var el = document.getElementById('su-email');
+  if (!el) return;
+  // firebase auth가 준비되면 이메일 표시
+  if (typeof firebase !== 'undefined' && firebase.auth) {
+    var u = firebase.auth().currentUser;
+    if (u && u.email) {
+      el.textContent = u.email;
+      el.title = u.email;
+      return;
+    }
+  }
+  el.textContent = '';
+}
+
+function sidebarLogout() {
+  if (!confirm('로그아웃 하시겠습니까?')) return;
+  if (typeof firebase !== 'undefined' && firebase.auth) {
+    firebase.auth().signOut().then(function() {
+      window.location.replace('login.html');
+    }).catch(function() {
+      window.location.replace('login.html');
+    });
+  } else {
+    window.location.replace('login.html');
+  }
+}
+
+// ============================================================
 // 5. 초기화 — DOM 준비 후 실행
 // ============================================================
 (function initSidebar() {
@@ -798,6 +841,12 @@ async function loadSidebarWeather() {
     renderSidebar();
     _restoreSidebarState();
     _renderSubTabs();
+    // 사용자 이메일 표시 (인증 준비 후)
+    if (typeof firebase !== 'undefined' && firebase.auth) {
+      firebase.auth().onAuthStateChanged(function(user) {
+        _renderSidebarUser();
+      });
+    }
     // 날씨 위젯 로드 (Firebase 준비 후)
     if (typeof waitForFirebase === 'function') {
       loadSidebarWeather();
