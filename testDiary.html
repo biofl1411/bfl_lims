@@ -1032,6 +1032,18 @@ function openTestMethodModal() {
     }
     // 저장된 표의 모든 셀에 contenteditable 보장
     ed.querySelectorAll('td,th').forEach(function(c){ c.contentEditable = 'true'; });
+    // ★ 셀 클릭할 때마다 _tmMergeTargetCell 자동 저장 (라디오 클릭으로 커서 사라져도 유지)
+    ed.removeEventListener('click', ed._tmCellTracker);
+    ed._tmCellTracker = function(e) {
+      var cell = e.target.closest('td,th');
+      if (cell) {
+        window._tmMergeTargetCell = cell;
+        // 선택된 셀 하이라이트 (기존 해제 후 적용)
+        ed.querySelectorAll('td.tm-selected,th.tm-selected').forEach(function(c){ c.classList.remove('tm-selected'); });
+        cell.classList.add('tm-selected');
+      }
+    };
+    ed.addEventListener('click', ed._tmCellTracker);
   }
   var modal = document.getElementById('test-method-modal');
   if (modal) modal.style.display = 'flex';
@@ -1226,8 +1238,8 @@ function tmShowMergePanel(btn) {
   var old = document.getElementById('tm-merge-panel');
   if (old) { old.parentNode.removeChild(old); return; }
 
-  // ★ 패널 열 때 선택된 셀 미리 저장 (이후 포커스 잃어도 유지)
-  window._tmMergeTargetCell = _tmGetActiveCell();
+  // ★ 클릭 추적으로 저장된 셀 우선, 없으면 현재 selection에서 탐색
+  if (!window._tmMergeTargetCell) window._tmMergeTargetCell = _tmGetActiveCell();
 
   // 버튼 위치 기준 fixed 좌표 계산 (모달 overflow:hidden 우회)
   var btnRect = btn.getBoundingClientRect();
@@ -3930,6 +3942,7 @@ function _printFormTemplateDiary(ft) {
         #tm-editor td,#tm-editor th,.tm-view-content td,.tm-view-content th{border:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap}
         #tm-editor th,.tm-view-content th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}
         #tm-editor td:focus,#tm-editor th:focus{outline:2px solid #3b82f6;outline-offset:-2px}
+        #tm-editor td.tm-selected,#tm-editor th.tm-selected{outline:2px solid #f59e0b;outline-offset:-2px;background:rgba(245,158,11,.08)}
         #tm-editor h3,.tm-view-content h3{font-size:13px;font-weight:700;color:#1e40af;margin:10px 0 4px;border-bottom:1px solid #bfdbfe;padding-bottom:3px}
         #tm-editor p,.tm-view-content p{margin:4px 0}
         #tm-editor hr,.tm-view-content hr{border:none;border-top:1px solid #cbd5e1;margin:8px 0}
