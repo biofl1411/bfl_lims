@@ -1050,6 +1050,8 @@ function openTestMethodModal() {
       _tmHighlightSelection();
     };
     ed.addEventListener('mousedown', ed._tmCellTracker);
+    // 열 너비 드래그 핸들 초기화
+    setTimeout(tmInitAllTablesResize, 80);
   }
   var modal = document.getElementById('test-method-modal');
   if (modal) modal.style.display = 'flex';
@@ -1113,6 +1115,7 @@ function tmInsertTable(btn) {
     html+='</tbody></table><p><br></p>';
     document.getElementById('tm-editor').focus();
     document.execCommand('insertHTML',false,html);
+    setTimeout(tmInitAllTablesResize, 80);
   });
   setTimeout(function(){
     document.addEventListener('mousedown',function _c(e){
@@ -1123,6 +1126,45 @@ function tmInsertTable(btn) {
   },50);
   return; // 아래 구버전 코드 실행 안 함
   document.execCommand('insertHTML', false, html);
+}
+
+/* ── 표 열 너비 드래그 조정 ── */
+function tmInitTableResize(tbl) {
+  var headerRow = tbl.querySelector('thead tr') || tbl.rows[0];
+  if (!headerRow) return;
+  Array.from(headerRow.cells).forEach(function(th) {
+    // 현재 렌더링 너비를 픽셀로 고정
+    var curW = th.getBoundingClientRect().width;
+    if (curW > 0) th.style.width = curW + 'px';
+    th.style.position = 'relative';
+    // 이미 핸들 있으면 스킵
+    if (th.querySelector('.tm-col-resize-handle')) return;
+    var handle = document.createElement('div');
+    handle.className = 'tm-col-resize-handle';
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var startX = e.clientX;
+      var startW = th.getBoundingClientRect().width;
+      var colIdx = th.cellIndex;
+      function onMove(ev) {
+        var newW = Math.max(30, startW + (ev.clientX - startX));
+        th.style.width = newW + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    th.appendChild(handle);
+  });
+}
+function tmInitAllTablesResize() {
+  var ed = document.getElementById('tm-editor');
+  if (!ed) return;
+  ed.querySelectorAll('table').forEach(function(tbl) { tmInitTableResize(tbl); });
 }
 
 function _tmGetActiveTable() {
@@ -1187,6 +1229,9 @@ function tmTableAddCol() {
       newCell.contentEditable = 'true';
     }
   });
+  // 리사이즈 핸들 재초기화 (헤더에 새 핸들 추가)
+  tbl.querySelector('thead tr,.tm-col-resize-handle') && tbl.querySelectorAll('.tm-col-resize-handle').forEach(function(h){ h.parentNode.removeChild(h); });
+  tmInitTableResize(tbl);
 }
 
 function tmTableDelRow() {
@@ -1210,6 +1255,9 @@ function tmTableDelCol() {
   Array.from(tbl.rows).forEach(function(row) {
     if (row.cells[colIdx]) row.deleteCell(colIdx);
   });
+  // 리사이즈 핸들 재초기화
+  tbl.querySelectorAll('.tm-col-resize-handle').forEach(function(h){ h.parentNode.removeChild(h); });
+  tmInitTableResize(tbl);
 }
 
 function tmSetFontSize(size) {
@@ -4013,6 +4061,8 @@ function _printFormTemplateDiary(ft) {
         #tm-editor td:focus,#tm-editor th:focus{outline:2px solid #3b82f6;outline-offset:-2px}
         #tm-editor td.tm-selected,#tm-editor th.tm-selected{outline:2px solid #f59e0b;outline-offset:-2px;background:rgba(245,158,11,.12)}
         #tm-editor td.tm-sel-range,#tm-editor th.tm-sel-range{outline:2px solid #3b82f6;outline-offset:-2px;background:rgba(59,130,246,.12)}
+        #tm-editor .tm-col-resize-handle{position:absolute;right:-3px;top:0;width:6px;height:100%;cursor:col-resize;z-index:5;background:transparent;-webkit-user-select:none;user-select:none}
+        #tm-editor .tm-col-resize-handle:hover{background:rgba(255,255,255,.5)}
         #tm-editor h3,.tm-view-content h3{font-size:13px;font-weight:700;color:#1e40af;margin:10px 0 4px;border-bottom:1px solid #bfdbfe;padding-bottom:3px}
         #tm-editor p,.tm-view-content p{margin:4px 0}
         #tm-editor hr,.tm-view-content hr{border:none;border-top:1px solid #cbd5e1;margin:8px 0}
