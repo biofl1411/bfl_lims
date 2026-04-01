@@ -1055,22 +1055,55 @@ async function saveTestMethod() {
 }
 
 /* ── 검사방법 편집기 툴바 함수들 ── */
-function tmInsertTable() {
-  var rows = parseInt(prompt('행 수 (기본 3)', '3') || '3');
-  var cols = parseInt(prompt('열 수 (기본 3)', '3') || '3');
-  if (isNaN(rows) || rows < 1) rows = 3;
-  if (isNaN(cols) || cols < 1) cols = 3;
-  var colW = Math.floor(100 / cols) + '%';
-  var html = '<table><thead><tr>';
-  for (var c = 0; c < cols; c++) html += '<th contenteditable="true" style="width:' + colW + '">항목' + (c+1) + '</th>';
-  html += '</tr></thead><tbody>';
-  for (var r = 0; r < rows; r++) {
-    html += '<tr>';
-    for (var c2 = 0; c2 < cols; c2++) html += '<td contenteditable="true">&nbsp;</td>';
-    html += '</tr>';
-  }
-  html += '</tbody></table><p><br></p>';
-  document.getElementById('tm-editor').focus();
+function tmInsertTable(btn) {
+  // 기존 패널 제거 (토글)
+  var oldP = document.getElementById('tm-insert-table-panel');
+  if (oldP) { oldP.parentNode.removeChild(oldP); return; }
+
+  var btnRect = (btn || document.querySelector('[title="표 삽입"]')).getBoundingClientRect();
+  var panel = document.createElement('div');
+  panel.id = 'tm-insert-table-panel';
+  panel.style.cssText = 'position:fixed;top:' + (btnRect.bottom+4) + 'px;left:' + Math.max(4,btnRect.left) + 'px;background:#fff;border:1.5px solid #1e40af;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:999999;padding:12px 16px;min-width:200px;font-size:12px;color:#1e293b';
+  panel.innerHTML =
+    '<div style="font-weight:700;margin-bottom:10px;color:#1e40af">⊞ 표 삽입</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">'
+    + '<label style="width:24px">행</label><input id="tm-tbl-rows" type="number" value="3" min="1" max="20" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px">'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">'
+    + '<label style="width:24px">열</label><input id="tm-tbl-cols" type="number" value="3" min="1" max="10" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px">'
+    + '</div>'
+    + '<div style="display:flex;gap:6px;justify-content:flex-end">'
+    + '<button id="tm-tbl-cancel" style="padding:4px 12px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">취소</button>'
+    + '<button id="tm-tbl-ok" style="padding:4px 12px;border:none;border-radius:5px;background:#1e40af;color:#fff;cursor:pointer;font-size:12px;font-weight:600">삽입</button>'
+    + '</div>';
+  panel.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+  document.body.appendChild(panel);
+
+  document.getElementById('tm-tbl-cancel').addEventListener('click', function(){
+    var p=document.getElementById('tm-insert-table-panel'); if(p) p.parentNode.removeChild(p);
+  });
+  document.getElementById('tm-tbl-ok').addEventListener('click', function(){
+    var rows = parseInt(document.getElementById('tm-tbl-rows').value||'3');
+    var cols = parseInt(document.getElementById('tm-tbl-cols').value||'3');
+    var p=document.getElementById('tm-insert-table-panel'); if(p) p.parentNode.removeChild(p);
+    if(isNaN(rows)||rows<1) rows=3; if(isNaN(cols)||cols<1) cols=3;
+    var colW = Math.floor(100/cols)+'%';
+    var html='<table><thead><tr>';
+    for(var c=0;c<cols;c++) html+='<th contenteditable="true" style="width:'+colW+'">항목'+(c+1)+'</th>';
+    html+='</tr></thead><tbody>';
+    for(var r=0;r<rows;r++){html+='<tr>';for(var c2=0;c2<cols;c2++) html+='<td contenteditable="true">&nbsp;</td>';html+='</tr>';}
+    html+='</tbody></table><p><br></p>';
+    document.getElementById('tm-editor').focus();
+    document.execCommand('insertHTML',false,html);
+  });
+  setTimeout(function(){
+    document.addEventListener('mousedown',function _c(e){
+      var p=document.getElementById('tm-insert-table-panel');
+      if(!p){document.removeEventListener('mousedown',_c);return;}
+      if(!p.contains(e.target)){p.parentNode.removeChild(p);document.removeEventListener('mousedown',_c);}
+    });
+  },50);
+  return; // 아래 구버전 코드 실행 안 함
   document.execCommand('insertHTML', false, html);
 }
 
@@ -3878,7 +3911,7 @@ function _printFormTemplateDiary(ft) {
       <button onmousedown="event.preventDefault();tmInsertBlock('p')" title="본문" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">본문</button>
       <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
       <!-- 표 관련 -->
-      <button onmousedown="event.preventDefault();tmInsertTable()" title="표 삽입" style="padding:3px 9px;border:1px solid #1e40af;border-radius:5px;background:#eff6ff;color:#1e40af;cursor:pointer;font-size:12px;font-weight:600">⊞ 표 삽입</button>
+      <button onmousedown="event.preventDefault();tmInsertTable(this)" title="표 삽입" style="padding:3px 9px;border:1px solid #1e40af;border-radius:5px;background:#eff6ff;color:#1e40af;cursor:pointer;font-size:12px;font-weight:600">⊞ 표 삽입</button>
       <button onmousedown="event.preventDefault();tmTableAddRow()" title="행 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 행</button>
       <button onmousedown="event.preventDefault();tmTableAddCol()" title="열 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 열</button>
       <button onmousedown="event.preventDefault();tmTableDelRow()" title="행 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 행</button>
