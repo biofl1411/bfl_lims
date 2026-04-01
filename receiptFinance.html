@@ -1212,7 +1212,6 @@ function onPayMethodChange(receiptId) {
   var mappedIt = '';
   if (pm) {
     pmSel.classList.add('filled');
-    // 결제방법 → 계산서유형 자동 매핑
     if (pm === '카드') mappedIt = '카드전표';
     else if (pm === '온라인입금') mappedIt = '세금계산서';
     else if (pm === '현금') mappedIt = '현금영수증';
@@ -1224,12 +1223,26 @@ function onPayMethodChange(receiptId) {
     itSel.value = '';
     itSel.classList.remove('filled');
   }
-  // 펼침 영역이 열려 있으면 동기화
+  // 펼침 영역 동기화
   if (_currentReceiptId === receiptId) {
     var expPm = document.getElementById('exp-payMethod');
     var expIt = document.getElementById('exp-invoiceType');
     if (expPm) expPm.value = pm;
     if (expIt) expIt.value = mappedIt;
+  }
+  // 합산 그룹 — 같은 mergedGroupId 전체에 결제방법/계산서유형 일괄 적용 (UI만)
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  if (r && r.data.billingType === '합산' && r.data.mergedGroupId) {
+    var gid = r.data.mergedGroupId;
+    _allReceipts.forEach(function(x) {
+      if (x.id !== receiptId && x.data.mergedGroupId === gid) {
+        var xPm = document.getElementById('pm-' + x.id);
+        var xIt = document.getElementById('it-' + x.id);
+        if (xPm) { xPm.value = pm; if (pm) xPm.classList.add('filled'); else xPm.classList.remove('filled'); }
+        if (xIt) { xIt.value = mappedIt; if (mappedIt) xIt.classList.add('filled'); else xIt.classList.remove('filled'); }
+      }
+    });
+    if (pm) showToast('🔗 합산 그룹 ' + _allReceipts.filter(function(x){ return x.data.mergedGroupId === gid; }).length + '건에 일괄 적용됨');
   }
 }
 
@@ -1285,21 +1298,41 @@ async function saveRow(receiptId) {
     else updateData.billingType = firebase.firestore.FieldValue.delete();
     if (billingMemo) updateData.billingMemo = billingMemo;
     else updateData.billingMemo = firebase.firestore.FieldValue.delete();
-    await db.collection('receipts').doc(receiptId).update(updateData);
-    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
-    if (idx >= 0) {
+    var r0 = _allReceipts.find(function(x) { return x.id === receiptId; });
+    var isMerged = r0 && billingType === '합산' && r0.data.mergedGroupId;
+    var mergeGroup = isMerged ? _allReceipts.filter(function(x) { return x.id !== receiptId && x.data.mergedGroupId === r0.data.mergedGroupId; }) : [];
+
+    var batch = db.batch();
+    batch.update(db.collection('receipts').doc(receiptId), updateData);
+    // 합산 그룹 나머지 건 — 결제방법/계산서유형만 일괄 저장 (billingMemo·invoiceDate는 개별 유지)
+    mergeGroup.forEach(function(x) {
+      batch.update(db.collection('receipts').doc(x.id), {
+        payMethod: payMethod, invoiceType: invoiceType,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+
+    function applyLocal(rid, extra) {
+      var idx = _allReceipts.findIndex(function(r) { return r.id === rid; });
+      if (idx < 0) return;
       _allReceipts[idx].data.payMethod = payMethod;
       _allReceipts[idx].data.invoiceType = invoiceType;
-      _allReceipts[idx].data.invoiceDate = invoiceDate || null;
-      _allReceipts[idx].data.billingType = billingType || undefined;
-      _allReceipts[idx].data.billingMemo = billingMemo || undefined;
+      if (extra) {
+        _allReceipts[idx].data.invoiceDate = invoiceDate || null;
+        _allReceipts[idx].data.billingType = billingType || undefined;
+        _allReceipts[idx].data.billingMemo = billingMemo || undefined;
+      }
     }
+    applyLocal(receiptId, true);
+    mergeGroup.forEach(function(x) { applyLocal(x.id, false); });
+
     if (pmSel) pmSel.classList.add('filled');
     if (itSel) itSel.classList.add('filled');
     if (btSel && billingType) btSel.classList.add('filled');
     if (dtInp && invoiceDate) dtInp.classList.add('filled');
     renderKpiCards();
-    showToast('✅ 저장 완료');
+    showToast(isMerged ? '✅ 저장 완료 (합산 ' + (mergeGroup.length + 1) + '건 일괄)' : '✅ 저장 완료');
   } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
 }
 
