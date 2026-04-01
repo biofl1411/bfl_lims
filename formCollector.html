@@ -1579,14 +1579,32 @@ function showReviewPanel(data) {
     var rvSum = document.getElementById('rv-summary');
     if (rvSum && rvSum.parentNode) rvSum.parentNode.insertBefore(tmArea, rvSum.nextSibling);
   }
-  if (data.testMethod) {
-    tmArea.innerHTML = '<div style="background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;padding:7px 13px">📋 검사방법 (시험절차)</div>'
-      + '<textarea id="rv-test-method-text" style="width:100%;min-height:140px;border:none;padding:10px 13px;font-size:12px;font-family:\'Malgun Gothic\',sans-serif;line-height:1.7;resize:vertical;box-sizing:border-box;color:#1a2332">' + (data.testMethod || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</textarea>';
-    tmArea.style.display = '';
-  } else {
-    tmArea.innerHTML = '<div style="background:#f1f5f9;color:#94a3b8;font-size:12px;padding:9px 13px;border-radius:9px">📋 검사방법: PDF에서 검사방법 섹션을 찾지 못했습니다.</div>';
-    tmArea.style.display = '';
-  }
+  // 검사방법 표시 (HTML 편집기)
+  var tmContent = data.testMethod || '';
+  // plain text 감지 시 HTML 변환
+  var tmIsHtml = /<[a-z][\s\S]*>/i.test(tmContent);
+  var tmInnerHtml = tmIsHtml ? tmContent : (tmContent ? tmContent.split('\n').map(function(l){ return l ? '<p>' + l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>' : '<p><br></p>'; }).join('') : '');
+  tmArea.innerHTML = '<div style="background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;padding:7px 13px;display:flex;justify-content:space-between;align-items:center">'
+    + '<span>📋 검사방법 (시험절차)</span>'
+    + '<span style="font-size:10px;font-weight:400;opacity:.75">클릭하여 편집 가능</span>'
+    + '</div>'
+    + '<div id="rv-test-method-editor" contenteditable="true" style="min-height:120px;padding:10px 13px;font-size:12px;font-family:\'Malgun Gothic\',sans-serif;line-height:1.7;color:#1a2332;outline:none;background:#fff;border:1px solid #e2e8f0;border-top:none">'
+    + (tmInnerHtml || '<p style="color:#94a3b8">내용을 입력하거나 수정하세요</p>')
+    + '</div>'
+    + '<style>'
+    + '#rv-test-method-editor table{border-collapse:collapse;width:100%;margin:6px 0}'
+    + '#rv-test-method-editor td,#rv-test-method-editor th{border:1px solid #94a3b8;padding:4px 8px;min-width:50px;vertical-align:middle}'
+    + '#rv-test-method-editor th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}'
+    + '#rv-test-method-editor h3{font-size:12px;font-weight:700;color:#1e40af;margin:8px 0 3px;border-bottom:1px solid #bfdbfe;padding-bottom:2px}'
+    + '#rv-test-method-editor p{margin:3px 0}'
+    + '#rv-test-method-editor hr{border:none;border-top:1px solid #cbd5e1;margin:6px 0}'
+    + '</style>';
+  // 셀 contenteditable 보장
+  setTimeout(function(){
+    var ed = document.getElementById('rv-test-method-editor');
+    if (ed) ed.querySelectorAll('td,th').forEach(function(c){ c.contentEditable='true'; });
+  }, 50);
+  tmArea.style.display = '';
 
   // ★ 미생물 입력폼 삽입
   var testBasisRv = (document.getElementById('inp-test-basis') || {}).value || '';
@@ -1969,9 +1987,12 @@ async function doConfirmSave() {
     var testBasis = (document.getElementById('inp-test-basis') || {}).value || '';
     var sampleType = (document.getElementById('inp-sample-type') || {}).value || '';
 
-    // 검토 패널에서 수정한 검사방법 반영
-    var tmTextEl = document.getElementById('rv-test-method-text');
-    if (tmTextEl) _lastAnalyzed.testMethod = tmTextEl.value.trim() || null;
+    // 검토 패널에서 수정한 검사방법 반영 (HTML 편집기)
+    var tmEdEl = document.getElementById('rv-test-method-editor');
+    if (tmEdEl) {
+      var tmHtml = tmEdEl.innerHTML.trim();
+      _lastAnalyzed.testMethod = (tmHtml && tmHtml !== '<p style="color:#94a3b8">내용을 입력하거나 수정하세요</p>') ? tmHtml : null;
+    }
 
     // 첨부파일 설정 반영
     var attachFields = _collectAttachmentConfig();
@@ -2428,7 +2449,7 @@ async function callClaude(textContext) {
     + '  },\n'
     + '  "equipment": ["장비목록"],\n'
     + '  "reagents": ["시약목록"],\n'
-    + '  "testMethod": "검사방법/시험절차 원문 전체 (번호·단계·조건 포함, 없으면 null)",\n'
+    + '  "testMethod": "검사방법/시험절차를 HTML 형식으로 반환 (없으면 null). 아래 testMethod 작성 규칙 참고",\n'
     + '  "attachmentFields": [\n'
     + '    { "id": "photo1", "label": "사진 또는 첨부파일 라벨 (PDF 원문)", "accept": "image/*또는*", "showPreview": true }\n'
     + '  ]\n'
@@ -2439,8 +2460,18 @@ async function callClaude(textContext) {
     + '- showPreview: 이미지인 경우 true, 일반 문서인 경우 false\n'
     + '- 해당 필드가 없으면 빈 배열 []로 설정하세요.\n\n'
     + '## testMethod 작성 규칙\n'
-    + '- PDF에 "검사방법", "시험방법", "시험절차", "분析방법", "2. 검사방법" 등의 섹션이 있으면 해당 내용 전체를 그대로 문자열로 기록하세요.\n'
-    + '- 번호 목록은 "1. ...\n2. ..." 형태로 줄바꿈 포함하여 원문 그대로 유지하세요.\n'
+    + '- PDF에 "검사방법", "시험방법", "시험절차", "분析방법", "2. 검사방법" 등의 섹션이 있으면 해당 내용을 **HTML 형식**으로 반환하세요.\n'
+    + '- 반드시 아래 HTML 규칙을 따르세요:\n'
+    + '  1. **일반 텍스트/단계**: `<p>내용</p>` 으로 감싸세요.\n'
+    + '  2. **번호 목록 (1. 2. 3. ...)**: 각 항목을 `<p>1. 내용</p>` 형태로 유지하세요.\n'
+    + '  3. **제목/소제목**: `<h3>제목</h3>` 으로 감싸세요.\n'
+    + '  4. **표(테이블) 형태의 데이터** (예: 분석조건, 기기조건, 시약 농도 등):\n'
+    + '     `<table><thead><tr><th contenteditable="true">헤더1</th><th contenteditable="true">헤더2</th></tr></thead>`\n'
+    + '     `<tbody><tr><td contenteditable="true">값1</td><td contenteditable="true">값2</td></tr></tbody></table>` 형태로 반환하세요.\n'
+    + '  5. **구분선**: `<hr>` 사용\n'
+    + '  6. **굵게 강조**: `<strong>텍스트</strong>` 사용\n'
+    + '- JSON 문자열에 포함되므로 큰따옴표(")는 \\" 로 이스케이프하세요.\n'
+    + '- 줄바꿈은 \\n 없이 HTML 태그로만 처리하세요.\n'
     + '- 해당 섹션이 없으면 null로 설정하세요.\n\n'
     + '## 최종 검증\n'
     + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.';
