@@ -2077,7 +2077,7 @@ function downloadMergedExcel() {
       // 단건은 그대로
       dataRows.push(buildDuzonRow(items[0].data, td, null));
     } else {
-      // 다건 합산: 공급가액/세액 합산, 품목명 합산
+      // 다건 합산: 공급가액/세액 합산, 품목은 각 접수건별로 품목1~4에 개별 배치 (최대 4건)
       var baseData = items[0].data;
       var totalSupply = items.reduce(function(s, r) { return s + getSupplyAmount(r.data); }, 0);
       var totalTax = items.reduce(function(s, r) { return s + getTaxAmount(r.data); }, 0);
@@ -2085,13 +2085,24 @@ function downloadMergedExcel() {
       var isTaxExempt = baseData.taxCategory === '면세';
       var buyer = buildBuyerInfo(baseData);
       var writeDate = td;
-      var itemNames = items.map(function(r) { return getItemName(r.data); }).join(', ');
       var receiptNos = items.map(function(r) { return r.data.receiptNo || r.id; }).join(', ');
-      var totalQty = items.reduce(function(s, r) { return s + getSampleCount(r.data); }, 0);
       var paidAmt = 0;
       items.forEach(function(r) { (r.data.payments || []).forEach(function(p) { paidAmt += Number(p.amount || 0); }); });
       var billTypeCode = (paidAmt >= totalAmt && totalAmt > 0) ? 2 : 1;
       var taxCode = isTaxExempt ? 2 : 1;
+      // 품목 슬롯 4개 생성 (각 접수건 → 개별 품목 슬롯)
+      var itemSlots = [];
+      for (var si = 0; si < 4; si++) {
+        var ri = items[si];
+        if (ri) {
+          var iSupply = isTaxExempt ? getTotalFee(ri.data) : getSupplyAmount(ri.data);
+          var iTax = isTaxExempt ? 0 : getTaxAmount(ri.data);
+          var iQty = getSampleCount(ri.data) || 1;
+          itemSlots.push(writeDate, getItemName(ri.data), '', iQty, Math.round(iSupply / iQty), iSupply, iTax, '');
+        } else {
+          itemSlots.push('','','','','','','','');
+        }
+      }
       dataRows.push([
         '', 'EXCEL', billTypeCode, 1, 1, taxCode, '', '', '',
         SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
@@ -2100,16 +2111,13 @@ function downloadMergedExcel() {
         buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
         '', buyer.bizStatus, buyer.bizType, '', buyer.email,
         buyer.mobile, buyer.contactName, buyer.phone,
-        writeDate, totalSupply, totalTax,
-        writeDate, itemNames, '', totalQty, Math.round(totalSupply / totalQty), totalSupply, totalTax, '',
-        '','','','','','','','',
-        '','','','','','','','',
-        '','','','','','','','',
+        writeDate, totalSupply, totalTax
+      ].concat(itemSlots).concat([
         totalAmt, 0, 0, 0, totalAmt,
         receiptNos, '', '',
         'N', '', '', '', '',
         'END'
-      ]);
+      ]));
     }
   });
   var ws = XLSX.utils.aoa_to_sheet(headers.concat(dataRows));
