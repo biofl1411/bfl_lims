@@ -3185,6 +3185,13 @@ function printDiaryTemplate() {
   if (!panel || panel.querySelector('.empty-state')) {
     alert('선택된 시험일지가 없습니다.'); return;
   }
+  // 기록서 양식 수집 템플릿인 경우 → 전용 시험과정 양식으로 인쇄
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (ft && ft._isFormTemplate) {
+    _printFormTemplateDiary(ft);
+    return;
+  }
+  // 일반 시험일지 (기존 방식)
   var clone = panel.cloneNode(true);
   panel.querySelectorAll('input, textarea, select').forEach(function(el, i) {
     var c = clone.querySelectorAll('input, textarea, select')[i];
@@ -3198,6 +3205,138 @@ function printDiaryTemplate() {
   });
   clone.querySelectorAll('button, .btn').forEach(function(b) { b.remove(); });
   _printViaIframe(_buildPrintHtml(clone.innerHTML, '🧪 시험일지', false));
+}
+
+/* ─────────────────────────────────────────────
+   기록서 양식 수집 템플릿 전용 인쇄 레이아웃
+   결과 입력 폼(testResultInput) 필드 제외,
+   시험 과정 관련 내용(섹션·표준물질·계산식 등) 포함
+   ───────────────────────────────────────────── */
+function _printFormTemplateDiary(ft) {
+  var a = ft.analyzed || {};
+  var overrides = ft._overrides || {};
+
+  // 계산식 변수로 사용되는 field ID = 결과 입력 측정 필드 → 시험일지에서 제외
+  var resultFieldIds = [];
+  (a.calculations || []).forEach(function(calc) {
+    (calc.formula || '').replace(/[a-zA-Z_][a-zA-Z0-9_]*/g, function(v) {
+      if (resultFieldIds.indexOf(v) < 0) resultFieldIds.push(v);
+    });
+  });
+
+  // 결과 입력에만 사용되는 섹션명 패턴 (해당 섹션 전체 제외)
+  var resultSectionKeywords = ['측정값', '검체측정', '시료측정'];
+  function isResultSection(title) {
+    return resultSectionKeywords.some(function(k) { return (title || '').indexOf(k) >= 0; });
+  }
+
+  var h = '';
+
+  /* ── 헤더 테이블 ── */
+  h += '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">';
+  h += '<tr><td colspan="4" style="background:#1e3a5f;color:#fff;font-size:15px;font-weight:700;padding:9px 14px;text-align:center;letter-spacing:1px">시험검사기록서</td></tr>';
+  var rows = [
+    ['검사항목', escH(ft.representativeItem || ''), '항목코드', escH(ft.representativeItemCode || '')],
+    ['시험법근거', escH(ft.testBasis || ''), '시험유형', escH(a.testType || '')],
+    ['SOP', escH(a.sop || ''), '장비', escH((a.equipment || []).join(', '))]
+  ];
+  if (a.judgmentRule && a.judgmentRule.standardText) {
+    rows.push(['판정기준',
+      '<span style="color:#dc2626;font-weight:700">' + escH(a.judgmentRule.standardText) + (a.judgmentRule.unit ? ' ' + escH(a.judgmentRule.unit) : '') + '</span>',
+      '식품유형', escH(getFoodTypeFromForm(ft))]);
+  }
+  rows.forEach(function(r) {
+    h += '<tr>';
+    h += '<td style="width:13%;background:#f0f4ff;border:1px solid #cbd5e1;padding:5px 9px;font-size:10px;color:#475569;font-weight:600">' + r[0] + '</td>';
+    h += '<td style="border:1px solid #cbd5e1;padding:5px 9px;font-size:12px">' + r[1] + '</td>';
+    h += '<td style="width:13%;background:#f0f4ff;border:1px solid #cbd5e1;padding:5px 9px;font-size:10px;color:#475569;font-weight:600">' + r[2] + '</td>';
+    h += '<td style="border:1px solid #cbd5e1;padding:5px 9px;font-size:12px">' + r[3] + '</td>';
+    h += '</tr>';
+  });
+  h += '</table>';
+
+  /* ── 섹션별 필드 출력 ── */
+  (a.sections || []).forEach(function(sec) {
+    if (isResultSection(sec.title)) return; // 결과 입력 섹션 제외
+
+    // 결과 측정 변수에 해당하는 필드를 제외한 나머지 필드
+    var fields = (sec.fields || []).filter(function(f) {
+      return resultFieldIds.indexOf(f.id) < 0;
+    });
+    if (!fields.length) return;
+
+    h += '<div style="margin-bottom:14px">';
+    if (sec.title) {
+      h += '<div style="background:#334155;color:#fff;font-size:11px;font-weight:700;padding:5px 11px;border-radius:4px 4px 0 0">' + escH(sec.title) + '</div>';
+    }
+    h += '<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1">';
+
+    var perRow = 3; // 한 행에 최대 3개 필드
+    for (var fi = 0; fi < fields.length; fi += perRow) {
+      h += '<tr>';
+      for (var ci = 0; ci < perRow; ci++) {
+        var f = fields[fi + ci];
+        if (!f) {
+          // 빈 칸으로 채우기
+          h += '<td style="border:1px solid #e2e8f0;padding:6px 8px" colspan="' + (2 * (perRow - ci)) + '"></td>';
+          break;
+        }
+        var lbl = escH(f.label || '') + (f.unit ? ' <span style="color:#9ca3af;font-size:9px">(' + escH(f.unit) + ')</span>' : '');
+        // 오버라이드 값 우선, 없으면 exampleValue
+        var ovVal = '';
+        if (sec.title === '표준물질정보' && overrides.stdInfo) ovVal = overrides.stdInfo[f.id] || '';
+        if (sec.title === '표준용액농도' && overrides.stdConc) ovVal = overrides.stdConc[f.id] || '';
+        var val = ovVal || f.exampleValue || '';
+        var isFixed = (f.type === 'readonly' || !!ovVal);
+
+        h += '<td style="background:#f8fafc;border:1px solid #e2e8f0;padding:4px 8px;font-size:10px;color:#64748b;width:12%">' + lbl + '</td>';
+        if (isFixed) {
+          h += '<td style="border:1px solid #e2e8f0;padding:6px 8px;font-size:12px;font-weight:600;color:#065f46;background:#f0fdf4">' + escH(val) + '</td>';
+        } else {
+          // 수기 입력용 빈 칸 (exampleValue는 연한 색으로)
+          var display = val ? '<span style="color:#c0c0c0;font-size:11px">' + escH(val) + '</span>' : '&nbsp;';
+          h += '<td style="border:1px solid #e2e8f0;padding:6px 8px;font-size:12px;min-height:24px">' + display + '</td>';
+        }
+      }
+      h += '</tr>';
+    }
+    h += '</table></div>';
+  });
+
+  /* ── 계산식 ── */
+  if (a.calculations && a.calculations.length) {
+    h += '<div style="margin-bottom:14px;padding:10px 14px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px">';
+    h += '<div style="font-size:11px;font-weight:700;color:#6b21a8;margin-bottom:6px">계산식 (결과 산출)</div>';
+    a.calculations.forEach(function(calc) {
+      h += '<div style="font-size:11px;margin-bottom:4px">';
+      h += '<span style="color:#7c3aed;font-weight:600">' + escH(calc.label || '') + '</span>';
+      if (calc.unit) h += ' (' + escH(calc.unit) + ')';
+      h += ' = <code style="font-size:11px;background:#f5f3ff;padding:2px 5px;border-radius:3px">' + escH(calc.formulaText || calc.formula || '') + '</code>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  /* ── 결과 기록란 ── */
+  h += '<table style="width:100%;border-collapse:collapse;border:2px solid #1e3a5f;margin-top:4px">';
+  h += '<tr style="background:#1e3a5f;color:#fff">';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">분석항목</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">기준규격</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">결과(측정값)</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">판정</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">검사자</th>';
+  h += '</tr>';
+  var jr = a.judgmentRule || {};
+  h += '<tr>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;font-weight:600">' + escH(ft.representativeItem || '') + '</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;text-align:center">' + escH((jr.standardText || '') + (jr.unit ? ' ' + jr.unit : '')) + '</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:50px;text-align:center">&nbsp;</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+  h += '</tr>';
+  h += '</table>';
+
+  _printViaIframe(_buildPrintHtml(h, '🧪 시험검사기록서 — ' + escH(ft.representativeItem || ''), false));
 }
 
 </script>
