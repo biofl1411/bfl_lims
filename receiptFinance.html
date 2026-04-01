@@ -346,8 +346,8 @@ tr:hover{background:#fafbfc}
           <div class="rf-issue-desc">결제정보 입력 완료 + 미발행 건을 선택하여 건별로 홈택스 파일을 생성합니다.</div>
           <div class="rf-scroll-table"><table><thead><tr>
             <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="batchCheckAll" onchange="toggleCheckAll('batch',this.checked)"></th>
-            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th></th>
-          </tr></thead><tbody id="batchTbody"><tr><td colspan="8" class="empty-msg">발행 대기 건이 없습니다</td></tr></tbody></table></div>
+            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th>메모</th><th></th>
+          </tr></thead><tbody id="batchTbody"><tr><td colspan="9" class="empty-msg">발행 대기 건이 없습니다</td></tr></tbody></table></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <span class="selected-info" id="batchSelectedInfo">선택: 0건 / 0원</span>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -397,8 +397,8 @@ tr:hover{background:#fafbfc}
           <div class="rf-issue-desc">발행예정일이 특정 날짜로 지정된 건들만 모아서 발행합니다.</div>
           <div class="rf-scroll-table"><table><thead><tr>
             <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="specificCheckAll" onchange="toggleCheckAll('specific',this.checked)"></th>
-            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th></th>
-          </tr></thead><tbody id="specificTbody"><tr><td colspan="8" class="empty-msg">날짜를 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
+            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th>메모</th><th></th>
+          </tr></thead><tbody id="specificTbody"><tr><td colspan="9" class="empty-msg">날짜를 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <span class="selected-info" id="specificSelectedInfo">선택: 0건 / 0원</span>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -426,8 +426,8 @@ tr:hover{background:#fafbfc}
           <div id="monthDateInfo" style="font-size:11px;color:#1565c0;margin-bottom:10px;display:none"></div>
           <div class="rf-scroll-table"><table><thead><tr>
             <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="monthCheckAll" onchange="toggleCheckAll('month',this.checked)"></th>
-            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th></th>
-          </tr></thead><tbody id="monthTbody"><tr><td colspan="8" class="empty-msg">월을 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
+            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th>메모</th><th></th>
+          </tr></thead><tbody id="monthTbody"><tr><td colspan="9" class="empty-msg">월을 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <span class="selected-info" id="monthSelectedInfo">선택: 0건 / 0원</span>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -1330,6 +1330,28 @@ async function clearPayInfo(receiptId) {
   } catch(e) { showToast('❗ 초기화 실패: ' + e.message); }
 }
 
+// 발행예정일 + 메모만 저장 (발행 탭 행 내 인라인 저장)
+async function saveIssueMeta(receiptId) {
+  var dtInp = document.getElementById('idate-' + receiptId);
+  var memoInp = document.getElementById('imemo-' + receiptId);
+  if (!dtInp) return;
+  var dt = dtInp.value;
+  var memo = memoInp ? memoInp.value.trim() : '';
+  try {
+    var upd = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+    if (dt) upd.invoiceDate = dt; else upd.invoiceDate = firebase.firestore.FieldValue.delete();
+    if (memo) upd.billingMemo = memo; else upd.billingMemo = firebase.firestore.FieldValue.delete();
+    await db.collection('receipts').doc(receiptId).update(upd);
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      if (dt) _allReceipts[idx].data.invoiceDate = dt; else delete _allReceipts[idx].data.invoiceDate;
+      if (memo) _allReceipts[idx].data.billingMemo = memo; else delete _allReceipts[idx].data.billingMemo;
+    }
+    if (dtInp) dtInp.classList.toggle('filled', !!dt);
+    showToast('✅ 저장 완료');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
+}
+
 // 발행 정보 전체 해제 → 미입력으로 복귀
 async function clearBillingType(receiptId) {
   if (!confirm('등록된 발행 정보를 취소하고 미입력으로 되돌리겠습니까?')) return;
@@ -1626,8 +1648,12 @@ function renderBatchTab() {
       '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>' +
       '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>' +
       '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>' +
-      '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || '-') + '</td>' +
-      '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
+      '<td><input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="idate-' + id + '" type="date" value="' + (d.invoiceDate || '') + '" style="width:130px"></td>' +
+      '<td><input class="inline-memo" id="imemo-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:100px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px"></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-success btn-sm" onclick="saveIssueMeta(\'' + id + '\')">저장</button> ' +
+        '<button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button>' +
+      '</td>' +
       '</tr>';
   }).join('');
   updateSelectedInfo('batch');
@@ -1684,8 +1710,12 @@ function loadMonthData() {
       '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>' +
       '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>' +
       '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>' +
-      '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || lastDay) + '</td>' +
-      '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
+      '<td><input class="inline-date filled" id="idate-' + id + '" type="date" value="' + (d.invoiceDate || lastDay) + '" style="width:130px"></td>' +
+      '<td><input class="inline-memo" id="imemo-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:100px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px"></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-success btn-sm" onclick="saveIssueMeta(\'' + id + '\')">저장</button> ' +
+        '<button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button>' +
+      '</td>' +
       '</tr>';
   }).join('');
   updateSelectedInfo('month');
@@ -1715,8 +1745,12 @@ function loadSpecificDateData() {
       '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>' +
       '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>' +
       '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>' +
-      '<td style="font-size:11px;color:#5f6b7a">' + dt + '</td>' +
-      '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
+      '<td><input class="inline-date filled" id="idate-' + id + '" type="date" value="' + (d.invoiceDate || dt) + '" style="width:130px"></td>' +
+      '<td><input class="inline-memo" id="imemo-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:100px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px"></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-success btn-sm" onclick="saveIssueMeta(\'' + id + '\')">저장</button> ' +
+        '<button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button>' +
+      '</td>' +
       '</tr>';
   }).join('');
   updateSelectedInfo('specific');
