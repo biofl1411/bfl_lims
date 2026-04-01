@@ -938,6 +938,7 @@ function renderRightPanel() {
   html += '<button class="btn btn-outline" onclick="cancelEdit()">취소</button>';
   html += '<button class="btn btn-primary" id="save-btn" onclick="saveResults()">💾 Firestore 저장</button>';
   html += '<button class="btn btn-success" onclick="openMfdsModal()">🏛️ 식약처 전송</button>';
+  html += '<button class="btn btn-outline" onclick="printTestResults()" style="background:#f0f9ff;color:#0369a1;border-color:#7dd3fc">🖨️ 인쇄</button>';
   html += '<label style="margin-left:8px;display:flex;align-items:center;gap:4px;font-size:12px;color:#999;cursor:pointer">';
   html += '<input type="checkbox" id="mfds-toggle" ' + (MFDS_ENABLED ? 'checked' : '') + ' onchange="toggleMfdsEnabled()">';
   html += '식약처 전송 활성화</label>';
@@ -2723,6 +2724,67 @@ function cancelEdit() {
   document.querySelectorAll('.receipt-row').forEach(function(el) { el.classList.remove('active'); });
 }
 
+
+/* ══════════════════════════════════════
+   시험 결과 인쇄
+   ══════════════════════════════════════ */
+function printTestResults() {
+  var panel = document.getElementById('right-panel');
+  if (!panel || panel.querySelector('.empty-state') || panel.innerHTML.trim() === '') {
+    alert('출력할 결과가 없습니다. 접수건을 선택하세요.'); return;
+  }
+
+  // input 값 clone에 동기화
+  var clone = panel.cloneNode(true);
+  var live = panel.querySelectorAll('input, textarea, select');
+  var cl   = clone.querySelectorAll('input, textarea, select');
+  live.forEach(function(el, i) {
+    if (!cl[i]) return;
+    if (el.type === 'checkbox') { cl[i].checked = el.checked; cl[i].setAttribute('checked', el.checked ? 'checked' : ''); }
+    else cl[i].value = el.value;
+  });
+  // 편집용 UI 제거
+  clone.querySelectorAll('button, .btn, .btn-group, .override-select, .quick-btn, .idf-toggle, .attach-btn').forEach(function(b) { b.remove(); });
+  // 숨김 행(item-detail-row)은 열린 것만 표시
+  clone.querySelectorAll('.item-detail-row[style*="display:none"]').forEach(function(r) { r.remove(); });
+
+  var win = window.open('', '_blank', 'width=1000,height=800');
+  win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
+    + '<title>시험결과</title><style>'
+    + '@page{margin:12mm 18mm;size:A4 landscape}'
+    + '*{box-sizing:border-box}'
+    + 'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:11px;color:#1a2332;margin:0;padding:10px}'
+    + '.print-hd{text-align:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1e3a5f}'
+    + '.print-hd h1{font-size:16px;margin:0 0 3px;color:#1e3a5f}'
+    + '.print-hd p{font-size:10px;color:#888;margin:0}'
+    + 'input[type=text],input[type=number],input[type=date],textarea{'
+    +   'border:none!important;background:transparent!important;padding:0!important;'
+    +   'outline:none;font-size:inherit;font-family:inherit;color:inherit;width:100%;resize:none}'
+    + 'select{border:none;background:transparent;font-size:inherit;font-family:inherit;color:inherit}'
+    + 'input[type=checkbox]{width:12px;height:12px;pointer-events:none}'
+    + 'button,.btn,.btn-group,.override-select,.quick-btn,.idf-toggle,.attach-btn{display:none!important}'
+    + '.section{margin-bottom:10px}'
+    + '.section-header{background:#1e3a5f;color:#fff;padding:6px 10px;font-weight:600;font-size:12px;border-radius:4px 4px 0 0}'
+    + '.section-content{border:1px solid #e2e6ed;border-top:none;padding:8px;border-radius:0 0 4px 4px}'
+    + '.section-content:not(.active){display:block!important}'  /* 접힌 섹션도 펼쳐서 인쇄 */
+    + 'table{border-collapse:collapse;width:100%;font-size:11px}'
+    + 'td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:middle}'
+    + 'th{background:#f0f4ff;color:#1e3a5f;font-weight:600;text-align:center}'
+    + '.result-input{font-weight:700;color:#059669}'
+    + '.overall-row{display:flex;align-items:center;gap:8px;padding:8px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;margin-top:8px}'
+    + '.overall-badge{padding:4px 12px;border-radius:6px;font-weight:700;font-size:14px}'
+    + '.overall-badge.pass{background:#dcfce7;color:#166534}'
+    + '.overall-badge.fail{background:#fee2e2;color:#991b1b}'
+    + 'label{font-size:10px;color:#666;display:block;margin-bottom:1px}'
+    + '.empty-state{display:none}'
+    + '</style></head><body>'
+    + '<div class="print-hd"><h1>🔬 시험 결과</h1>'
+    + '<p>출력일시: ' + new Date().toLocaleString('ko-KR') + '</p></div>'
+    + clone.innerHTML
+    + '<script>window.onload=function(){window.print();window.close();}<\/script>'
+    + '</body></html>');
+  win.document.close();
+}
 
 function handleUrlParams() {
   var params = new URLSearchParams(window.location.search);

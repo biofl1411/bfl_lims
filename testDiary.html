@@ -246,6 +246,7 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
             시험일지 양식
             <div style="display:flex;gap:4px">
               <button class="btn btn-sm btn-outline" onclick="loadDiaryDetail()" title="식약처 일지 조회">조회</button>
+              <button class="btn btn-sm btn-outline" onclick="printDiaryTemplate()" title="시험일지 인쇄" style="background:#f0f9ff;color:#0369a1;border-color:#7dd3fc">🖨️ 인쇄</button>
               <button class="btn btn-sm btn-primary" onclick="saveDiaryTemplate()" title="양식 저장">저장</button>
             </div>
           </div>
@@ -3130,6 +3131,66 @@ function _mcCalcAll(nCount, rule) {
     + (over300Count > 0 ? ' | 300초과(밀집평판법) '+over300Count+'건' : '')
     + (failCount > 0 ? ' | M초과 '+failCount+'건' : '')
     + (warnCount > c ? ' | m초과 '+warnCount+'건>c('+c+')' : '');
+}
+
+/* ══════════════════════════════════════
+   시험일지 인쇄
+   ══════════════════════════════════════ */
+function printDiaryTemplate() {
+  var panel = document.getElementById('diary-panel');
+  if (!panel || panel.querySelector('.empty-state')) {
+    alert('선택된 시험일지가 없습니다.'); return;
+  }
+
+  // 현재 input 값 clone에 동기화
+  var clone = panel.cloneNode(true);
+  var live = panel.querySelectorAll('input, textarea, select');
+  var cl   = clone.querySelectorAll('input, textarea, select');
+  live.forEach(function(el, i) {
+    if (!cl[i]) return;
+    if (el.type === 'checkbox') cl[i].checked = el.checked;
+    else cl[i].value = el.value;
+  });
+  // details open 상태 동기화
+  panel.querySelectorAll('details').forEach(function(d, i) {
+    var cd = clone.querySelectorAll('details')[i];
+    if (cd) cd.open = d.open;
+  });
+  // 버튼 제거
+  clone.querySelectorAll('button, .btn').forEach(function(b) { b.remove(); });
+
+  var itemName = (document.getElementById('diary-panel').querySelector('[id*="testItem"], .dp-receipt-no') || {}).textContent || '시험일지';
+
+  var win = window.open('', '_blank', 'width=860,height=720');
+  win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
+    + '<title>시험일지</title><style>'
+    + '@page{margin:15mm 20mm;size:A4 portrait}'
+    + '*{box-sizing:border-box}'
+    + 'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;color:#1a2332;margin:0;padding:12px}'
+    + '.print-hd{text-align:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1e3a5f}'
+    + '.print-hd h1{font-size:17px;margin:0 0 4px;color:#1e3a5f}'
+    + '.print-hd p{font-size:10px;color:#888;margin:0}'
+    + 'input[type=text],input[type=number],input[type=date],textarea{'
+    +   'border:none!important;background:transparent!important;padding:0!important;'
+    +   'outline:none;font-size:inherit;font-family:inherit;color:inherit;width:100%;resize:none}'
+    + 'select{border:none;background:transparent;font-size:inherit;font-family:inherit;color:inherit}'
+    + 'button,.btn{display:none!important}'
+    + 'details:not([open]){display:none}'
+    + 'details{border:1px solid #e2e6ed;border-radius:6px;overflow:hidden;margin-bottom:8px}'
+    + 'summary{padding:7px 12px;font-weight:600;font-size:13px;list-style:none;cursor:default}'
+    + 'summary::-webkit-details-marker{display:none}'
+    + 'table{border-collapse:collapse;width:100%;font-size:11px;margin-top:4px}'
+    + 'td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:middle}'
+    + 'th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}'
+    + '.empty-state{display:none}'
+    + 'label{font-size:10px;color:#666;display:block;margin-bottom:2px}'
+    + '</style></head><body>'
+    + '<div class="print-hd"><h1>🧪 시험일지</h1>'
+    + '<p>출력일시: ' + new Date().toLocaleString('ko-KR') + '</p></div>'
+    + clone.innerHTML
+    + '<script>window.onload=function(){window.print();window.close();}<\/script>'
+    + '</body></html>');
+  win.document.close();
 }
 
 </script>
