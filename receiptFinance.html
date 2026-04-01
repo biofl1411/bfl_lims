@@ -346,8 +346,8 @@ tr:hover{background:#fafbfc}
           <div class="rf-issue-desc">결제정보 입력 완료 + 미발행 건을 선택하여 건별로 홈택스 파일을 생성합니다.</div>
           <div class="rf-scroll-table"><table><thead><tr>
             <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="batchCheckAll" onchange="toggleCheckAll('batch',this.checked)"></th>
-            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th>
-          </tr></thead><tbody id="batchTbody"><tr><td colspan="7" class="empty-msg">발행 대기 건이 없습니다</td></tr></tbody></table></div>
+            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th></th>
+          </tr></thead><tbody id="batchTbody"><tr><td colspan="8" class="empty-msg">발행 대기 건이 없습니다</td></tr></tbody></table></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <span class="selected-info" id="batchSelectedInfo">선택: 0건 / 0원</span>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -397,8 +397,8 @@ tr:hover{background:#fafbfc}
           <div class="rf-issue-desc">발행예정일이 특정 날짜로 지정된 건들만 모아서 발행합니다.</div>
           <div class="rf-scroll-table"><table><thead><tr>
             <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="specificCheckAll" onchange="toggleCheckAll('specific',this.checked)"></th>
-            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th>
-          </tr></thead><tbody id="specificTbody"><tr><td colspan="7" class="empty-msg">날짜를 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
+            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th></th>
+          </tr></thead><tbody id="specificTbody"><tr><td colspan="8" class="empty-msg">날짜를 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <span class="selected-info" id="specificSelectedInfo">선택: 0건 / 0원</span>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -426,8 +426,8 @@ tr:hover{background:#fafbfc}
           <div id="monthDateInfo" style="font-size:11px;color:#1565c0;margin-bottom:10px;display:none"></div>
           <div class="rf-scroll-table"><table><thead><tr>
             <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="monthCheckAll" onchange="toggleCheckAll('month',this.checked)"></th>
-            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th>
-          </tr></thead><tbody id="monthTbody"><tr><td colspan="7" class="empty-msg">월을 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
+            <th>접수번호</th><th>업체명 (발행대상)</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th></th>
+          </tr></thead><tbody id="monthTbody"><tr><td colspan="8" class="empty-msg">월을 선택하고 [조회]를 클릭하세요</td></tr></tbody></table></div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <span class="selected-info" id="monthSelectedInfo">선택: 0건 / 0원</span>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -1330,6 +1330,30 @@ async function clearPayInfo(receiptId) {
   } catch(e) { showToast('❗ 초기화 실패: ' + e.message); }
 }
 
+// 발행유형만 해제 → 미지정으로 이동 (결제방법/계산서유형은 유지)
+async function clearBillingType(receiptId) {
+  if (!confirm('발행유형 지정을 취소하고 미지정으로 되돌리겠습니까?')) return;
+  try {
+    await db.collection('receipts').doc(receiptId).update({
+      billingType: firebase.firestore.FieldValue.delete(),
+      mergedGroupId: firebase.firestore.FieldValue.delete(),
+      invoiceDate: firebase.firestore.FieldValue.delete(),
+      billingMemo: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      delete _allReceipts[idx].data.billingType;
+      delete _allReceipts[idx].data.mergedGroupId;
+      delete _allReceipts[idx].data.invoiceDate;
+      delete _allReceipts[idx].data.billingMemo;
+    }
+    renderKpiCards();
+    doSearch();
+    showToast('✅ 발행유형 취소 완료 — 미지정으로 이동됨');
+  } catch(e) { showToast('❗ 실패: ' + e.message); }
+}
+
 /* =====================================================
    탭2: 전체 렌더링
 ===================================================== */
@@ -1494,7 +1518,7 @@ function renderMergedTab() {
     h += '</div><div class="merged-group-body">';
     h += '<div class="rf-scroll-table"><table><thead><tr>';
     h += '<th class="text-center" style="width:32px"></th>';
-    h += '<th>접수번호</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th>메모</th>';
+    h += '<th>접수번호</th><th>계산서유형</th><th class="text-right">공급가액</th><th class="text-right">세액</th><th>발행예정일</th><th>메모</th><th></th>';
     h += '</tr></thead><tbody>';
     items.forEach(function(r) {
       var d = r.data;
@@ -1507,6 +1531,7 @@ function renderMergedTab() {
       h += '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>';
       h += '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || '-') + '</td>';
       h += '<td style="font-size:11px;color:#8892a4">' + escHtml(d.billingMemo || '') + '</td>';
+      h += '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + r.id + '\')">✕ 취소</button></td>';
       h += '</tr>';
     });
     h += '</tbody></table></div></div></div>';
@@ -1567,7 +1592,10 @@ function renderUnsetTab() {
       '<td class="text-right" style="font-size:11px">' + total.toLocaleString() + '</td>' +
       '<td>' + getPayMethodTag(d.payMethod || '') + '</td>' +
       '<td>' + getInvoiceTypeTag(d.invoiceType || '') + '</td>' +
-      '<td><button class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px" onclick="switchTab(\'uninput\')">발행유형 지정</button></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px" onclick="switchTab(\'uninput\')">발행유형 지정</button> ' +
+        '<button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearPayInfo(\'' + id + '\')">🗑️ 초기화</button>' +
+      '</td>' +
       '</tr>';
   }).join('');
 }
@@ -1597,6 +1625,7 @@ function renderBatchTab() {
       '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>' +
       '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>' +
       '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || '-') + '</td>' +
+      '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
       '</tr>';
   }).join('');
   updateSelectedInfo('batch');
@@ -1654,6 +1683,7 @@ function loadMonthData() {
       '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>' +
       '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>' +
       '<td style="font-size:11px;color:#5f6b7a">' + (d.invoiceDate || lastDay) + '</td>' +
+      '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
       '</tr>';
   }).join('');
   updateSelectedInfo('month');
@@ -1684,6 +1714,7 @@ function loadSpecificDateData() {
       '<td class="text-right" style="font-size:11px">' + supply.toLocaleString() + '</td>' +
       '<td class="text-right" style="font-size:11px">' + taxAmt.toLocaleString() + '</td>' +
       '<td style="font-size:11px;color:#5f6b7a">' + dt + '</td>' +
+      '<td><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
       '</tr>';
   }).join('');
   updateSelectedInfo('specific');
