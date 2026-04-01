@@ -458,6 +458,26 @@ tr:hover{background:#fafbfc}
   </div><!-- /content -->
 </div><!-- /main -->
 
+<!-- 홈택스 파일 미리보기 모달 -->
+<div class="overlay" id="taxPreviewOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:1400px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <span style="font-size:16px;font-weight:700">📋 홈택스 업로드 파일 미리보기</span>
+        <span style="font-size:12px;color:#6b7280;margin-left:12px" id="taxPreviewTitle"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-warning btn-sm" id="taxPreviewDownloadBtn">📥 이 데이터로 다운로드</button>
+        <button onclick="closeTaxPreview()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">✕</button>
+      </div>
+    </div>
+    <div style="padding:16px 20px;overflow-x:auto">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px">⬅️ 좌우 스크롤 · 빨간색 = 필수항목 · 세로 2칸 병합된 열은 한 칸으로 표시</div>
+      <div id="taxPreviewTableWrap"></div>
+    </div>
+  </div>
+</div>
+
 <!-- 합산 그룹 선택 모달 -->
 <div class="overlay" id="mergeSelectOverlay">
   <div class="modal" style="max-width:520px">
@@ -1220,6 +1240,34 @@ async function confirmMergeSelect() {
     });
 
     await batch.commit();
+
+    // 그룹 확정 직후 — payMethod/invoiceType 동기화
+    var allMembers = _allReceipts.filter(function(x) { return x.data.mergedGroupId === groupId; });
+    var pmLeader = allMembers.find(function(x) { return x.data.payMethod; });
+    if (pmLeader) {
+      var syncIt = pmLeader.data.invoiceType;
+      if (!syncIt) {
+        if (pmLeader.data.payMethod === '카드') syncIt = '카드전표';
+        else if (pmLeader.data.payMethod === '온라인입금') syncIt = '세금계산서';
+        else if (pmLeader.data.payMethod === '현금') syncIt = '현금영수증';
+        else syncIt = '세금계산서';
+      }
+      var syncBatch = db.batch();
+      var syncCnt = 0;
+      allMembers.forEach(function(x) {
+        if (!x.data.payMethod || !x.data.invoiceType) {
+          x.data.payMethod = pmLeader.data.payMethod;
+          x.data.invoiceType = syncIt;
+          syncBatch.update(db.collection('receipts').doc(x.id), {
+            payMethod: pmLeader.data.payMethod,
+            invoiceType: syncIt,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          syncCnt++;
+        }
+      });
+      if (syncCnt > 0) await syncBatch.commit();
+    }
 
     // 인라인 행 셀렉트 갱신
     var sel = document.getElementById('bt-' + id);
