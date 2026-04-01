@@ -1614,6 +1614,9 @@ function showReviewPanel(data) {
     microSec.style.display = 'none';
   }
 
+  // ── 첨부파일/사진 필드 설정 UI ──
+  _renderAttachmentConfig(data.attachmentFields || []);
+
   // 텍스트 비교 그리드 렌더
   renderTextCompare();
 
@@ -1654,6 +1657,86 @@ async function matchSampleTypeToMfds() {
   } catch(e) {
     console.warn('[품목코드 매칭] 실패:', e.message);
   }
+}
+
+/* ═══════════════════════════════════════════════
+   첨부파일/사진 필드 설정 UI
+   ═══════════════════════════════════════════════ */
+function _renderAttachmentConfig(detectedFields) {
+  var wrap = document.getElementById('rv-attach-config');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'rv-attach-config';
+    wrap.style.cssText = 'margin-top:14px;border:1.5px solid #d1fae5;border-radius:9px;overflow:hidden';
+    var tmArea = document.getElementById('rv-test-method');
+    var ref = tmArea || document.getElementById('rv-summary');
+    if (ref && ref.parentNode) ref.parentNode.insertBefore(wrap, ref.nextSibling);
+  }
+
+  // AI가 감지한 필드 초기값
+  var fields = detectedFields && detectedFields.length
+    ? detectedFields.map(function(f, i) {
+        return { id: f.id || ('attach_' + (i+1)), label: f.label || ('첨부 '+(i+1)), accept: f.accept || 'image/*', showPreview: f.showPreview !== false };
+      })
+    : [];
+
+  wrap._fields = fields;
+
+  function rebuild() {
+    var hasAttach = document.getElementById('rv-attach-toggle') && document.getElementById('rv-attach-toggle').checked;
+    _renderAttachRows(wrap, hasAttach);
+  }
+
+  var aiDetected = detectedFields && detectedFields.length > 0;
+  wrap.innerHTML = '<div style="background:#059669;color:#fff;font-size:12px;font-weight:700;padding:7px 13px;display:flex;align-items:center;gap:10px">'
+    + '📎 첨부파일 / 사진 필드 설정'
+    + (aiDetected ? '<span style="font-size:10px;background:rgba(255,255,255,.25);padding:1px 7px;border-radius:8px">AI 감지 ' + detectedFields.length + '건</span>' : '')
+    + '</div>'
+    + '<div style="padding:10px 14px;background:#f0fdf4">'
+    + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#065f46">'
+    + '<input type="checkbox" id="rv-attach-toggle"' + (aiDetected || fields.length ? ' checked' : '') + ' onchange="_renderAttachRows(document.getElementById(\'rv-attach-config\'),this.checked)" style="width:16px;height:16px">'
+    + '이 기록서에 사진/첨부파일 필드가 필요합니다</label>'
+    + '</div>'
+    + '<div id="rv-attach-rows"></div>';
+
+  wrap._fields = fields;
+  _renderAttachRows(wrap, aiDetected || fields.length > 0);
+}
+
+function _renderAttachRows(wrap, show) {
+  var container = document.getElementById('rv-attach-rows');
+  if (!container) return;
+  if (!show) { container.innerHTML = ''; return; }
+
+  var fields = wrap._fields || [];
+  var html = '<div style="padding:10px 14px 4px;border-top:1px solid #d1fae5">';
+
+  fields.forEach(function(f, i) {
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;background:#fff;border:1px solid #a7f3d0;border-radius:7px">';
+    html += '<span style="font-size:11px;color:#065f46;font-weight:700;min-width:20px">#' + (i+1) + '</span>';
+    html += '<input type="text" value="' + (f.label||'').replace(/"/g,'&quot;') + '" placeholder="필드 라벨 (예: 검체 사진)" data-ai="' + i + '" oninput="(document.getElementById(\'rv-attach-config\')._fields[' + i + '].label=this.value)" style="flex:1;padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">';
+    html += '<select data-ai-accept="' + i + '" onchange="(document.getElementById(\'rv-attach-config\')._fields[' + i + '].accept=this.value)" style="padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">'
+      + '<option value="image/*"' + (f.accept==='image/*'?' selected':'') + '>이미지 파일</option>'
+      + '<option value="*"' + (f.accept==='*'?' selected':'') + '>모든 파일</option>'
+      + '</select>';
+    html += '<select data-ai-preview="' + i + '" onchange="(document.getElementById(\'rv-attach-config\')._fields[' + i + '].showPreview=this.value===\'true\')" style="padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">'
+      + '<option value="true"' + (f.showPreview?' selected':'') + '>이미지 미리보기</option>'
+      + '<option value="false"' + (!f.showPreview?' selected':'') + '>파일명만 표시</option>'
+      + '</select>';
+    html += '<button onclick="var w=document.getElementById(\'rv-attach-config\');w._fields.splice(' + i + ',1);_renderAttachRows(w,true)" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:11px;cursor:pointer">✕</button>';
+    html += '</div>';
+  });
+
+  html += '<button onclick="var w=document.getElementById(\'rv-attach-config\');w._fields.push({id:\'attach_\'+(w._fields.length+1),label:\'\',accept:\'image/*\',showPreview:true});_renderAttachRows(w,true)" style="padding:5px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:10px">+ 필드 추가</button>';
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function _collectAttachmentConfig() {
+  var wrap = document.getElementById('rv-attach-config');
+  var toggle = document.getElementById('rv-attach-toggle');
+  if (!wrap || !toggle || !toggle.checked) return [];
+  return (wrap._fields || []).filter(function(f) { return f.label; });
 }
 
 function renderTextCompare() {
@@ -1889,6 +1972,10 @@ async function doConfirmSave() {
     // 검토 패널에서 수정한 검사방법 반영
     var tmTextEl = document.getElementById('rv-test-method-text');
     if (tmTextEl) _lastAnalyzed.testMethod = tmTextEl.value.trim() || null;
+
+    // 첨부파일 설정 반영
+    var attachFields = _collectAttachmentConfig();
+    _lastAnalyzed.attachmentFields = attachFields.length ? attachFields : [];
 
     var row = {
       docId: docId,
@@ -2341,8 +2428,16 @@ async function callClaude(textContext) {
     + '  },\n'
     + '  "equipment": ["장비목록"],\n'
     + '  "reagents": ["시약목록"],\n'
-    + '  "testMethod": "검사방법/시험절차 원문 전체 (번호·단계·조건 포함, 없으면 null)"\n'
+    + '  "testMethod": "검사방법/시험절차 원문 전체 (번호·단계·조건 포함, 없으면 null)",\n'
+    + '  "attachmentFields": [\n'
+    + '    { "id": "photo1", "label": "사진 또는 첨부파일 라벨 (PDF 원문)", "accept": "image/*또는*", "showPreview": true }\n'
+    + '  ]\n'
     + '}\n\n'
+    + '## attachmentFields 작성 규칙\n'
+    + '- PDF 양식에 사진 첨부, 이미지 첨부, 사진 파일, 스캔본 첨부 등 파일 첨부가 필요한 칸이 있으면 추출하세요.\n'
+    + '- accept: 사진/이미지인 경우 "image/*", 모든 파일이면 "*"\n'
+    + '- showPreview: 이미지인 경우 true, 일반 문서인 경우 false\n'
+    + '- 해당 필드가 없으면 빈 배열 []로 설정하세요.\n\n'
     + '## testMethod 작성 규칙\n'
     + '- PDF에 "검사방법", "시험방법", "시험절차", "분析방법", "2. 검사방법" 등의 섹션이 있으면 해당 내용 전체를 그대로 문자열로 기록하세요.\n'
     + '- 번호 목록은 "1. ...\n2. ..." 형태로 줄바꿈 포함하여 원문 그대로 유지하세요.\n'
