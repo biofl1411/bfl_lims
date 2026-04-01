@@ -1166,6 +1166,150 @@ function tmSetFontSize(size) {
   document.execCommand('fontSize', false, size);
 }
 
+/* ── 셀 위치 계산 헬퍼 (colspan/rowspan 고려) ── */
+function _tmGetCellColIndex(cell) {
+  var row = cell.parentElement;
+  var idx = 0;
+  for (var i = 0; i < row.cells.length; i++) {
+    if (row.cells[i] === cell) return idx;
+    idx += parseInt(row.cells[i].colSpan || 1);
+  }
+  return idx;
+}
+function _tmGetCellAtCol(row, colIndex) {
+  var idx = 0;
+  for (var i = 0; i < row.cells.length; i++) {
+    if (idx === colIndex) return row.cells[i];
+    idx += parseInt(row.cells[i].colSpan || 1);
+    if (idx > colIndex) return null; // colIndex가 병합셀 내부
+  }
+  return null;
+}
+
+/* ── 셀 합치기 패널 ── */
+function tmShowMergePanel(btn) {
+  // 기존 패널 제거
+  var old = document.getElementById('tm-merge-panel');
+  if (old) { old.parentNode.removeChild(old); return; }
+  var panel = document.createElement('div');
+  panel.id = 'tm-merge-panel';
+  panel.style.cssText = 'position:absolute;top:28px;left:0;background:#fff;border:1.5px solid #0369a1;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:99999;padding:10px 14px;min-width:200px;font-size:12px;color:#1e293b';
+  panel.innerHTML =
+    '<div style="font-weight:700;margin-bottom:8px;color:#0369a1">⊡ 셀 합치기</div>'
+    + '<div style="margin-bottom:6px"><label>방향: </label>'
+    + '<select id="tm-merge-dir" style="padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px">'
+    + '<option value="r">→ 오른쪽 (가로 합치기)</option>'
+    + '<option value="d">↓ 아래 (세로 합치기)</option>'
+    + '</select></div>'
+    + '<div style="margin-bottom:10px"><label>칸 수 (현재 포함): </label>'
+    + '<input id="tm-merge-n" type="number" value="2" min="2" max="10" style="width:52px;padding:2px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px"></div>'
+    + '<div style="display:flex;gap:6px;justify-content:flex-end">'
+    + '<button onclick="var p=document.getElementById(\'tm-merge-panel\');p&&p.parentNode.removeChild(p)" style="padding:3px 12px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">취소</button>'
+    + '<button onclick="tmDoMerge()" style="padding:3px 12px;border:none;border-radius:5px;background:#0369a1;color:#fff;cursor:pointer;font-size:12px;font-weight:600">합치기</button>'
+    + '</div>';
+  btn.style.position = 'relative';
+  btn.appendChild(panel);
+  // 바깥 클릭 닫기
+  setTimeout(function(){
+    document.addEventListener('mousedown', function _close(e){
+      if (!panel.contains(e.target) && e.target !== btn) {
+        var p = document.getElementById('tm-merge-panel');
+        if (p) p.parentNode.removeChild(p);
+        document.removeEventListener('mousedown', _close);
+      }
+    });
+  }, 10);
+}
+
+function tmDoMerge() {
+  var dir = (document.getElementById('tm-merge-dir') || {}).value || 'r';
+  var n = parseInt((document.getElementById('tm-merge-n') || {}).value || '2');
+  var panel = document.getElementById('tm-merge-panel');
+  if (panel) panel.parentNode.removeChild(panel);
+  if (isNaN(n) || n < 2) return;
+
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('합칠 셀을 먼저 클릭하세요', 'warning'); return; }
+
+  if (dir === 'r') {
+    /* 가로 합치기 (colspan) */
+    var row = cell.parentElement;
+    var arrIdx = Array.from(row.cells).indexOf(cell);
+    var toRemove = [];
+    for (var i = 1; i < n; i++) {
+      if (row.cells[arrIdx + i]) toRemove.push(row.cells[arrIdx + i]);
+    }
+    if (toRemove.length < n - 1) { showToast('오른쪽에 셀이 부족합니다', 'warning'); return; }
+    toRemove.forEach(function(c) { row.removeChild(c); });
+    cell.colSpan = (parseInt(cell.colSpan || 1)) + toRemove.length;
+    cell.contentEditable = 'true';
+
+  } else {
+    /* 세로 합치기 (rowspan) */
+    var tbl = _tmGetActiveTable();
+    if (!tbl) return;
+    var allRows = Array.from(tbl.rows);
+    var rowIdx = allRows.indexOf(cell.parentElement);
+    var colIdx = _tmGetCellColIndex(cell);
+    var toRemove2 = [];
+    for (var r = 1; r < n; r++) {
+      var tRow = allRows[rowIdx + r];
+      if (!tRow) break;
+      var tCell = _tmGetCellAtCol(tRow, colIdx);
+      if (tCell) toRemove2.push(tCell);
+    }
+    if (toRemove2.length < n - 1) { showToast('아래에 셀이 부족합니다', 'warning'); return; }
+    toRemove2.forEach(function(c) { c.parentElement.removeChild(c); });
+    cell.rowSpan = (parseInt(cell.rowSpan || 1)) + toRemove2.length;
+    cell.contentEditable = 'true';
+  }
+  showToast('셀 합치기 완료', 'success');
+}
+
+function tmSplitCell() {
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('나눌 셀을 클릭하세요', 'warning'); return; }
+  var colspan = parseInt(cell.colSpan || 1);
+  var rowspan = parseInt(cell.rowSpan || 1);
+  if (colspan <= 1 && rowspan <= 1) { showToast('이미 단일 셀입니다', 'warning'); return; }
+
+  var row = cell.parentElement;
+  var isHdr = cell.tagName === 'TH';
+  var arrIdx = Array.from(row.cells).indexOf(cell);
+  var colIdx = _tmGetCellColIndex(cell);
+
+  /* colspan 분리 */
+  if (colspan > 1) {
+    cell.colSpan = 1;
+    for (var i = 1; i < colspan; i++) {
+      var nc = document.createElement(isHdr ? 'th' : 'td');
+      nc.innerHTML = '&nbsp;';
+      nc.contentEditable = 'true';
+      var refEl = row.cells[arrIdx + i] || null;
+      row.insertBefore(nc, refEl);
+    }
+  }
+
+  /* rowspan 분리 */
+  if (rowspan > 1) {
+    var tbl2 = _tmGetActiveTable();
+    if (!tbl2) return;
+    var allRows2 = Array.from(tbl2.rows);
+    var rowIdx2 = allRows2.indexOf(row);
+    cell.rowSpan = 1;
+    for (var r2 = 1; r2 < rowspan; r2++) {
+      var tRow2 = allRows2[rowIdx2 + r2];
+      if (!tRow2) continue;
+      var nc2 = document.createElement(isHdr ? 'th' : 'td');
+      nc2.innerHTML = '&nbsp;';
+      nc2.contentEditable = 'true';
+      var refCell2 = _tmGetCellAtCol(tRow2, colIdx);
+      tRow2.insertBefore(nc2, refCell2 || null);
+    }
+  }
+  showToast('셀 나누기 완료', 'success');
+}
+
 function tmInsertBlock(tag) {
   document.getElementById('tm-editor').focus();
   document.execCommand('formatBlock', false, tag);
@@ -3710,6 +3854,10 @@ function _printFormTemplateDiary(ft) {
       <button onmousedown="event.preventDefault();tmTableAddCol()" title="열 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 열</button>
       <button onmousedown="event.preventDefault();tmTableDelRow()" title="행 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 행</button>
       <button onmousedown="event.preventDefault();tmTableDelCol()" title="열 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 열</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 셀 합치기/나누기 -->
+      <button onmousedown="event.preventDefault();tmShowMergePanel(this)" title="셀 합치기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600;position:relative">⊡ 셀 합치기</button>
+      <button onmousedown="event.preventDefault();tmSplitCell()" title="셀 나누기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600">⊟ 셀 나누기</button>
       <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
       <button onmousedown="event.preventDefault();tmInsertHr()" title="구분선" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">— 구분선</button>
     </div>
