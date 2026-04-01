@@ -1132,33 +1132,39 @@ function tmInsertTable(btn) {
 function tmInitTableResize(tbl) {
   var headerRow = tbl.querySelector('thead tr') || tbl.rows[0];
   if (!headerRow) return;
+  // 헤더 셀 픽셀 너비 고정
   Array.from(headerRow.cells).forEach(function(th) {
-    // 현재 렌더링 너비를 픽셀로 고정
     var curW = th.getBoundingClientRect().width;
     if (curW > 0) th.style.width = curW + 'px';
-    th.style.position = 'relative';
-    // 이미 핸들 있으면 스킵
-    if (th.querySelector('.tm-col-resize-handle')) return;
-    var handle = document.createElement('div');
-    handle.className = 'tm-col-resize-handle';
-    handle.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var startX = e.clientX;
-      var startW = th.getBoundingClientRect().width;
-      var colIdx = th.cellIndex;
-      function onMove(ev) {
-        var newW = Math.max(30, startW + (ev.clientX - startX));
-        th.style.width = newW + 'px';
-      }
-      function onUp() {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      }
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+  });
+  // 모든 셀(th/td)에 핸들 추가
+  Array.from(tbl.rows).forEach(function(row) {
+    Array.from(row.cells).forEach(function(cell) {
+      cell.style.position = 'relative';
+      if (cell.querySelector('.tm-col-resize-handle')) return;
+      var handle = document.createElement('div');
+      handle.className = 'tm-col-resize-handle';
+      handle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var startX = e.clientX;
+        // 헤더에서 같은 열 인덱스의 th를 찾아 너비 기준 사용
+        var colIdx = cell.cellIndex;
+        var refTh = headerRow.cells[colIdx] || cell;
+        var startW = refTh.getBoundingClientRect().width;
+        function onMove(ev) {
+          var newW = Math.max(30, startW + (ev.clientX - startX));
+          refTh.style.width = newW + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+      cell.appendChild(handle);
     });
-    th.appendChild(handle);
   });
 }
 function tmInitAllTablesResize() {
@@ -1229,8 +1235,8 @@ function tmTableAddCol() {
       newCell.contentEditable = 'true';
     }
   });
-  // 리사이즈 핸들 재초기화 (헤더에 새 핸들 추가)
-  tbl.querySelector('thead tr,.tm-col-resize-handle') && tbl.querySelectorAll('.tm-col-resize-handle').forEach(function(h){ h.parentNode.removeChild(h); });
+  // 리사이즈 핸들 재초기화
+  tbl.querySelectorAll('.tm-col-resize-handle').forEach(function(h){ h.parentNode.removeChild(h); });
   tmInitTableResize(tbl);
 }
 
