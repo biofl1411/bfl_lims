@@ -1044,8 +1044,8 @@ function renderUninputTab() {
     var btSel = buildBillingTypeSelect(id, d.billingType);
     var dtToday = new Date().toISOString().slice(0,10);
     var dtVal = d.invoiceDate || dtToday;
-    var dtInp = '<input class="inline-date filled" id="id-' + id + '" type="date" value="' + dtVal + '">';
-    var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px">';
+    var dtInp = '<input class="inline-date filled" id="id-' + id + '" type="date" value="' + dtVal + '" onchange="autoSaveRow(\'' + id + '\')">';
+    var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
     // 제품/시료명: samples[0].productName > d.productName 순
     var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
     // 검사목적: testPurpose > purpose
@@ -1065,8 +1065,7 @@ function renderUninputTab() {
       '<td>' + dtInp + '</td>' +
       '<td>' + memoInp + '</td>' +
       '<td>' + altBtn + '</td>' +
-      '<td style="white-space:nowrap"><button class="btn btn-success btn-sm" onclick="saveRow(\'' + id + '\')">저장</button>' +
-      '<button class="btn btn-secondary btn-sm" onclick="resetRow(\'' + id + '\')" style="margin-left:4px">취소</button></td>' +
+      '<td style="white-space:nowrap" id="save-state-' + id + '"><button class="btn btn-secondary btn-sm" onclick="resetRow(\'' + id + '\')">취소</button></td>' +
       '</tr>';
   }).join('');
 }
@@ -1096,6 +1095,8 @@ function onBillingTypeChange(id) {
     openMergeSelectModal(id);
     return;
   }
+  // 자동저장
+  autoSaveRow(id);
 }
 
 var _mergeSelectReceiptId = null;
@@ -1229,7 +1230,7 @@ async function confirmMergeSelect() {
 
 function buildInvoiceTypeSelect(id, cur) {
   var opts = [['','선택'],['세금계산서','세금계산서'],['현금영수증','현금영수증'],['카드전표','카드전표'],['카드+계산서','카드+계산서'],['없음','없음']];
-  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="it-' + id + '">';
+  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="it-' + id + '" onchange="autoSaveRow(\'' + id + '\')">';
   opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
   html += '</select>';
   return html;
@@ -1273,8 +1274,9 @@ function onPayMethodChange(receiptId) {
         if (xIt) { xIt.value = mappedIt; if (mappedIt) xIt.classList.add('filled'); else xIt.classList.remove('filled'); }
       }
     });
-    if (pm) showToast('🔗 합산 그룹 ' + _allReceipts.filter(function(x){ return x.data.mergedGroupId === gid; }).length + '건에 일괄 적용됨');
   }
+  // 자동저장
+  autoSaveRow(receiptId);
 }
 
 // 상세 펼침 결제방법 변경 시 계산서유형 자동 설정 + 인라인 행 동기화
@@ -1409,6 +1411,79 @@ async function clearPayInfo(receiptId) {
     doSearch();
     showToast('✅ 결제정보 초기화 완료');
   } catch(e) { showToast('❗ 초기화 실패: ' + e.message); }
+}
+
+// 자동저장
+var _autoSaveTimers = {};
+function debounceAutoSave(receiptId) {
+  clearTimeout(_autoSaveTimers[receiptId]);
+  _autoSaveTimers[receiptId] = setTimeout(function() { autoSaveRow(receiptId); }, 800);
+}
+
+async function autoSaveRow(receiptId) {
+  var pmSel  = document.getElementById('pm-' + receiptId);
+  var itSel  = document.getElementById('it-' + receiptId);
+  var btSel  = document.getElementById('bt-' + receiptId);
+  var dtInp  = document.getElementById('id-' + receiptId);
+  var memoInp = document.getElementById('bm-' + receiptId);
+  var pm   = pmSel   ? pmSel.value   : '';
+  var it   = itSel   ? itSel.value   : '';
+  var bt   = btSel   ? btSel.value   : '';
+  var dt   = dtInp   ? dtInp.value   : '';
+  var memo = memoInp ? memoInp.value.trim() : '';
+
+  var FD = firebase.firestore.FieldValue.delete;
+  var upd = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+  if (pm)   upd.payMethod   = pm;   else upd.payMethod   = FD();
+  if (it)   upd.invoiceType = it;   else upd.invoiceType = FD();
+  if (bt)   upd.billingType = bt;   else upd.billingType = FD();
+  if (dt)   upd.invoiceDate = dt;   else upd.invoiceDate = FD();
+  if (memo) upd.billingMemo = memo; else upd.billingMemo = FD();
+
+  // 합산 그룹 cascade
+  var r0 = _allReceipts.find(function(x) { return x.id === receiptId; });
+  var mergeGroup = (r0 && bt === '합산' && r0.data.mergedGroupId)
+    ? _allReceipts.filter(function(x) { return x.id !== receiptId && x.data.mergedGroupId === r0.data.mergedGroupId; })
+    : [];
+
+  try {
+    var batch = db.batch();
+    batch.update(db.collection('receipts').doc(receiptId), upd);
+    mergeGroup.forEach(function(x) {
+      batch.update(db.collection('receipts').doc(x.id), {
+        payMethod: pm || FD(), invoiceType: it || FD(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+
+    // 로컬 데이터 동기화
+    function syncLocal(rid, full) {
+      var idx = _allReceipts.findIndex(function(r) { return r.id === rid; });
+      if (idx < 0) return;
+      var d = _allReceipts[idx].data;
+      if (pm) d.payMethod = pm; else delete d.payMethod;
+      if (it) d.invoiceType = it; else delete d.invoiceType;
+      if (full) {
+        if (bt) d.billingType = bt; else delete d.billingType;
+        if (dt) d.invoiceDate = dt; else delete d.invoiceDate;
+        if (memo) d.billingMemo = memo; else delete d.billingMemo;
+      }
+    }
+    syncLocal(receiptId, true);
+    mergeGroup.forEach(function(x) { syncLocal(x.id, false); });
+
+    // 저장 완료 표시 (행 마지막 셀에 ✓ 플래시)
+    var stateEl = document.getElementById('save-state-' + receiptId);
+    if (stateEl) {
+      var ck = document.createElement('span');
+      ck.textContent = ' ✓';
+      ck.style.cssText = 'color:#4caf50;font-weight:700;font-size:13px;transition:opacity .6s';
+      stateEl.appendChild(ck);
+      setTimeout(function() { ck.style.opacity = '0'; setTimeout(function() { if (ck.parentNode) ck.parentNode.removeChild(ck); }, 600); }, 1400);
+    }
+    renderKpiCards();
+  } catch(e) { console.error('[자동저장 실패]', receiptId, e); }
 }
 
 // 발행예정일 + 메모만 저장 (발행 탭 행 내 인라인 저장)
@@ -1681,8 +1756,8 @@ function buildIssueTabRow(r, checkboxHtml) {
   var btSel = buildBillingTypeSelect(id, d.billingType);
   var dtToday = new Date().toISOString().slice(0,10);
   var dtVal = d.invoiceDate || dtToday;
-  var dtInp = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + dtVal + '">';
-  var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px">';
+  var dtInp = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + dtVal + '" onchange="autoSaveRow(\'' + id + '\')">';
+  var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
   var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
   var testPurpose = d.testPurpose || d.purpose || '';
   var chkTd = checkboxHtml ? '<td class="text-center">' + checkboxHtml + '</td>' : '';
@@ -1702,7 +1777,7 @@ function buildIssueTabRow(r, checkboxHtml) {
     '<td>' + dtInp + '</td>' +
     '<td>' + memoInp + '</td>' +
     '<td>' + altBtn + '</td>' +
-    '<td style="white-space:nowrap"><button class="btn btn-success btn-sm" onclick="saveRow(\'' + id + '\')">저장</button> <button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
+    '<td style="white-space:nowrap" id="save-state-' + id + '"><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
     '</tr>';
 }
 
