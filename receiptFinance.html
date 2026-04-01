@@ -753,10 +753,41 @@ async function loadReceiptsData() {
         legacyFixed++;
       }
     });
-    if (autoFilled > 0 || legacyFixed > 0) {
+    // 합산 그룹 내 결제방법/계산서유형 동기화 — 그룹 내 1건이라도 있으면 나머지에 전파
+    var mergedGroups = {};
+    _allReceipts.forEach(function(r) {
+      var gid = r.data.mergedGroupId;
+      if (gid) {
+        if (!mergedGroups[gid]) mergedGroups[gid] = [];
+        mergedGroups[gid].push(r);
+      }
+    });
+    var groupSynced = 0;
+    Object.keys(mergedGroups).forEach(function(gid) {
+      var members = mergedGroups[gid];
+      // 그룹에서 결제방법이 있는 대표 건 찾기
+      var leader = members.find(function(r) { return r.data.payMethod && r.data.invoiceType; });
+      if (!leader) return;
+      members.forEach(function(r) {
+        if (r.id === leader.id) return;
+        if (!r.data.payMethod || !r.data.invoiceType) {
+          r.data.payMethod = leader.data.payMethod;
+          r.data.invoiceType = leader.data.invoiceType;
+          batch.update(db.collection('receipts').doc(r.id), {
+            payMethod: leader.data.payMethod,
+            invoiceType: leader.data.invoiceType,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          groupSynced++;
+        }
+      });
+    });
+
+    if (autoFilled > 0 || legacyFixed > 0 || groupSynced > 0) {
       await batch.commit();
       if (autoFilled > 0) console.log('[자동정정] ' + autoFilled + '건 결제방법/계산서유형 정합성 수정 완료');
       if (legacyFixed > 0) console.log('[레거시정정] ' + legacyFixed + '건 byPurpose billingType 제거 완료');
+      if (groupSynced > 0) console.log('[합산동기화] ' + groupSynced + '건 합산그룹 결제방법/계산서유형 전파 완료');
     }
 
     buildSalesRepOptions();
