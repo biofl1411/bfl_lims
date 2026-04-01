@@ -3136,39 +3136,14 @@ function _mcCalcAll(nCount, rule) {
 /* ══════════════════════════════════════
    시험일지 인쇄
    ══════════════════════════════════════ */
-function printDiaryTemplate() {
-  var panel = document.getElementById('diary-panel');
-  if (!panel || panel.querySelector('.empty-state')) {
-    alert('선택된 시험일지가 없습니다.'); return;
-  }
-
-  // 현재 input 값 clone에 동기화
-  var clone = panel.cloneNode(true);
-  var live = panel.querySelectorAll('input, textarea, select');
-  var cl   = clone.querySelectorAll('input, textarea, select');
-  live.forEach(function(el, i) {
-    if (!cl[i]) return;
-    if (el.type === 'checkbox') cl[i].checked = el.checked;
-    else cl[i].value = el.value;
-  });
-  // details open 상태 동기화
-  panel.querySelectorAll('details').forEach(function(d, i) {
-    var cd = clone.querySelectorAll('details')[i];
-    if (cd) cd.open = d.open;
-  });
-  // 버튼 제거
-  clone.querySelectorAll('button, .btn').forEach(function(b) { b.remove(); });
-
-  var itemName = (document.getElementById('diary-panel').querySelector('[id*="testItem"], .dp-receipt-no') || {}).textContent || '시험일지';
-
-  var win = window.open('', '_blank', 'width=860,height=720');
-  win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
-    + '<title>시험일지</title><style>'
-    + '@page{margin:15mm 20mm;size:A4 portrait}'
+function _buildPrintHtml(contentHtml, title, landscape) {
+  var pageSize = landscape ? 'A4 landscape' : 'A4 portrait';
+  return '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>' + title + '</title><style>'
+    + '@page{margin:12mm 18mm;size:' + pageSize + '}'
     + '*{box-sizing:border-box}'
-    + 'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;color:#1a2332;margin:0;padding:12px}'
-    + '.print-hd{text-align:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1e3a5f}'
-    + '.print-hd h1{font-size:17px;margin:0 0 4px;color:#1e3a5f}'
+    + 'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;color:#1a2332;margin:0;padding:10px}'
+    + '.print-hd{text-align:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1e3a5f}'
+    + '.print-hd h1{font-size:16px;margin:0 0 3px;color:#1e3a5f}'
     + '.print-hd p{font-size:10px;color:#888;margin:0}'
     + 'input[type=text],input[type=number],input[type=date],textarea{'
     +   'border:none!important;background:transparent!important;padding:0!important;'
@@ -3184,13 +3159,45 @@ function printDiaryTemplate() {
     + 'th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}'
     + '.empty-state{display:none}'
     + 'label{font-size:10px;color:#666;display:block;margin-bottom:2px}'
+    + '.overall-badge{padding:3px 10px;border-radius:6px;font-weight:700}'
+    + '.overall-badge.pass{background:#dcfce7;color:#166534}'
+    + '.overall-badge.fail{background:#fee2e2;color:#991b1b}'
     + '</style></head><body>'
-    + '<div class="print-hd"><h1>🧪 시험일지</h1>'
+    + '<div class="print-hd"><h1>' + title + '</h1>'
     + '<p>출력일시: ' + new Date().toLocaleString('ko-KR') + '</p></div>'
-    + clone.innerHTML
-    + '<script>window.onload=function(){window.print();window.close();}<\/script>'
-    + '</body></html>');
-  win.document.close();
+    + contentHtml + '</body></html>';
+}
+
+function _printViaIframe(htmlContent) {
+  var iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none';
+  document.body.appendChild(iframe);
+  var doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open(); doc.write(htmlContent); doc.close();
+  iframe.onload = function() {
+    try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e) {}
+    setTimeout(function() { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
+  };
+}
+
+function printDiaryTemplate() {
+  var panel = document.getElementById('diary-panel');
+  if (!panel || panel.querySelector('.empty-state')) {
+    alert('선택된 시험일지가 없습니다.'); return;
+  }
+  var clone = panel.cloneNode(true);
+  panel.querySelectorAll('input, textarea, select').forEach(function(el, i) {
+    var c = clone.querySelectorAll('input, textarea, select')[i];
+    if (!c) return;
+    if (el.type === 'checkbox') c.checked = el.checked;
+    else c.value = el.value;
+  });
+  panel.querySelectorAll('details').forEach(function(d, i) {
+    var cd = clone.querySelectorAll('details')[i];
+    if (cd) cd.open = d.open;
+  });
+  clone.querySelectorAll('button, .btn').forEach(function(b) { b.remove(); });
+  _printViaIframe(_buildPrintHtml(clone.innerHTML, '🧪 시험일지', false));
 }
 
 </script>
