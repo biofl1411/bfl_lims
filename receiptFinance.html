@@ -107,6 +107,9 @@ tr:hover{background:#fafbfc}
 .merged-group-hd .count-badge{font-size:11px;color:#1a73e8;background:#e8f0fe;border-radius:8px;padding:2px 8px}
 .merged-group-hd .sum-amount{margin-left:auto;font-size:13px;font-weight:700;color:#2e7d32}
 .merged-group-body{padding:12px 14px}
+.group-member-row{background:#fafbff}
+.member-ro-badge{display:inline-block;font-size:11px;color:#546e7a;background:#eceff1;border-radius:5px;padding:3px 8px;font-weight:500}
+.member-ro-text{font-size:11px;color:#546e7a}
 .rf-issue-desc{font-size:12px;color:#5f6b7a;margin-bottom:12px;line-height:1.6}
 .rf-scroll-table{max-height:280px;overflow-y:auto;border:1px solid #e2e6ed;border-radius:8px}
 
@@ -1089,6 +1092,19 @@ function renderUninputTab() {
   }).join('');
 }
 
+function getPmLabel(val) {
+  if (val === '카드') return '💳 카드';
+  if (val === '온라인입금') return '🏦 온라인입금';
+  if (val === '현금') return '💵 현금';
+  return val || '-';
+}
+function getIsLabel(val) {
+  if (val === '미정') return '📋 미정';
+  if (val === '특정일') return '🎯 특정일';
+  if (val === '월말') return '📅 월말';
+  return val || '-';
+}
+
 function buildPayMethodSelect(id, cur) {
   var opts = [['','선택'],['카드','💳 카드'],['온라인입금','🏦 온라인입금'],['현금','💵 현금']];
   var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="pm-' + id + '" onchange="onPayMethodChange(\'' + id + '\')">';
@@ -1134,6 +1150,27 @@ function onIssueScheduleChange(id) {
       dateInp.disabled = false;
       dateInp.style.opacity = '1';
     }
+  }
+  // 합산 그룹 리더이면 멤버행 읽기전용 스팬 즉시 업데이트
+  var r0 = _allReceipts.find(function(x) { return x.id === id; });
+  if (r0 && r0.data.billingType === '합산' && r0.data.mergedGroupId) {
+    var gid = r0.data.mergedGroupId;
+    var isLabel = getIsLabel(val);
+    var cascadeDate = val === '월말' ? (function() {
+      var t = new Date(); return new Date(t.getFullYear(), t.getMonth() + 1, 0).toISOString().slice(0,10);
+    })() : '';
+    _allReceipts.forEach(function(x) {
+      if (x.id !== id && x.data.mergedGroupId === gid) {
+        var isHid = document.getElementById('is-' + x.id);
+        var idHid = document.getElementById('id-' + x.id);
+        var isRo  = document.getElementById('is-ro-' + x.id);
+        var idRo  = document.getElementById('id-ro-' + x.id);
+        if (isHid) isHid.value = val;
+        if (idHid) idHid.value = cascadeDate;
+        if (isRo)  isRo.textContent  = isLabel;
+        if (idRo)  idRo.textContent  = cascadeDate || '-';
+      }
+    });
   }
   autoSaveRow(id);
 }
@@ -1359,6 +1396,11 @@ function onPayMethodChange(receiptId) {
         var xIt = document.getElementById('it-' + x.id);
         if (xPm) { xPm.value = pm; if (pm) xPm.classList.add('filled'); else xPm.classList.remove('filled'); }
         if (xIt) { xIt.value = mappedIt; if (mappedIt) xIt.classList.add('filled'); else xIt.classList.remove('filled'); }
+        // 멤버행 읽기전용 스팬 업데이트
+        var pmRo = document.getElementById('pm-ro-' + x.id);
+        var itRo = document.getElementById('it-ro-' + x.id);
+        if (pmRo) pmRo.textContent = getPmLabel(pm);
+        if (itRo) itRo.textContent = mappedIt || '-';
       }
     });
   }
@@ -1544,10 +1586,29 @@ async function autoSaveRow(receiptId) {
     var batch = db.batch();
     batch.update(db.collection('receipts').doc(receiptId), upd);
     mergeGroup.forEach(function(x) {
-      batch.update(db.collection('receipts').doc(x.id), {
+      var mUpd = {
         payMethod: pm || FD(), invoiceType: it || FD(),
+        issueSchedule: isVal || FD(), invoiceDate: dt || FD(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      batch.update(db.collection('receipts').doc(x.id), mUpd);
+      // 멤버행 읽기전용 스팬 + 숨겨진 input 즉시 업데이트
+      var pmHid = document.getElementById('pm-' + x.id);
+      var itHid = document.getElementById('it-' + x.id);
+      var isHid = document.getElementById('is-' + x.id);
+      var idHid = document.getElementById('id-' + x.id);
+      var pmRo  = document.getElementById('pm-ro-' + x.id);
+      var itRo  = document.getElementById('it-ro-' + x.id);
+      var isRo  = document.getElementById('is-ro-' + x.id);
+      var idRo  = document.getElementById('id-ro-' + x.id);
+      if (pmHid) pmHid.value = pm;
+      if (itHid) itHid.value = it;
+      if (isHid) isHid.value = isVal;
+      if (idHid) idHid.value = dt;
+      if (pmRo) pmRo.textContent = getPmLabel(pm);
+      if (itRo) itRo.textContent = it || '-';
+      if (isRo) isRo.textContent = getIsLabel(isVal);
+      if (idRo) idRo.textContent = dt || '-';
     });
     await batch.commit();
 
@@ -1563,6 +1624,10 @@ async function autoSaveRow(receiptId) {
         if (isVal) d.issueSchedule = isVal; else delete d.issueSchedule;
         if (dt) d.invoiceDate = dt; else delete d.invoiceDate;
         if (memo) d.billingMemo = memo; else delete d.billingMemo;
+      } else {
+        // 멤버행: issueSchedule·invoiceDate도 리더와 동기화
+        if (isVal) d.issueSchedule = isVal; else delete d.issueSchedule;
+        if (dt) d.invoiceDate = dt; else delete d.invoiceDate;
       }
     }
     syncLocal(receiptId, true);
@@ -1767,9 +1832,9 @@ function buildGroupBlock(items, groupKey, label, tabType) {
   h += '<th class="text-center" style="width:32px"></th>';
   h += '<th>접수번호</th><th>접수일</th><th>업체명</th><th>제품명</th><th>검사목적</th><th>담당자</th><th class="text-right">수수료</th><th class="text-center">입금현황</th><th>결제방법</th><th>계산서유형</th><th>발행유형</th><th>발행일</th><th>발행예정일</th><th>메모</th><th>타업체 지정</th><th></th>';
   h += '</tr></thead><tbody>';
-  items.forEach(function(r) {
+  items.forEach(function(r, idx) {
     var chk = '<input type="checkbox" class="row-check merged-chk merged-chk-' + escHtml(tabType) + '" data-id="' + r.id + '" data-group="' + escHtml(groupKey) + '" onchange="updateMergedSelectedInfo(\'' + escHtml(tabType) + '\')" checked>';
-    h += buildIssueTabRow(r, chk);
+    h += buildIssueTabRow(r, chk, idx === 0);
   });
   h += '</tbody></table></div></div></div>';
   return h;
@@ -1883,7 +1948,8 @@ function renderBatchTab() { /* 제거된 탭 — 호환성 유지용 no-op */ }
 function renderMergedTab() { /* 제거된 탭 — 호환성 유지용 no-op */ }
 
 // 공통 발행 탭 행 빌더 (pending/specific/month 공유)
-function buildIssueTabRow(r, checkboxHtml) {
+function buildIssueTabRow(r, checkboxHtml, isLeader) {
+  if (isLeader === undefined) isLeader = true;
   var d = r.data; var id = r.id;
   var altBadge = d.billEditEnabled
     ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span><br><span style="font-size:10px;color:#e65100">' + escHtml((d.billEdit && d.billEdit.company) || '') + '</span>'
@@ -1891,6 +1957,49 @@ function buildIssueTabRow(r, checkboxHtml) {
   var altBtn = d.billEditEnabled
     ? '<button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">✏️ 수정</button>'
     : '<button style="background:#fff3e0;color:#e65100;border:1px solid #ffe082;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">🏢 지정</button>';
+  var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
+  var testPurpose = d.testPurpose || d.purpose || '';
+  var chkTd = checkboxHtml ? '<td class="text-center">' + checkboxHtml + '</td>' : '';
+  var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
+
+  // 멤버행 (리더 아님) — 읽기전용 표시 + 숨겨진 input
+  if (!isLeader) {
+    var hidden =
+      '<input type="hidden" id="pm-' + id + '" value="' + escHtml(d.payMethod || '') + '">' +
+      '<input type="hidden" id="it-' + id + '" value="' + escHtml(d.invoiceType || '') + '">' +
+      '<input type="hidden" id="bt-' + id + '" value="합산">' +
+      '<input type="hidden" id="is-' + id + '" value="' + escHtml(d.issueSchedule || '') + '">' +
+      '<input type="hidden" id="id-' + id + '" value="' + escHtml(d.invoiceDate || '') + '">';
+    var pmRo = '<span id="pm-ro-' + id + '" class="member-ro-badge">' + getPmLabel(d.payMethod) + '</span>';
+    var itRo = '<span id="it-ro-' + id + '" class="member-ro-badge">' + escHtml(d.invoiceType || '-') + '</span>';
+    var btRo = '<span class="member-ro-badge" style="opacity:0.6">🔗 합산</span>';
+    var isRo = '<span id="is-ro-' + id + '" class="member-ro-badge">' + getIsLabel(d.issueSchedule) + '</span>';
+    var idRo = '<span id="id-ro-' + id + '" class="member-ro-text">' + escHtml(d.invoiceDate || '-') + '</span>';
+    var chkTdMember = checkboxHtml
+      ? '<td class="text-center">' + checkboxHtml + hidden + '</td>'
+      : '<td style="width:0;padding:0">' + hidden + '</td>';
+    return '<tr data-id="' + id + '" class="group-member-row">' +
+      chkTdMember +
+      '<td><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
+      '<td style="color:#5f6b7a">' + fmtDate(d.receiptDate || '') + '</td>' +
+      '<td><div style="font-weight:600">' + escHtml(d.companyName || '') + '</div>' + altBadge + '</td>' +
+      '<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(productName) + '">' + escHtml(productName || '-') + '</td>' +
+      '<td style="font-size:11px;color:#5f6b7a">' + escHtml(testPurpose || '-') + '</td>' +
+      '<td style="font-size:11px;color:#5f6b7a">' + escHtml(d.salesRep || '-') + '</td>' +
+      '<td class="text-right" style="font-weight:600">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
+      '<td>' + pmRo + '</td>' +
+      '<td>' + itRo + '</td>' +
+      '<td>' + btRo + '</td>' +
+      '<td>' + isRo + '</td>' +
+      '<td>' + idRo + '</td>' +
+      '<td>' + memoInp + '</td>' +
+      '<td>' + altBtn + '</td>' +
+      '<td style="white-space:nowrap" id="save-state-' + id + '"></td>' +
+      '</tr>';
+  }
+
+  // 리더행 — 기존 편집 가능 UI
   var pmSel = buildPayMethodSelect(id, d.payMethod);
   var itSel = buildInvoiceTypeSelect(id, d.payMethod ? d.invoiceType : '');
   var btSel = buildBillingTypeSelect(id, d.billingType);
@@ -1899,10 +2008,6 @@ function buildIssueTabRow(r, checkboxHtml) {
   var dtVal = d.invoiceDate || dtToday;
   var isDateDisabled = (d.issueSchedule === '미정' || d.issueSchedule === '월말');
   var dtInp = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + dtVal + '" onchange="autoSaveRow(\'' + id + '\')"' + (isDateDisabled ? ' disabled style="opacity:0.4"' : '') + '>';
-  var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
-  var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
-  var testPurpose = d.testPurpose || d.purpose || '';
-  var chkTd = checkboxHtml ? '<td class="text-center">' + checkboxHtml + '</td>' : '';
   return '<tr data-id="' + id + '">' +
     chkTd +
     '<td><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
