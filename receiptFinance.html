@@ -1713,9 +1713,14 @@ function renderMergedTab() {
     h += '<th class="text-center" style="width:32px"></th>';
     h += '<th>접수번호</th><th>접수일</th><th>업체명</th><th>제품명</th><th>검사목적</th><th>담당자</th><th class="text-right">수수료</th><th class="text-center">입금현황</th><th>결제방법</th><th>계산서유형</th><th>발행유형</th><th>발행예정일</th><th>메모</th><th>타업체 지정</th><th></th>';
     h += '</tr></thead><tbody>';
-    items.forEach(function(r) {
+    var groupSize = items.length;
+    items.forEach(function(r, idx) {
       var chk = '<input type="checkbox" class="row-check merged-chk" data-id="' + r.id + '" data-group="' + escHtml(groupKey) + '" onchange="updateMergedSelectedInfo()" checked>';
-      h += buildIssueTabRow(r, chk);
+      // 2건 이상인 그룹: 첫 행에 rowspan, 이후 행은 결제방법/계산서유형 셀 생략
+      var mo = groupSize > 1
+        ? (idx === 0 ? { rowspan: groupSize } : { skipMerged: true })
+        : null;
+      h += buildIssueTabRow(r, chk, mo);
     });
     h += '</tbody></table></div></div></div>';
     return h;
@@ -1756,7 +1761,8 @@ function updateMergedSelectedInfo() {
 }
 
 // 공통 발행 탭 행 빌더 (수동/합산/특정일/월말/미지정 공유)
-function buildIssueTabRow(r, checkboxHtml) {
+// mergeOpts: null(일반) | { rowspan: N } (첫 행, 결제방법/계산서유형 셀 병합) | { skipMerged: true } (이후 행, 해당 셀 생략)
+function buildIssueTabRow(r, checkboxHtml, mergeOpts) {
   var d = r.data; var id = r.id;
   var altBadge = d.billEditEnabled
     ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span><br><span style="font-size:10px;color:#e65100">' + escHtml((d.billEdit && d.billEdit.company) || '') + '</span>'
@@ -1774,6 +1780,23 @@ function buildIssueTabRow(r, checkboxHtml) {
   var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
   var testPurpose = d.testPurpose || d.purpose || '';
   var chkTd = checkboxHtml ? '<td class="text-center">' + checkboxHtml + '</td>' : '';
+
+  // 합산 그룹 병합 셀 처리
+  var pmTd = '', itTd = '';
+  if (mergeOpts && mergeOpts.skipMerged) {
+    // 이후 행: 결제방법/계산서유형 셀 생략 (rowspan으로 이미 위 행에 표시됨)
+    pmTd = '';
+    itTd = '';
+  } else if (mergeOpts && mergeOpts.rowspan && mergeOpts.rowspan > 1) {
+    // 첫 행: rowspan 적용, 가운데 정렬
+    pmTd = '<td rowspan="' + mergeOpts.rowspan + '" style="vertical-align:middle;background:#f0f7ff;border-left:3px solid #90caf9">' + pmSel + '</td>';
+    itTd = '<td rowspan="' + mergeOpts.rowspan + '" style="vertical-align:middle;background:#f0f7ff">' + itSel + '</td>';
+  } else {
+    // 일반 행 (단건 그룹 또는 비병합)
+    pmTd = '<td>' + pmSel + '</td>';
+    itTd = '<td>' + itSel + '</td>';
+  }
+
   return '<tr data-id="' + id + '">' +
     chkTd +
     '<td><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
@@ -1784,8 +1807,8 @@ function buildIssueTabRow(r, checkboxHtml) {
     '<td style="font-size:11px;color:#5f6b7a">' + escHtml(d.salesRep || '-') + '</td>' +
     '<td class="text-right" style="font-weight:600">' + fmtMoney(getTotalFee(d)) + '</td>' +
     '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
-    '<td>' + pmSel + '</td>' +
-    '<td>' + itSel + '</td>' +
+    pmTd +
+    itTd +
     '<td>' + btSel + '</td>' +
     '<td>' + dtInp + '</td>' +
     '<td>' + memoInp + '</td>' +
