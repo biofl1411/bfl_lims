@@ -263,6 +263,7 @@ tr:hover{background:#fafbfc}
             <button class="btn btn-secondary btn-sm" onclick="loadReceiptsData()">🔄 새로고침</button>
           </div>
         </div>
+        <div id="uninputMergedContainer" style="padding:0 4px"></div>
         <div class="tbl-wrap">
           <table>
             <thead>
@@ -1046,11 +1047,38 @@ function switchTab(tabId) {
 function renderUninputTab() {
   var list = _filteredReceipts.filter(function(r) { return isMissingInfo(r.data); });
   var tbody = document.getElementById('uninputTbody');
-  if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13" class="empty-msg">미입력 건이 없습니다 ✅</td></tr>';
+  var mergedContainer = document.getElementById('uninputMergedContainer');
+
+  // 합산 그룹 분리
+  var groups = {};
+  var individuals = [];
+  list.forEach(function(r) {
+    var d = r.data;
+    if (d.billingType === '합산' && d.mergedGroupId) {
+      if (!groups[d.mergedGroupId]) groups[d.mergedGroupId] = [];
+      groups[d.mergedGroupId].push(r);
+    } else {
+      individuals.push(r);
+    }
+  });
+
+  // 합산 그룹 블록 렌더 (상단)
+  var groupHtml = '';
+  Object.keys(groups).forEach(function(gid) {
+    groupHtml += buildGroupBlock(groups[gid], gid, null, 'uninput');
+  });
+  if (mergedContainer) mergedContainer.innerHTML = groupHtml;
+
+  // 개별 건 테이블 렌더
+  if (individuals.length === 0 && Object.keys(groups).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="16" class="empty-msg">미입력 건이 없습니다 ✅</td></tr>';
     return;
   }
-  tbody.innerHTML = list.map(function(r) {
+  if (individuals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="16" class="empty-msg">개별 미입력 건이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = individuals.map(function(r) {
     var d = r.data; var id = r.id;
     var altBadge = d.billEditEnabled
       ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span><br><span style="font-size:10px;color:#e65100">' + escHtml((d.billEdit && d.billEdit.company) || '') + '</span>'
@@ -1067,9 +1095,7 @@ function renderUninputTab() {
     var isDateDisabled = (d.issueSchedule === '미정' || d.issueSchedule === '월말' || !d.issueSchedule);
     var dtInp = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + (isDateDisabled ? '' : dtVal) + '" onchange="autoSaveRow(\'' + id + '\')"' + (isDateDisabled ? ' disabled style="opacity:0.4"' : '') + '>';
     var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:90px;padding:4px 6px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
-    // 제품/시료명: samples[0].productName > d.productName 순
     var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
-    // 검사목적: testPurpose > purpose
     var testPurpose = d.testPurpose || d.purpose || '';
     return '<tr data-id="' + id + '">' +
       '<td><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
