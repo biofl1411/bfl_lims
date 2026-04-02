@@ -3451,18 +3451,16 @@ function _isMicroBiology(testBasis) {
    살모넬라·리스테리아 등 정성(검출/불검출) 항목은 false */
 function _isQuantitativeMicro(analyzed) {
   var rule = (analyzed || {}).judgmentRule || {};
+  var stdText = (rule.standardText || '').toLowerCase();
   var unit = (rule.unit || '').toUpperCase();
-  // 단위에 /25g, /g 등이 있고 CFU가 없으면 정성시험
-  if (unit.indexOf('CFU') < 0 && unit.indexOf('/') >= 0) return false;
-  // CFU 명시 → 정량
+  // 1순위: 판정기준 텍스트에 /25g 포함 → 정성시험 (살모넬라, 리스테리아 등)
+  if (stdText.indexOf('/25g') >= 0) return false;
+  // 2순위: 단위에 CFU 포함 → 정량
   if (unit.indexOf('CFU') >= 0) return true;
-  // 단위 없으면 계산식으로 판단 (균판수·ΣC 포함 여부)
-  var calcs = (analyzed || {}).calculations || [];
-  var hasColonyFormula = calcs.some(function(c) {
-    var f = ((c.formula || '') + (c.formulaText || '')).toLowerCase();
-    return f.indexOf('균판수') >= 0 || f.indexOf('σc') >= 0;
-  });
-  return hasColonyFormula;
+  // 3순위: 단위에 / 포함하되 CFU 없음 (/25g, /g 등) → 정성
+  if (unit.indexOf('/') >= 0) return false;
+  // 이외: isMicroForm 플래그 명시적으로 설정된 경우만 집락수 폼 표시
+  return !!(analyzed && analyzed.isMicroForm);
 }
 
 function _getMicroNCount(analyzed) {
