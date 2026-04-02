@@ -55,6 +55,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
         <button class="settings-tab" onclick="switchSettingsTab('ocrtpl')"><span class="tab-icon">🎯</span>OCR 템플릿</button>
         <button class="settings-tab" onclick="switchSettingsTab('label')"><span class="tab-icon">🏷️</span>업체라벨</button>
         <button class="settings-tab" onclick="switchSettingsTab('font')"><span class="tab-icon">🔤</span>글꼴 설정</button>
+        <button class="settings-tab" onclick="switchSettingsTab('holiday')"><span class="tab-icon">📅</span>휴일 관리</button>
     </div>
 
     <!-- 접수 공지 (iframe) -->
@@ -210,6 +211,31 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             </div>
         </div>
     </div>
+
+    <!-- 휴일 관리 -->
+    <div class="tab-content" id="tab-holiday" style="padding:24px;overflow-y:auto">
+        <div style="max-width:800px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+                <h2 style="font-size:18px;font-weight:700;color:#1a2332">📅 휴일 관리</h2>
+                <span style="font-size:12px;color:#8892a4">등록된 휴일은 처리기한 계산(워킹데이) 시 제외됩니다. 주말(토/일)은 자동 제외됩니다.</span>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e6ed;border-radius:12px;padding:16px 20px;margin-bottom:20px">
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+                    <div>
+                        <label style="display:block;font-size:11px;color:#5f6b7a;font-weight:600;margin-bottom:4px">날짜</label>
+                        <input type="date" id="holiday-date" style="padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:11px;color:#5f6b7a;font-weight:600;margin-bottom:4px">명칭</label>
+                        <input type="text" id="holiday-name" placeholder="예: 설날, 추석" style="padding:8px 12px;border:1px solid #e2e6ed;border-radius:8px;font-size:13px;width:180px">
+                    </div>
+                    <button onclick="rsAddHoliday()" style="padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff">+ 추가</button>
+                    <button onclick="rsAddDefaultHolidays()" style="padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid #e2e6ed;background:#fff;color:#374151">📋 2026년 공휴일 일괄 등록</button>
+                </div>
+                <div id="holiday-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px"></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -220,9 +246,9 @@ function switchSettingsTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(function(pane) {
         pane.classList.remove('active');
     });
-    // 클릭한 탭 활성화
     event.currentTarget.classList.add('active');
     document.getElementById('tab-' + tabName).classList.add('active');
+    if (tabName === 'holiday') rsRenderHolidays();
 }
 
 // URL 파라미터로 탭 지정
@@ -490,6 +516,84 @@ function resetFontSettings() {
     updateFontPreview();
     alert('기본값으로 복원되었습니다.');
 }
+
+// ── 휴일 관리 ──
+var _rsHolidayCache = [];
+
+async function rsGetHolidays() {
+    try {
+        var fsData = await fsGetSettings('holidays');
+        if (fsData && Array.isArray(fsData.list)) {
+            _rsHolidayCache = fsData.list;
+            return fsData.list;
+        }
+    } catch(e) { console.warn('휴일 로드 실패:', e.message); }
+    return _rsHolidayCache;
+}
+
+async function rsSaveHolidays(data) {
+    _rsHolidayCache = data;
+    await fsSaveSettings('holidays', { list: data, dates: data.map(function(h){ return h.date; }) });
+}
+
+async function rsRenderHolidays() {
+    var data = (await rsGetHolidays()).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var el = document.getElementById('holiday-list');
+    if (!el) return;
+    if (!data.length) {
+        el.innerHTML = '<p style="color:#9ca3af;font-size:13px">등록된 휴일이 없습니다.</p>';
+        return;
+    }
+    el.innerHTML = data.map(function(h, i) {
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border-radius:8px;border:1px solid #fbbf24">'
+            + '<div><div style="font-weight:600;color:#92400e;font-size:13px">' + h.date + '</div><div style="font-size:11px;color:#78350f">' + h.name + '</div></div>'
+            + '<button onclick="rsDeleteHoliday(' + i + ')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;padding:0 4px">✕</button>'
+            + '</div>';
+    }).join('');
+}
+
+async function rsAddHoliday() {
+    var date = document.getElementById('holiday-date').value;
+    var name = (document.getElementById('holiday-name').value || '').trim();
+    if (!date) { alert('날짜를 선택하세요'); return; }
+    if (!name) { alert('명칭을 입력하세요'); return; }
+    var data = await rsGetHolidays();
+    if (data.some(function(h){ return h.date === date; })) { alert('이미 등록된 날짜입니다'); return; }
+    data.push({ date: date, name: name });
+    await rsSaveHolidays(data);
+    await rsRenderHolidays();
+    document.getElementById('holiday-date').value = '';
+    document.getElementById('holiday-name').value = '';
+}
+
+async function rsDeleteHoliday(idx) {
+    var data = await rsGetHolidays();
+    data.splice(idx, 1);
+    await rsSaveHolidays(data);
+    await rsRenderHolidays();
+}
+
+async function rsAddDefaultHolidays() {
+    var defaults = [
+        {date:'2026-01-01',name:'신정'},{date:'2026-01-26',name:'설날 전날'},{date:'2026-01-27',name:'설날'},{date:'2026-01-28',name:'설날 다음날'},
+        {date:'2026-03-01',name:'삼일절'},{date:'2026-05-05',name:'어린이날'},{date:'2026-05-24',name:'부처님오신날'},
+        {date:'2026-06-06',name:'현충일'},{date:'2026-08-15',name:'광복절'},
+        {date:'2026-09-24',name:'추석 전날'},{date:'2026-09-25',name:'추석'},{date:'2026-09-26',name:'추석 다음날'},
+        {date:'2026-10-03',name:'개천절'},{date:'2026-10-09',name:'한글날'},{date:'2026-12-25',name:'크리스마스'}
+    ];
+    var data = await rsGetHolidays();
+    var added = 0;
+    defaults.forEach(function(d) {
+        if (!data.some(function(h){ return h.date === d.date; })) { data.push(d); added++; }
+    });
+    await rsSaveHolidays(data);
+    await rsRenderHolidays();
+    alert('2026년 공휴일 ' + added + '건 추가 (중복 제외)');
+}
+
+// 휴일 탭 진입 시 로드
+var _rsHolidayLoaded = false;
+var _origSwitchSettingsTab = null;
 
 document.addEventListener('DOMContentLoaded', loadFontSettings);
 
