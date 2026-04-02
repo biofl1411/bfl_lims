@@ -248,6 +248,10 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 .fee-chip.discount .fee-val{color:#c2410c}
 .fee-discount-inputs{display:flex;align-items:center;gap:4px;font-size:11px}
 .fee-discount-inputs input{width:52px;height:22px;padding:0 5px;border:1px solid #fed7aa;border-radius:4px;font-size:11px;text-align:right;background:#fff7ed}
+.item-disc-input{width:44px;height:20px;padding:0 4px;border:1px solid #fed7aa;border-radius:3px;font-size:10px;text-align:right;background:#fff7ed}
+.item-disc-input:focus{outline:none;border-color:#f97316}
+.item-disc-type{font-size:10px;color:#c2410c;cursor:pointer;padding:1px 4px;border:1px solid #fca5a5;border-radius:2px;background:#fff;user-select:none;line-height:1.4}
+.item-disc-type:hover{background:#fee2e2}
 
 /* ─── 메모/계산서 토글 패널 ─── */
 .cp-memo-toggle{position:relative}
@@ -1056,17 +1060,26 @@ body.sidebar-collapsed .main-container{margin-left:64px}
   <div class="fee-chip total"><span class="fee-lbl">총계</span><span class="fee-val" id="fee-total">0원</span></div>
 
   <!-- 할인 -->
-  <div class="fee-chip discount" style="flex-direction:row;gap:6px;align-items:center;padding:3px 10px">
-    <span style="font-size:10px;color:#c2410c;font-weight:600;white-space:nowrap">🏷️ 할인</span>
-    <div class="fee-discount-inputs">
-      <input type="number" id="discount-rate" min="0" max="100" step="1" placeholder="0" oninput="onDiscountRateChange()">
-      <span style="color:#c2410c;font-size:11px">%</span>
-      <span style="color:#ccc;font-size:10px">할인가</span>
-      <input type="text" id="discount-amount" inputmode="numeric" placeholder="0" oninput="formatDiscountAmountInput(this);onDiscountAmountChange()" style="width:70px">
-      <span style="color:#c2410c;font-size:11px">원</span>
+  <div class="fee-chip discount" id="discount-chip-wrap" style="flex-direction:column;gap:4px;align-items:stretch;padding:5px 10px;min-width:260px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:10px;color:#c2410c;font-weight:600;white-space:nowrap">🏷️ 할인</span>
+      <div style="display:flex;gap:2px;margin-left:2px">
+        <button id="disc-mode-total-btn" onclick="setDiscountMode('total')" style="font-size:10px;padding:1px 7px;border-radius:3px 0 0 3px;border:1px solid #fca5a5;cursor:pointer;background:#c2410c;color:#fff;font-weight:600">총계</button>
+        <button id="disc-mode-item-btn" onclick="setDiscountMode('item')" style="font-size:10px;padding:1px 7px;border-radius:0 3px 3px 0;border:1px solid #fca5a5;border-left:none;cursor:pointer;background:#fff;color:#c2410c;font-weight:600">항목</button>
+      </div>
     </div>
-    <span style="font-size:11px;color:#888;white-space:nowrap">→</span>
-    <span style="font-size:11px;color:#c2410c;font-weight:700;white-space:nowrap" id="discount-final">0원</span>
+    <div id="disc-total-section" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+      <div class="fee-discount-inputs">
+        <input type="number" id="discount-rate" min="0" max="100" step="1" placeholder="0" oninput="onDiscountRateChange()">
+        <span style="color:#c2410c;font-size:11px">%</span>
+        <span style="color:#ccc;font-size:10px">할인가</span>
+        <input type="text" id="discount-amount" inputmode="numeric" placeholder="0" oninput="formatDiscountAmountInput(this);onDiscountAmountChange()" style="width:70px">
+        <span style="color:#c2410c;font-size:11px">원</span>
+      </div>
+      <span style="font-size:11px;color:#888;white-space:nowrap">→</span>
+      <span style="font-size:11px;color:#c2410c;font-weight:700;white-space:nowrap" id="discount-final">0원</span>
+    </div>
+    <div id="disc-item-section" style="display:none;font-size:11px;color:#888">항목 행 할인 열에 직접 입력하세요</div>
   </div>
 
   <!-- 계산서/결제 — hidden으로 유지 (데이터 호환) -->
@@ -3489,6 +3502,10 @@ function onTestPurposeChange() {
     if (document.getElementById('notice-required') && document.getElementById('notice-required').value === '예') {
         loadNoticeTemplate();
     }
+
+    // 자가품질위탁검사용 할인 잠금
+    window._currentPurposeObj = purposeObj;
+    updateDiscountLock(purposeObj);
 }
 
 // ============================================================================
@@ -6766,7 +6783,11 @@ async function updateFeeSummary() {
     document.getElementById('fee-total').textContent = grandTotal.toLocaleString() + '원';
 
     // 할인 적용 → window._feeTotal 설정 + 할인가 표시
-    applyDiscount();
+    if (_discountMode === 'item') {
+        renderItemDiscountCols();
+    } else {
+        applyDiscount();
+    }
 }
 
 // ============================================================================
@@ -6793,10 +6814,33 @@ function formatDiscountAmountInput(el) {
 }
 
 /**
+ * 자가품질위탁검사용 할인 잠금/해제
+ */
+function updateDiscountLock(purposeObj) {
+    var isJaga = purposeObj && purposeObj.n === '자가품질위탁검사용';
+    var rateEl = document.getElementById('discount-rate');
+    var amtEl = document.getElementById('discount-amount');
+    var chipEl = document.getElementById('discount-chip-wrap');
+    if (isJaga) {
+        // 항목 모드였으면 총계로 강제 복귀 후 잠금
+        if (_discountMode === 'item') { _discountMode = 'total'; clearItemDiscountCols(); }
+        if (rateEl) { rateEl.value = ''; rateEl.disabled = true; rateEl.title = '자가품질위탁검사용은 할인 불가'; }
+        if (amtEl) { amtEl.value = ''; amtEl.disabled = true; amtEl.title = '자가품질위탁검사용은 할인 불가'; }
+        if (chipEl) { chipEl.style.opacity = '0.4'; chipEl.style.pointerEvents = 'none'; chipEl.title = '자가품질위탁검사용은 할인 적용 불가'; }
+        applyDiscount();
+    } else {
+        if (rateEl) { rateEl.disabled = false; rateEl.title = ''; }
+        if (amtEl) { amtEl.disabled = false; amtEl.title = ''; }
+        if (chipEl) { chipEl.style.opacity = ''; chipEl.style.pointerEvents = ''; chipEl.title = ''; }
+    }
+}
+
+/**
  * 할인율(%) 입력 → 할인가(최종 결제금액) 자동 계산
  * 할인율 51.6% → 할인가 = 원가 × (1 - 51.6/100)
  */
 function onDiscountRateChange() {
+    if (window._currentPurposeObj && window._currentPurposeObj.n === '자가품질위탁검사용') return;
     var rate = parseFloat(document.getElementById('discount-rate').value) || 0;
     if (rate < 0) rate = 0;
     if (rate > 100) rate = 100;
@@ -6811,6 +6855,7 @@ function onDiscountRateChange() {
  * 할인가 54,000 / 원가 111,500 → 할인율 = (111,500-54,000)/111,500 = 51.57%
  */
 function onDiscountAmountChange() {
+    if (window._currentPurposeObj && window._currentPurposeObj.n === '자가품질위탁검사용') return;
     var finalPrice = parseComma(document.getElementById('discount-amount').value);
     if (finalPrice < 0) finalPrice = 0;
     var original = window._feeGrandTotal || 0;
@@ -8951,6 +8996,149 @@ function distributeDiscountToItems(totalDiscount) {
     var dtf = document.getElementById('disc-total-final');
     if (dtd) dtd.textContent = '-' + totalDiscount.toLocaleString() + '원';
     if (dtf) dtf.textContent = (grandTotal - totalDiscount).toLocaleString() + '원';
+}
+
+// ============================================================================
+// 항목별 개별 할인 (항목 모드)
+// ============================================================================
+var _discountMode = 'total'; // 'total' | 'item'
+
+function setDiscountMode(mode) {
+    if (window._currentPurposeObj && window._currentPurposeObj.n === '자가품질위탁검사용') return;
+    _discountMode = mode;
+    var totalBtn = document.getElementById('disc-mode-total-btn');
+    var itemBtn  = document.getElementById('disc-mode-item-btn');
+    var totalSec = document.getElementById('disc-total-section');
+    var itemSec  = document.getElementById('disc-item-section');
+    if (mode === 'item') {
+        if (totalBtn) { totalBtn.style.background='#fff'; totalBtn.style.color='#c2410c'; }
+        if (itemBtn)  { itemBtn.style.background='#c2410c'; itemBtn.style.color='#fff'; }
+        if (totalSec) totalSec.style.display = 'none';
+        if (itemSec)  itemSec.style.display  = '';
+        // 총계 할인 초기화
+        var dr = document.getElementById('discount-rate');
+        var da = document.getElementById('discount-amount');
+        if (dr) dr.value = '';
+        if (da) da.value = '';
+        window._feeTotal = window._feeGrandTotal || 0;
+        var df = document.getElementById('discount-final');
+        if (df) df.textContent = '0원';
+        renderItemDiscountCols();
+    } else {
+        if (totalBtn) { totalBtn.style.background='#c2410c'; totalBtn.style.color='#fff'; }
+        if (itemBtn)  { itemBtn.style.background='#fff'; itemBtn.style.color='#c2410c'; }
+        if (totalSec) totalSec.style.display = '';
+        if (itemSec)  itemSec.style.display  = 'none';
+        clearItemDiscountCols();
+    }
+}
+
+function renderItemDiscountCols() {
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr[data-fee]');
+    document.querySelectorAll('.disc-col').forEach(function(el) { el.style.display = ''; });
+    rows.forEach(function(tr) {
+        var old1 = tr.querySelector('.td-disc'); var old2 = tr.querySelector('.td-final');
+        if (old1) old1.remove(); if (old2) old2.remove();
+        var fee = parseInt(tr.getAttribute('data-fee') || '0', 10);
+        var prevDisc = parseInt(tr.getAttribute('data-item-disc') || '0', 10);
+        var prevType = tr.getAttribute('data-item-disc-type') || 'rate';
+        var prevVal  = tr.getAttribute('data-item-disc-val') || '';
+        var tdDisc = document.createElement('td');
+        tdDisc.className = 'td-disc';
+        tdDisc.style.cssText = 'padding:3px 6px;text-align:right';
+        tdDisc.innerHTML = '<div style="display:flex;align-items:center;justify-content:flex-end;gap:2px">'
+            + '<input type="text" class="item-disc-input" data-disc-type="' + prevType + '" value="' + prevVal + '" placeholder="0" oninput="onItemDiscountInput(this)">'
+            + '<span class="item-disc-type" onclick="toggleItemDiscType(this)" title="클릭 — 비율(%)/금액(₩) 전환">' + (prevType === 'rate' ? '%' : '₩') + '</span>'
+            + '</div>';
+        var tdFinal = document.createElement('td');
+        tdFinal.className = 'td-final';
+        tdFinal.style.cssText = 'padding:4px 8px;text-align:right;color:#1565c0;font-weight:700;font-size:12px;white-space:nowrap';
+        var finalPrice = fee - prevDisc;
+        tdFinal.textContent = fee > 0 ? (finalPrice.toLocaleString() + '원') : '-';
+        tr.appendChild(tdDisc);
+        tr.appendChild(tdFinal);
+    });
+    recalcAllItemDiscounts();
+}
+
+function clearItemDiscountCols() {
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr[data-fee]').forEach(function(tr) {
+        tr.removeAttribute('data-item-disc');
+        tr.removeAttribute('data-item-disc-type');
+        tr.removeAttribute('data-item-disc-val');
+        var d1 = tr.querySelector('.td-disc'); var d2 = tr.querySelector('.td-final');
+        if (d1) d1.remove(); if (d2) d2.remove();
+    });
+    document.querySelectorAll('.disc-col').forEach(function(el) { el.style.display = 'none'; });
+    window._itemDiscounts = null;
+    window._feeTotal = window._feeGrandTotal || 0;
+    updatePaymentSummary();
+}
+
+function toggleItemDiscType(spanEl) {
+    var inputEl = spanEl.previousElementSibling;
+    if (!inputEl) return;
+    var isRate = inputEl.getAttribute('data-disc-type') === 'rate';
+    inputEl.setAttribute('data-disc-type', isRate ? 'amt' : 'rate');
+    spanEl.textContent = isRate ? '₩' : '%';
+    inputEl.value = '';
+    var tr = spanEl.closest('tr');
+    if (tr) {
+        tr.removeAttribute('data-item-disc');
+        tr.removeAttribute('data-item-disc-val');
+        tr.setAttribute('data-item-disc-type', isRate ? 'amt' : 'rate');
+        var fee = parseInt(tr.getAttribute('data-fee') || '0', 10);
+        var tdF = tr.querySelector('.td-final');
+        if (tdF) tdF.textContent = fee > 0 ? fee.toLocaleString() + '원' : '-';
+    }
+    recalcAllItemDiscounts();
+}
+
+function onItemDiscountInput(inputEl) {
+    var tr = inputEl.closest('tr');
+    if (!tr) return;
+    var fee = parseInt(tr.getAttribute('data-fee') || '0', 10);
+    var discType = inputEl.getAttribute('data-disc-type') || 'rate';
+    var raw = parseFloat((inputEl.value || '').replace(/,/g, '')) || 0;
+    var discAmt = 0;
+    if (discType === 'rate') {
+        raw = Math.min(100, Math.max(0, raw));
+        discAmt = Math.round(fee * raw / 100);
+    } else {
+        raw = Math.min(fee, Math.max(0, raw));
+        discAmt = raw;
+    }
+    var finalPrice = fee - discAmt;
+    var tdF = tr.querySelector('.td-final');
+    if (tdF) tdF.textContent = fee > 0 ? finalPrice.toLocaleString() + '원' : '-';
+    tr.setAttribute('data-item-disc', discAmt);
+    tr.setAttribute('data-item-disc-type', discType);
+    tr.setAttribute('data-item-disc-val', inputEl.value);
+    recalcAllItemDiscounts();
+}
+
+function recalcAllItemDiscounts() {
+    if (_discountMode !== 'item') return;
+    var tbody = document.getElementById('inspection-items-tbody');
+    if (!tbody) return;
+    var totalDisc = 0; var discounts = [];
+    tbody.querySelectorAll('tr[data-fee]').forEach(function(tr) {
+        var fee  = parseInt(tr.getAttribute('data-fee') || '0', 10);
+        var disc = parseInt(tr.getAttribute('data-item-disc') || '0', 10);
+        totalDisc += disc;
+        discounts.push({ fee: fee, discount: disc, final: fee - disc });
+    });
+    window._itemDiscounts = discounts.some(function(d) { return d.discount > 0; }) ? discounts : null;
+    window._feeTotal = (window._feeGrandTotal || 0) - totalDisc;
+    var dtd = document.getElementById('disc-total-discount');
+    var dtf = document.getElementById('disc-total-final');
+    if (dtd) dtd.textContent = totalDisc > 0 ? '-' + totalDisc.toLocaleString() + '원' : '-';
+    if (dtf) dtf.textContent = window._feeTotal.toLocaleString() + '원';
+    updatePaymentSummary();
 }
 
 // ============================================================================
