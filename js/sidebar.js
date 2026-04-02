@@ -237,7 +237,16 @@ const SIDEBAR_MENU = [
       { label: '기록서 양식 수집',  href: 'formCollector.html',  page: 'testing-formCollector' }
     ]
   },
-  { id: 'results',       icon: '📄', label: '성적 관리',      disabled: true },
+  {
+    id: 'results',
+    icon: '📄',
+    label: '성적 관리',
+    sub: [
+      { label: '검토 및 발송',         href: 'reportDispatch.html',  page: 'results-dispatch' },
+      { label: '성적서 발급',          disabled: true },
+      { label: '설정',                 disabled: true }
+    ]
+  },
   {
     id: 'finance',
     icon: '💰',
