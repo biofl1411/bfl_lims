@@ -764,23 +764,19 @@ async function loadChangeHistoryCheck() {
 
   await Promise.all(changeApis.map(async function(sid) {
     try {
-      // 최근 30일 이내 chng_dt 기준 건수
-      var snap30 = await db.collection('fss_changes')
-        .where('api_source', '==', sid)
-        .where('chng_dt', '>=', since30)
-        .get();
-
-      // 전체 중 최신 chng_dt
-      var snapLatest = await db.collection('fss_changes')
+      // DESC 인덱스(api_source + chng_dt DESC) 단일 쿼리 → 최근 500건 fetch 후 클라이언트 필터
+      var snapRecent = await db.collection('fss_changes')
         .where('api_source', '==', sid)
         .orderBy('chng_dt', 'desc')
-        .limit(1)
+        .limit(500)
         .get();
 
-      var latestDt = '';
-      if (!snapLatest.empty) latestDt = snapLatest.docs[0].data().chng_dt || '';
+      var latestDt = snapRecent.empty ? '' : (snapRecent.docs[0].data().chng_dt || '');
+      var count30 = snapRecent.docs.filter(function(d) {
+        return (d.data().chng_dt || '') >= since30;
+      }).length;
 
-      newResult[sid] = { count30: snap30.size, latestChngDt: latestDt };
+      newResult[sid] = { count30: count30, latestChngDt: latestDt };
     } catch(e) {
       newResult[sid] = { count30: -1, latestChngDt: '' };
     }
