@@ -2724,6 +2724,9 @@ async function loadReceiptForEdit(docId) {
 window.onload = async function() {
     setTodayDate();
 
+    // 휴일 목록 Firestore에서 로드 (처리기한 계산용)
+    loadHolidaysFromFirestore();
+
     // 서버 상태 확인
     await checkServerStatus();
 
@@ -3080,7 +3083,26 @@ function setTodayDate() {
 // ============================================================================
 // 처리기한 계산 (워킹데이 12일 기준)
 // ============================================================================
+var _holidayDatesCache = null;
+
+async function loadHolidaysFromFirestore() {
+    try {
+        var fsData = await fsGetSettings('holidays');
+        if (fsData && Array.isArray(fsData.dates)) {
+            _holidayDatesCache = fsData.dates;
+        } else if (fsData && Array.isArray(fsData.list)) {
+            _holidayDatesCache = fsData.list.map(function(h){ return h.date; });
+        } else {
+            _holidayDatesCache = [];
+        }
+    } catch(e) {
+        _holidayDatesCache = [];
+    }
+}
+
 function getHolidays() {
+    if (_holidayDatesCache !== null) return _holidayDatesCache;
+    // Firestore 로드 전 fallback: localStorage
     try {
         const stored = localStorage.getItem('bfl_holidays');
         return stored ? JSON.parse(stored) : [];
