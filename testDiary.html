@@ -3522,7 +3522,10 @@ function _buildMicroForm(analyzed) {
   for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="mc-w-' + n + '" placeholder="g" style="width:80px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
   h += '</tr>';
   h += '<tr style="background:#fff7ed"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#c2410c;text-align:center;line-height:1.4">밀집평판<br><span style="font-size:9px">(1cm²)</span></td>';
-  for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-dense-' + n + '" placeholder="1cm² 집락수" oninput="_mcCalcAll(window._mcNCount,window._mcRule)" title="전 평판 300 초과 시 가장 가까운 평판의 1cm² 내 집락수 입력 (×65 자동 계산)" style="width:80px;height:22px;text-align:center;border:0.5px solid #fb923c;border-radius:4px;font-size:11px;background:#fff7ed"></td>';
+  for (var n = 1; n <= nCount; n++) {
+    h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-dense-' + n + '-0" placeholder="평판1" oninput="_mcCalcAll(window._mcNCount,window._mcRule)" title="평판1: 1cm² 집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #fb923c;border-radius:4px;font-size:11px;background:#fff7ed"></td>';
+    h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-dense-' + n + '-1" placeholder="평판2" oninput="_mcCalcAll(window._mcNCount,window._mcRule)" title="평판2: 1cm² 집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #fb923c;border-radius:4px;font-size:11px;background:#fff7ed"></td>';
+  }
   h += '</tr>';
   h += '<tr style="background:#f0f9ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#0369a1;text-align:center">계산식</td>';
   for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:4px 6px;border:0.5px solid #e5e7eb;text-align:center;font-size:10px;color:#6b7280" id="mc-formula-' + n + '">-</td>';
@@ -3681,23 +3684,31 @@ function _mcCalcOne(n) {
         if (closestDi < 0) closestDi = di;
       });
     });
-    // 밀집평판 입력값 확인 (1cm² 집락수 × 65)
-    var denseInp = document.getElementById('mc-dense-' + n);
-    var denseNum = denseInp ? _mcGetVal(denseInp.value) : null;
-    if (denseNum !== null && denseNum > 0) {
-      if (closestDi < 0) {
-        for (var d3 = 0; d3 < _MICRO_DILUTIONS.length; d3++) {
-          var chk3 = document.getElementById('mc-row-en-' + d3);
-          if (chk3 && chk3.checked) { closestDi = d3; break; }
+    // 밀집평판 입력값 확인 — 평판1·평판2 각각 1cm² 집락수 → 평균 × 65 × 희석배수
+    var denseV0 = _mcGetVal((document.getElementById('mc-dense-' + n + '-0') || {}).value);
+    var denseV1 = _mcGetVal((document.getElementById('mc-dense-' + n + '-1') || {}).value);
+    var denseCount = (denseV0 !== null ? 1 : 0) + (denseV1 !== null ? 1 : 0);
+    if (denseCount > 0) {
+      var denseAvg = ((denseV0 || 0) + (denseV1 || 0)) / denseCount;
+      if (denseAvg > 0) {
+        if (closestDi < 0) {
+          for (var d3 = 0; d3 < _MICRO_DILUTIONS.length; d3++) {
+            var chk3 = document.getElementById('mc-row-en-' + d3);
+            if (chk3 && chk3.checked) { closestDi = d3; break; }
+          }
         }
+        if (closestDi < 0) return null;
+        var dil = _MICRO_DILUTIONS[closestDi];
+        var dilStr2 = dil === 1 ? '×1(원액)' : '×' + dil.toLocaleString();
+        var denseTotal = denseAvg * 65;
+        var rawVal2 = denseTotal * dil;
+        // 계산식 문자열: 두 값이면 "(a+b)/2", 하나면 단독 표시
+        var avgStr = denseCount === 2
+          ? '(' + denseV0 + '+' + denseV1 + ')÷2×65'
+          : denseAvg + '×65';
+        var formulaDense = avgStr + ' ' + dilStr2 + ' = ' + Math.round(rawVal2).toLocaleString();
+        return { sigmaC: denseTotal, denom: 1, dilution: dil, raw: Math.round(rawVal2), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
       }
-      if (closestDi < 0) return null;
-      var dil = _MICRO_DILUTIONS[closestDi];
-      var dilStr2 = dil === 1 ? '×1(원액)' : '×' + dil.toLocaleString();
-      var denseTotal = denseNum * 65;
-      var rawVal2 = denseTotal * dil;
-      var formulaDense = denseNum + ' × 65 ' + dilStr2 + ' = ' + Math.round(rawVal2).toLocaleString();
-      return { sigmaC: denseTotal, denom: 1, dilution: dil, raw: Math.round(rawVal2), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
     }
     if (closestDi < 0) return null;
     var r = _makeResult(closestVal, 1, _MICRO_DILUTIONS[closestDi], 'over300');
