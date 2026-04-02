@@ -3903,7 +3903,15 @@ function printDiaryTemplate() {
   // 기록서 양식 수집 템플릿인 경우 → 전용 시험과정 양식으로 인쇄
   var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
   if (ft && ft._isFormTemplate) {
-    _printFormTemplateDiary(ft);
+    // DOM에서 업로드된 첨부 이미지 수집
+    var attachImgs = {};
+    ((ft.analyzed || {}).attachmentFields || []).forEach(function(af) {
+      var imgEl = document.getElementById('attach-' + af.id + '-img');
+      if (imgEl && imgEl.src && imgEl.src.startsWith('data:')) {
+        attachImgs[af.id] = imgEl.src;
+      }
+    });
+    _printFormTemplateDiary(ft, attachImgs);
     return;
   }
   // 일반 시험일지 (기존 방식)
@@ -3928,9 +3936,10 @@ function printDiaryTemplate() {
    결과 입력 폼(testResultInput) 필드 제외,
    시험 과정 관련 내용(섹션·표준물질·계산식 등) 포함
    ───────────────────────────────────────────── */
-function _printFormTemplateDiary(ft) {
+function _printFormTemplateDiary(ft, attachImgs) {
   var a = ft.analyzed || {};
   var overrides = ft._overrides || {};
+  attachImgs = attachImgs || {};
 
   // 계산식 변수로 사용되는 field ID = 결과 입력 측정 필드 → 시험일지에서 제외
   var resultFieldIds = [];
@@ -4042,6 +4051,24 @@ function _printFormTemplateDiary(ft) {
       h += '</div>';
     });
     h += '</div>';
+  }
+
+  /* ── 첨부파일 / 사진 ── */
+  if (a.attachmentFields && a.attachmentFields.length) {
+    h += '<div style="margin-bottom:14px;border:1.5px solid #d1fae5;border-radius:7px;overflow:hidden">';
+    h += '<div style="background:#059669;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📎 첨부파일 / 사진</div>';
+    h += '<div style="padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px">';
+    a.attachmentFields.forEach(function(af) {
+      h += '<div style="flex:1;min-width:160px;border:1px solid #a7f3d0;border-radius:6px;padding:8px;background:#f0fdf4">';
+      h += '<div style="font-size:10px;font-weight:700;color:#065f46;margin-bottom:6px">' + escH(af.label || af.id) + '</div>';
+      if (attachImgs[af.id]) {
+        h += '<img src="' + attachImgs[af.id] + '" style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;display:block">';
+      } else {
+        h += '<div style="height:120px;border:2px dashed #6ee7b7;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px">사진 없음</div>';
+      }
+      h += '</div>';
+    });
+    h += '</div></div>';
   }
 
   /* ── 결과 기록란 ── */
