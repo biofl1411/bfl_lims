@@ -2885,8 +2885,13 @@ function mcCalcAll(nCount, rule) {
 
 function normalizeMicroCalculations(analyzed) {
   if (!analyzed || !analyzed.isMicroForm) return analyzed;
-  var nCount = getMicroNCount(analyzed);
   var rule = analyzed.judgmentRule || {};
+  var unit = (rule.unit || '').toUpperCase();
+  var stdText = (rule.standardText || '').toLowerCase();
+  // 정성시험(검출/불검출): /25g, /g 단위이거나 CFU 없음 → 계산식 불필요
+  var isQualitative = stdText.indexOf('/25g') >= 0 || (unit.indexOf('/') >= 0 && unit.indexOf('CFU') < 0);
+  if (isQualitative) { analyzed.calculations = []; return analyzed; }
+  var nCount = getMicroNCount(analyzed);
   var hasProper = (analyzed.calculations || []).some(function(c){ return c.formula === 'microCalc(1)' || c.sampleIndex; });
   if (hasProper) return analyzed;
   analyzed.calculations = [];
