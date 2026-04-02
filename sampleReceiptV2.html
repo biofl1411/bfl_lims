@@ -1070,6 +1070,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
   <div class="fee-chip"><span class="fee-lbl">공급가액</span><span class="fee-val" id="fee-supply">0원</span></div>
   <div class="fee-chip"><span class="fee-lbl">VAT 10%</span><span class="fee-val" id="fee-vat">0원</span></div>
   <div class="fee-chip total"><span class="fee-lbl">총계</span><span class="fee-val" id="fee-total">0원</span></div>
+  <div class="fee-chip" id="fee-final-chip" style="display:none;background:#fff3e0;border:1.5px solid #f97316"><span class="fee-lbl" style="color:#c2410c">최종수납액</span><span class="fee-val" id="fee-final" style="color:#c2410c;font-weight:700">0원</span></div>
 
   <!-- 할인 -->
   <div class="fee-chip discount" id="discount-chip-wrap" style="flex-direction:row;gap:6px;align-items:center;padding:3px 10px">
@@ -9136,6 +9137,37 @@ function recalcAllItemDiscounts() {
         ? '-' + totalAllDisc.toLocaleString() + '원<br><span style="font-size:10px;color:#f97316">(' + overallRate + '%)</span>'
         : '-';
     if (dtf) dtf.textContent = window._feeTotal.toLocaleString() + '원';
+    // 하단 바 최종수납액 칩 갱신
+    var finalChip = document.getElementById('fee-final-chip');
+    var finalVal  = document.getElementById('fee-final');
+    if (finalChip && finalVal) {
+        if (totalAllDisc > 0) {
+            var finalAmt = window._feeTotal || 0;
+            var finalSupply = Math.round(finalAmt / 1.1);
+            var finalVat    = finalAmt - finalSupply;
+            finalVal.textContent = finalAmt.toLocaleString() + '원';
+            finalChip.style.display = '';
+            // 공급가액/VAT도 최종 기준으로 갱신
+            var supplyEl = document.getElementById('fee-supply');
+            var vatEl    = document.getElementById('fee-vat');
+            var totalEl  = document.getElementById('fee-total');
+            if (supplyEl) supplyEl.textContent = finalSupply.toLocaleString() + '원';
+            if (vatEl)    vatEl.textContent    = finalVat.toLocaleString() + '원';
+            if (totalEl)  totalEl.textContent  = finalAmt.toLocaleString() + '원';
+        } else {
+            finalChip.style.display = 'none';
+            // 할인 없으면 원가 기준 복원
+            var orig = window._feeGrandTotal || 0;
+            var origSupply = Math.round(orig / 1.1);
+            var origVat    = orig - origSupply;
+            var supplyEl2 = document.getElementById('fee-supply');
+            var vatEl2    = document.getElementById('fee-vat');
+            var totalEl2  = document.getElementById('fee-total');
+            if (supplyEl2) supplyEl2.textContent = origSupply.toLocaleString() + '원';
+            if (vatEl2)    vatEl2.textContent    = origVat.toLocaleString() + '원';
+            if (totalEl2)  totalEl2.textContent  = orig.toLocaleString() + '원';
+        }
+    }
 }
 
 // ============================================================================
