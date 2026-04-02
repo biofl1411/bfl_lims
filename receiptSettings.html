@@ -234,6 +234,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
                 </div>
                 <div id="holiday-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px"></div>
             </div>
+
+            <!-- 처리기한 일괄 재계산 -->
+            <div style="background:#fff;border:1px solid #e2e6ed;border-radius:12px;padding:16px 20px">
+                <div style="font-size:13px;font-weight:700;color:#1a2332;margin-bottom:4px">🔄 처리기한 일괄 재계산</div>
+                <div style="font-size:12px;color:#8892a4;margin-bottom:12px">휴일 추가/삭제 후 기존 접수건의 처리기한을 현재 휴일 규칙 기준으로 다시 계산합니다. 상태가 <strong>완료·취소</strong>가 아닌 접수건만 대상입니다.</div>
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                    <button onclick="rsRecalcDeadlines()" id="btn-recalc-deadlines" style="padding:9px 22px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#e65100;color:#fff">🔄 처리기한 일괄 재계산</button>
+                    <span id="recalc-status" style="font-size:12px;color:#5f6b7a"></span>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -594,6 +604,86 @@ async function rsAddDefaultHolidays() {
 // 휴일 탭 진입 시 로드
 var _rsHolidayLoaded = false;
 var _origSwitchSettingsTab = null;
+
+// ── 처리기한 일괄 재계산 ──
+function rsIsWorkingDay(date, holidayDates) {
+    var day = date.getDay();
+    if (day === 0 || day === 6) return false;
+    var y = date.getFullYear(), m = String(date.getMonth()+1).padStart(2,'0'), d = String(date.getDate()).padStart(2,'0');
+    return holidayDates.indexOf(y+'-'+m+'-'+d) < 0;
+}
+
+function rsAddWorkingDays(startDate, workDays, holidayDates) {
+    var date = new Date(startDate);
+    var added = rsIsWorkingDay(date, holidayDates) ? 1 : 0;
+    while (added < workDays) {
+        date.setDate(date.getDate() + 1);
+        if (rsIsWorkingDay(date, holidayDates)) added++;
+    }
+    var y = date.getFullYear(), m = String(date.getMonth()+1).padStart(2,'0'), d = String(date.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+}
+
+async function rsRecalcDeadlines() {
+    var btn = document.getElementById('btn-recalc-deadlines');
+    var statusEl = document.getElementById('recalc-status');
+    btn.disabled = true;
+    statusEl.textContent = '휴일 목록 로드 중...';
+
+    // 현재 휴일 날짜 목록
+    var holidays = await rsGetHolidays();
+    var holidayDates = holidays.map(function(h){ return h.date; });
+
+    statusEl.textContent = '접수 데이터 조회 중...';
+    try {
+        // 완료·취소 제외한 접수건 조회
+        var snap = await db.collection('receipts')
+            .where('status', 'not-in', ['완료', '취소'])
+            .get();
+
+        if (snap.empty) {
+            statusEl.textContent = '대상 접수건이 없습니다.';
+            btn.disabled = false;
+            return;
+        }
+
+        var total = snap.docs.length;
+        var updated = 0;
+        var batch = db.batch();
+        var batchCount = 0;
+
+        for (var i = 0; i < snap.docs.length; i++) {
+            var doc = snap.docs[i];
+            var data = doc.data();
+            var receiptDate = data.receiptDate;
+            if (!receiptDate) continue;
+
+            var newDeadline = rsAddWorkingDays(new Date(receiptDate), 12, holidayDates);
+            if (newDeadline !== data.processingDeadline) {
+                batch.update(doc.ref, { processingDeadline: newDeadline });
+                updated++;
+                batchCount++;
+            }
+
+            // Firestore batch 최대 500건
+            if (batchCount >= 490) {
+                await batch.commit();
+                batch = db.batch();
+                batchCount = 0;
+            }
+
+            if (i % 20 === 0) statusEl.textContent = '처리 중... (' + (i+1) + '/' + total + ')';
+        }
+
+        if (batchCount > 0) await batch.commit();
+
+        statusEl.textContent = '완료 — 총 ' + total + '건 중 ' + updated + '건 업데이트';
+    } catch(e) {
+        statusEl.textContent = '오류: ' + e.message;
+        console.error(e);
+    }
+    btn.disabled = false;
+}
 
 document.addEventListener('DOMContentLoaded', loadFontSettings);
 
