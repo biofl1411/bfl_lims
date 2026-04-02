@@ -1,0 +1,3085 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioFoodLab LIMS - 재무 접수현황</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height:100vh;background:#f8f9fb;font-size:13px;overflow:hidden;display:flex}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:250px;height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e6ed;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:700;color:#1a2332}
+.topbar-sep{color:#c8d6e5}
+.topbar-sub{font-size:13px;color:#5f6b7a}
+.content{flex:1;padding:24px;overflow-y:auto}
+
+/* 버튼 */
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#1a73e8;color:#fff}.btn-primary:hover{background:#1557b0}
+.btn-secondary{background:#fff;color:#5f6b7a;border:1px solid #e2e6ed}.btn-secondary:hover{background:#f0f2f5}
+.btn-success{background:#10b981;color:#fff}.btn-success:hover{background:#059669}
+.btn-warning{background:#ff9800;color:#fff}.btn-warning:hover{background:#f57c00}
+.btn-danger{background:#fff;color:#ef4444;border:1px solid #fecaca}.btn-danger:hover{background:#fef2f2}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* 카드 */
+.card{background:#fff;border-radius:12px;border:1px solid #e2e6ed;margin-bottom:16px}
+.card-hd{padding:14px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card-hd h3{font-size:14px;font-weight:700;color:#1a2332}
+.card-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card-bd{padding:20px}
+
+/* 테이블 */
+.tbl-wrap{overflow-x:auto;border:1px solid #e2e6ed;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{background:#f8f9fb;position:sticky;top:0;z-index:1}
+th{padding:9px 10px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #f0f2f5;color:#1a2332;vertical-align:middle}
+tr:hover{background:#fafbfc}
+.text-right{text-align:right}
+.text-center{text-align:center}
+.empty-msg{text-align:center;padding:40px;color:#9ca3af;font-size:13px}
+
+/* 태그 */
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.tag-green{background:#e8f5e9;color:#2e7d32}
+.tag-blue{background:#e3f2fd;color:#1565c0}
+.tag-orange{background:#fff3e0;color:#e65100}
+.tag-red{background:#fce4ec;color:#c62828}
+.tag-gray{background:#f5f5f5;color:#5f6b7a}
+.tag-purple{background:#f3e5f5;color:#7b1fa2}
+
+/* KPI */
+.rf-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.rf-kpi{background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px}
+.rf-kpi-icon{font-size:24px;flex-shrink:0}
+.rf-kpi-val{font-size:20px;font-weight:800;line-height:1}
+.rf-kpi-lbl{font-size:10px;color:#8892a4;margin-top:3px}
+
+/* 검색 필터존 */
+.rf-filter-zone{background:#fff;border:1px solid #e2e6ed;border-radius:10px;padding:10px 16px;margin-bottom:16px;display:flex;flex-direction:column;gap:8px}
+.rf-filter-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rf-filter-bar input[type=date]{padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;outline:none;transition:border .15s}
+.rf-filter-bar input[type=date]:focus{border-color:#1a73e8}
+.rf-filter-row2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rf-filter-row2 select{padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;outline:none;background:#fff;cursor:pointer;transition:border .15s}
+.rf-filter-row2 select:focus{border-color:#1a73e8}
+.rf-filter-srch{flex:1;min-width:180px;padding:7px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;outline:none;transition:border .15s}
+.rf-filter-srch:focus{border-color:#1a73e8}
+.rf-result-text{margin-left:auto;font-size:11px;color:#8892a4;white-space:nowrap}
+
+/* 탭 */
+.rf-tab-bar{display:flex;border-bottom:2px solid #e2e6ed;margin-bottom:20px;background:#fff;border-radius:10px 10px 0 0;padding:0 4px}
+.rf-tab{padding:12px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:#8892a4;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.rf-tab:hover{color:#1a73e8}
+.rf-tab.active{color:#1a73e8;border-bottom-color:#1a73e8}
+.rf-panel{display:none}
+.rf-panel.active{display:block}
+.rf-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;font-size:10px;font-weight:700;color:#fff;background:#e53935}
+
+/* 인라인 select/date */
+.inline-select{padding:4px 6px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;cursor:pointer;min-width:78px;transition:border .15s}
+.inline-select:focus{border-color:#1a73e8}
+.inline-select.filled{border-color:#4caf50;background:#f1f8e9;color:#2e7d32;font-weight:600}
+.inline-date{padding:4px 6px;border:1px solid #e2e6ed;border-radius:6px;font-size:11px;font-family:inherit;outline:none;width:108px;transition:border .15s}
+.inline-date:focus{border-color:#1a73e8}
+.inline-date.filled{border-color:#1a73e8;background:#e3f2fd}
+
+/* 발행관리 블록 */
+.rf-issue-block{background:#fff;border:1px solid #e2e6ed;border-radius:12px;margin-bottom:16px;overflow:hidden}
+.rf-issue-hd{padding:14px 18px;background:#f8f9fb;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:10px}
+.rf-issue-hd h4{font-size:14px;font-weight:700;color:#1a2332}
+.rf-issue-hd .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.rf-issue-body{padding:16px 18px}
+/* 발행관리 서브탭 */
+.issue-subtab-bar{display:flex;gap:4px;border-bottom:2px solid #e2e6ed;margin-bottom:18px;flex-wrap:wrap}
+.issue-subtab{padding:9px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:#8892a4;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap;border-radius:6px 6px 0 0}
+.issue-subtab:hover{color:#1a73e8;background:#f0f4ff}
+.issue-subtab.active{color:#1a73e8;border-bottom-color:#1a73e8;background:#f0f4ff}
+.issue-subtab .sub-badge{display:inline-block;background:#e53935;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+.issue-panel{display:none}
+.issue-panel.active{display:block}
+/* 합산발행 그룹 */
+.merged-group{background:#fff;border:1px solid #e2e6ed;border-radius:10px;margin-bottom:14px;overflow:hidden}
+.merged-group-hd{padding:10px 14px;background:#f5f7fb;border-bottom:1px solid #eef0f4;display:flex;align-items:center;gap:8px;cursor:pointer}
+.merged-group-hd .company-name{font-size:13px;font-weight:700;color:#1a2332}
+.merged-group-hd .count-badge{font-size:11px;color:#1a73e8;background:#e8f0fe;border-radius:8px;padding:2px 8px}
+.merged-group-hd .sum-amount{margin-left:auto;font-size:13px;font-weight:700;color:#2e7d32}
+.merged-group-body{padding:12px 14px}
+.merged-group-body .rf-scroll-table{border:none;border-radius:0}
+.group-member-row{background:#f5f7fa;border-left:3px solid #e0e7ef}
+.member-ro-badge{font-size:11px;color:#546e7a}
+.member-ro-text{font-size:11px;color:#546e7a}
+.rf-issue-desc{font-size:12px;color:#5f6b7a;margin-bottom:12px;line-height:1.6}
+.rf-scroll-table{max-height:320px;overflow-y:auto;overflow-x:auto;border:1px solid #e2e6ed;border-radius:8px}
+
+/* 체크박스 */
+.row-check{accent-color:#1a73e8;width:14px;height:14px;cursor:pointer}
+
+/* 라디오 */
+.rf-radio-group{display:flex;gap:8px}
+.rf-radio-label{display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #e2e6ed;border-radius:8px;cursor:pointer;font-size:12px;transition:all .15s;background:#fff}
+.rf-radio-label.active{background:#e3f2fd;border-color:#1a73e8;color:#1565c0;font-weight:600}
+
+/* 오버레이/모달 */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.overlay.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.modal-lg{width:680px}
+.modal-hd{padding:18px 20px;border-bottom:1px solid #eef0f4;display:flex;align-items:flex-start;justify-content:space-between}
+.modal-hd h3{font-size:16px;font-weight:700;color:#1a2332}
+.modal-hd .subtitle{font-size:12px;color:#8892a4;margin-top:3px}
+.modal-close{background:none;border:none;cursor:pointer;font-size:20px;color:#8892a4;line-height:1;padding:0}
+.modal-bd{padding:20px}
+.modal-ft{padding:14px 20px;border-top:1px solid #eef0f4;display:flex;justify-content:flex-end;gap:8px}
+.form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-label{font-size:11px;font-weight:700;color:#5f6b7a}
+.form-input{padding:8px 10px;border:1px solid #e2e6ed;border-radius:8px;font-size:12px;font-family:inherit;outline:none;transition:border .15s;width:100%}
+.form-input:focus{border-color:#1a73e8}
+.form-input[readonly]{background:#f8f9fb;color:#8892a4}
+.form-section{margin-bottom:16px}
+.form-section-title{font-size:12px;font-weight:700;color:#1a2332;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #eef0f4}
+.selected-info{font-size:12px;color:#5f6b7a;padding:6px 10px;background:#f8f9fb;border-radius:6px;border:1px solid #eef0f4;display:inline-block}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/firestore-helpers.js"></script>
+<script src="js/sidebar.js?v=3"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="js/toast.js"></script>
+</head>
+<body>
+<aside class="sidebar" id="sidebar"></aside>
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">재무 관리</span>
+    <span class="topbar-sep">›</span>
+    <span class="topbar-sub">접수현황</span>
+  </div>
+  <div class="content">
+
+    <!-- KPI 카드 -->
+    <div class="rf-kpi-grid">
+      <div class="rf-kpi">
+        <div class="rf-kpi-icon">📋</div>
+        <div>
+          <div class="rf-kpi-val" id="kpiTotal" style="color:#1a2332">0</div>
+          <div class="rf-kpi-lbl">전체 접수건</div>
+        </div>
+      </div>
+      <div class="rf-kpi">
+        <div class="rf-kpi-icon">⚠️</div>
+        <div>
+          <div class="rf-kpi-val" id="kpiUninput" style="color:#e53935">0</div>
+          <div class="rf-kpi-lbl">결제정보 미입력</div>
+        </div>
+      </div>
+      <div class="rf-kpi">
+        <div class="rf-kpi-icon">📤</div>
+        <div>
+          <div class="rf-kpi-val" id="kpiPending" style="color:#ff9800">0</div>
+          <div class="rf-kpi-lbl">발행 대기</div>
+        </div>
+      </div>
+      <div class="rf-kpi">
+        <div class="rf-kpi-icon">✅</div>
+        <div>
+          <div class="rf-kpi-val" id="kpiIssued" style="color:#2e7d32">0</div>
+          <div class="rf-kpi-lbl">발행 완료</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 검색 필터존 -->
+    <div class="rf-filter-zone">
+      <!-- 1행: 날짜 범위 + 빠른선택 버튼 -->
+      <div class="rf-filter-bar">
+        <input type="date" id="srchFrom" onchange="doSearch()">
+        <span style="color:#999">~</span>
+        <input type="date" id="srchTo" onchange="doSearch()">
+        <button class="btn btn-secondary btn-sm" onclick="setRangeDays(-1)">전일</button>
+        <button class="btn btn-secondary btn-sm" onclick="setRangeToday()">오늘</button>
+        <button class="btn btn-secondary btn-sm" onclick="setRangeDays(7)">1주일</button>
+        <button class="btn btn-secondary btn-sm" onclick="setRangeThisMonth()">이번달</button>
+        <button class="btn btn-secondary btn-sm" onclick="setRangeMonths(3)">3개월</button>
+        <button class="btn btn-secondary btn-sm" onclick="setRangeMonths(6)">6개월</button>
+        <button class="btn btn-secondary btn-sm" onclick="setRangeAll()">전체</button>
+      </div>
+      <!-- 2행: 드롭다운 + 초기화 + 텍스트검색 + 결과 -->
+      <div class="rf-filter-row2">
+        <select id="srchSalesRep" onchange="doSearch()">
+          <option value="">전체 담당자</option>
+        </select>
+        <select id="srchStatus" onchange="doSearch()">
+          <option value="">전체 상태</option>
+          <option value="미입력">미입력</option>
+          <option value="발행대기">발행대기</option>
+          <option value="발행완료">발행완료</option>
+          <option value="취소">취소</option>
+        </select>
+        <select id="srchInvoiceType" onchange="doSearch()">
+          <option value="">전체 계산서</option>
+          <option value="세금계산서">세금계산서</option>
+          <option value="현금영수증">현금영수증</option>
+          <option value="카드전표">카드전표</option>
+          <option value="카드+계산서">카드+계산서</option>
+          <option value="없음">없음</option>
+        </select>
+        <select id="srchPayMethod" onchange="doSearch()">
+          <option value="">전체 결제방법</option>
+          <option value="카드">카드</option>
+          <option value="온라인입금">온라인입금</option>
+          <option value="현금">현금</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="resetSearch()">초기화</button>
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px">
+          <input class="rf-filter-srch" type="text" id="srchKeyword" placeholder="검색 후 Enter로 태그 추가..." oninput="doSearch()" onkeydown="onSearchKeydown(event)" style="width:100%">
+          <div id="search-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
+        </div>
+        <span class="rf-result-text" id="srchResultText">0건 / 0원</span>
+      </div>
+    </div>
+
+    <!-- 탭 바 -->
+    <div class="rf-tab-bar">
+      <button class="rf-tab active" id="tab-uninput" onclick="switchTab('uninput')">⚠️ 미입력 <span class="rf-badge" id="uninputBadge">0</span></button>
+      <button class="rf-tab" id="tab-all" onclick="switchTab('all')">📋 전체</button>
+      <div style="width:1px;background:#e2e6ed;margin:8px 4px"></div>
+      <button class="rf-tab" id="tab-undefined" onclick="switchTab('undefined')">📋 미정 <span class="rf-badge" id="undefinedBadge" style="background:#607d8b">0</span></button>
+      <button class="rf-tab" id="tab-specific" onclick="switchTab('specific')">🎯 특정일 <span class="rf-badge" id="specificBadge" style="background:#e65100">0</span></button>
+      <button class="rf-tab" id="tab-month" onclick="switchTab('month')">📅 월말 <span class="rf-badge" id="monthBadge" style="background:#1565c0">0</span></button>
+    </div>
+
+    <!-- 탭1: 미입력 -->
+    <div class="rf-panel active" id="rfPanel-uninput">
+      <div class="card">
+        <div class="card-hd">
+          <h3>결제정보 미입력 건</h3>
+          <span style="background:#fce4ec;color:#c62828;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600">⚠️ 아래 건들의 결제방법 / 계산서유형을 입력하고 저장해 주세요</span>
+          <div class="right">
+            <button class="btn btn-secondary btn-sm" onclick="loadReceiptsData()">🔄 새로고침</button>
+          </div>
+        </div>
+        <div id="uninputMergedContainer" style="padding:0 4px"></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>접수번호</th>
+                <th>접수일</th>
+                <th>업체명</th>
+                <th>제품명</th>
+                <th>검사목적</th>
+                <th class="text-right">수수료</th>
+                <th class="text-center">입금현황</th>
+                <th>결제방법</th>
+                <th>계산서유형</th>
+                <th>발행유형</th>
+                <th>발행일</th>
+                <th>발행예정일</th>
+                <th>메모</th>
+                <th>타업체 지정</th>
+                <th>저장</th>
+              </tr>
+            </thead>
+            <tbody id="uninputTbody">
+              <tr><td colspan="13" class="empty-msg">데이터 로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 탭2: 전체 -->
+    <div class="rf-panel" id="rfPanel-all">
+      <div class="card">
+        <div class="card-hd">
+          <h3>전체 접수 현황</h3>
+          <span id="allTabInfo" style="font-size:11px;color:#8892a4"></span>
+          <div class="right">
+            <button class="btn btn-secondary btn-sm" onclick="downloadAllExcel()">📥 Excel 다운로드</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>접수번호</th>
+                <th>접수일</th>
+                <th>업체명</th>
+                <th>발행 대상</th>
+                <th class="text-right">수수료</th>
+                <th class="text-center">입금현황</th>
+                <th>결제방법</th>
+                <th>계산서유형</th>
+                <th>발행유형</th>
+                <th>발행일</th>
+                <th>발행예정일</th>
+                <th>메모</th>
+                <th>상태</th>
+                <th>처리</th>
+              </tr>
+            </thead>
+            <tbody id="allTbody">
+              <tr><td colspan="11" class="empty-msg">데이터 로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 미정 탭 -->
+    <div class="rf-panel" id="rfPanel-undefined">
+      <div class="rf-issue-block">
+        <div class="rf-issue-hd">
+          <span style="font-size:20px">📋</span>
+          <h4>미정</h4>
+          <div class="right">
+            <div class="rf-radio-group" id="batchTaxTypeGroup">
+              <label class="rf-radio-label active" id="batchRadio-taxable" onclick="setBatchTaxType('과세')"><input type="radio" name="batchTaxType" value="과세" checked style="display:none"> 과세</label>
+              <label class="rf-radio-label" id="batchRadio-exempt" onclick="setBatchTaxType('면세')"><input type="radio" name="batchTaxType" value="면세" style="display:none"> 면세</label>
+            </div>
+          </div>
+        </div>
+        <div class="rf-issue-body">
+          <div class="rf-issue-desc">발행일정이 미정인 건들입니다. 합산 그룹은 위에, 수동/분할 건은 아래 테이블에 표시됩니다.</div>
+          <div id="undefinedMergedContainer"></div>
+          <div class="rf-scroll-table"><table><thead><tr>
+            <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="undefinedCheckAll" onchange="toggleCheckAll('undefined',this.checked)"></th>
+            <th>접수번호</th><th>접수일</th><th>업체명</th><th>제품명</th><th>검사목적</th><th class="text-right">수수료</th><th class="text-center">입금현황</th><th>결제방법</th><th>계산서유형</th><th>발행유형</th><th>발행일</th><th>발행예정일</th><th>메모</th><th>타업체 지정</th><th></th>
+          </tr></thead><tbody id="undefinedTbody"><tr><td colspan="17" class="empty-msg">해당 건이 없습니다</td></tr></tbody></table></div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <span class="selected-info" id="undefinedSelectedInfo">선택: 0건 / 0원</span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn btn-warning btn-sm" onclick="downloadUndefinedExcel()">📥 홈택스 파일 생성</button>
+              <button class="btn btn-success btn-sm" onclick="markUndefinedIssued()">✅ 발행완료 처리</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /rfPanel-undefined -->
+
+    <!-- 특정일 탭 -->
+    <div class="rf-panel" id="rfPanel-specific">
+      <div class="rf-issue-block">
+        <div class="rf-issue-hd">
+          <span style="font-size:20px">🎯</span>
+          <h4>특정일</h4>
+          <div class="right">
+            <input type="date" class="rf-input" id="specificDateSelect" style="width:140px" onchange="renderSpecificTab()">
+          </div>
+        </div>
+        <div class="rf-issue-body">
+          <div class="rf-issue-desc">발행일정이 특정일로 지정된 건들입니다. 날짜를 선택하면 해당 날짜 건만 필터됩니다.</div>
+          <div id="specificMergedContainer"></div>
+          <div class="rf-scroll-table"><table><thead><tr>
+            <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="specificCheckAll" onchange="toggleCheckAll('specific',this.checked)"></th>
+            <th>접수번호</th><th>접수일</th><th>업체명</th><th>제품명</th><th>검사목적</th><th class="text-right">수수료</th><th class="text-center">입금현황</th><th>결제방법</th><th>계산서유형</th><th>발행유형</th><th>발행일</th><th>발행예정일</th><th>메모</th><th>타업체 지정</th><th></th>
+          </tr></thead><tbody id="specificIndividualTbody"><tr><td colspan="17" class="empty-msg">해당 건이 없습니다</td></tr></tbody></table></div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <span class="selected-info" id="specificSelectedInfo">선택: 0건 / 0원</span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn btn-warning btn-sm" onclick="downloadSpecificDateExcel()">📥 홈택스 파일 생성</button>
+              <button class="btn btn-success btn-sm" onclick="markSpecificDateIssued()">✅ 발행완료 처리</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /rfPanel-specific -->
+
+    <!-- 월말 탭 -->
+    <div class="rf-panel" id="rfPanel-month">
+      <div class="rf-issue-block">
+        <div class="rf-issue-hd">
+          <span style="font-size:20px">📅</span>
+          <h4>월말</h4>
+          <div class="right">
+            <input type="month" class="rf-input" id="monthSelect" style="width:140px" onchange="renderMonthTab()">
+          </div>
+        </div>
+        <div class="rf-issue-body">
+          <div class="rf-issue-desc">발행일정이 월말로 지정된 건들입니다. 월을 선택하면 해당 월 건만 필터됩니다.</div>
+          <div id="monthMergedContainer"></div>
+          <div class="rf-scroll-table"><table><thead><tr>
+            <th class="text-center" style="width:32px"><input type="checkbox" class="row-check" id="monthCheckAll" onchange="toggleCheckAll('month',this.checked)"></th>
+            <th>접수번호</th><th>접수일</th><th>업체명</th><th>제품명</th><th>검사목적</th><th class="text-right">수수료</th><th class="text-center">입금현황</th><th>결제방법</th><th>계산서유형</th><th>발행유형</th><th>발행일</th><th>발행예정일</th><th>메모</th><th>타업체 지정</th><th></th>
+          </tr></thead><tbody id="monthIndividualTbody"><tr><td colspan="17" class="empty-msg">해당 건이 없습니다</td></tr></tbody></table></div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <span class="selected-info" id="monthSelectedInfo">선택: 0건 / 0원</span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn btn-warning btn-sm" onclick="downloadMonthExcel()">📥 홈택스 파일 생성</button>
+              <button class="btn btn-success btn-sm" onclick="markMonthIssued()">✅ 발행완료 처리</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /rfPanel-month -->
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- 홈택스 파일 미리보기 모달 -->
+<div class="overlay" id="taxPreviewOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:1400px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <span style="font-size:16px;font-weight:700">📋 홈택스 업로드 파일 미리보기</span>
+        <span style="font-size:12px;color:#6b7280;margin-left:12px" id="taxPreviewTitle"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-warning btn-sm" id="taxPreviewDownloadBtn">📥 이 데이터로 다운로드</button>
+        <button onclick="closeTaxPreview()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">✕</button>
+      </div>
+    </div>
+    <div style="padding:16px 20px;overflow-x:auto">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px">⬅️ 좌우 스크롤 · 빨간색 = 필수항목 · 세로 2칸 병합된 열은 한 칸으로 표시</div>
+      <div id="taxPreviewTableWrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 합산 그룹 선택 모달 -->
+<div class="overlay" id="mergeSelectOverlay">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hd">
+      <div>
+        <h3>🔗 합산 발행 묶기</h3>
+        <div class="subtitle" id="mergeSelectSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeMergeSelectModal()">✕</button>
+    </div>
+    <div class="modal-bd">
+      <div style="font-size:12px;color:#5f6b7a;margin-bottom:12px">함께 합산할 접수건을 선택하세요. 선택한 건들이 1장 세금계산서로 묶입니다.</div>
+      <div id="mergeSelectList"></div>
+      <div id="mergeSelectSum" style="text-align:right;font-size:13px;font-weight:700;color:#1a73e8;margin-top:10px;padding-top:10px;border-top:1px solid #e2e6ed"></div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid #eef0f4;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-secondary btn-sm" onclick="closeMergeSelectModal()">취소</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmMergeSelect()">✅ 묶기 확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 타업체 발행 모달 -->
+<div class="overlay" id="altBizOverlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <div>
+        <h3>🏢 발행 대상 사업자 지정</h3>
+        <div class="subtitle" id="altBizSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeAltBizModal()">✕</button>
+    </div>
+    <div class="modal-bd">
+      <!-- 현재 발행 대상 -->
+      <div class="form-section">
+        <div class="form-section-title">현재 발행 대상 (업체 등록 정보)</div>
+        <div id="currentBizInfo" style="background:#e3f2fd;border-radius:8px;padding:10px 14px;font-size:12px;color:#1565c0;line-height:1.8"></div>
+      </div>
+      <!-- 타업체 발행 체크박스 -->
+      <div style="background:#fff3e0;border:1px solid #ffe082;border-radius:8px;padding:8px 12px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:#e65100">
+          <input type="checkbox" id="altBizEnabled" onchange="toggleAltBiz()" style="accent-color:#e65100;width:15px;height:15px">
+          다른 사업자에게 발행 (타업체 발행)
+        </label>
+      </div>
+      <!-- 타업체 정보 입력 -->
+      <div id="altBizFields" style="display:none;border:1px solid #ffe082;border-radius:8px;padding:14px">
+        <div class="form-grid-2" style="margin-bottom:10px">
+          <div class="form-group">
+            <label class="form-label">사업자등록번호 *</label>
+            <input class="form-input" id="altBizNo" placeholder="000-00-00000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">상호 *</label>
+            <input class="form-input" id="altBizCompany" placeholder="(주)한국식품안전 본사">
+          </div>
+        </div>
+        <div class="form-grid-2" style="margin-bottom:10px">
+          <div class="form-group">
+            <label class="form-label">대표자명 *</label>
+            <input class="form-input" id="altBizCeo">
+          </div>
+          <div class="form-group">
+            <label class="form-label">이메일 *</label>
+            <input class="form-input" id="altBizEmail" type="email">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">주소</label>
+          <input class="form-input" id="altBizAddr">
+        </div>
+        <div class="form-grid-2" style="margin-bottom:10px">
+          <div class="form-group">
+            <label class="form-label">업태</label>
+            <input class="form-input" id="altBizType" placeholder="제조업">
+          </div>
+          <div class="form-group">
+            <label class="form-label">종목</label>
+            <input class="form-input" id="altBizItem" placeholder="식품">
+          </div>
+        </div>
+        <div class="form-grid-2" style="margin-bottom:10px">
+          <div class="form-group">
+            <label class="form-label">담당자명</label>
+            <input class="form-input" id="altBizContactName">
+          </div>
+          <div class="form-group">
+            <label class="form-label">담당자 휴대폰</label>
+            <input class="form-input" id="altBizMobile">
+          </div>
+        </div>
+        <div style="background:#fce4ec;border-radius:6px;padding:8px 12px;font-size:11px;color:#c62828">
+          ⚠️ 타업체 발행 시 사업자등록번호, 상호, 대표자명, 이메일은 필수입니다.
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-secondary" onclick="closeAltBizModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveAltBiz()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 접수 상세: 인라인 아코디언 방식으로 대체 (openDetailModal 참조) -->
+
+<script>
+/* =====================================================
+   전역 변수
+===================================================== */
+var _allReceipts = [];
+var _filteredReceipts = [];
+var _companiesMap = {};
+var _companiesByBizNo = {};
+var _currentReceiptId = null;
+var _currentTab = 'uninput';
+var _batchTaxType = '과세';
+var _monthList = [];
+var _specificList = [];
+
+var SUPPLIER = {
+  bizNo: '6588700076',
+  name: '주식회사 바이오푸드랩',
+  ceo: '이용표',
+  addr1: '서울특별시 구로구 디지털로30길 28',
+  addr2: '1408호,1410호~1414호 (구로동, 마리오 타워)',
+  bizStatus: '서비스,도매 및 소매업,전문, 과학 및 기술서비스업',
+  bizType: '물질성분검사및분석업,의료용품 도매업,기타 통신 판매업',
+  dept: '', email: '', mobile: '', contactName: '', phone: ''
+};
+
+/* =====================================================
+   초기화
+===================================================== */
+async function init() {
+  setDefaultDates();
+  await loadSupplierInfoLocal();
+  await loadCompaniesData();
+  await loadReceiptsData();
+  // 발행관리 탭 기본 날짜 설정 — 특정일은 빈값(전체), 월말만 이번달
+  var now = new Date();
+  var ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('monthSelect').value = ym;
+  document.getElementById('specificDateSelect').value = ''; // 전체 표시 (날짜 선택 시 필터)
+}
+
+function setDefaultDates() {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = String(now.getMonth()+1).padStart(2,'0');
+  var d = String(now.getDate()).padStart(2,'0');
+  document.getElementById('srchFrom').value = y + '-' + m + '-01';
+  document.getElementById('srchTo').value = y + '-' + m + '-' + d;
+}
+function setRangeDays(days) {
+  var now = new Date(); var from, to;
+  if (days < 0) {
+    var yd = new Date(now); yd.setDate(yd.getDate()-1);
+    from = to = yd.toISOString().slice(0,10);
+  } else {
+    var fd = new Date(now); fd.setDate(fd.getDate()-days+1);
+    from = fd.toISOString().slice(0,10);
+    to = now.toISOString().slice(0,10);
+  }
+  document.getElementById('srchFrom').value = from;
+  document.getElementById('srchTo').value = to;
+  doSearch();
+}
+function setRangeToday() {
+  var t = new Date().toISOString().slice(0,10);
+  document.getElementById('srchFrom').value = t;
+  document.getElementById('srchTo').value = t;
+  doSearch();
+}
+function setRangeThisMonth() {
+  var n = new Date();
+  document.getElementById('srchFrom').value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-01';
+  document.getElementById('srchTo').value = n.toISOString().slice(0,10);
+  doSearch();
+}
+function setRangeMonths(months) {
+  var now = new Date(); var from = new Date(now);
+  from.setMonth(from.getMonth()-months);
+  document.getElementById('srchFrom').value = from.toISOString().slice(0,10);
+  document.getElementById('srchTo').value = now.toISOString().slice(0,10);
+  doSearch();
+}
+function setRangeAll() {
+  document.getElementById('srchFrom').value = '';
+  document.getElementById('srchTo').value = '';
+  doSearch();
+}
+
+async function loadSupplierInfoLocal() {
+  try {
+    var doc = await db.collection('settings').doc('companyInfo').get();
+    if (doc.exists) {
+      var d = doc.data();
+      SUPPLIER.bizNo = d.bizNo || SUPPLIER.bizNo;
+      SUPPLIER.name = d.name || SUPPLIER.name;
+      SUPPLIER.ceo = d.ceo || SUPPLIER.ceo;
+      SUPPLIER.addr1 = d.addr1 || SUPPLIER.addr1;
+      SUPPLIER.addr2 = d.addr2 || SUPPLIER.addr2;
+      SUPPLIER.bizStatus = d.bizStatus || SUPPLIER.bizStatus;
+      SUPPLIER.bizType = d.bizType || SUPPLIER.bizType;
+      SUPPLIER.dept = d.dept || SUPPLIER.dept;
+      SUPPLIER.email = d.email || SUPPLIER.email;
+      SUPPLIER.mobile = d.mobile || SUPPLIER.mobile;
+      SUPPLIER.contactName = d.contactName || SUPPLIER.contactName;
+      SUPPLIER.phone = d.phone || SUPPLIER.phone;
+    }
+  } catch(e) { console.warn('공급자 정보 로드 실패:', e.message); }
+}
+
+async function loadCompaniesData() {
+  try {
+    var snap = await db.collection('companies').get();
+    _companiesMap = {};
+    _companiesByBizNo = {};
+    snap.docs.forEach(function(doc) {
+      var cd = doc.data();
+      var name = cd.companyName || cd.company || cd.name || '';
+      var biz = (cd.bizNo || cd.businessNo || '').replace(/-/g,'');
+      if (name) _companiesMap[name] = cd;
+      if (biz) _companiesByBizNo[biz] = cd;
+    });
+  } catch(e) { console.warn('업체 로드 실패:', e.message); }
+}
+
+// payments[].method → payMethod 매핑
+function inferPayMethodFromPayments(payments) {
+  if (!payments || !payments.length) return null;
+  var method = (payments[0].method || '').trim();
+  if (method === '카드') return '카드';
+  if (method === '현금') return '현금';
+  return '온라인입금'; // 계좌이체, 이체 등 나머지
+}
+function inferInvoiceType(payMethod) {
+  if (payMethod === '카드') return '카드전표';
+  if (payMethod === '현금') return '현금영수증';
+  return '세금계산서';
+}
+
+async function loadReceiptsData() {
+  try {
+    var snap = await db.collection('receipts').orderBy('createdAt','desc').limit(2000).get();
+    _allReceipts = snap.docs.map(function(doc) { return { id: doc.id, data: doc.data() }; });
+
+    // payments 있는데 payMethod 없는 건 자동 추론 + Firestore 저장
+    // 또는 invoiceType 있는데 payMethod 없는 건 역방향 정정
+    var batch = db.batch();
+    var autoFilled = 0;
+    _allReceipts.forEach(function(r) {
+      var d = r.data;
+      if (!d.payMethod && d.payments && d.payments.length > 0) {
+        var pm = inferPayMethodFromPayments(d.payments);
+        var it = inferInvoiceType(pm);
+        if (pm) {
+          d.payMethod = pm;
+          d.invoiceType = it;
+          batch.update(db.collection('receipts').doc(r.id), {
+            payMethod: pm, invoiceType: it,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          autoFilled++;
+        }
+      } else if (!d.payMethod && d.invoiceType) {
+        // invoiceType은 있는데 payMethod 없는 불일치 → 역방향 정정
+        var pmFromIt = '';
+        if (d.invoiceType === '카드전표' || d.invoiceType === '카드+계산서') pmFromIt = '카드';
+        else if (d.invoiceType === '현금영수증') pmFromIt = '현금';
+        else if (d.invoiceType === '세금계산서') pmFromIt = '온라인입금';
+        if (pmFromIt) {
+          d.payMethod = pmFromIt;
+          batch.update(db.collection('receipts').doc(r.id), {
+            payMethod: pmFromIt,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          autoFilled++;
+        }
+      }
+    });
+    // billingType='byPurpose' 레거시 값 정규화 (구 sampleReceiptV2 기본값)
+    var legacyFixed = 0;
+    _allReceipts.forEach(function(r) {
+      var d = r.data;
+      if (d.billingType === 'byPurpose' || d.billingType === '목적별') {
+        delete d.billingType;
+        batch.update(db.collection('receipts').doc(r.id), {
+          billingType: firebase.firestore.FieldValue.delete(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        legacyFixed++;
+      }
+    });
+
+    // 발행유형/발행일 구조 마이그레이션
+    // 구 billingType='특정일' → billingType='수동', issueSchedule='특정일'
+    // 구 billingType='월말'   → billingType='수동', issueSchedule='월말'
+    // 구 billingType='미지정' → billingType='수동', issueSchedule='미정'
+    // 구 billingType='수동'   → issueSchedule 없으면 '미정'
+    // 구 billingType='합산'   → issueSchedule 없으면 '미정'
+    var migrated = 0;
+    _allReceipts.forEach(function(r) {
+      var d = r.data;
+      var upd = null;
+      if (d.billingType === '특정일') {
+        upd = { billingType: '수동', issueSchedule: '특정일', updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        d.billingType = '수동'; d.issueSchedule = '특정일';
+      } else if (d.billingType === '월말') {
+        upd = { billingType: '수동', issueSchedule: '월말', updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        d.billingType = '수동'; d.issueSchedule = '월말';
+      } else if (d.billingType === '미지정') {
+        upd = { billingType: '수동', issueSchedule: '미정', updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        d.billingType = '수동'; d.issueSchedule = '미정';
+      }
+      if (upd) {
+        batch.update(db.collection('receipts').doc(r.id), upd);
+        migrated++;
+      }
+    });
+    // 합산 그룹 내 결제방법/계산서유형 동기화 — 그룹 내 1건이라도 있으면 나머지에 전파
+    var mergedGroups = {};
+    _allReceipts.forEach(function(r) {
+      var gid = r.data.mergedGroupId;
+      if (gid) {
+        if (!mergedGroups[gid]) mergedGroups[gid] = [];
+        mergedGroups[gid].push(r);
+      }
+    });
+    var groupSynced = 0;
+    Object.keys(mergedGroups).forEach(function(gid) {
+      var members = mergedGroups[gid];
+      // 그룹에서 결제방법이 있는 대표 건 찾기 (invoiceType 없어도 OK)
+      var leader = members.find(function(r) { return r.data.payMethod; });
+      if (!leader) return;
+      // invoiceType 없으면 payMethod로 추론
+      var leaderIt = leader.data.invoiceType;
+      if (!leaderIt) {
+        if (leader.data.payMethod === '카드') leaderIt = '카드전표';
+        else if (leader.data.payMethod === '온라인입금') leaderIt = '세금계산서';
+        else if (leader.data.payMethod === '현금') leaderIt = '현금영수증';
+        else leaderIt = '세금계산서';
+      }
+      members.forEach(function(r) {
+        if (!r.data.payMethod || !r.data.invoiceType) {
+          r.data.payMethod = leader.data.payMethod;
+          r.data.invoiceType = leaderIt;
+          batch.update(db.collection('receipts').doc(r.id), {
+            payMethod: leader.data.payMethod,
+            invoiceType: leaderIt,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          groupSynced++;
+        }
+      });
+    });
+
+    if (autoFilled > 0 || legacyFixed > 0 || groupSynced > 0 || migrated > 0) {
+      await batch.commit();
+      if (autoFilled > 0) console.log('[자동정정] ' + autoFilled + '건 결제방법/계산서유형 정합성 수정 완료');
+      if (legacyFixed > 0) console.log('[레거시정정] ' + legacyFixed + '건 byPurpose billingType 제거 완료');
+      if (groupSynced > 0) console.log('[합산동기화] ' + groupSynced + '건 합산그룹 결제방법/계산서유형 전파 완료');
+      if (migrated > 0) console.log('[구조마이그레이션] ' + migrated + '건 발행유형/발행일 신규구조 변환 완료');
+    }
+
+    buildSalesRepOptions();
+    renderKpiCards();
+    doSearch();
+  } catch(e) {
+    console.error('접수 데이터 로드 실패:', e);
+    showToast('데이터 로드 실패: ' + e.message);
+  }
+}
+
+function buildSalesRepOptions() {
+  var reps = {};
+  _allReceipts.forEach(function(r) { if (r.data.salesRep) reps[r.data.salesRep] = 1; });
+  var sel = document.getElementById('srchSalesRep');
+  sel.innerHTML = '<option value="">전체</option>';
+  Object.keys(reps).sort().forEach(function(rep) {
+    var opt = document.createElement('option');
+    opt.value = rep; opt.textContent = rep;
+    sel.appendChild(opt);
+  });
+}
+
+/* =====================================================
+   KPI 카드
+===================================================== */
+function renderKpiCards() {
+  var total = _allReceipts.length;
+  var uninput = _allReceipts.filter(function(r) { return isMissingInfo(r.data); }).length;
+  var issued = _allReceipts.filter(function(r) { return r.data.taxInvoiceIssued === true; }).length;
+  var pending = _allReceipts.filter(function(r) {
+    return !isMissingInfo(r.data) && r.data.taxInvoiceIssued !== true && r.data.taxCancelled !== true;
+  }).length;
+  document.getElementById('kpiTotal').textContent = total.toLocaleString();
+  document.getElementById('kpiUninput').textContent = uninput.toLocaleString();
+  document.getElementById('kpiPending').textContent = pending.toLocaleString();
+  document.getElementById('kpiIssued').textContent = issued.toLocaleString();
+  document.getElementById('uninputBadge').textContent = uninput;
+  updateUnsetBadge();
+}
+
+/* =====================================================
+   태그 검색
+===================================================== */
+var _searchTags = [];
+
+var SEARCH_ALIASES = {
+  // 검사목적
+  '자가': '자가품질위탁검사용',
+  '자가품질': '자가품질위탁검사용',
+  '위탁': '위탁검사',
+  '성분': '영양성분',
+  '수출': '수출용',
+  '수입': '수입식품',
+  '관능': '관능검사',
+  '미생물': '미생물검사',
+  '중금속': '중금속검사',
+  '농약': '농약잔류물',
+  '잔농': '잔류농약',
+  '식품첨가물': '식품첨가물검사',
+  '방사능': '방사능검사',
+  '항생': '항생물질',
+  '알티': 'allergen(rt-pcr)',
+  '엘라': 'allergen(elisa)',
+  // 업종
+  '제조': '식품제조가공업',
+  '즉판': '즉석판매제조가공업',
+  '축물': '축산물가공업',
+  '유통': '유통판매원',
+  // 긴급
+  '시간': '시간긴급'
+};
+
+function expandAlias(val) {
+  var v = val.trim().toLowerCase();
+  var alias = SEARCH_ALIASES[val.trim()] || SEARCH_ALIASES[v];
+  return alias ? [val.trim(), alias] : [val.trim()];
+}
+
+function onSearchKeydown(e) {
+  var inp = document.getElementById('srchKeyword');
+  var val = (inp.value || '').trim();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!val) return;
+    if (_searchTags.some(function(t) { return t.raw === val; })) { inp.value = ''; return; }
+    _searchTags.push({ raw: val, terms: expandAlias(val) });
+    inp.value = '';
+    renderSearchTags();
+    doSearch();
+  } else if (e.key === 'Backspace' && !val && _searchTags.length > 0) {
+    _searchTags.pop();
+    renderSearchTags();
+    doSearch();
+  }
+}
+
+function removeSearchTag(idx) {
+  _searchTags.splice(idx, 1);
+  renderSearchTags();
+  doSearch();
+}
+
+function renderSearchTags() {
+  var container = document.getElementById('search-tags');
+  if (!container) return;
+  if (_searchTags.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = _searchTags.map(function(t, i) {
+    var label = t.terms.length > 1 ? t.raw + ' (' + t.terms[1] + ')' : t.raw;
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:#e8f0fe;color:#1565c0;border:1px solid #bbdefb;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600">'
+      + escHtml(label)
+      + '<button type="button" onclick="removeSearchTag(' + i + ')" style="background:none;border:none;cursor:pointer;color:#1565c0;font-size:13px;padding:0;line-height:1">&times;</button>'
+      + '</span>';
+  }).join('');
+}
+
+// 부분 매칭: 5글자 미만은 2-gram 퍼지, 5글자 이상은 정확 포함만
+function fuzzyMatch(term, hay) {
+  term = term.toLowerCase(); hay = hay.toLowerCase();
+  if (hay.indexOf(term) >= 0) return true;
+  if (term.length >= 3) return false;
+  if (term.length < 2) return false;
+  for (var i = 0; i < term.length - 1; i++) {
+    if (hay.indexOf(term.slice(i, i + 2)) >= 0) return true;
+  }
+  return false;
+}
+
+/* =====================================================
+   검색
+===================================================== */
+function doSearch() {
+  var typingSearch = document.getElementById('srchKeyword').value.trim().toLowerCase();
+  var from = document.getElementById('srchFrom').value;
+  var to = document.getElementById('srchTo').value;
+  var salesRep = document.getElementById('srchSalesRep').value;
+  var status = document.getElementById('srchStatus').value;
+  var invoiceType = document.getElementById('srchInvoiceType').value;
+  var payMethod = document.getElementById('srchPayMethod').value;
+
+  _filteredReceipts = _allReceipts.filter(function(r) {
+    var d = r.data;
+    if (from && (d.receiptDate || '') < from) return false;
+    if (to && (d.receiptDate || '') > to) return false;
+    if (salesRep && d.salesRep !== salesRep) return false;
+    if (status) {
+      var st = getReceiptStatus(d);
+      if (st !== status) return false;
+    }
+    if (invoiceType && d.invoiceType !== invoiceType) return false;
+    if (payMethod && d.payMethod !== payMethod) return false;
+
+    // 태그 검색 + 실시간 검색
+    if (_searchTags.length > 0 || typingSearch) {
+      // 검사항목명 추출
+      var _itemNames = '';
+      (d.samples || []).forEach(function(s) {
+        var items = s.testItems || s.refTestItems || [];
+        items.forEach(function(t) {
+          _itemNames += ' ' + (t.itemName || t.name || '').replace(/\|+/g,'').trim();
+        });
+      });
+      // 금액 (합계·공급가액·세액)
+      var total = getTotalFee(d);
+      var supply = getSupplyAmount(d);
+      var tax = getTaxAmount(d);
+      var _feeStr = [total, supply, tax].filter(Boolean).map(function(n){
+        return n.toString() + ' ' + n.toLocaleString();
+      }).join(' ');
+      var productNm = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
+      var hay = [
+        d.receiptNo, d.companyName, d.salesRep,
+        d.testPurpose || d.purpose, productNm,
+        d.foodType, d.billCompany, d.bizNo,
+        d.licBizForm, d.payMethod, d.invoiceType,
+        _itemNames, _feeStr
+      ].map(function(v){ return (v||'').toLowerCase(); }).join(' ');
+
+      // 태그 AND 검색
+      for (var ti = 0; ti < _searchTags.length; ti++) {
+        var terms = _searchTags[ti].terms;
+        var matched = terms.some(function(term) { return fuzzyMatch(term, hay); });
+        if (!matched) return false;
+      }
+      // 실시간 검색
+      if (typingSearch) {
+        var typingTerms = expandAlias(typingSearch);
+        if (!typingTerms.some(function(term) { return fuzzyMatch(term, hay); })) return false;
+      }
+    }
+    return true;
+  });
+
+  var totalAmt = _filteredReceipts.reduce(function(s,r) { return s + getTotalFee(r.data); }, 0);
+  document.getElementById('srchResultText').textContent = '총 ' + _filteredReceipts.length + '건 / ' + totalAmt.toLocaleString() + '원';
+
+  renderCurrentTab();
+}
+
+function resetSearch() {
+  document.getElementById('srchKeyword').value = '';
+  _searchTags = [];
+  renderSearchTags();
+  setDefaultDates();
+  document.getElementById('srchSalesRep').value = '';
+  document.getElementById('srchStatus').value = '';
+  document.getElementById('srchInvoiceType').value = '';
+  document.getElementById('srchPayMethod').value = '';
+  doSearch();
+}
+
+function renderCurrentTab() {
+  if (_currentTab === 'uninput') renderUninputTab();
+  else if (_currentTab === 'all') renderAllTab();
+  else if (_currentTab === 'undefined') renderUndefinedTab();
+  else if (_currentTab === 'specific') renderSpecificTab();
+  else if (_currentTab === 'month') renderMonthTab();
+}
+
+/* =====================================================
+   탭 전환
+===================================================== */
+function switchTab(tabId) {
+  _currentTab = tabId;
+  ['uninput','all','undefined','specific','month'].forEach(function(t) {
+    var tabEl = document.getElementById('tab-' + t);
+    var panelEl = document.getElementById('rfPanel-' + t);
+    if (tabEl) tabEl.classList.toggle('active', t === tabId);
+    if (panelEl) panelEl.classList.toggle('active', t === tabId);
+  });
+  renderCurrentTab();
+}
+
+/* =====================================================
+   탭1: 미입력 렌더링
+===================================================== */
+function renderUninputTab() {
+  var list = _filteredReceipts.filter(function(r) { return isMissingInfo(r.data); });
+  var tbody = document.getElementById('uninputTbody');
+  var mergedContainer = document.getElementById('uninputMergedContainer');
+
+  // 합산 그룹 분리
+  var groups = {};
+  var individuals = [];
+  list.forEach(function(r) {
+    var d = r.data;
+    if (d.billingType === '합산' && d.mergedGroupId) {
+      if (!groups[d.mergedGroupId]) groups[d.mergedGroupId] = [];
+      groups[d.mergedGroupId].push(r);
+    } else {
+      individuals.push(r);
+    }
+  });
+
+  // 합산 그룹 블록 렌더 (상단)
+  var groupHtml = '';
+  Object.keys(groups).forEach(function(gid) {
+    groupHtml += buildGroupBlock(groups[gid], gid, null, 'uninput');
+  });
+  if (mergedContainer) mergedContainer.innerHTML = groupHtml;
+
+  // 개별 건 테이블 렌더
+  if (individuals.length === 0 && Object.keys(groups).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="16" class="empty-msg">미입력 건이 없습니다 ✅</td></tr>';
+    return;
+  }
+  if (individuals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="16" class="empty-msg">개별 미입력 건이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = individuals.map(function(r) {
+    var d = r.data; var id = r.id;
+    var altBadge = d.billEditEnabled
+      ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span><br><span style="font-size:10px;color:#e65100">' + escHtml((d.billEdit && d.billEdit.company) || '') + '</span>'
+      : '';
+    var altBtn = d.billEditEnabled
+      ? '<button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="openAltBizModal(\'' + id + '\')">✏️ 수정</button>'
+      : '<button style="background:#fff3e0;color:#e65100;border:1px solid #ffe082;border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;white-space:nowrap" onclick="openAltBizModal(\'' + id + '\')">🏢 지정</button>';
+    var pmSel = buildPayMethodSelect(id, d.payMethod);
+    var itSel = buildInvoiceTypeSelect(id, d.payMethod ? d.invoiceType : '');
+    var btSel = buildBillingTypeSelect(id, d.billingType);
+    var isSel = buildIssueScheduleSelect(id, d.issueSchedule);
+    var dtToday = new Date().toISOString().slice(0,10);
+    var dtVal = d.invoiceDate || dtToday;
+    var isDateDisabled = (d.issueSchedule === '미정' || d.issueSchedule === '월말' || !d.issueSchedule);
+    var dtInp = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + (isDateDisabled ? '' : dtVal) + '" onchange="autoSaveRow(\'' + id + '\')"' + (isDateDisabled ? ' disabled style="opacity:0.4"' : '') + '>';
+    var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:70px;padding:3px 5px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
+    var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
+    var testPurpose = d.testPurpose || d.purpose || '';
+    return '<tr data-id="' + id + '">' +
+      '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
+      '<td style="color:#5f6b7a">' + fmtDate(d.receiptDate || '') + '</td>' +
+      '<td style="white-space:nowrap"><div style="font-weight:600">' + escHtml(d.companyName || '') + '</div>' + altBadge + '</td>' +
+      '<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(productName) + '">' + escHtml(productName || '-') + '</td>' +
+      '<td style="font-size:11px;color:#5f6b7a;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(testPurpose || '') + '">' + escHtml(testPurpose || '-') + '</td>' +
+      '<td class="text-right" style="font-weight:600;white-space:nowrap">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
+      '<td>' + pmSel + '</td>' +
+      '<td>' + itSel + '</td>' +
+      '<td>' + btSel + '</td>' +
+      '<td>' + isSel + '</td>' +
+      '<td>' + dtInp + '</td>' +
+      '<td>' + memoInp + '</td>' +
+      '<td>' + altBtn + '</td>' +
+      '<td style="white-space:nowrap" id="save-state-' + id + '"><button class="btn btn-secondary btn-sm" onclick="resetRow(\'' + id + '\')">취소</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function getPmLabel(val) {
+  if (val === '카드') return '💳 카드';
+  if (val === '온라인입금') return '🏦 온라인입금';
+  if (val === '현금') return '💵 현금';
+  return val || '-';
+}
+function getIsLabel(val) {
+  if (val === '미정') return '📋 미정';
+  if (val === '특정일') return '🎯 특정일';
+  if (val === '월말') return '📅 월말';
+  return val || '-';
+}
+
+function buildPayMethodSelect(id, cur) {
+  var opts = [['','선택'],['카드','💳 카드'],['온라인입금','🏦 온라인입금'],['현금','💵 현금']];
+  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="pm-' + id + '" onchange="onPayMethodChange(\'' + id + '\')">';
+  opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
+  html += '</select>';
+  return html;
+}
+
+function buildBillingTypeSelect(id, cur) {
+  var opts = [['','선택'],['수동','📦 수동'],['합산','🔗 합산'],['분할','✂️ 분할']];
+  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="bt-' + id + '" onchange="onBillingTypeChange(\'' + id + '\')">';
+  opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
+  html += '</select>';
+  return html;
+}
+
+function buildIssueScheduleSelect(id, cur) {
+  var opts = [['','선택'],['미정','📋 미정'],['특정일','🎯 특정일'],['월말','📅 월말']];
+  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="is-' + id + '" onchange="onIssueScheduleChange(\'' + id + '\')">';
+  opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
+  return html + '</select>';
+}
+
+function onIssueScheduleChange(id) {
+  var sel = document.getElementById('is-' + id);
+  if (!sel) return;
+  var val = sel.value;
+  sel.classList.toggle('filled', !!val);
+
+  var dateInp = document.getElementById('id-' + id);
+  if (dateInp) {
+    if (val === '미정') {
+      dateInp.disabled = true;
+      dateInp.style.opacity = '0.4';
+      dateInp.value = '';
+    } else if (val === '월말') {
+      dateInp.disabled = true;
+      dateInp.style.opacity = '0.4';
+      var today = new Date();
+      var lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      dateInp.value = lastDay.toISOString().slice(0, 10);
+    } else {
+      dateInp.disabled = false;
+      dateInp.style.opacity = '1';
+    }
+  }
+  // 합산 그룹 리더이면 멤버행 읽기전용 스팬 즉시 업데이트
+  var r0 = _allReceipts.find(function(x) { return x.id === id; });
+  if (r0 && r0.data.billingType === '합산' && r0.data.mergedGroupId) {
+    var gid = r0.data.mergedGroupId;
+    var isLabel = getIsLabel(val);
+    var cascadeDate = val === '월말' ? (function() {
+      var t = new Date(); return new Date(t.getFullYear(), t.getMonth() + 1, 0).toISOString().slice(0,10);
+    })() : '';
+    _allReceipts.forEach(function(x) {
+      if (x.id !== id && x.data.mergedGroupId === gid) {
+        var isHid = document.getElementById('is-' + x.id);
+        var idHid = document.getElementById('id-' + x.id);
+        var isRo  = document.getElementById('is-ro-' + x.id);
+        var idRo  = document.getElementById('id-ro-' + x.id);
+        if (isHid) isHid.value = val;
+        if (idHid) idHid.value = cascadeDate;
+        if (isRo)  isRo.textContent  = isLabel;
+        if (idRo)  idRo.textContent  = cascadeDate || '-';
+      }
+    });
+  }
+  autoSaveRow(id);
+}
+
+function onBillingTypeChange(id) {
+  var sel = document.getElementById('bt-' + id);
+  if (!sel) return;
+  if (sel.value) sel.classList.add('filled'); else sel.classList.remove('filled');
+  // 합산 선택 시 즉시 묶기 모달 오픈
+  if (sel.value === '합산') {
+    openMergeSelectModal(id);
+    return;
+  }
+  // 자동저장
+  autoSaveRow(id);
+}
+
+var _mergeSelectReceiptId = null;
+
+function openMergeSelectModal(receiptId) {
+  _mergeSelectReceiptId = receiptId;
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  if (!r) return;
+  var d = r.data;
+  var company = d.companyName || '';
+  document.getElementById('mergeSelectSubtitle').textContent = (d.receiptNo || receiptId) + ' · ' + company;
+
+  // 같은 업체 미발행 건 (현재 건 제외)
+  var candidates = _allReceipts.filter(function(x) {
+    return x.id !== receiptId && x.data.companyName === company
+      && x.data.taxInvoiceIssued !== true && x.data.taxCancelled !== true;
+  });
+
+  var existGroupId = d.mergedGroupId || '';
+  var html = '';
+  // 현재 건 (고정)
+  html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#e8f0fe;border-radius:8px;margin-bottom:6px">';
+  html += '<input type="checkbox" checked disabled style="accent-color:#1a73e8;width:16px;height:16px">';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:12px;font-weight:700;color:#1a73e8">' + escHtml(d.receiptNo || receiptId) + ' <span style="font-weight:400;color:#5f6b7a">현재</span></div>';
+  html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(d));
+  var _pn = (d.samples && d.samples.length ? d.samples[0].productName : '') || d.productName || '';
+  var _pp = d.testPurpose || d.purpose || '';
+  if (d.receiptDate) html += ' · ' + fmtDate(d.receiptDate);
+  if (_pp) html += ' · ' + escHtml(_pp);
+  if (_pn) html += ' · ' + escHtml(_pn);
+  if (d.billingMemo) html += ' · <em>' + escHtml(d.billingMemo) + '</em>';
+  html += '</div></div></div>';
+
+  if (candidates.length === 0) {
+    html += '<div style="font-size:12px;color:#8892a4;padding:12px 0;text-align:center">같은 업체의 다른 접수건이 없습니다.</div>';
+  } else {
+    candidates.forEach(function(x) {
+      var xd = x.data;
+      var inSameGroup = existGroupId && xd.mergedGroupId === existGroupId;
+      html += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:' + (inSameGroup ? '#f0fdf4' : '#f8f9fb') + ';border-radius:8px;margin-bottom:6px;cursor:pointer">';
+      html += '<input type="checkbox" class="merge-candidate-chk" data-id="' + x.id + '" data-fee="' + getTotalFee(xd) + '"' + (inSameGroup ? ' checked' : '') + ' onchange="updateMergeSum()" style="accent-color:#4caf50;width:16px;height:16px">';
+      var _xpn = (xd.samples && xd.samples.length ? xd.samples[0].productName : '') || xd.productName || '';
+      var _xpp = xd.testPurpose || xd.purpose || '';
+      html += '<div style="flex:1">';
+      html += '<div style="font-size:12px;font-weight:600;color:#1a2332">' + escHtml(xd.receiptNo || x.id) + (xd.billingType ? ' <span style="font-size:10px;color:#9c27b0;background:#f3e5f5;padding:1px 5px;border-radius:4px">[' + xd.billingType + ']</span>' : '') + '</div>';
+      html += '<div style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(xd));
+      if (xd.receiptDate) html += ' · ' + fmtDate(xd.receiptDate);
+      if (_xpp) html += ' · ' + escHtml(_xpp);
+      if (_xpn) html += ' · ' + escHtml(_xpn);
+      if (xd.billingMemo) html += ' · <em>' + escHtml(xd.billingMemo) + '</em>';
+      html += '</div></div>';
+      html += '</label>';
+    });
+  }
+
+  document.getElementById('mergeSelectList').innerHTML = html;
+  updateMergeSum();
+  document.getElementById('mergeSelectOverlay').classList.add('show');
+}
+
+function updateMergeSum() {
+  var r = _allReceipts.find(function(x) { return x.id === _mergeSelectReceiptId; });
+  var sum = r ? getTotalFee(r.data) : 0;
+  document.querySelectorAll('.merge-candidate-chk:checked').forEach(function(chk) {
+    sum += Number(chk.getAttribute('data-fee') || 0);
+  });
+  var cnt = document.querySelectorAll('.merge-candidate-chk:checked').length;
+  document.getElementById('mergeSelectSum').textContent = '합산 ' + (cnt + 1) + '건 · 합계 ' + sum.toLocaleString() + '원';
+}
+
+function closeMergeSelectModal() {
+  // 취소 시 billingType 셀렉트를 이전 값으로 되돌림
+  if (_mergeSelectReceiptId) {
+    var r = _allReceipts.find(function(x) { return x.id === _mergeSelectReceiptId; });
+    var prev = r ? (r.data.billingType || '') : '';
+    var sel = document.getElementById('bt-' + _mergeSelectReceiptId);
+    if (sel) { sel.value = prev; if (prev) sel.classList.add('filled'); else sel.classList.remove('filled'); }
+  }
+  document.getElementById('mergeSelectOverlay').classList.remove('show');
+  _mergeSelectReceiptId = null;
+}
+
+async function confirmMergeSelect() {
+  if (!_mergeSelectReceiptId) return;
+  var id = _mergeSelectReceiptId;
+  var r = _allReceipts.find(function(x) { return x.id === id; });
+  if (!r) return;
+
+  var checkedIds = [];
+  document.querySelectorAll('.merge-candidate-chk:checked').forEach(function(chk) {
+    checkedIds.push(chk.getAttribute('data-id'));
+  });
+
+  var groupId = r.data.mergedGroupId || ('grp_' + Date.now());
+
+  try {
+    var batch = db.batch();
+    // 리더의 issueSchedule (없으면 '미정')
+    var leaderIs = r.data.issueSchedule || '미정';
+    // 현재 건
+    batch.update(db.collection('receipts').doc(id), {
+      billingType: '합산', mergedGroupId: groupId,
+      issueSchedule: leaderIs,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    r.data.billingType = '합산'; r.data.mergedGroupId = groupId; r.data.issueSchedule = leaderIs;
+
+    // 선택한 건들 — 리더의 issueSchedule 전파
+    checkedIds.forEach(function(cid) {
+      batch.update(db.collection('receipts').doc(cid), {
+        billingType: '합산', mergedGroupId: groupId,
+        issueSchedule: leaderIs,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      var ci = _allReceipts.findIndex(function(x) { return x.id === cid; });
+      if (ci >= 0) { _allReceipts[ci].data.billingType = '합산'; _allReceipts[ci].data.mergedGroupId = groupId; _allReceipts[ci].data.issueSchedule = leaderIs; }
+    });
+
+    await batch.commit();
+
+    // 그룹 확정 직후 — payMethod/invoiceType 동기화
+    var allMembers = _allReceipts.filter(function(x) { return x.data.mergedGroupId === groupId; });
+    var pmLeader = allMembers.find(function(x) { return x.data.payMethod; });
+    if (pmLeader) {
+      var syncIt = pmLeader.data.invoiceType;
+      if (!syncIt) {
+        if (pmLeader.data.payMethod === '카드') syncIt = '카드전표';
+        else if (pmLeader.data.payMethod === '온라인입금') syncIt = '세금계산서';
+        else if (pmLeader.data.payMethod === '현금') syncIt = '현금영수증';
+        else syncIt = '세금계산서';
+      }
+      var syncBatch = db.batch();
+      var syncCnt = 0;
+      allMembers.forEach(function(x) {
+        if (!x.data.payMethod || !x.data.invoiceType) {
+          x.data.payMethod = pmLeader.data.payMethod;
+          x.data.invoiceType = syncIt;
+          syncBatch.update(db.collection('receipts').doc(x.id), {
+            payMethod: pmLeader.data.payMethod,
+            invoiceType: syncIt,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          syncCnt++;
+        }
+      });
+      if (syncCnt > 0) await syncBatch.commit();
+    }
+
+    // 인라인 행 셀렉트 갱신
+    var sel = document.getElementById('bt-' + id);
+    if (sel) { sel.value = '합산'; sel.classList.add('filled'); }
+
+    document.getElementById('mergeSelectOverlay').classList.remove('show');
+    _mergeSelectReceiptId = null;
+    renderKpiCards();
+    doSearch();
+    showToast('✅ ' + (checkedIds.length + 1) + '건 합산그룹 저장 완료');
+    // 미정 탭으로 이동
+    switchTab('undefined');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
+}
+
+function buildInvoiceTypeSelect(id, cur) {
+  var opts = [['','선택'],['세금계산서','세금계산서'],['현금영수증','현금영수증'],['카드전표','카드전표'],['카드+계산서','카드+계산서'],['없음','없음']];
+  var html = '<select class="inline-select' + (cur ? ' filled' : '') + '" id="it-' + id + '" onchange="autoSaveRow(\'' + id + '\')">';
+  opts.forEach(function(o) { html += '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; });
+  html += '</select>';
+  return html;
+}
+
+function onPayMethodChange(receiptId) {
+  var pmSel = document.getElementById('pm-' + receiptId);
+  var itSel = document.getElementById('it-' + receiptId);
+  if (!pmSel || !itSel) return;
+  var pm = pmSel.value;
+  var mappedIt = '';
+  if (pm) {
+    pmSel.classList.add('filled');
+    if (pm === '카드') mappedIt = '카드전표';
+    else if (pm === '온라인입금') mappedIt = '세금계산서';
+    else if (pm === '현금') mappedIt = '현금영수증';
+    else mappedIt = '세금계산서';
+    itSel.value = mappedIt;
+    itSel.classList.add('filled');
+  } else {
+    pmSel.classList.remove('filled');
+    itSel.value = '';
+    itSel.classList.remove('filled');
+  }
+  // 펼침 영역 동기화
+  if (_currentReceiptId === receiptId) {
+    var expPm = document.getElementById('exp-payMethod');
+    var expIt = document.getElementById('exp-invoiceType');
+    if (expPm) expPm.value = pm;
+    if (expIt) expIt.value = mappedIt;
+  }
+  // 합산 그룹 — 같은 mergedGroupId 전체에 결제방법/계산서유형 일괄 적용 (UI)
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  // billingType: data 또는 DOM 드롭다운 중 하나라도 '합산'이면 cascade
+  var btDom = document.getElementById('bt-' + receiptId);
+  var btVal = (btDom ? btDom.value : '') || (r ? r.data.billingType : '');
+  var gid   = r ? r.data.mergedGroupId : null;
+  if (btVal === '합산' && gid) {
+    _allReceipts.forEach(function(x) {
+      if (x.id !== receiptId && x.data.mergedGroupId === gid) {
+        var xPm = document.getElementById('pm-' + x.id);
+        var xIt = document.getElementById('it-' + x.id);
+        if (xPm) { xPm.value = pm; if (pm) xPm.classList.add('filled'); else xPm.classList.remove('filled'); }
+        if (xIt) { xIt.value = mappedIt; if (mappedIt) xIt.classList.add('filled'); else xIt.classList.remove('filled'); }
+        // 멤버행 읽기전용 스팬 업데이트
+        var pmRo = document.getElementById('pm-ro-' + x.id);
+        var itRo = document.getElementById('it-ro-' + x.id);
+        if (pmRo) pmRo.textContent = getPmLabel(pm);
+        if (itRo) itRo.textContent = mappedIt || '-';
+      }
+    });
+  }
+  // 자동저장
+  autoSaveRow(receiptId);
+}
+
+// 상세 펼침 결제방법 변경 시 계산서유형 자동 설정 + 인라인 행 동기화
+function onExpPayMethodChange() {
+  var pmSel = document.getElementById('exp-payMethod');
+  var itSel = document.getElementById('exp-invoiceType');
+  if (!pmSel || !itSel) return;
+  var pm = pmSel.value;
+  var mappedIt = '';
+  if (pm === '카드') mappedIt = '카드전표';
+  else if (pm === '온라인입금') mappedIt = '세금계산서';
+  else if (pm === '현금') mappedIt = '현금영수증';
+  else if (pm) mappedIt = '세금계산서';
+  itSel.value = mappedIt;
+  // 인라인 행도 동기화
+  if (_currentReceiptId) {
+    var inPm = document.getElementById('pm-' + _currentReceiptId);
+    var inIt = document.getElementById('it-' + _currentReceiptId);
+    if (inPm) {
+      inPm.value = pm;
+      if (pm) inPm.classList.add('filled'); else inPm.classList.remove('filled');
+    }
+    if (inIt) {
+      inIt.value = mappedIt;
+      if (mappedIt) inIt.classList.add('filled'); else inIt.classList.remove('filled');
+    }
+  }
+}
+
+async function saveRow(receiptId) {
+  var pmSel = document.getElementById('pm-' + receiptId);
+  var itSel = document.getElementById('it-' + receiptId);
+  var btSel = document.getElementById('bt-' + receiptId);
+  var dtInp = document.getElementById('id-' + receiptId);
+  var memoInp = document.getElementById('bm-' + receiptId);
+  if (!pmSel || !itSel) return;
+  var payMethod = pmSel.value;
+  var invoiceType = itSel.value;
+  var billingType = btSel ? btSel.value : '';
+  var billingMemo = memoInp ? memoInp.value.trim() : '';
+  var invoiceDate = dtInp ? dtInp.value : '';
+  if (!payMethod) { showToast('❗ 결제방법을 선택해 주세요'); return; }
+  if (!invoiceType) { showToast('❗ 계산서유형을 선택해 주세요'); return; }
+  try {
+    var updateData = {
+      payMethod: payMethod,
+      invoiceType: invoiceType,
+      invoiceDate: invoiceDate || null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (billingType) updateData.billingType = billingType;
+    else updateData.billingType = firebase.firestore.FieldValue.delete();
+    if (billingMemo) updateData.billingMemo = billingMemo;
+    else updateData.billingMemo = firebase.firestore.FieldValue.delete();
+    var r0 = _allReceipts.find(function(x) { return x.id === receiptId; });
+    var isMerged = r0 && billingType === '합산' && r0.data.mergedGroupId;
+    var mergeGroup = isMerged ? _allReceipts.filter(function(x) { return x.id !== receiptId && x.data.mergedGroupId === r0.data.mergedGroupId; }) : [];
+
+    var batch = db.batch();
+    batch.update(db.collection('receipts').doc(receiptId), updateData);
+    // 합산 그룹 나머지 건 — 결제방법/계산서유형만 일괄 저장 (billingMemo·invoiceDate는 개별 유지)
+    mergeGroup.forEach(function(x) {
+      batch.update(db.collection('receipts').doc(x.id), {
+        payMethod: payMethod, invoiceType: invoiceType,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+
+    function applyLocal(rid, extra) {
+      var idx = _allReceipts.findIndex(function(r) { return r.id === rid; });
+      if (idx < 0) return;
+      _allReceipts[idx].data.payMethod = payMethod;
+      _allReceipts[idx].data.invoiceType = invoiceType;
+      if (extra) {
+        _allReceipts[idx].data.invoiceDate = invoiceDate || null;
+        _allReceipts[idx].data.billingType = billingType || undefined;
+        _allReceipts[idx].data.billingMemo = billingMemo || undefined;
+      }
+    }
+    applyLocal(receiptId, true);
+    mergeGroup.forEach(function(x) { applyLocal(x.id, false); });
+
+    if (pmSel) pmSel.classList.add('filled');
+    if (itSel) itSel.classList.add('filled');
+    if (btSel && billingType) btSel.classList.add('filled');
+    if (dtInp && invoiceDate) dtInp.classList.add('filled');
+    renderKpiCards();
+    showToast(isMerged ? '✅ 저장 완료 (합산 ' + (mergeGroup.length + 1) + '건 일괄)' : '✅ 저장 완료');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
+}
+
+function resetRow(receiptId) {
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  if (!r) return;
+  var d = r.data;
+  var pmSel = document.getElementById('pm-' + receiptId);
+  var itSel = document.getElementById('it-' + receiptId);
+  var btSel = document.getElementById('bt-' + receiptId);
+  var dtInp = document.getElementById('id-' + receiptId);
+  var memoInp = document.getElementById('bm-' + receiptId);
+  var isSel2 = document.getElementById('is-' + receiptId);
+  if (pmSel) { pmSel.value = d.payMethod || ''; if (d.payMethod) pmSel.classList.add('filled'); else pmSel.classList.remove('filled'); }
+  if (itSel) { itSel.value = d.invoiceType || ''; if (d.invoiceType) itSel.classList.add('filled'); else itSel.classList.remove('filled'); }
+  if (btSel) { btSel.value = d.billingType || ''; if (d.billingType) btSel.classList.add('filled'); else btSel.classList.remove('filled'); }
+  if (isSel2) { isSel2.value = d.issueSchedule || ''; if (d.issueSchedule) isSel2.classList.add('filled'); else isSel2.classList.remove('filled'); }
+  if (dtInp) { dtInp.value = d.invoiceDate || new Date().toISOString().slice(0,10); }
+  if (memoInp) { memoInp.value = d.billingMemo || ''; }
+  if (_currentReceiptId === receiptId) closeDetailModal();
+}
+
+// 전체 탭 취소: 결제정보 초기화 → 미입력으로 복귀
+async function clearPayInfo(receiptId) {
+  if (!confirm('결제정보를 초기화하고 미입력 상태로 되돌리겠습니까?')) return;
+  try {
+    await db.collection('receipts').doc(receiptId).update({
+      payMethod: firebase.firestore.FieldValue.delete(),
+      invoiceType: firebase.firestore.FieldValue.delete(),
+      invoiceDate: firebase.firestore.FieldValue.delete(),
+      billingType: firebase.firestore.FieldValue.delete(),
+      billingMemo: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      delete _allReceipts[idx].data.payMethod;
+      delete _allReceipts[idx].data.invoiceType;
+      delete _allReceipts[idx].data.invoiceDate;
+      delete _allReceipts[idx].data.billingType;
+      delete _allReceipts[idx].data.billingMemo;
+    }
+    if (_currentReceiptId === receiptId) closeDetailModal();
+    renderKpiCards();
+    doSearch();
+    showToast('✅ 결제정보 초기화 완료');
+  } catch(e) { showToast('❗ 초기화 실패: ' + e.message); }
+}
+
+// 자동저장
+var _autoSaveTimers = {};
+function debounceAutoSave(receiptId) {
+  clearTimeout(_autoSaveTimers[receiptId]);
+  _autoSaveTimers[receiptId] = setTimeout(function() { autoSaveRow(receiptId); }, 800);
+}
+
+async function autoSaveRow(receiptId) {
+  var pmSel  = document.getElementById('pm-' + receiptId);
+  var itSel  = document.getElementById('it-' + receiptId);
+  var btSel  = document.getElementById('bt-' + receiptId);
+  var isSel  = document.getElementById('is-' + receiptId);
+  var dtInp  = document.getElementById('id-' + receiptId);
+  var memoInp = document.getElementById('bm-' + receiptId);
+  var pm   = pmSel   ? pmSel.value   : '';
+  var it   = itSel   ? itSel.value   : '';
+  var bt   = btSel   ? btSel.value   : '';
+  var isVal = isSel  ? isSel.value   : '';
+  var dt   = dtInp   ? dtInp.value   : '';
+  var memo = memoInp ? memoInp.value.trim() : '';
+
+  var FD = firebase.firestore.FieldValue.delete;
+  var upd = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+  if (pm)   upd.payMethod     = pm;   else upd.payMethod     = FD();
+  if (it)   upd.invoiceType   = it;   else upd.invoiceType   = FD();
+  if (bt)   upd.billingType   = bt;   else upd.billingType   = FD();
+  if (isVal) upd.issueSchedule = isVal; else upd.issueSchedule = FD();
+  if (dt)   upd.invoiceDate   = dt;   else upd.invoiceDate   = FD();
+  if (memo) upd.billingMemo   = memo; else upd.billingMemo   = FD();
+
+  // 합산 그룹 cascade — bt(DOM값) 또는 data 중 하나라도 '합산'이면 cascade
+  var r0 = _allReceipts.find(function(x) { return x.id === receiptId; });
+  var mergeGid = r0 ? r0.data.mergedGroupId : null;
+  var isMergedRow = (bt === '합산' || (r0 && r0.data.billingType === '합산')) && mergeGid;
+  var mergeGroup = isMergedRow
+    ? _allReceipts.filter(function(x) { return x.id !== receiptId && x.data.mergedGroupId === mergeGid; })
+    : [];
+
+  try {
+    var batch = db.batch();
+    batch.update(db.collection('receipts').doc(receiptId), upd);
+    mergeGroup.forEach(function(x) {
+      var mUpd = {
+        payMethod: pm || FD(), invoiceType: it || FD(),
+        issueSchedule: isVal || FD(), invoiceDate: dt || FD(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      batch.update(db.collection('receipts').doc(x.id), mUpd);
+      // 멤버행 읽기전용 스팬 + 숨겨진 input 즉시 업데이트
+      var pmHid = document.getElementById('pm-' + x.id);
+      var itHid = document.getElementById('it-' + x.id);
+      var isHid = document.getElementById('is-' + x.id);
+      var idHid = document.getElementById('id-' + x.id);
+      var pmRo  = document.getElementById('pm-ro-' + x.id);
+      var itRo  = document.getElementById('it-ro-' + x.id);
+      var isRo  = document.getElementById('is-ro-' + x.id);
+      var idRo  = document.getElementById('id-ro-' + x.id);
+      if (pmHid) pmHid.value = pm;
+      if (itHid) itHid.value = it;
+      if (isHid) isHid.value = isVal;
+      if (idHid) idHid.value = dt;
+      if (pmRo) pmRo.textContent = getPmLabel(pm);
+      if (itRo) itRo.textContent = it || '-';
+      if (isRo) isRo.textContent = getIsLabel(isVal);
+      if (idRo) idRo.textContent = dt || '-';
+    });
+    await batch.commit();
+
+    // 로컬 데이터 동기화
+    function syncLocal(rid, full) {
+      var idx = _allReceipts.findIndex(function(r) { return r.id === rid; });
+      if (idx < 0) return;
+      var d = _allReceipts[idx].data;
+      if (pm) d.payMethod = pm; else delete d.payMethod;
+      if (it) d.invoiceType = it; else delete d.invoiceType;
+      if (full) {
+        if (bt) d.billingType = bt; else delete d.billingType;
+        if (isVal) d.issueSchedule = isVal; else delete d.issueSchedule;
+        if (dt) d.invoiceDate = dt; else delete d.invoiceDate;
+        if (memo) d.billingMemo = memo; else delete d.billingMemo;
+      } else {
+        // 멤버행: issueSchedule·invoiceDate도 리더와 동기화
+        if (isVal) d.issueSchedule = isVal; else delete d.issueSchedule;
+        if (dt) d.invoiceDate = dt; else delete d.invoiceDate;
+      }
+    }
+    syncLocal(receiptId, true);
+    mergeGroup.forEach(function(x) { syncLocal(x.id, false); });
+
+    // 저장 완료 표시
+    var stateEl = document.getElementById('save-state-' + receiptId);
+    if (stateEl) {
+      var ck = document.createElement('span');
+      ck.textContent = ' ✓';
+      ck.style.cssText = 'color:#4caf50;font-weight:700;font-size:13px;transition:opacity .6s';
+      stateEl.appendChild(ck);
+      setTimeout(function() { ck.style.opacity = '0'; setTimeout(function() { if (ck.parentNode) ck.parentNode.removeChild(ck); }, 600); }, 1400);
+    }
+    showToast(mergeGroup.length > 0 ? '✅ 자동저장 (합산 ' + (mergeGroup.length + 1) + '건)' : '✅ 저장됨');
+    renderKpiCards();
+  } catch(e) { console.error('[자동저장 실패]', receiptId, e); }
+}
+
+// 발행예정일 + 메모만 저장 (발행 탭 행 내 인라인 저장)
+async function saveIssueMeta(receiptId) {
+  var dtInp = document.getElementById('idate-' + receiptId);
+  var memoInp = document.getElementById('imemo-' + receiptId);
+  if (!dtInp) return;
+  var dt = dtInp.value;
+  var memo = memoInp ? memoInp.value.trim() : '';
+  try {
+    var upd = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+    if (dt) upd.invoiceDate = dt; else upd.invoiceDate = firebase.firestore.FieldValue.delete();
+    if (memo) upd.billingMemo = memo; else upd.billingMemo = firebase.firestore.FieldValue.delete();
+    await db.collection('receipts').doc(receiptId).update(upd);
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      if (dt) _allReceipts[idx].data.invoiceDate = dt; else delete _allReceipts[idx].data.invoiceDate;
+      if (memo) _allReceipts[idx].data.billingMemo = memo; else delete _allReceipts[idx].data.billingMemo;
+    }
+    if (dtInp) dtInp.classList.toggle('filled', !!dt);
+    showToast('✅ 저장 완료');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
+}
+
+// 발행 정보 전체 해제 → 미입력으로 복귀
+async function clearBillingType(receiptId) {
+  if (!confirm('등록된 발행 정보를 취소하고 미입력으로 되돌리겠습니까?')) return;
+  try {
+    await db.collection('receipts').doc(receiptId).update({
+      payMethod: firebase.firestore.FieldValue.delete(),
+      invoiceType: firebase.firestore.FieldValue.delete(),
+      billingType: firebase.firestore.FieldValue.delete(),
+      mergedGroupId: firebase.firestore.FieldValue.delete(),
+      invoiceDate: firebase.firestore.FieldValue.delete(),
+      billingMemo: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      var d = _allReceipts[idx].data;
+      delete d.payMethod; delete d.invoiceType;
+      delete d.billingType; delete d.mergedGroupId;
+      delete d.invoiceDate; delete d.billingMemo;
+    }
+    renderKpiCards();
+    doSearch();
+    showToast('✅ 취소 완료 — 미입력으로 이동됨');
+  } catch(e) { showToast('❗ 실패: ' + e.message); }
+}
+
+/* =====================================================
+   탭2: 전체 렌더링
+===================================================== */
+function renderAllTab() {
+  var list = _filteredReceipts;
+  var totalAmt = list.reduce(function(s,r) { return s + getTotalFee(r.data); }, 0);
+  document.getElementById('allTabInfo').textContent = list.length + '건 / ' + totalAmt.toLocaleString() + '원';
+  var tbody = document.getElementById('allTbody');
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="14" class="empty-msg">검색 결과가 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(function(r) {
+    var d = r.data; var id = r.id;
+    var st = getReceiptDisplayStatus(d);
+    var billTarget = d.billEditEnabled && d.billEdit ? d.billEdit.company : d.companyName;
+    var altBadge = d.billEditEnabled ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span>' : '';
+    var pmTag = d.payMethod ? getPayMethodTag(d.payMethod) : '<span style="color:#c8d6e5">-</span>';
+    var itTag = d.invoiceType ? getInvoiceTypeTag(d.invoiceType) : '<span style="color:#c8d6e5">-</span>';
+    var btTag = getBillingTypeTag(d.billingType);
+    var isTag = getIssueScheduleTag(d.issueSchedule);
+    var memoTd = d.billingMemo ? '<span style="font-size:11px;color:#5f6b7a" title="' + escHtml(d.billingMemo) + '">' + escHtml(d.billingMemo.length > 12 ? d.billingMemo.slice(0,12) + '…' : d.billingMemo) + '</span>' : '<span style="color:#c8d6e5">-</span>';
+    var actionBtn = '';
+    if (st.status === '미입력') actionBtn = '<button class="btn btn-primary btn-sm" onclick="switchTab(\'uninput\')">입력</button>';
+    else if (st.status === '발행대기') actionBtn = '<span style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openDetailModal(\'' + id + '\')">수정</button><button class="btn btn-sm" onclick="clearPayInfo(\'' + id + '\')" style="margin-left:4px;background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">취소</button></span>';
+    else if (st.status === '발행완료') actionBtn = '<button class="btn btn-secondary btn-sm" onclick="cancelIssue(\'' + id + '\')">취소</button>';
+    return '<tr data-id="' + id + '">' +
+      '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
+      '<td style="color:#5f6b7a">' + fmtDate(d.receiptDate || '') + '</td>' +
+      '<td><span style="font-weight:600">' + escHtml(d.companyName || '') + '</span>' + altBadge + '<div style="font-size:10px;color:#8892a4">' + escHtml(d.salesRep || '') + '</div></td>' +
+      '<td>' + escHtml(billTarget || '') + '</td>' +
+      '<td class="text-right" style="font-weight:600;white-space:nowrap">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
+      '<td>' + pmTag + '</td>' +
+      '<td>' + itTag + '</td>' +
+      '<td>' + btTag + '</td>' +
+      '<td>' + isTag + '</td>' +
+      '<td style="color:#5f6b7a">' + (d.invoiceDate ? fmtDate(d.invoiceDate) : '-') + '</td>' +
+      '<td>' + memoTd + '</td>' +
+      '<td><span class="tag ' + st.cls + '">' + st.label + '</span></td>' +
+      '<td>' + actionBtn + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+async function cancelIssue(receiptId) {
+  if (!confirm('발행완료를 취소하시겠습니까?')) return;
+  try {
+    await db.collection('receipts').doc(receiptId).update({
+      taxInvoiceIssued: false,
+      taxCancelled: true,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    var idx = _allReceipts.findIndex(function(r) { return r.id === receiptId; });
+    if (idx >= 0) {
+      _allReceipts[idx].data.taxInvoiceIssued = false;
+      _allReceipts[idx].data.taxCancelled = true;
+    }
+    renderKpiCards();
+    doSearch();
+    showToast('✅ 취소 처리 완료');
+  } catch(e) { showToast('❗ 처리 실패: ' + e.message); }
+}
+
+function downloadAllExcel() {
+  var list = _filteredReceipts;
+  if (list.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+  var headerRow = ['접수번호','접수일','업체명','발행대상','수수료','결제방법','계산서유형','발행예정일','상태'];
+  var dataRows = list.map(function(r) {
+    var d = r.data;
+    return [
+      d.receiptNo || r.id,
+      d.receiptDate || '',
+      d.companyName || '',
+      (d.billEditEnabled && d.billEdit ? d.billEdit.company : d.companyName) || '',
+      getTotalFee(d),
+      d.payMethod || '',
+      d.invoiceType || '',
+      d.invoiceDate || '',
+      getReceiptStatus(d)
+    ];
+  });
+  var ws = XLSX.utils.aoa_to_sheet([headerRow].concat(dataRows));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '접수현황');
+  var today = new Date(); var td = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb, '재무접수현황_' + td + '_' + list.length + '건.xlsx');
+  showToast(list.length + '건 다운로드 완료');
+}
+
+/* =====================================================
+   탭3: 발행관리 렌더링
+===================================================== */
+
+function renderIssueTab() {
+  updateIssueBadges();
+  renderCurrentTab();
+}
+
+function updateIssueBadges() {
+  var undef = _allReceipts.filter(function(r) {
+    var d = r.data;
+    if (d.taxInvoiceIssued === true || d.taxCancelled === true) return false;
+    if (!d.payMethod || !d.invoiceType) return false;
+    return d.issueSchedule === '미정';
+  }).length;
+  var specific = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return d.issueSchedule === '특정일' && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+  }).length;
+  var month = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return d.issueSchedule === '월말' && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+  }).length;
+  var ub = document.getElementById('undefinedBadge'); if (ub) ub.textContent = undef;
+  var sb = document.getElementById('specificBadge'); if (sb) sb.textContent = specific;
+  var mo = document.getElementById('monthBadge'); if (mo) mo.textContent = month;
+}
+
+function updateUnsetBadge() { updateIssueBadges(); }
+
+// 합산 그룹 블록 빌더 (미정/특정일/월말 탭 공통)
+function buildGroupBlock(items, groupKey, label, tabType) {
+  var totalSupply = items.reduce(function(s, r) { return s + getSupplyAmount(r.data); }, 0);
+  var totalTax = items.reduce(function(s, r) { return s + getTaxAmount(r.data); }, 0);
+  var company = items[0] ? ((items[0].data.billEditEnabled && items[0].data.billEdit) ? items[0].data.billEdit.company : items[0].data.companyName) || '' : '';
+  var h = '<div class="merged-group">';
+  h += '<div class="merged-group-hd">';
+  h += '<input type="checkbox" class="row-check merged-group-chk" data-group="' + escHtml(groupKey) + '" data-tab="' + escHtml(tabType) + '" onchange="toggleMergedGroup(this,\'' + escHtml(tabType) + '\')" style="margin-right:6px" checked>';
+  h += '<span class="company-name">' + escHtml(label || company) + '</span>';
+  h += '<span class="count-badge">' + items.length + '건</span>';
+  h += '<span class="sum-amount">' + (totalSupply + totalTax).toLocaleString() + '원 (공급 ' + totalSupply.toLocaleString() + ' + 세액 ' + totalTax.toLocaleString() + ')</span>';
+  h += '</div><div class="merged-group-body">';
+  h += '<div class="rf-scroll-table"><table><thead><tr>';
+  h += '<th class="text-center" style="width:32px"></th>';
+  h += '<th>접수번호</th><th>접수일</th><th>업체명</th><th>제품명</th><th>검사목적</th><th class="text-right">수수료</th><th class="text-center">입금현황</th><th>결제방법</th><th>계산서유형</th><th>발행유형</th><th>발행일</th><th>발행예정일</th><th>메모</th><th>타업체 지정</th><th></th>';
+  h += '</tr></thead><tbody>';
+  items.forEach(function(r, idx) {
+    var chk = '<input type="checkbox" class="row-check merged-chk merged-chk-' + escHtml(tabType) + '" data-id="' + r.id + '" data-group="' + escHtml(groupKey) + '" onchange="updateMergedSelectedInfo(\'' + escHtml(tabType) + '\')" checked>';
+    h += buildIssueTabRow(r, chk, idx === 0);
+  });
+  h += '</tbody></table></div></div></div>';
+  return h;
+}
+
+function toggleMergedGroup(groupChk, tabType) {
+  var group = groupChk.getAttribute('data-group');
+  var checked = groupChk.checked;
+  document.querySelectorAll('.merged-chk-' + tabType + '[data-group="' + group + '"]').forEach(function(chk) { chk.checked = checked; });
+  updateMergedSelectedInfo(tabType);
+}
+
+function updateMergedSelectedInfo(tabType) {
+  var chks = document.querySelectorAll('.merged-chk-' + tabType + ':checked');
+  var total = 0;
+  chks.forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) total += getTotalFee(r.data);
+  });
+  // 각 탭의 selected info 업데이트
+  var selInfo = document.getElementById(tabType + 'SelectedInfo');
+  if (selInfo) selInfo.textContent = '선택: ' + chks.length + '건 / ' + total.toLocaleString() + '원';
+}
+
+// 공통: 합산 그룹 렌더 헬퍼 (탭별 컨테이너 + 개별 tbody 채우기)
+function renderTabWithGroups(list, mergedContainerId, individualTbodyId, tabType) {
+  var container = document.getElementById(mergedContainerId);
+  var tbody = document.getElementById(individualTbodyId);
+
+  // 합산 그룹 분리
+  var groups = {};
+  var individuals = [];
+  list.forEach(function(r) {
+    var d = r.data;
+    if (d.billingType === '합산' && d.mergedGroupId) {
+      if (!groups[d.mergedGroupId]) groups[d.mergedGroupId] = [];
+      groups[d.mergedGroupId].push(r);
+    } else {
+      individuals.push(r);
+    }
+  });
+
+  // 합산 그룹 블록
+  var groupHtml = '';
+  // 미그룹 합산 건 (mergedGroupId 없는 합산)
+  var ungroupedMerged = list.filter(function(r) { return r.data.billingType === '합산' && !r.data.mergedGroupId; });
+  Object.keys(groups).forEach(function(gid) {
+    groupHtml += buildGroupBlock(groups[gid], gid, null, tabType);
+  });
+  if (ungroupedMerged.length > 0) {
+    groupHtml += '<div style="font-size:11px;font-weight:600;color:#e65100;margin:12px 0 6px">⚠️ 미그룹 합산 건 — 접수번호 클릭 후 묶을 건을 선택해 주세요.</div>';
+    ungroupedMerged.forEach(function(r) {
+      groupHtml += buildGroupBlock([r], 'ug_' + r.id, (r.data.companyName || '') + ' (' + (r.data.receiptNo || r.id) + ')', tabType);
+    });
+  }
+  if (container) container.innerHTML = groupHtml;
+
+  // 개별 건 테이블 — 개별 건이 없으면 숨김 (그룹 블록만 있을 때 이중 박스 방지)
+  var indivWrap = tbody ? tbody.closest('.rf-scroll-table') : null;
+  if (individuals.length === 0) {
+    if (indivWrap) indivWrap.style.display = 'none';
+  } else {
+    if (indivWrap) indivWrap.style.display = '';
+    if (tbody) tbody.innerHTML = individuals.map(function(r) {
+      var chk = '<input type="checkbox" class="row-check ' + tabType + '-chk" data-id="' + r.id + '" onchange="updateSelectedInfo(\'' + tabType + '\')" checked>';
+      return buildIssueTabRow(r, chk);
+    }).join('');
+  }
+  updateSelectedInfo(tabType);
+}
+
+function renderUndefinedTab() {
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    if (d.taxInvoiceIssued === true || d.taxCancelled === true) return false;
+    var isMergedGroup = d.billingType === '합산' && d.mergedGroupId;
+    if (!isMergedGroup && (!d.payMethod || !d.invoiceType)) return false;
+    return d.issueSchedule === '미정';
+  });
+  renderTabWithGroups(list, 'undefinedMergedContainer', 'undefinedTbody', 'undefined');
+}
+
+function renderSpecificTab() {
+  var dt = document.getElementById('specificDateSelect') ? document.getElementById('specificDateSelect').value : '';
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    if (d.taxInvoiceIssued === true || d.taxCancelled === true) return false;
+    if (d.issueSchedule !== '특정일') return false;
+    // 합산 그룹은 결제정보 없어도 표시 (그룹 블록에서 입력 가능)
+    var isMergedGroup = d.billingType === '합산' && d.mergedGroupId;
+    if (!isMergedGroup && (!d.payMethod || !d.invoiceType)) return false;
+    if (dt && d.invoiceDate !== dt) return false;
+    return true;
+  });
+  _specificList = list;
+  renderTabWithGroups(list, 'specificMergedContainer', 'specificIndividualTbody', 'specific');
+}
+
+function renderMonthTab() {
+  var ym = document.getElementById('monthSelect') ? document.getElementById('monthSelect').value : '';
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    if (d.taxInvoiceIssued === true || d.taxCancelled === true) return false;
+    if (d.issueSchedule !== '월말') return false;
+    // 합산 그룹은 결제정보 없어도 표시
+    var isMergedGroup = d.billingType === '합산' && d.mergedGroupId;
+    if (!isMergedGroup && (!d.payMethod || !d.invoiceType)) return false;
+    if (ym && !(d.invoiceDate || d.receiptDate || '').startsWith(ym)) return false;
+    return true;
+  });
+  _monthList = list;
+  renderTabWithGroups(list, 'monthMergedContainer', 'monthIndividualTbody', 'month');
+}
+
+function renderUnsetTab() { /* 제거된 탭 — 호환성 유지용 no-op */ }
+function renderBatchTab() { /* 제거된 탭 — 호환성 유지용 no-op */ }
+function renderMergedTab() { /* 제거된 탭 — 호환성 유지용 no-op */ }
+
+// 공통 발행 탭 행 빌더 (pending/specific/month 공유)
+function buildIssueTabRow(r, checkboxHtml, isLeader, textMode) {
+  if (isLeader === undefined) isLeader = true;
+  if (textMode === undefined) textMode = false;
+  var d = r.data; var id = r.id;
+  var altBadge = d.billEditEnabled
+    ? '<span class="tag tag-purple" style="margin-left:4px">타업체</span><br><span style="font-size:10px;color:#e65100">' + escHtml((d.billEdit && d.billEdit.company) || '') + '</span>'
+    : '';
+  var altBtn = d.billEditEnabled
+    ? '<button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">✏️ 수정</button>'
+    : '<button style="background:#fff3e0;color:#e65100;border:1px solid #ffe082;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" onclick="openAltBizModal(\'' + id + '\')">🏢 지정</button>';
+  var productName = (d.samples && d.samples.length ? d.samples[0].productName || '' : '') || d.productName || '';
+  var testPurpose = d.testPurpose || d.purpose || '';
+  var chkTd = checkboxHtml ? '<td class="text-center">' + checkboxHtml + '</td>' : '';
+  var memoInp = '<input class="inline-memo" id="bm-' + id + '" type="text" value="' + escHtml(d.billingMemo || '') + '" placeholder="메모..." style="width:70px;padding:3px 5px;border:1px solid #dde1e9;border-radius:6px;font-size:11px" oninput="debounceAutoSave(\'' + id + '\')">';
+
+  // 멤버행 (리더 아님) — 읽기전용 표시 + 숨겨진 input
+  if (!isLeader) {
+    var hidden =
+      '<input type="hidden" id="pm-' + id + '" value="' + escHtml(d.payMethod || '') + '">' +
+      '<input type="hidden" id="it-' + id + '" value="' + escHtml(d.invoiceType || '') + '">' +
+      '<input type="hidden" id="bt-' + id + '" value="합산">' +
+      '<input type="hidden" id="is-' + id + '" value="' + escHtml(d.issueSchedule || '') + '">' +
+      '<input type="hidden" id="id-' + id + '" value="' + escHtml(d.invoiceDate || '') + '">';
+    var chkTdMember = checkboxHtml
+      ? '<td class="text-center">' + checkboxHtml + hidden + '</td>'
+      : '<td style="width:0;padding:0">' + hidden + '</td>';
+    return '<tr data-id="' + id + '" class="group-member-row">' +
+      chkTdMember +
+      '<td style="white-space:nowrap;padding-left:18px"><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
+      '<td style="color:#5f6b7a">' + fmtDate(d.receiptDate || '') + '</td>' +
+      '<td style="white-space:nowrap"><div style="font-weight:600">' + escHtml(d.companyName || '') + '</div>' + altBadge + '</td>' +
+      '<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(productName) + '">' + escHtml(productName || '-') + '</td>' +
+      '<td style="font-size:11px;color:#5f6b7a;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(testPurpose || '') + '">' + escHtml(testPurpose || '-') + '</td>' +
+      '<td class="text-right" style="font-weight:600;white-space:nowrap">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
+      '<td><span id="pm-ro-' + id + '" style="font-size:11px;font-weight:600;color:#2e7d32;white-space:nowrap">' + getPmLabel(d.payMethod) + '</span></td>' +
+      '<td><span id="it-ro-' + id + '" style="font-size:11px;color:#374151;white-space:nowrap">' + escHtml(d.invoiceType || '-') + '</span></td>' +
+      '<td><span style="font-size:11px;color:#374151;white-space:nowrap">🔗 합산</span></td>' +
+      '<td><span id="is-ro-' + id + '" style="font-size:11px;color:#374151;white-space:nowrap">' + getIsLabel(d.issueSchedule) + '</span></td>' +
+      '<td><span id="id-ro-' + id + '" style="font-size:11px;color:#374151;white-space:nowrap">' + escHtml(d.invoiceDate || '') + '</span></td>' +
+      '<td>' + memoInp + '</td>' +
+      '<td>' + altBtn + '</td>' +
+      '<td style="white-space:nowrap" id="save-state-' + id + '"></td>' +
+      '</tr>';
+  }
+
+  // textMode=true (개별 행) — 드롭다운 대신 텍스트 표시, 담당자 td 없음
+  if (textMode) {
+    var hiddenFields =
+      '<input type="hidden" id="pm-' + id + '" value="' + escHtml(d.payMethod || '') + '">' +
+      '<input type="hidden" id="it-' + id + '" value="' + escHtml(d.invoiceType || '') + '">' +
+      '<input type="hidden" id="bt-' + id + '" value="' + escHtml(d.billingType || '') + '">' +
+      '<input type="hidden" id="is-' + id + '" value="' + escHtml(d.issueSchedule || '') + '">';
+    var pmTxt = '<span style="font-size:11px;font-weight:600;color:#2e7d32;white-space:nowrap">' + getPmLabel(d.payMethod) + '</span>' + hiddenFields;
+    var itTxt = '<span style="font-size:11px;color:#374151;white-space:nowrap">' + escHtml(d.invoiceType || '-') + '</span>';
+    var btTxt = '<span style="font-size:11px;color:#374151;white-space:nowrap">' + escHtml(d.billingType || '-') + '</span>';
+    var isTxt = '<span style="font-size:11px;color:#374151;white-space:nowrap">' + getIsLabel(d.issueSchedule) + '</span>';
+    var dtToday2 = new Date().toISOString().slice(0,10);
+    var dtVal2 = d.invoiceDate || dtToday2;
+    var isDateDisabled2 = (d.issueSchedule === '미정' || d.issueSchedule === '월말');
+    var dtInp2 = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + dtVal2 + '" onchange="autoSaveRow(\'' + id + '\')"' + (isDateDisabled2 ? ' disabled style="opacity:0.4"' : '') + '>';
+    return '<tr data-id="' + id + '">' +
+      chkTd +
+      '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
+      '<td style="color:#5f6b7a">' + fmtDate(d.receiptDate || '') + '</td>' +
+      '<td style="white-space:nowrap"><div style="font-weight:600">' + escHtml(d.companyName || '') + '</div>' + altBadge + '</td>' +
+      '<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(productName) + '">' + escHtml(productName || '-') + '</td>' +
+      '<td style="font-size:11px;color:#5f6b7a;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(testPurpose || '') + '">' + escHtml(testPurpose || '-') + '</td>' +
+      '<td class="text-right" style="font-weight:600;white-space:nowrap">' + fmtMoney(getTotalFee(d)) + '</td>' +
+      '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
+      '<td>' + pmTxt + '</td>' +
+      '<td>' + itTxt + '</td>' +
+      '<td>' + btTxt + '</td>' +
+      '<td>' + isTxt + '</td>' +
+      '<td>' + dtInp2 + '</td>' +
+      '<td>' + memoInp + '</td>' +
+      '<td>' + altBtn + '</td>' +
+      '<td style="white-space:nowrap" id="save-state-' + id + '"><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
+      '</tr>';
+  }
+
+  // 리더행 — 기존 편집 가능 UI, 담당자 td 없음
+  var pmSel = buildPayMethodSelect(id, d.payMethod);
+  var itSel = buildInvoiceTypeSelect(id, d.payMethod ? d.invoiceType : '');
+  var btSel = buildBillingTypeSelect(id, d.billingType);
+  var isSel = buildIssueScheduleSelect(id, d.issueSchedule);
+  var dtToday = new Date().toISOString().slice(0,10);
+  var dtVal = d.invoiceDate || dtToday;
+  var isDateDisabled = (d.issueSchedule === '미정' || d.issueSchedule === '월말');
+  var dtInp = '<input class="inline-date' + (d.invoiceDate ? ' filled' : '') + '" id="id-' + id + '" type="date" value="' + dtVal + '" onchange="autoSaveRow(\'' + id + '\')"' + (isDateDisabled ? ' disabled style="opacity:0.4"' : '') + '>';
+  return '<tr data-id="' + id + '">' +
+    chkTd +
+    '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetailModal(\'' + id + '\')" style="color:#1a73e8;font-weight:600;text-decoration:none">' + escHtml(d.receiptNo || id) + '</a></td>' +
+    '<td style="color:#5f6b7a">' + fmtDate(d.receiptDate || '') + '</td>' +
+    '<td style="white-space:nowrap"><div style="font-weight:600">' + escHtml(d.companyName || '') + '</div>' + altBadge + '</td>' +
+    '<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(productName) + '">' + escHtml(productName || '-') + '</td>' +
+    '<td style="font-size:11px;color:#5f6b7a;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(testPurpose || '') + '">' + escHtml(testPurpose || '-') + '</td>' +
+    '<td class="text-right" style="font-weight:600;white-space:nowrap">' + fmtMoney(getTotalFee(d)) + '</td>' +
+    '<td class="text-center">' + getPayStatusTagRF(d) + '</td>' +
+    '<td>' + pmSel + '</td>' +
+    '<td>' + itSel + '</td>' +
+    '<td>' + btSel + '</td>' +
+    '<td>' + isSel + '</td>' +
+    '<td>' + dtInp + '</td>' +
+    '<td>' + memoInp + '</td>' +
+    '<td>' + altBtn + '</td>' +
+    '<td style="white-space:nowrap" id="save-state-' + id + '"><button style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="clearBillingType(\'' + id + '\')">✕ 취소</button></td>' +
+    '</tr>';
+}
+
+function renderUnsetTab() {
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return !d.billingType && d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true;
+  });
+  var tbody = document.getElementById('unsetTbody');
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="15" class="empty-msg">발행유형 미지정 건이 없습니다 🎉</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(function(r) { return buildIssueTabRow(r, null); }).join('');
+}
+
+function renderBatchTab() {
+  var list = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true
+      && (d.billingType === '수동' || !d.billingType);
+  });
+  var tbody = document.getElementById('batchTbody');
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="16" class="empty-msg">발행 대기 건이 없습니다</td></tr>';
+    updateSelectedInfo('batch');
+    return;
+  }
+  tbody.innerHTML = list.map(function(r) {
+    var chk = '<input type="checkbox" class="row-check batch-chk" data-id="' + r.id + '" onchange="updateSelectedInfo(\'batch\')" checked>';
+    return buildIssueTabRow(r, chk);
+  }).join('');
+  updateSelectedInfo('batch');
+}
+
+function setBatchTaxType(type) {
+  _batchTaxType = type;
+  document.getElementById('batchRadio-taxable').classList.toggle('active', type === '과세');
+  document.getElementById('batchRadio-exempt').classList.toggle('active', type === '면세');
+}
+
+function toggleCheckAll(type, checked) {
+  document.querySelectorAll('.' + type + '-chk').forEach(function(chk) { chk.checked = checked; });
+  updateSelectedInfo(type);
+}
+
+function updateSelectedInfo(type) {
+  var chks = document.querySelectorAll('.' + type + '-chk:checked');
+  var total = 0;
+  chks.forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) total += getTotalFee(r.data);
+  });
+  document.getElementById(type + 'SelectedInfo').textContent = '선택: ' + chks.length + '건 / ' + total.toLocaleString() + '원';
+}
+
+// loadMonthData/loadSpecificDateData → renderMonthTab/renderSpecificTab으로 통합
+
+/* =====================================================
+   홈택스 엑셀 다운로드
+===================================================== */
+// 홈택스 양식 셀 병합 — 참고 파일(세금계산서.xlsx) 완전 일치
+function applyDuzonMerges(ws) {
+  var m = [];
+  // A~I (col 0~8): row2-row3 세로 병합
+  for (var i = 0; i <= 8; i++) m.push({ s: { r: 1, c: i }, e: { r: 2, c: i } });
+  // 공급자정보 J2:V2 (col 9~21) 가로 병합
+  m.push({ s: { r: 1, c: 9  }, e: { r: 1, c: 21 } });
+  // 공급받는자정보 W2:AI2 (col 22~34) 가로 병합
+  m.push({ s: { r: 1, c: 22 }, e: { r: 1, c: 34 } });
+  // 작성일자/공급가액/세액 AJ~AL (col 35~37): row2-row3 세로 병합
+  for (var j = 35; j <= 37; j++) m.push({ s: { r: 1, c: j }, e: { r: 2, c: j } });
+  // 품목1~4 가로 병합 (각 8칸)
+  m.push({ s: { r: 1, c: 38 }, e: { r: 1, c: 45 } });
+  m.push({ s: { r: 1, c: 46 }, e: { r: 1, c: 53 } });
+  m.push({ s: { r: 1, c: 54 }, e: { r: 1, c: 61 } });
+  m.push({ s: { r: 1, c: 62 }, e: { r: 1, c: 69 } });
+  // BS~CF (col 70~83): row2-row3 세로 병합
+  for (var k = 70; k <= 83; k++) m.push({ s: { r: 1, c: k }, e: { r: 2, c: k } });
+  ws['!merges'] = m;
+  return ws;
+}
+
+function buildDuzonHeaders() {
+  var row1 = [];
+  for (var i = 1; i <= 84; i++) row1.push(i);
+  var row2 = ['발송시스템_고유번호','결과_고유번호','청구유형코드','거래구분코드','사용자구분코드','과세구분코드',
+    '책번호_권','책번호_호','일련번호',
+    '공급자정보','','','','','','','','','','','','',
+    '공급받는자정보','','','','','','','','','','','','',
+    '작성일자','공급가액','세액',
+    '품목1','','','','','','','',
+    '품목2','','','','','','','',
+    '품목3','','','','','','','',
+    '품목4','','','','','','','',
+    '합계금액','현금','수표','어음','외상미수금',
+    '비고1','비고2','비고3',
+    '수정세금계산서여부','수정코드','원천세금계산서 고유번호','원천세금계산서 승인번호',
+    '협력업체코드','종료'];
+  var row3 = ['','','','','','','','','',
+    '등록번호','상호','대표자명','주소','주소상세','종사업장번호','업태','종목','부서명','담당자이메일','담당자휴대번호','담당자명','담당자전화번호',
+    '등록번호','상호','대표자명','주소','주소상세','종사업장번호','업태','종목','부서명','담당자이메일','담당자휴대번호','담당자명','담당자전화번호',
+    '','','',
+    '일자','품목','규격','수량','단가','공급가액','세액','비고',
+    '일자','품목','규격','수량','단가','공급가액','세액','비고',
+    '일자','품목','규격','수량','단가','공급가액','세액','비고',
+    '일자','품목','규격','수량','단가','공급가액','세액','비고',
+    '','','','','','','','','','','','','',''];
+  return [row1, row2, row3];
+}
+
+function buildBuyerInfo(d) {
+  var buyer = {};
+  var companyName = d.companyName || '';
+  var ci = _companiesMap[companyName] || {};
+  if (!ci.bizNo && !ci.businessNo) {
+    var rawBiz = (d.bizNo || d.businessNo || '').replace(/-/g,'');
+    if (rawBiz && _companiesByBizNo[rawBiz]) ci = _companiesByBizNo[rawBiz];
+  }
+  if (d.billEditEnabled && d.billEdit) {
+    buyer.bizNo = (d.billEdit.bizNo || '').replace(/-/g,'');
+    buyer.name = d.billEdit.company || '';
+    buyer.ceo = d.billEdit.ceo || '';
+    buyer.addr1 = d.billEdit.address || '';
+    buyer.addr2 = '';
+    buyer.bizStatus = d.billEdit.bizType || '';
+    buyer.bizType = d.billEdit.bizItem || '';
+    buyer.email = d.billEdit.email || '';
+    buyer.contactName = d.billEdit.name || '';
+    buyer.phone = d.billEdit.phone || '';
+    buyer.mobile = d.billEdit.mobile || '';
+  } else {
+    buyer.bizNo = (ci.bizNo || ci.businessNo || '').replace(/-/g,'');
+    buyer.name = ci.companyName || ci.company || ci.name || companyName;
+    buyer.ceo = ci.ceo || ci.repName || ci.representative || '';
+    buyer.addr1 = ci.addr1 || ci.address || ci.companyAddress || '';
+    buyer.addr2 = ci.addr2 || '';
+    buyer.bizStatus = ci.bizStatus || ci.bizType || ci.businessType || '';
+    buyer.bizType = ci.bizItem || ci.businessItem || '';
+    buyer.email = ci.taxEmail || ci.email || '';
+    buyer.contactName = ci.contactName || ci.managerName || '';
+    buyer.phone = ci.contactPhone || ci.phone || ci.tel || '';
+    buyer.mobile = ci.contactMobile || ci.mobile || '';
+  }
+  return buyer;
+}
+
+function getItemName(d) {
+  if (d.productName) return d.productName;
+  if (d.sampleName) return d.sampleName;
+  var purpose = d.testPurpose || d.purpose || '';
+  if (purpose) return purpose + ' 검사수수료';
+  return '검사수수료';
+}
+
+function getSampleCount(d) {
+  if (d.sampleCount) return Number(d.sampleCount);
+  if (d.samples && d.samples.length) return d.samples.length;
+  return 1;
+}
+
+function buildDuzonRow(d, fallbackDate, taxType) {
+  var isTaxExempt = (taxType === '면세') || (d.taxCategory === '면세');
+  var total = getTotalFee(d);
+  var supply = isTaxExempt ? total : getSupplyAmount(d);
+  var taxAmt = isTaxExempt ? 0 : getTaxAmount(d);
+  var buyer = buildBuyerInfo(d);
+  var writeDate = (fallbackDate || '').replace(/-/g,'');
+  if (!writeDate && d.receiptDate) writeDate = d.receiptDate.replace(/-/g,'');
+  var itemName = getItemName(d);
+  var qty = getSampleCount(d);
+  var unitPrice = qty > 0 ? Math.round(supply / qty) : supply;
+  var paidAmt = 0;
+  (d.payments || []).forEach(function(p) { paidAmt += Number(p.amount || 0); });
+  var billTypeCode = (paidAmt >= total && total > 0) ? 2 : 1;
+  var taxCode = isTaxExempt ? 2 : 1;
+  return [
+    '', 'EXCEL', billTypeCode, 1, 1, taxCode, '', '', '',
+    SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
+    '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
+    SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
+    buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
+    '', buyer.bizStatus, buyer.bizType, '', buyer.email,
+    buyer.mobile, buyer.contactName, buyer.phone,
+    writeDate, supply, taxAmt,
+    writeDate, itemName, '', qty, unitPrice, supply, taxAmt, '',
+    '','','','','','','','',
+    '','','','','','','','',
+    '','','','','','','','',
+    total, 0, 0, 0, total,
+    d.receiptNo || '', '', '',
+    'N', '', '', '', '',
+    'END'
+  ];
+}
+
+function getCheckedList(type) {
+  var chks = document.querySelectorAll('.' + type + '-chk:checked');
+  var result = [];
+  chks.forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) result.push(r);
+  });
+  return result;
+}
+
+function downloadUndefinedExcel() {
+  // 개별 건 + 합산 그룹 건 통합
+  var indList = getCheckedList('undefined');
+  var mergedList = [];
+  document.querySelectorAll('.merged-chk-undefined:checked').forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) mergedList.push(r);
+  });
+  var all = indList.concat(mergedList.filter(function(r) { return !indList.find(function(x) { return x.id === r.id; }); }));
+  if (all.length === 0) all = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true
+      && (!d.issueSchedule || d.issueSchedule === '미정');
+  });
+  if (all.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+  var today = new Date(); var td = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+  // 합산 그룹별로 묶어서 처리
+  var groups = {}; var singles = [];
+  all.forEach(function(r) {
+    var gid = r.data.billingType === '합산' && r.data.mergedGroupId ? r.data.mergedGroupId : null;
+    if (gid) { if (!groups[gid]) groups[gid] = []; groups[gid].push(r); }
+    else singles.push(r);
+  });
+  var headers = buildDuzonHeaders();
+  var dataRows = [];
+  singles.forEach(function(r) { dataRows.push(buildDuzonRow(r.data, td, _batchTaxType)); });
+  Object.keys(groups).forEach(function(gid) { dataRows = dataRows.concat(buildMergedDuzonRows(groups[gid], td)); });
+  var ws = XLSX.utils.aoa_to_sheet(headers.concat(dataRows));
+  applyDuzonMerges(ws);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '세금계산서');
+  XLSX.writeFile(wb, '홈택스_세금계산서_미정_' + td + '_' + all.length + '건.xlsx');
+  showToast(all.length + '건 파일 생성 완료');
+}
+
+function downloadMonthExcel() {
+  var indList = getCheckedList('month');
+  var mergedList = [];
+  document.querySelectorAll('.merged-chk-month:checked').forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) mergedList.push(r);
+  });
+  var all = indList.concat(mergedList.filter(function(r) { return !indList.find(function(x) { return x.id === r.id; }); }));
+  if (all.length === 0) all = _monthList;
+  if (all.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+  var ym = document.getElementById('monthSelect').value;
+  var lastDay = calcMonthLastDay(ym).replace(/-/g,'');
+  var groups = {}; var singles = [];
+  all.forEach(function(r) {
+    var gid = r.data.billingType === '합산' && r.data.mergedGroupId ? r.data.mergedGroupId : null;
+    if (gid) { if (!groups[gid]) groups[gid] = []; groups[gid].push(r); }
+    else singles.push(r);
+  });
+  var headers = buildDuzonHeaders();
+  var dataRows = [];
+  singles.forEach(function(r) { dataRows.push(buildDuzonRow(r.data, lastDay)); });
+  Object.keys(groups).forEach(function(gid) { dataRows = dataRows.concat(buildMergedDuzonRows(groups[gid], lastDay)); });
+  var ws = XLSX.utils.aoa_to_sheet(headers.concat(dataRows));
+  applyDuzonMerges(ws);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '세금계산서');
+  XLSX.writeFile(wb, '홈택스_세금계산서_월말_' + lastDay + '_' + all.length + '건.xlsx');
+  showToast(all.length + '건 파일 생성 완료');
+}
+
+// 합산 그룹 → 두존 행 배열 빌더 (단건/다건 공통)
+function buildMergedDuzonRows(items, writeDate) {
+  if (items.length === 1) return [buildDuzonRow(items[0].data, writeDate, null)];
+  var baseData = items[0].data;
+  var isTaxExempt = baseData.taxCategory === '면세';
+  var totalSupply = items.reduce(function(s, r) { return s + (isTaxExempt ? getTotalFee(r.data) : getSupplyAmount(r.data)); }, 0);
+  var totalTax = isTaxExempt ? 0 : items.reduce(function(s, r) { return s + getTaxAmount(r.data); }, 0);
+  var totalAmt = totalSupply + totalTax;
+  var buyer = buildBuyerInfo(baseData);
+  var receiptNos = items.map(function(r) { return r.data.receiptNo || r.id; }).join(', ');
+  var paidAmt = 0;
+  items.forEach(function(r) { (r.data.payments || []).forEach(function(p) { paidAmt += Number(p.amount || 0); }); });
+  var billTypeCode = (paidAmt >= totalAmt && totalAmt > 0) ? 2 : 1;
+  var taxCode = isTaxExempt ? 2 : 1;
+  var itemSlots = [];
+  for (var si = 0; si < 4; si++) {
+    var ri = items[si];
+    if (ri) {
+      var iSupply = isTaxExempt ? getTotalFee(ri.data) : getSupplyAmount(ri.data);
+      var iTax = isTaxExempt ? 0 : getTaxAmount(ri.data);
+      var iQty = getSampleCount(ri.data) || 1;
+      itemSlots.push(writeDate, getItemName(ri.data), '', iQty, Math.round(iSupply / iQty), iSupply, iTax, '');
+    } else { itemSlots.push('','','','','','','',''); }
+  }
+  return [[
+    '', 'EXCEL', billTypeCode, 1, 1, taxCode, '', '', '',
+    SUPPLIER.bizNo, SUPPLIER.name, SUPPLIER.ceo, SUPPLIER.addr1, SUPPLIER.addr2,
+    '', SUPPLIER.bizStatus, SUPPLIER.bizType, SUPPLIER.dept, SUPPLIER.email,
+    SUPPLIER.mobile, SUPPLIER.contactName, SUPPLIER.phone,
+    buyer.bizNo, buyer.name, buyer.ceo, buyer.addr1, buyer.addr2,
+    '', buyer.bizStatus, buyer.bizType, '', buyer.email,
+    buyer.mobile, buyer.contactName, buyer.phone,
+    writeDate, totalSupply, totalTax
+  ].concat(itemSlots).concat([
+    totalAmt, 0, 0, 0, totalAmt,
+    receiptNos, '', '',
+    'N', '', '', '', '',
+    'END'
+  ])];
+}
+
+function downloadSpecificDateExcel() {
+  var indList = getCheckedList('specific');
+  var mergedList = [];
+  document.querySelectorAll('.merged-chk-specific:checked').forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) mergedList.push(r);
+  });
+  var all = indList.concat(mergedList.filter(function(r) { return !indList.find(function(x) { return x.id === r.id; }); }));
+  if (all.length === 0) all = _specificList;
+  if (all.length === 0) { showToast('다운로드할 데이터가 없습니다'); return; }
+  var dt = document.getElementById('specificDateSelect').value.replace(/-/g,'');
+  var groups = {}; var singles = [];
+  all.forEach(function(r) {
+    var gid = r.data.billingType === '합산' && r.data.mergedGroupId ? r.data.mergedGroupId : null;
+    if (gid) { if (!groups[gid]) groups[gid] = []; groups[gid].push(r); }
+    else singles.push(r);
+  });
+  var headers = buildDuzonHeaders();
+  var dataRows = [];
+  singles.forEach(function(r) { dataRows.push(buildDuzonRow(r.data, dt)); });
+  Object.keys(groups).forEach(function(gid) { dataRows = dataRows.concat(buildMergedDuzonRows(groups[gid], dt)); });
+  var ws = XLSX.utils.aoa_to_sheet(headers.concat(dataRows));
+  applyDuzonMerges(ws);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '세금계산서');
+  XLSX.writeFile(wb, '홈택스_세금계산서_특정일_' + dt + '_' + all.length + '건.xlsx');
+  showToast(all.length + '건 파일 생성 완료');
+}
+
+/* =====================================================
+   발행완료 처리
+===================================================== */
+async function markIssuedList(list) {
+  if (list.length === 0) { showToast('선택된 건이 없습니다'); return; }
+  if (!confirm(list.length + '건을 발행완료 처리하시겠습니까?')) return;
+  var today = new Date(); var td = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  try {
+    var batch = db.batch();
+    list.forEach(function(r) {
+      var ref = db.collection('receipts').doc(r.id);
+      batch.update(ref, {
+        taxInvoiceIssued: true,
+        taxInvoiceDate: td,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+    list.forEach(function(r) {
+      var idx = _allReceipts.findIndex(function(x) { return x.id === r.id; });
+      if (idx >= 0) { _allReceipts[idx].data.taxInvoiceIssued = true; _allReceipts[idx].data.taxInvoiceDate = td; }
+    });
+    renderKpiCards();
+    doSearch();
+    renderIssueTab();
+    showToast('✅ ' + list.length + '건 발행완료 처리');
+  } catch(e) { showToast('❗ 처리 실패: ' + e.message); }
+}
+
+function markUndefinedIssued() {
+  var list = getCheckedList('undefined');
+  var merged = [];
+  document.querySelectorAll('.merged-chk-undefined:checked').forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) merged.push(r);
+  });
+  var all = list.concat(merged.filter(function(r) { return !list.find(function(x) { return x.id === r.id; }); }));
+  if (all.length === 0) all = _allReceipts.filter(function(r) {
+    var d = r.data;
+    return d.payMethod && d.invoiceType && d.taxInvoiceIssued !== true && d.taxCancelled !== true
+      && (!d.issueSchedule || d.issueSchedule === '미정');
+  });
+  markIssuedList(all);
+}
+
+function markMonthIssued() {
+  var list = getCheckedList('month');
+  var merged = [];
+  document.querySelectorAll('.merged-chk-month:checked').forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) merged.push(r);
+  });
+  var all = list.concat(merged.filter(function(r) { return !list.find(function(x) { return x.id === r.id; }); }));
+  if (all.length === 0) all = _monthList;
+  markIssuedList(all);
+}
+
+function markSpecificDateIssued() {
+  var list = getCheckedList('specific');
+  var merged = [];
+  document.querySelectorAll('.merged-chk-specific:checked').forEach(function(chk) {
+    var id = chk.getAttribute('data-id');
+    var r = _allReceipts.find(function(x) { return x.id === id; });
+    if (r) merged.push(r);
+  });
+  var all = list.concat(merged.filter(function(r) { return !list.find(function(x) { return x.id === r.id; }); }));
+  if (all.length === 0) all = _specificList;
+  markIssuedList(all);
+}
+
+/* =====================================================
+   타업체 발행 모달
+===================================================== */
+function openAltBizModal(receiptId) {
+  _currentReceiptId = receiptId;
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  if (!r) return;
+  var d = r.data;
+  document.getElementById('altBizSubtitle').textContent = (d.receiptNo || receiptId) + ' · ' + (d.companyName || '');
+  // 현재 발행 대상 표시
+  var ci = _companiesMap[d.companyName] || {};
+  var infoHtml = '<strong>' + escHtml(d.companyName || '') + '</strong>';
+  if (ci.bizNo || ci.businessNo) infoHtml += ' · ' + escHtml(ci.bizNo || ci.businessNo || '');
+  if (ci.repName || ci.ceo) infoHtml += ' · 대표 ' + escHtml(ci.repName || ci.ceo || '');
+  if (ci.taxEmail || ci.email) infoHtml += ' · ' + escHtml(ci.taxEmail || ci.email || '');
+  document.getElementById('currentBizInfo').innerHTML = infoHtml;
+  // 기존 값 채우기
+  var enabled = d.billEditEnabled === true;
+  document.getElementById('altBizEnabled').checked = enabled;
+  var be = d.billEdit || {};
+  document.getElementById('altBizNo').value = be.bizNo || '';
+  document.getElementById('altBizCompany').value = be.company || '';
+  document.getElementById('altBizCeo').value = be.ceo || '';
+  document.getElementById('altBizEmail').value = be.email || '';
+  document.getElementById('altBizAddr').value = be.address || '';
+  document.getElementById('altBizType').value = be.bizType || '';
+  document.getElementById('altBizItem').value = be.bizItem || '';
+  document.getElementById('altBizContactName').value = be.name || '';
+  document.getElementById('altBizMobile').value = be.mobile || '';
+  toggleAltBiz();
+  document.getElementById('altBizOverlay').classList.add('show');
+}
+
+function toggleAltBiz() {
+  var enabled = document.getElementById('altBizEnabled').checked;
+  document.getElementById('altBizFields').style.display = enabled ? 'block' : 'none';
+}
+
+function closeAltBizModal() {
+  document.getElementById('altBizOverlay').classList.remove('show');
+  _currentReceiptId = null;
+}
+
+async function saveAltBiz() {
+  if (!_currentReceiptId) return;
+  var enabled = document.getElementById('altBizEnabled').checked;
+  var updateData = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+  if (!enabled) {
+    updateData.billEditEnabled = false;
+    updateData.billEdit = null;
+  } else {
+    var bizNo = document.getElementById('altBizNo').value.trim();
+    var company = document.getElementById('altBizCompany').value.trim();
+    var ceo = document.getElementById('altBizCeo').value.trim();
+    var email = document.getElementById('altBizEmail').value.trim();
+    if (!bizNo || !company || !ceo || !email) {
+      showToast('❗ 사업자번호, 상호, 대표자명, 이메일은 필수입니다');
+      return;
+    }
+    updateData.billEditEnabled = true;
+    updateData.billEdit = {
+      bizNo: bizNo.replace(/-/g,''),
+      company: company,
+      ceo: ceo,
+      email: email,
+      address: document.getElementById('altBizAddr').value.trim(),
+      bizType: document.getElementById('altBizType').value.trim(),
+      bizItem: document.getElementById('altBizItem').value.trim(),
+      name: document.getElementById('altBizContactName').value.trim(),
+      mobile: document.getElementById('altBizMobile').value.trim()
+    };
+  }
+  try {
+    await db.collection('receipts').doc(_currentReceiptId).update(updateData);
+    var idx = _allReceipts.findIndex(function(r) { return r.id === _currentReceiptId; });
+    if (idx >= 0) {
+      _allReceipts[idx].data.billEditEnabled = updateData.billEditEnabled;
+      _allReceipts[idx].data.billEdit = updateData.billEdit;
+    }
+    closeAltBizModal();
+    doSearch();
+    showToast('✅ 발행 대상 저장 완료');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
+}
+
+/* =====================================================
+   접수 상세 모달
+===================================================== */
+function openDetailModal(receiptId) {
+  // 같은 행 재클릭 시 닫기 (토글)
+  if (_currentReceiptId === receiptId) { closeDetailModal(); return; }
+  closeDetailModal();
+
+  _currentReceiptId = receiptId;
+  var r = _allReceipts.find(function(x) { return x.id === receiptId; });
+  if (!r) return;
+  var d = r.data;
+  var ci = _companiesMap[d.companyName] || {};
+  // 업체명으로 못 찾으면 사업자번호로 재시도
+  if (!ci.bizNo && !ci.businessNo) {
+    var _rb = (d.bizNo || d.businessNo || '').replace(/-/g,'');
+    if (_rb && _companiesByBizNo[_rb]) ci = _companiesByBizNo[_rb];
+  }
+  // 상세 표시용: companies컬렉션 → 접수데이터 순 폴백
+  var _dispBizNo   = ci.bizNo || ci.businessNo || d.bizNo || d.businessNo || '-';
+  var _dispRepName = ci.repName || ci.ceo || ci.representative || d.repName || d.ceo || d.representative || '-';
+  var _dispEmail   = ci.taxEmail || ci.invoiceEmail || ci.email || d.taxEmail || d.invoiceEmail || d.email || '-';
+
+  // 시료 테이블 HTML (testItems 객체 배열 안전 처리)
+  var samplesHtml = '';
+  if (d.samples && d.samples.length > 0) {
+    var totalFee = getTotalFee(d);
+    var singleSample = d.samples.length === 1;
+    var sRows = d.samples.map(function(s) {
+      var items = '';
+      if (Array.isArray(s.testItems)) {
+        var _antibio = 0, _pestic = 0, _others = [];
+        s.testItems.forEach(function(t) {
+          var name = typeof t === 'object' ? (t.itemName || t.name || t.item || '') : String(t||'');
+          var code = typeof t === 'object' ? (t.testCode || '') : '';
+          if (!name && !code) return;
+          if (code.indexOf('SCF_') === 0) return; // 묶음수수료 항목 제외
+          var prefix = code.replace(/[0-9_]/g,'').toUpperCase();
+          if (prefix.charAt(0) === 'F') _antibio++;       // F계열 → 항생물질
+          else if (prefix.charAt(0) === 'E') _pestic++;   // E계열 → 잔류농약
+          else if (name) _others.push(name);
+        });
+        var _parts = [];
+        if (_pestic > 0) _parts.push('잔류농약 ' + _pestic + '종');
+        if (_antibio > 0) _parts.push('항생물질 ' + _antibio + '종');
+        _parts = _parts.concat(_others);
+        items = _parts.join(', ');
+      } else { items = s.testItems || ''; }
+      // 수수료: 샘플 자체 필드 → testItems fee 합산 → 단일시료면 접수 전체 수수료
+      var sFee = Number(s.discountFinalPrice || s.feeTotal || s.feeOriginal || s.totalFee || s.totalAmount || s.fee || 0);
+      if (!sFee && Array.isArray(s.testItems)) {
+        s.testItems.forEach(function(t) { if (Number(t.fee) > 0) sFee += Number(t.fee); });
+      }
+      if (!sFee && singleSample) sFee = totalFee;
+      return '<tr>' +
+        '<td style="padding:4px 8px;border-top:1px solid #e2e6ed">' + escHtml(s.sampleName || s.productName || '') + '</td>' +
+        '<td style="padding:4px 8px;border-top:1px solid #e2e6ed;max-width:320px;white-space:normal">' + escHtml(items) + '</td>' +
+        '<td style="padding:4px 8px;border-top:1px solid #e2e6ed;text-align:right">' + (sFee ? sFee.toLocaleString()+'원' : '-') + '</td>' +
+        '</tr>';
+    }).join('');
+    // 다중 시료일 경우 합계 행 추가
+    var totalRow = (!singleSample && totalFee) ?
+      '<tr style="background:#f8f9fb;font-weight:600">' +
+        '<td colspan="2" style="padding:4px 8px;border-top:2px solid #e2e6ed;color:#5f6b7a">합계</td>' +
+        '<td style="padding:4px 8px;border-top:2px solid #e2e6ed;text-align:right;color:#1a73e8">' + totalFee.toLocaleString() + '원</td>' +
+      '</tr>' : '';
+    samplesHtml = '<table style="width:100%;border-collapse:collapse;font-size:11px">' +
+      '<thead><tr style="background:#f0f4f8"><th style="padding:4px 8px;text-align:left;font-weight:600">시료명</th><th style="padding:4px 8px;text-align:left;font-weight:600">검사항목</th><th style="padding:4px 8px;text-align:right;font-weight:600">수수료</th></tr></thead>' +
+      '<tbody>' + sRows + totalRow + '</tbody></table>';
+  } else {
+    samplesHtml = '<span style="font-size:12px;color:#5f6b7a">' + escHtml(d.productName || d.sampleName || '-') + ' · ' + fmtMoney(getTotalFee(d)) + '</span>';
+  }
+
+  var dtToday = new Date().toISOString().slice(0,10);
+
+  var sourceRow = document.querySelector('tr[data-id="' + receiptId + '"]');
+  if (!sourceRow) return;
+  var colCount = sourceRow.cells.length;
+
+  // 원본 행 하이라이트
+  sourceRow.style.background = '#e8f0fe';
+  sourceRow.style.borderLeft = '3px solid #1a73e8';
+
+  // 전체탭에서 열린 경우 결제방법/계산서유형 편집 UI 포함, 미입력탭은 인라인 행에 있으므로 제외
+  var isAllTab = (_currentTab === 'all');
+  var pmItHtml = '';
+  if (isAllTab) {
+    var pmOpts = [['','선택'],['카드','💳 카드'],['온라인입금','🏦 온라인입금'],['현금','💵 현금']];
+    var pmSel2 = '<select id="exp-payMethod" onchange="onExpPayMethodChange()" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit;min-width:110px">' +
+      pmOpts.map(function(o){ return '<option value="' + o[0] + '"' + (d.payMethod===o[0]?' selected':'') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+    var itOpts = [['','선택'],['세금계산서','세금계산서'],['현금영수증','현금영수증'],['카드전표','카드전표'],['카드+계산서','카드+계산서'],['없음','없음']];
+    var itSel2 = '<select id="exp-invoiceType" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit;min-width:110px">' +
+      itOpts.map(function(o){ return '<option value="' + o[0] + '"' + (d.invoiceType===o[0]?' selected':'') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+    var btOpts2 = [['','선택'],['수동','📦 수동'],['합산','🔗 합산'],['분할','✂️ 분할']];
+    var btSel2 = '<select id="exp-billingType" onchange="onExpBillingTypeChange()" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit;min-width:100px">' +
+      btOpts2.map(function(o){ return '<option value="' + o[0] + '"' + (d.billingType===o[0]?' selected':'') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+    var isOpts2 = [['','선택'],['미정','📋 미정'],['특정일','🎯 특정일'],['월말','📅 월말']];
+    var isSel2 = '<select id="exp-issueSchedule" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit;min-width:100px">' +
+      isOpts2.map(function(o){ return '<option value="' + o[0] + '"' + (d.issueSchedule===o[0]?' selected':'') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+    pmItHtml =
+      '<div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:10px;padding:10px 14px;background:#fff;border:1px solid #e2e6ed;border-radius:8px">' +
+        '<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:10px;font-weight:600;color:#5f6b7a">결제방법</label>' + pmSel2 + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:10px;font-weight:600;color:#5f6b7a">계산서유형</label>' + itSel2 + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:10px;font-weight:600;color:#5f6b7a">발행유형</label>' + btSel2 + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:10px;font-weight:600;color:#5f6b7a">발행일</label>' + isSel2 + '</div>' +
+        '<div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-primary btn-sm" onclick="saveDetailModal()">💾 저장</button><button class="btn btn-secondary btn-sm" onclick="closeDetailModal()">✕ 닫기</button></div>' +
+      '</div>';
+  }
+
+  var expandHtml =
+    '<tr id="detail-expand-row" data-expand-for="' + receiptId + '">' +
+    '<td colspan="' + colCount + '" style="padding:0;background:#f0f7ff;border-top:2px solid #1a73e8;border-bottom:2px solid #1a73e8">' +
+    '<div style="padding:14px 20px 16px">' +
+      '<div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:10px;font-size:12px;color:#374151">' +
+        '<span><span style="color:#9ca3af;margin-right:4px">접수번호</span><strong>' + escHtml(d.receiptNo||receiptId) + '</strong></span>' +
+        '<span><span style="color:#9ca3af;margin-right:4px">접수일</span>' + escHtml(d.receiptDate||'') + '</span>' +
+        '<span><span style="color:#9ca3af;margin-right:4px">담당자</span>' + escHtml(d.salesRep||'-') + '</span>' +
+        '<span><span style="color:#9ca3af;margin-right:4px">업체</span><strong>' + escHtml(d.companyName||'') + '</strong></span>' +
+        '<span><span style="color:#9ca3af;margin-right:4px">사업자</span>' + escHtml(_dispBizNo) + '</span>' +
+        '<span><span style="color:#9ca3af;margin-right:4px">대표자</span>' + escHtml(_dispRepName) + '</span>' +
+        '<span><span style="color:#9ca3af;margin-right:4px">이메일</span>' + escHtml(_dispEmail) + '</span>' +
+      '</div>' +
+      '<div style="background:#fff;border:1px solid #e2e6ed;border-radius:6px;padding:8px 12px;margin-bottom:10px">' +
+        '<div style="font-size:11px;font-weight:600;color:#5f6b7a;margin-bottom:6px">📦 시료 및 검사항목</div>' +
+        samplesHtml +
+      '</div>' +
+      pmItHtml +
+    '</div></td></tr>';
+
+  sourceRow.insertAdjacentHTML('afterend', expandHtml);
+
+  // 삽입 후 select value 강제 세팅
+  var _expPm = document.getElementById('exp-payMethod');
+  var _expIt = document.getElementById('exp-invoiceType');
+  var _expBt = document.getElementById('exp-billingType');
+  var _expTx = document.getElementById('exp-taxCategory');
+  if (_expPm && d.payMethod) _expPm.value = d.payMethod;
+  if (_expIt && d.invoiceType) _expIt.value = d.invoiceType;
+  if (_expBt && d.billingType) _expBt.value = d.billingType;
+  if (_expTx) _expTx.value = d.taxCategory || '과세';
+}
+
+function buildExpandBillingSection(receiptId, billingType, d) {
+  var bt = billingType || '';
+  var dtToday = new Date().toISOString().slice(0,10);
+  var dtVal = d.invoiceDate || dtToday;
+  var txSel = '<select id="exp-taxCategory" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit;min-width:70px">' +
+    [['과세','과세'],['면세','면세']].map(function(o){ return '<option value="' + o[0] + '"' + ((d.taxCategory||'과세')===o[0]?' selected':'') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+  var memoInp = '<input id="exp-billingMemo" type="text" value="' + escHtml(d.billingMemo||'') + '" placeholder="발행 메모..." style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit;min-width:160px">';
+  var baseStyle = 'background:#e8f0fe;border:1px solid #aac4f0;border-radius:8px;padding:12px 16px';
+  var rowStyle = 'display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:10px';
+  var lblStyle = 'font-size:10px;font-weight:600;color:#5f6b7a';
+  var colStyle = 'display:flex;flex-direction:column;gap:3px';
+  var btnRow = '<div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-secondary btn-sm" onclick="closeDetailModal()">✕ 닫기</button></div>';
+  var dateField = '<div style="' + colStyle + '"><label style="' + lblStyle + '">발행예정일</label><input id="exp-invoiceDate" type="date" value="' + dtVal + '" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit"></div>';
+
+  var html = '<div id="exp-billing-section" style="' + baseStyle + '">';
+  html += '<div style="display:flex;align-items:center"><span style="font-size:12px;font-weight:700;color:#1565c0">📋 발행 설정</span>' + btnRow + '</div>';
+
+  if (!bt || bt === '미지정') {
+    html += '<div style="font-size:12px;color:#8892a4;margin-top:8px;padding:6px">발행유형을 선택하면 상세 설정이 표시됩니다.</div>';
+    html += '<div style="' + rowStyle + '"><div style="' + colStyle + '"><label style="' + lblStyle + '">메모</label>' + memoInp + '</div></div>';
+  } else if (bt === '수동') {
+    html += '<div style="' + rowStyle + '">';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">과세구분</label>' + txSel + '</div>';
+    html += dateField;
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">메모</label>' + memoInp + '</div>';
+    html += '</div>';
+  } else if (bt === '합산') {
+    var companyName = d.companyName || '';
+    var currentGroupId = d.mergedGroupId || '';
+    var sameList = _allReceipts.filter(function(r) {
+      return r.id !== receiptId && r.data.companyName === companyName && r.data.billingType === '합산' && r.data.taxInvoiceIssued !== true && r.data.taxCancelled !== true;
+    });
+    html += '<div style="margin-top:8px;background:#fff;border:1px solid #e2e6ed;border-radius:8px;padding:10px 14px">';
+    html += '<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:8px">🔗 합산할 건 선택 <span style="font-weight:400;color:#8892a4">(' + escHtml(companyName) + ' 미발행 건)</span></div>';
+    // 현재 건 (고정, 항상 포함)
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#e8f0fe;border-radius:6px;margin-bottom:4px;cursor:default">';
+    html += '<input type="checkbox" checked disabled style="accent-color:#1a73e8">';
+    html += '<span style="font-size:12px;font-weight:600;color:#1a73e8">' + escHtml(d.receiptNo||receiptId) + '</span>';
+    html += '<span style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(d)) + '</span>';
+    html += '<span style="font-size:10px;color:#1a73e8;margin-left:auto">현재</span>';
+    html += '</label>';
+    if (sameList.length === 0) {
+      html += '<div style="font-size:11px;color:#8892a4;padding:6px 8px">같은 업체의 다른 합산 건이 없습니다.</div>';
+    } else {
+      sameList.forEach(function(r) {
+        var rd = r.data;
+        var inSameGroup = currentGroupId && rd.mergedGroupId === currentGroupId;
+        var inOtherGroup = rd.mergedGroupId && rd.mergedGroupId !== currentGroupId;
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:4px;cursor:pointer;' + (inSameGroup ? 'background:#f0fdf4' : 'background:#f8f9fb') + '">';
+        html += '<input type="checkbox" class="merged-select-chk" data-id="' + r.id + '"' + (inSameGroup ? ' checked' : '') + ' style="accent-color:#4caf50">';
+        html += '<span style="font-size:12px;color:#1a2332">' + escHtml(rd.receiptNo||r.id) + '</span>';
+        html += '<span style="font-size:11px;color:#5f6b7a">' + fmtMoney(getTotalFee(rd)) + '</span>';
+        if (inOtherGroup) html += '<span style="font-size:10px;color:#e65100;margin-left:auto">다른 그룹</span>';
+        else if (inSameGroup) html += '<span style="font-size:10px;color:#2e7d32;margin-left:auto">같은 그룹</span>';
+        html += '</label>';
+      });
+    }
+    html += '<div id="merged-sum-preview" style="font-size:11px;font-weight:600;color:#1a73e8;margin-top:6px;text-align:right"></div>';
+    html += '</div>';
+    html += '<div style="' + rowStyle + '">';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">과세구분</label>' + txSel + '</div>';
+    html += dateField;
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">메모</label>' + memoInp + '</div>';
+    html += '</div>';
+    // 합산 금액 미리보기 스크립트
+    html += '<script>setTimeout(function(){var chks=document.querySelectorAll(".merged-select-chk");function upd(){var sum=' + getTotalFee(d) + ';chks.forEach(function(c){if(c.checked){var r=_allReceipts.find(function(x){return x.id===c.getAttribute("data-id")});if(r)sum+=getTotalFee(r.data);}});var el=document.getElementById("merged-sum-preview");if(el)el.textContent="합산 예상금액: "+sum.toLocaleString()+"원";}chks.forEach(function(c){c.onchange=upd;});upd();},100);<\/script>';
+  } else if (bt === '특정일') {
+    html += '<div style="font-size:11px;color:#5f6b7a;margin-top:8px">발행할 날짜를 지정하세요. 발행관리 &gt; 특정일발행 탭에서 해당 날짜 조회 시 표시됩니다.</div>';
+    html += '<div style="' + rowStyle + '">';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">과세구분</label>' + txSel + '</div>';
+    html += dateField;
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">메모</label>' + memoInp + '</div>';
+    html += '</div>';
+  } else if (bt === '월말') {
+    var ym = (d.invoiceDate || dtToday).slice(0,7);
+    var lastDay = calcMonthLastDay(ym);
+    html += '<div style="font-size:11px;color:#5f6b7a;margin-top:8px">발행 월을 선택하면 말일이 자동 지정됩니다.</div>';
+    html += '<div style="' + rowStyle + '">';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">과세구분</label>' + txSel + '</div>';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">발행 월</label><input id="exp-monthYear" type="month" value="' + ym + '" onchange="onExpMonthChange()" style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;font-family:inherit"></div>';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">말일 (자동)</label><input id="exp-invoiceDate" type="text" value="' + lastDay + '" readonly style="padding:5px 8px;border:1px solid #e2e6ed;border-radius:6px;font-size:12px;background:#f0f4f8;color:#5f6b7a;min-width:110px"></div>';
+    html += '<div style="' + colStyle + '"><label style="' + lblStyle + '">메모</label>' + memoInp + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function onExpBillingTypeChange() {
+  var btSel = document.getElementById('exp-billingType');
+  if (!btSel || !_currentReceiptId) return;
+  var r = _allReceipts.find(function(x) { return x.id === _currentReceiptId; });
+  var d = r ? r.data : {};
+  var section = document.getElementById('exp-billing-section');
+  if (section) {
+    var newHtml = buildExpandBillingSection(_currentReceiptId, btSel.value, d);
+    var tmp = document.createElement('div');
+    tmp.innerHTML = newHtml;
+    section.parentNode.replaceChild(tmp.firstChild, section);
+    var tx = document.getElementById('exp-taxCategory');
+    if (tx) tx.value = d.taxCategory || '과세';
+  }
+}
+
+function onExpMonthChange() {
+  var ym = (document.getElementById('exp-monthYear') || {}).value;
+  if (!ym) return;
+  var lastDay = calcMonthLastDay(ym);
+  var dtEl = document.getElementById('exp-invoiceDate');
+  if (dtEl) dtEl.value = lastDay;
+}
+
+function closeDetailModal() {
+  if (_currentReceiptId) {
+    var src = document.querySelector('tr[data-id="' + _currentReceiptId + '"]');
+    if (src) { src.style.background = ''; src.style.borderLeft = ''; }
+  }
+  var expRow = document.getElementById('detail-expand-row');
+  if (expRow) expRow.remove();
+  _currentReceiptId = null;
+}
+
+async function saveDetailModal() {
+  if (!_currentReceiptId) return;
+  var id = _currentReceiptId;
+  // 전체탭: exp-payMethod/invoiceType/billingType 존재 / 미입력탭: 인라인 행에서 읽음
+  var payMethod   = ((document.getElementById('exp-payMethod')   || document.getElementById('pm-' + id) || {}).value) || '';
+  var invoiceType = ((document.getElementById('exp-invoiceType') || document.getElementById('it-' + id) || {}).value) || '';
+  var billingType = ((document.getElementById('exp-billingType') || document.getElementById('bt-' + id) || {}).value) || '';
+  var issueSchedule = ((document.getElementById('exp-issueSchedule') || document.getElementById('is-' + id) || {}).value) || '';
+  var taxCategory = (document.getElementById('exp-taxCategory')  || {}).value || '과세';
+  var billingMemo = ((document.getElementById('exp-billingMemo') || document.getElementById('bm-' + id) || {}).value || '').trim();
+  // invoiceDate: 월말은 exp-invoiceDate(readonly), 나머지는 직접
+  var invoiceDate = (document.getElementById('exp-invoiceDate') || {}).value || '';
+  try {
+    // 합산 그룹 처리
+    var mergedGroupId = null;
+    var uncheckedIds = []; // 기존 그룹에서 제외된 건들
+    if (billingType === '합산') {
+      var checkedChks = document.querySelectorAll('.merged-select-chk:checked');
+      var uncheckedChks = document.querySelectorAll('.merged-select-chk:not(:checked)');
+      if (checkedChks.length > 0) {
+        // 기존 그룹ID 유지 또는 신규 생성
+        var r0 = _allReceipts.find(function(x) { return x.id === id; });
+        mergedGroupId = (r0 && r0.data.mergedGroupId) || ('grp_' + Date.now());
+      }
+      uncheckedChks.forEach(function(c) { uncheckedIds.push(c.getAttribute('data-id')); });
+    }
+
+    var batch = db.batch();
+    var updateData = {
+      taxCategory: taxCategory,
+      invoiceDate: invoiceDate || null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (payMethod) updateData.payMethod = payMethod; else updateData.payMethod = null;
+    if (invoiceType) updateData.invoiceType = invoiceType; else updateData.invoiceType = null;
+    if (billingType) updateData.billingType = billingType;
+    else updateData.billingType = firebase.firestore.FieldValue.delete();
+    if (issueSchedule) updateData.issueSchedule = issueSchedule;
+    else updateData.issueSchedule = firebase.firestore.FieldValue.delete();
+    if (billingMemo) updateData.billingMemo = billingMemo;
+    else updateData.billingMemo = firebase.firestore.FieldValue.delete();
+    if (mergedGroupId) updateData.mergedGroupId = mergedGroupId;
+    else updateData.mergedGroupId = firebase.firestore.FieldValue.delete();
+
+    batch.update(db.collection('receipts').doc(id), updateData);
+
+    // 체크된 다른 건들에도 동일 그룹ID 저장
+    if (mergedGroupId) {
+      document.querySelectorAll('.merged-select-chk:checked').forEach(function(c) {
+        var cid = c.getAttribute('data-id');
+        batch.update(db.collection('receipts').doc(cid), {
+          mergedGroupId: mergedGroupId,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+    }
+    // 체크 해제된 건들은 그룹에서 제거
+    uncheckedIds.forEach(function(cid) {
+      var cr = _allReceipts.find(function(x) { return x.id === cid; });
+      if (cr && cr.data.mergedGroupId) {
+        batch.update(db.collection('receipts').doc(cid), {
+          mergedGroupId: firebase.firestore.FieldValue.delete(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    });
+    await batch.commit();
+    // 현재 건 메모리 업데이트
+    var idx = _allReceipts.findIndex(function(r) { return r.id === id; });
+    if (idx >= 0) {
+      _allReceipts[idx].data.payMethod   = payMethod   || null;
+      _allReceipts[idx].data.invoiceType = invoiceType || null;
+      _allReceipts[idx].data.taxCategory = taxCategory;
+      _allReceipts[idx].data.invoiceDate = invoiceDate || null;
+      _allReceipts[idx].data.billingType = billingType || undefined;
+      if (issueSchedule) _allReceipts[idx].data.issueSchedule = issueSchedule;
+      else delete _allReceipts[idx].data.issueSchedule;
+      _allReceipts[idx].data.billingMemo = billingMemo || undefined;
+      if (mergedGroupId) _allReceipts[idx].data.mergedGroupId = mergedGroupId;
+      else delete _allReceipts[idx].data.mergedGroupId;
+    }
+    // 체크된 건들 메모리 업데이트
+    if (mergedGroupId) {
+      document.querySelectorAll('.merged-select-chk:checked').forEach(function(c) {
+        var ci = _allReceipts.findIndex(function(x) { return x.id === c.getAttribute('data-id'); });
+        if (ci >= 0) _allReceipts[ci].data.mergedGroupId = mergedGroupId;
+      });
+    }
+    // 제외된 건들 메모리 업데이트
+    uncheckedIds.forEach(function(cid) {
+      var ci = _allReceipts.findIndex(function(x) { return x.id === cid; });
+      if (ci >= 0) delete _allReceipts[ci].data.mergedGroupId;
+    });
+    // 인라인 행 동기화 (미입력탭)
+    var pmSel = document.getElementById('pm-' + id);
+    var itSel = document.getElementById('it-' + id);
+    var btSel = document.getElementById('bt-' + id);
+    var bmInp = document.getElementById('bm-' + id);
+    if (pmSel) { pmSel.value = payMethod; if (payMethod) pmSel.classList.add('filled'); else pmSel.classList.remove('filled'); }
+    if (itSel) { itSel.value = invoiceType; if (invoiceType) itSel.classList.add('filled'); else itSel.classList.remove('filled'); }
+    if (btSel) { btSel.value = billingType; if (billingType) btSel.classList.add('filled'); else btSel.classList.remove('filled'); }
+    if (bmInp) bmInp.value = billingMemo;
+    closeDetailModal();
+    renderKpiCards();
+    doSearch();
+    showToast('✅ 저장 완료');
+  } catch(e) { showToast('❗ 저장 실패: ' + e.message); }
+}
+
+/* =====================================================
+   보조 함수
+===================================================== */
+function getTotalFee(d) {
+  if (d.discountFinalPrice) return Number(d.discountFinalPrice);
+  // testItems 레벨 fee 합산 (시료 × 시험항목 수수료 전체 합계)
+  if (d.samples && d.samples.length > 0) {
+    var itemSum = 0, hasItemFees = false;
+    d.samples.forEach(function(s) {
+      var items = s.testItems || s.refTestItems || [];
+      if (Array.isArray(items)) {
+        items.forEach(function(t) {
+          if (t && Number(t.fee)) { itemSum += Number(t.fee); hasItemFees = true; }
+        });
+      }
+    });
+    if (hasItemFees && itemSum > 0) return itemSum;
+  }
+  return Number(d.feeTotal || d.feeOriginal || d.totalFee || d.totalAmount || 0);
+}
+function getSupplyAmount(d) { return Math.round(getTotalFee(d) / 1.1); }
+function getTaxAmount(d) { return getTotalFee(d) - getSupplyAmount(d); }
+
+function isMissingInfo(d) { return !d.payMethod || !d.invoiceType; }
+
+/* 입금현황 헬퍼 */
+function getPaidAmountRF(d) {
+  var sum = 0;
+  (d.payments || []).forEach(function(p) { sum += Number(p.amount || 0); });
+  // 방안 A 연동: payDate가 있으면 전액 입금으로 간주
+  if (!sum && d.payDate) sum = getTotalFee(d);
+  return sum;
+}
+function getPayStatusTagRF(d) {
+  var total = getTotalFee(d);
+  if (total <= 0) return '<span style="color:#9ca3af;font-size:11px">-</span>';
+  var paid = getPaidAmountRF(d);
+  if (paid >= total) {
+    var dates = (d.payments || []).map(function(p){ return p.date || ''; }).filter(Boolean).sort();
+    var lastDate = dates.length ? dates[dates.length-1] : (d.payDate || '');
+    var dateSub = lastDate ? ' <span style="font-size:10px;color:#5f6b7a">' + lastDate.substring(5) + '</span>' : '';
+    return '<span style="white-space:nowrap"><span style="background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">입금완료</span>' + dateSub + '</span>';
+  }
+  if (paid > 0) {
+    var pct = Math.round(paid / total * 100);
+    var amtSub = ' <span style="font-size:10px;color:#5f6b7a">' + Number(paid).toLocaleString() + '원</span>';
+    return '<span style="white-space:nowrap"><span style="background:#fef9c3;color:#ca8a04;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">부분(' + pct + '%)</span>' + amtSub + '</span>';
+  }
+  return '<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">미입금</span>';
+}
+
+function getReceiptStatus(d) {
+  if (d.taxCancelled) return '취소';
+  if (d.taxInvoiceIssued) return '발행완료';
+  if (isMissingInfo(d)) return '미입력';
+  return '발행대기';
+}
+
+function getReceiptDisplayStatus(d) {
+  if (d.taxCancelled) return { label: '취소', cls: 'tag-gray', status: '취소' };
+  if (d.taxInvoiceIssued) return { label: '✅ 발행완료', cls: 'tag-green', status: '발행완료' };
+  if (isMissingInfo(d)) return { label: '⚠️ 미입력', cls: 'tag-red', status: '미입력' };
+  return { label: '📤 발행대기', cls: 'tag-orange', status: '발행대기' };
+}
+
+function getInvoiceTypeTag(type) {
+  if (type === '세금계산서') return '<span class="tag tag-green">' + type + '</span>';
+  if (type === '현금영수증') return '<span class="tag tag-blue">' + type + '</span>';
+  if (type === '카드전표') return '<span class="tag tag-gray">' + type + '</span>';
+  if (type === '카드+계산서') return '<span class="tag tag-purple">' + type + '</span>';
+  if (type === '없음') return '<span class="tag tag-gray">' + type + '</span>';
+  return '<span style="color:#c8d6e5">-</span>';
+}
+
+function getBillingTypeTag(type) {
+  if (type === '수동') return '<span class="tag tag-gray">📦 수동</span>';
+  if (type === '합산') return '<span class="tag tag-purple">🔗 합산</span>';
+  if (type === '분할') return '<span class="tag tag-orange">✂️ 분할</span>';
+  return '<span style="color:#c8d6e5">-</span>';
+}
+
+function getIssueScheduleTag(schedule) {
+  if (schedule === '미정' || !schedule) return '<span class="tag tag-gray">📋 미정</span>';
+  if (schedule === '특정일') return '<span class="tag tag-orange">🎯 특정일</span>';
+  if (schedule === '월말') return '<span class="tag tag-blue">📅 월말</span>';
+  return '<span style="color:#c8d6e5">-</span>';
+}
+
+function getPayMethodTag(method) {
+  if (method === '카드') return '<span class="tag tag-gray">💳 카드</span>';
+  if (method === '온라인입금') return '<span class="tag tag-blue">🏦 온라인입금</span>';
+  if (method === '현금') return '<span class="tag tag-orange">💵 현금</span>';
+  return '<span style="color:#c8d6e5">-</span>';
+}
+
+function fmtMoney(n) { return Number(n).toLocaleString() + '원'; }
+
+function fmtDate(s) {
+  if (!s || s.length < 10) return s || '';
+  return s.slice(2,4) + '.' + s.slice(5,7) + '.' + s.slice(8,10);
+}
+
+function calcMonthLastDay(yyyyMM) {
+  if (!yyyyMM) return '';
+  var y = parseInt(yyyyMM.slice(0,4));
+  var m = parseInt(yyyyMM.slice(5,7));
+  var lastDay = new Date(y, m, 0).getDate();
+  return yyyyMM + '-' + String(lastDay).padStart(2,'0');
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 오버레이 배경 클릭으로 닫기
+document.getElementById('altBizOverlay').addEventListener('click', function(e) { if (e.target === this) closeAltBizModal(); });
+document.getElementById('mergeSelectOverlay').addEventListener('click', function(e) { if (e.target === this) closeMergeSelectModal(); });
+
+
+// 초기화
+document.addEventListener('DOMContentLoaded', function() { init(); });
+</script>
+</body>
+</html>

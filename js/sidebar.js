@@ -245,6 +245,7 @@ const SIDEBAR_MENU = [
       { label: '매출처원장',           href: 'ledgerMgmt.html',  page: 'finance-ledger' },
       { label: '입금 관리',           href: 'paymentMgmt.html',    page: 'finance-payment' },
       { label: '세금계산서',          href: 'taxInvoice.html',     page: 'finance-tax' },
+      { label: '접수현황',            href: 'receiptFinance.html', page: 'finance-receipt' },
       { label: '입금 통계',           href: 'paymentStats.html',   page: 'finance-stats' }
     ]
   },
@@ -272,10 +273,14 @@ const SIDEBAR_MENU = [
       { label: '대시보드 권한',     disabled: true },
       { label: '알림 설정',         disabled: true },
       { label: '시스템 로그',       disabled: true },
-      { label: 'API 설정(영업부용)', href: 'salesMgmt.html#apiSettings',  page: 'apiSettings',  internalPage: 'apiSettings' },
-      { label: 'API 수집 설정',    href: 'admin_api_settings.html',    page: 'admin-api-settings' },
-      { label: '수집 현황',         href: 'admin_collect_status.html',  page: 'admin-collect-status' },
-      { label: '신규 업체 알림',    href: 'admin_new_businesses.html',  page: 'admin-new-biz' }
+      { label: 'API',               href: 'admin_api.html',             page: 'admin-api',
+        subTabs: [
+          { tab: 'apiSettings' },
+          { tab: 'collectSettings' },
+          { tab: 'collectStatus' },
+          { tab: 'newBiz' }
+        ]
+      }
     ]
   }
 ];
@@ -406,8 +411,12 @@ function renderSidebar() {
               isActive = true;
             }
           }
-        } else if (!currentHash || !_hasHashMatchInMenu(currentFile, currentHash)) {
-          // href에 hash가 없고, 현재 URL에 hash가 없거나 다른 메뉴에서 매칭되지 않을 때
+        } else if (!currentHash) {
+          isActive = true;
+        } else if (item.subTabs && item.subTabs.some(function(t) { return t.tab === currentHash; })) {
+          // href에 hash 없고 subTabs에 현재 hash 포함 → active (hash 기반 탭 페이지)
+          isActive = true;
+        } else if (!_hasHashMatchInMenu(currentFile, currentHash)) {
           isActive = true;
         }
       }

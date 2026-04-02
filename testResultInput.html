@@ -938,6 +938,7 @@ function renderRightPanel() {
   html += '<button class="btn btn-outline" onclick="cancelEdit()">취소</button>';
   html += '<button class="btn btn-primary" id="save-btn" onclick="saveResults()">💾 Firestore 저장</button>';
   html += '<button class="btn btn-success" onclick="openMfdsModal()">🏛️ 식약처 전송</button>';
+  html += '<button class="btn btn-outline" onclick="printTestResults()" style="background:#f0f9ff;color:#0369a1;border-color:#7dd3fc">🖨️ 인쇄</button>';
   html += '<label style="margin-left:8px;display:flex;align-items:center;gap:4px;font-size:12px;color:#999;cursor:pointer">';
   html += '<input type="checkbox" id="mfds-toggle" ' + (MFDS_ENABLED ? 'checked' : '') + ' onchange="toggleMfdsEnabled()">';
   html += '식약처 전송 활성화</label>';
@@ -1756,7 +1757,7 @@ async function loadFormTemplates() {
 // 항목명 + 식품유형으로 양식 찾기 (정확→부분→기본 순 매칭)
 function findFormTemplate(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return null;
-  var name = itemName.trim();
+  var name = itemName.split('||')[0].trim(); // "납||자기품질위탁검사용" → "납"
   var ft = (sampleFoodType || '').trim();
   var ftBase = ft.replace(/\(.*\)/, '').trim(); // "과자(밀봉,유탕,유처리)" → "과자"
   var exact = null, partial = null, nameOnly = null;
@@ -1783,7 +1784,7 @@ function findFormTemplate(itemName, sampleFoodType) {
 // 항목명 + 식품유형으로 오버라이드(시험일지 수정값) 찾기 (정확→부분→기본 순)
 function findFormTemplateOverrides(itemName, sampleFoodType) {
   if (!itemName || !_formTemplatesLoaded) return {};
-  var name = itemName.trim();
+  var name = itemName.split('||')[0].trim();
   var ft = (sampleFoodType || '').trim();
   var ftBase = ft.replace(/\(.*\)/, '').trim();
   var exact = null, partial = null, nameOnly = null;
@@ -1905,24 +1906,20 @@ function renderCalcForm(idx, item, tmpl, saved) {
     return h;
   }
 
-  // 미생물 양식 감지
-  var isMicro = tmpl.isMicroForm || (function() {
-    var basis = tmpl.testBasis || '';
-    return basis.indexOf('미생물') >= 0 || basis.indexOf('제8.') >= 0 || basis.indexOf('일반시험법 4.') >= 0;
-  })();
+  var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
+
+  // 미생물 양식 감지: 실제 필드에 '집락수' 포함 여부로 판단 (testBasis 문자열 오감지 방지)
+  var isMicro = tmpl.isMicroForm || sections.some(function(sec) {
+    return (sec.fields || []).some(function(f) { return /집락수/.test(f.label || f.id || ''); });
+  });
 
   if (isMicro) {
-    // ── 미생물 전용: 시료정보 + 희석배수 테이블 ──
-    // 시료정보 섹션
-    var sampleFields = [];
-    var microFields = []; // 희석배수/집락수/채취량 필드
+    // ── 미생물 전용: 시료정보 그리드 + 희석배수×n 집락수 테이블 ──
+    var sampleFields = [], microFields = [];
     sections.forEach(function(sec) {
       (sec.fields || []).forEach(function(f) {
-        if (/희석배수|집락수|검체채취량/.test(f.label || f.id)) {
-          microFields.push(f);
-        } else {
-          sampleFields.push(f);
-        }
+        if (/희석배수|집락수|검체채취량/.test(f.label || f.id || '')) microFields.push(f);
+        else sampleFields.push(f);
       });
     });
 
@@ -1930,7 +1927,6 @@ function renderCalcForm(idx, item, tmpl, saved) {
     if (sampleFields.length) {
       h += '<div style="font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px">시료정보</div>';
       h += '<div class="idf-grid">';
-      var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
       sampleFields.forEach(function(f) {
         var fid = 'idf-' + f.id + '-' + idx;
         var val = raw[f.id] || autoVals[f.id] || '';
@@ -1949,11 +1945,8 @@ function renderCalcForm(idx, item, tmpl, saved) {
       h += '</div>';
     }
 
-    // 희석배수 × n 평판 테이블
-    // n 수 파악: 집락수 필드 중 가장 큰 n 번호
-    var nCount = 0;
-    var dilutions = [];
-    var dilSet = {};
+    // 희석배수·n 수 파악 — 실제 필드에서 추출 (하드코딩 없음)
+    var nCount = 0, dilutions = [], dilSet = {};
     microFields.forEach(function(f) {
       var nm = f.label || f.id || '';
       var nMatch = nm.match(/n(\d+)/);
@@ -1961,69 +1954,64 @@ function renderCalcForm(idx, item, tmpl, saved) {
       var dMatch = nm.match(/희석배수\s*(\d+)/);
       if (dMatch && !dilSet[dMatch[1]]) { dilSet[dMatch[1]] = true; dilutions.push(parseInt(dMatch[1])); }
     });
-    if (nCount === 0) nCount = 5;
-    dilutions.sort(function(a,b){ return a-b; });
-    if (!dilutions.length) dilutions = [10, 100, 1000, 10000, 100000];
+    dilutions.sort(function(a, b) { return a - b; });
 
     // 채취량 필드 매핑
     var weightFields = {};
     microFields.forEach(function(f) {
-      var nm = f.label || f.id || '';
-      var wm = nm.match(/검체채취량\s*n(\d+)/);
+      var wm = (f.label || f.id || '').match(/검체채취량\s*n(\d+)/);
       if (wm) weightFields[parseInt(wm[1])] = f;
     });
 
-    h += '<div style="font-size:12px;font-weight:600;color:#1d4ed8;margin:12px 0 6px;border-bottom:1px solid #93c5fd;padding-bottom:3px">🦠 집락수 입력</div>';
-    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 130) + 'px">';
-    // 헤더
-    h += '<thead><tr><th rowspan="2" style="background:#1e3a8a;color:#fff;padding:5px 6px;border:0.5px solid #1e40af;width:70px;text-align:center;font-size:10px">희석배수</th>';
-    for (var n = 1; n <= nCount; n++) h += '<th colspan="2" style="background:#1e3a8a;color:#fff;padding:4px;border:0.5px solid #1e40af;text-align:center;font-size:10px">n' + n + '</th>';
-    h += '</tr><tr>';
-    for (var n = 1; n <= nCount; n++) {
-      h += '<th style="background:#374151;color:#fff;padding:3px;border:0.5px solid #4b5563;font-size:10px">평판1</th>';
-      h += '<th style="background:#374151;color:#fff;padding:3px;border:0.5px solid #4b5563;font-size:10px">평판2</th>';
-    }
-    h += '</tr></thead><tbody>';
-
-    // 각 희석배수 행
-    dilutions.forEach(function(dil) {
-      h += '<tr><td style="background:#f9fafb;padding:4px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;font-size:11px">1:' + dil.toLocaleString() + '</td>';
+    if (nCount > 0 && dilutions.length > 0) {
+      h += '<div style="font-size:12px;font-weight:600;color:#1d4ed8;margin:12px 0 6px;border-bottom:1px solid #93c5fd;padding-bottom:3px">🦠 집락수 입력</div>';
+      h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 130) + 'px">';
+      h += '<thead><tr><th rowspan="2" style="background:#1e3a8a;color:#fff;padding:5px 6px;border:0.5px solid #1e40af;width:70px;text-align:center;font-size:10px">희석배수</th>';
+      for (var n = 1; n <= nCount; n++) h += '<th colspan="2" style="background:#1e3a8a;color:#fff;padding:4px;border:0.5px solid #1e40af;text-align:center;font-size:10px">n' + n + '</th>';
+      h += '</tr><tr>';
       for (var n = 1; n <= nCount; n++) {
-        [1, 2].forEach(function(p) {
-          // 필드 찾기: "희석배수 {dil} n{n} 평판{p}"
-          var matchF = null;
-          microFields.forEach(function(f) {
-            var nm = f.label || f.id || '';
-            if (nm.indexOf('희석배수') >= 0 && nm.indexOf(String(dil)) >= 0 && nm.indexOf('n' + n) >= 0 && nm.indexOf('평판' + p) >= 0) matchF = f;
+        h += '<th style="background:#374151;color:#fff;padding:3px;border:0.5px solid #4b5563;font-size:10px">평판1</th>';
+        h += '<th style="background:#374151;color:#fff;padding:3px;border:0.5px solid #4b5563;font-size:10px">평판2</th>';
+      }
+      h += '</tr></thead><tbody>';
+      dilutions.forEach(function(dil) {
+        h += '<tr><td style="background:#f9fafb;padding:4px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;font-size:11px">1:' + dil.toLocaleString() + '</td>';
+        for (var n = 1; n <= nCount; n++) {
+          [1, 2].forEach(function(p) {
+            var matchF = null;
+            microFields.forEach(function(f) {
+              var nm = f.label || f.id || '';
+              if (nm.indexOf('집락수') >= 0 && nm.indexOf(String(dil)) >= 0 && nm.indexOf('n' + n) >= 0 && nm.indexOf('평판' + p) >= 0) matchF = f;
+              else if (nm.indexOf('희석배수') >= 0 && nm.indexOf(String(dil)) >= 0 && nm.indexOf('n' + n) >= 0 && nm.indexOf('평판' + p) >= 0) matchF = f;
+            });
+            if (matchF) {
+              var fid = 'idf-' + matchF.id + '-' + idx;
+              var val = raw[matchF.id] || '';
+              h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="' + fid + '" value="' + val + '" placeholder="집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" oninput="calcItemResult(' + idx + ')"></td>';
+            } else {
+              h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center;color:#d1d5db;font-size:10px">-</td>';
+            }
           });
-          if (matchF) {
-            var fid = 'idf-' + matchF.id + '-' + idx;
-            var val = raw[matchF.id] || '';
-            h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="' + fid + '" value="' + val + '" placeholder="집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" oninput="calcItemResult(' + idx + ')"></td>';
-          } else {
-            h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" style="width:52px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" disabled></td>';
-          }
-        });
+        }
+        h += '</tr>';
+      });
+      // 채취량 행
+      h += '<tr style="background:#f0fdf4"><td style="padding:4px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center">채취량(g)</td>';
+      for (var n = 1; n <= nCount; n++) {
+        var wf = weightFields[n];
+        if (wf) {
+          var fid2 = 'idf-' + wf.id + '-' + idx;
+          var wval = raw[wf.id] || '';
+          h += '<td colspan="2" style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="' + fid2 + '" value="' + wval + '" placeholder="g" style="width:70px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" oninput="calcItemResult(' + idx + ')"></td>';
+        } else {
+          h += '<td colspan="2" style="padding:2px;border:0.5px solid #e5e7eb;text-align:center;color:#d1d5db">-</td>';
+        }
       }
-      h += '</tr>';
-    });
-
-    // 채취량 행
-    h += '<tr style="background:#f0fdf4"><td style="padding:4px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center">채취량(g)</td>';
-    for (var n = 1; n <= nCount; n++) {
-      var wf = weightFields[n];
-      if (wf) {
-        var fid = 'idf-' + wf.id + '-' + idx;
-        var val = raw[wf.id] || '';
-        h += '<td colspan="2" style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="' + fid + '" value="' + val + '" placeholder="g" style="width:70px;height:22px;text-align:center;border:0.5px solid #d1d5db;border-radius:4px;font-size:11px" oninput="calcItemResult(' + idx + ')"></td>';
-      } else {
-        h += '<td colspan="2" style="padding:2px;border:0.5px solid #e5e7eb;text-align:center">-</td>';
-      }
+      h += '</tr></tbody></table></div>';
     }
-    h += '</tr></tbody></table></div>';
 
   } else {
-    // ── 이화학 등 일반 양식: 기존 그리드 렌더링 ──
+    // ── 이화학 등 일반 양식: sections 그대로 그리드 렌더링 ──
     sections.forEach(function(sec) {
       var isStdSection = (sec.title === '표준물질정보' || sec.title === '표준용액농도');
       if (sec.title) {
@@ -2035,7 +2023,6 @@ function renderCalcForm(idx, item, tmpl, saved) {
         h += '</div>';
       }
       h += '<div class="idf-grid">';
-      var stdFieldIds = ['standardName','standardConcentration','manufacturer','stdBlank','std1','std2','std3','std4','std5'];
       (sec.fields || []).forEach(function(f) {
         var fid = 'idf-' + f.id + '-' + idx;
         var val = raw[f.id] || autoVals[f.id] || '';
@@ -2724,6 +2711,85 @@ function cancelEdit() {
 }
 
 
+/* ══════════════════════════════════════
+   시험 결과 인쇄
+   ══════════════════════════════════════ */
+function printTestResults() {
+  var panel = document.getElementById('right-panel');
+  if (!panel || panel.querySelector('.empty-state') || panel.innerHTML.trim() === '') {
+    alert('출력할 결과가 없습니다. 접수건을 선택하세요.'); return;
+  }
+
+  // input 값 clone에 동기화
+  var clone = panel.cloneNode(true);
+  var live = panel.querySelectorAll('input, textarea, select');
+  var cl   = clone.querySelectorAll('input, textarea, select');
+  live.forEach(function(el, i) {
+    if (!cl[i]) return;
+    if (el.type === 'checkbox') { cl[i].checked = el.checked; cl[i].setAttribute('checked', el.checked ? 'checked' : ''); }
+    else cl[i].value = el.value;
+  });
+  // 편집용 UI 제거
+  clone.querySelectorAll('button, .btn, .btn-group, .override-select, .quick-btn, .idf-toggle, .attach-btn').forEach(function(b) { b.remove(); });
+  // 숨김 행(item-detail-row)은 열린 것만 표시
+  clone.querySelectorAll('.item-detail-row[style*="display:none"]').forEach(function(r) { r.remove(); });
+
+  var htmlContent = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
+    + '<title>시험결과</title><style>'
+    + '@page{margin:12mm 18mm;size:A4 landscape}'
+    + '*{box-sizing:border-box}'
+    + 'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:11px;color:#1a2332;margin:0;padding:10px}'
+    + '.print-hd{text-align:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1e3a5f}'
+    + '.print-hd h1{font-size:16px;margin:0 0 3px;color:#1e3a5f}'
+    + '.print-hd p{font-size:10px;color:#888;margin:0}'
+    + 'input[type=text],input[type=number],input[type=date],textarea{'
+    +   'border:none!important;background:transparent!important;padding:0!important;'
+    +   'outline:none;font-size:inherit;font-family:inherit;color:inherit;width:100%;resize:none}'
+    + 'select{border:none;background:transparent;font-size:inherit;font-family:inherit;color:inherit}'
+    + 'input[type=checkbox]{width:12px;height:12px;pointer-events:none}'
+    + 'button,.btn,.btn-group,.override-select,.quick-btn,.idf-toggle,.attach-btn{display:none!important}'
+    + '.section{margin-bottom:10px}'
+    + '.section-header{background:#1e3a5f;color:#fff;padding:6px 10px;font-weight:600;font-size:12px;border-radius:4px 4px 0 0}'
+    + '.section-content{border:1px solid #e2e6ed;border-top:none;padding:8px;border-radius:0 0 4px 4px}'
+    + '.section-content:not(.active){display:block!important}'
+    + 'table{border-collapse:collapse;width:100%;font-size:11px}'
+    + 'td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:middle}'
+    + 'th{background:#f0f4ff;color:#1e3a5f;font-weight:600;text-align:center}'
+    + '.result-input{font-weight:700;color:#059669}'
+    + '.overall-row{display:flex;align-items:center;gap:8px;padding:8px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;margin-top:8px}'
+    + '.overall-badge{padding:4px 12px;border-radius:6px;font-weight:700;font-size:14px}'
+    + '.overall-badge.pass{background:#dcfce7;color:#166534}'
+    + '.overall-badge.fail{background:#fee2e2;color:#991b1b}'
+    + 'label{font-size:10px;color:#666;display:block;margin-bottom:1px}'
+    + '.empty-state{display:none}'
+    + '</style></head><body>'
+    + '<div class="print-hd"><h1>🔬 시험 결과</h1>'
+    + '<p>출력일시: ' + new Date().toLocaleString('ko-KR') + '</p></div>'
+    + clone.innerHTML
+    + '</body></html>';
+
+  _showPrintPreview(htmlContent, '시험 결과 인쇄 미리보기');
+}
+
+/* ── 인쇄 미리보기 팝업 ── */
+function _showPrintPreview(htmlContent, title) {
+  var modal = document.getElementById('print-preview-modal');
+  if (!modal) return;
+  var pif = document.getElementById('print-preview-iframe');
+  pif.srcdoc = htmlContent;
+  document.getElementById('print-preview-title').textContent = title || '인쇄 미리보기';
+  document.getElementById('print-preview-do-btn').onclick = function() {
+    try { pif.contentWindow.focus(); pif.contentWindow.print(); } catch(e) {}
+  };
+  modal.style.display = 'flex';
+}
+function _closePrintPreview() {
+  var modal = document.getElementById('print-preview-modal');
+  if (modal) modal.style.display = 'none';
+  var pif = document.getElementById('print-preview-iframe');
+  if (pif) pif.srcdoc = '';
+}
+
 function handleUrlParams() {
   var params = new URLSearchParams(window.location.search);
   var rn = params.get('receiptNo');
@@ -2734,5 +2800,24 @@ function handleUrlParams() {
 }
 
 </script>
+
+<!-- 인쇄 미리보기 팝업 -->
+<div id="print-preview-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.35);width:960px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#1e3a5f;border-radius:12px 12px 0 0">
+      <span id="print-preview-title" style="color:#fff;font-size:14px;font-weight:700">인쇄 미리보기</span>
+      <div style="display:flex;gap:8px">
+        <button id="print-preview-do-btn" style="padding:6px 18px;background:#3b82f6;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 인쇄</button>
+        <button onclick="_closePrintPreview()" style="padding:6px 14px;background:#475569;color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer">✕ 닫기</button>
+      </div>
+    </div>
+    <div style="flex:1;overflow:auto;background:#e5e7eb;padding:16px">
+      <div style="background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15);min-height:1000px;border-radius:4px">
+        <iframe id="print-preview-iframe" style="width:100%;min-height:1000px;border:none;border-radius:4px" sandbox="allow-same-origin allow-modals"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

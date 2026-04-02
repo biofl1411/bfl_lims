@@ -465,6 +465,18 @@ body{font-family:'Pretendard',-apple-system,"Noto Sans KR",sans-serif;background
           </div>
         </div>
 
+        <!-- 변수 예외 케이스 & 참고 이미지 -->
+        <div style="background:#f8faff;border:1px solid #c7d7f9;border-radius:9px;padding:12px 14px;margin-top:6px">
+          <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:8px">📌 변수 예외 케이스 &amp; 참고 이미지</div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:8px">표준 계산식 외 특수 조건·예외 상황을 기록하고, 식품공전 표/이미지를 첨부하면 AI가 이미지를 직접 읽어 계산식에 반영합니다.</div>
+          <textarea id="inp-var-exception" rows="3" placeholder="예시:&#10;- 희석배수가 1인 경우(원액) 별도 계산 적용&#10;- 측정값이 0.000이면 결과도 0.000으로 표기&#10;- 표준용액 농도는 아래 첨부 공전 표에서 조회" style="width:100%;padding:7px 9px;border:1px solid #c7d7f9;border-radius:6px;font-size:12px;resize:vertical;color:#374151;box-sizing:border-box"></textarea>
+          <div style="margin-top:10px">
+            <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:5px">📷 공전 표 / 참고 이미지 첨부 <span style="font-size:10px;color:#6b7280;font-weight:400">(AI가 이미지를 읽어 계산식 도출)</span></label>
+            <input type="file" id="inp-var-images" multiple accept="image/*" onchange="previewVarImages(this)" style="font-size:11px;color:#374151">
+            <div id="var-image-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+          </div>
+        </div>
+
         <!-- 저장 파일명 -->
         <div class="fname-box" id="fname-box">
           <div class="fname-label">📁 저장 파일명 (자동 조합)</div>
@@ -1570,6 +1582,42 @@ function showReviewPanel(data) {
     '<div class="review-stat ok">계산식: '+calcs.length+'개</div>'+
     (data.judgmentRule?'<div class="review-stat memo">판정기준: '+(data.judgmentRule.standardText||'')+'</div>':'');
 
+  // 검사방법 표시
+  var tmArea = document.getElementById('rv-test-method');
+  if (!tmArea) {
+    tmArea = document.createElement('div');
+    tmArea.id = 'rv-test-method';
+    tmArea.style.cssText = 'margin-top:14px;border:1.5px solid #bfdbfe;border-radius:9px;overflow:hidden';
+    var rvSum = document.getElementById('rv-summary');
+    if (rvSum && rvSum.parentNode) rvSum.parentNode.insertBefore(tmArea, rvSum.nextSibling);
+  }
+  // 검사방법 표시 (HTML 편집기)
+  var tmContent = data.testMethod || '';
+  // plain text 감지 시 HTML 변환
+  var tmIsHtml = /<[a-z][\s\S]*>/i.test(tmContent);
+  var tmInnerHtml = tmIsHtml ? tmContent : (tmContent ? tmContent.split('\n').map(function(l){ return l ? '<p>' + l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>' : '<p><br></p>'; }).join('') : '');
+  tmArea.innerHTML = '<div style="background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;padding:7px 13px;display:flex;justify-content:space-between;align-items:center">'
+    + '<span>📋 검사방법 (시험절차)</span>'
+    + '<span style="font-size:10px;font-weight:400;opacity:.75">클릭하여 편집 가능</span>'
+    + '</div>'
+    + '<div id="rv-test-method-editor" contenteditable="true" style="min-height:120px;padding:10px 13px;font-size:12px;font-family:\'Malgun Gothic\',sans-serif;line-height:1.7;color:#1a2332;outline:none;background:#fff;border:1px solid #e2e8f0;border-top:none">'
+    + (tmInnerHtml || '<p style="color:#94a3b8">내용을 입력하거나 수정하세요</p>')
+    + '</div>'
+    + '<style>'
+    + '#rv-test-method-editor table{border-collapse:collapse;width:100%;margin:6px 0}'
+    + '#rv-test-method-editor td,#rv-test-method-editor th{border:1px solid #94a3b8;padding:4px 8px;min-width:50px;vertical-align:middle}'
+    + '#rv-test-method-editor th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}'
+    + '#rv-test-method-editor h3{font-size:12px;font-weight:700;color:#1e40af;margin:8px 0 3px;border-bottom:1px solid #bfdbfe;padding-bottom:2px}'
+    + '#rv-test-method-editor p{margin:3px 0}'
+    + '#rv-test-method-editor hr{border:none;border-top:1px solid #cbd5e1;margin:6px 0}'
+    + '</style>';
+  // 셀 contenteditable 보장
+  setTimeout(function(){
+    var ed = document.getElementById('rv-test-method-editor');
+    if (ed) ed.querySelectorAll('td,th').forEach(function(c){ c.contentEditable='true'; });
+  }, 50);
+  tmArea.style.display = '';
+
   // ★ 미생물 입력폼 삽입
   var testBasisRv = (document.getElementById('inp-test-basis') || {}).value || '';
   var isMicro = isMicroBiology(testBasisRv) || data.isMicroForm;
@@ -1595,6 +1643,9 @@ function showReviewPanel(data) {
   } else if (microSec) {
     microSec.style.display = 'none';
   }
+
+  // ── 첨부파일/사진 필드 설정 UI ──
+  _renderAttachmentConfig(data.attachmentFields || []);
 
   // 텍스트 비교 그리드 렌더
   renderTextCompare();
@@ -1636,6 +1687,86 @@ async function matchSampleTypeToMfds() {
   } catch(e) {
     console.warn('[품목코드 매칭] 실패:', e.message);
   }
+}
+
+/* ═══════════════════════════════════════════════
+   첨부파일/사진 필드 설정 UI
+   ═══════════════════════════════════════════════ */
+function _renderAttachmentConfig(detectedFields) {
+  var wrap = document.getElementById('rv-attach-config');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'rv-attach-config';
+    wrap.style.cssText = 'margin-top:14px;border:1.5px solid #d1fae5;border-radius:9px;overflow:hidden';
+    var tmArea = document.getElementById('rv-test-method');
+    var ref = tmArea || document.getElementById('rv-summary');
+    if (ref && ref.parentNode) ref.parentNode.insertBefore(wrap, ref.nextSibling);
+  }
+
+  // AI가 감지한 필드 초기값
+  var fields = detectedFields && detectedFields.length
+    ? detectedFields.map(function(f, i) {
+        return { id: f.id || ('attach_' + (i+1)), label: f.label || ('첨부 '+(i+1)), accept: f.accept || 'image/*', showPreview: f.showPreview !== false };
+      })
+    : [];
+
+  wrap._fields = fields;
+
+  function rebuild() {
+    var hasAttach = document.getElementById('rv-attach-toggle') && document.getElementById('rv-attach-toggle').checked;
+    _renderAttachRows(wrap, hasAttach);
+  }
+
+  var aiDetected = detectedFields && detectedFields.length > 0;
+  wrap.innerHTML = '<div style="background:#059669;color:#fff;font-size:12px;font-weight:700;padding:7px 13px;display:flex;align-items:center;gap:10px">'
+    + '📎 첨부파일 / 사진 필드 설정'
+    + (aiDetected ? '<span style="font-size:10px;background:rgba(255,255,255,.25);padding:1px 7px;border-radius:8px">AI 감지 ' + detectedFields.length + '건</span>' : '')
+    + '</div>'
+    + '<div style="padding:10px 14px;background:#f0fdf4">'
+    + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#065f46">'
+    + '<input type="checkbox" id="rv-attach-toggle"' + (aiDetected || fields.length ? ' checked' : '') + ' onchange="_renderAttachRows(document.getElementById(\'rv-attach-config\'),this.checked)" style="width:16px;height:16px">'
+    + '이 기록서에 사진/첨부파일 필드가 필요합니다</label>'
+    + '</div>'
+    + '<div id="rv-attach-rows"></div>';
+
+  wrap._fields = fields;
+  _renderAttachRows(wrap, aiDetected || fields.length > 0);
+}
+
+function _renderAttachRows(wrap, show) {
+  var container = document.getElementById('rv-attach-rows');
+  if (!container) return;
+  if (!show) { container.innerHTML = ''; return; }
+
+  var fields = wrap._fields || [];
+  var html = '<div style="padding:10px 14px 4px;border-top:1px solid #d1fae5">';
+
+  fields.forEach(function(f, i) {
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;background:#fff;border:1px solid #a7f3d0;border-radius:7px">';
+    html += '<span style="font-size:11px;color:#065f46;font-weight:700;min-width:20px">#' + (i+1) + '</span>';
+    html += '<input type="text" value="' + (f.label||'').replace(/"/g,'&quot;') + '" placeholder="필드 라벨 (예: 검체 사진)" data-ai="' + i + '" oninput="(document.getElementById(\'rv-attach-config\')._fields[' + i + '].label=this.value)" style="flex:1;padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">';
+    html += '<select data-ai-accept="' + i + '" onchange="(document.getElementById(\'rv-attach-config\')._fields[' + i + '].accept=this.value)" style="padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">'
+      + '<option value="image/*"' + (f.accept==='image/*'?' selected':'') + '>이미지 파일</option>'
+      + '<option value="*"' + (f.accept==='*'?' selected':'') + '>모든 파일</option>'
+      + '</select>';
+    html += '<select data-ai-preview="' + i + '" onchange="(document.getElementById(\'rv-attach-config\')._fields[' + i + '].showPreview=this.value===\'true\')" style="padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">'
+      + '<option value="true"' + (f.showPreview?' selected':'') + '>이미지 미리보기</option>'
+      + '<option value="false"' + (!f.showPreview?' selected':'') + '>파일명만 표시</option>'
+      + '</select>';
+    html += '<button onclick="var w=document.getElementById(\'rv-attach-config\');w._fields.splice(' + i + ',1);_renderAttachRows(w,true)" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:11px;cursor:pointer">✕</button>';
+    html += '</div>';
+  });
+
+  html += '<button onclick="var w=document.getElementById(\'rv-attach-config\');w._fields.push({id:\'attach_\'+(w._fields.length+1),label:\'\',accept:\'image/*\',showPreview:true});_renderAttachRows(w,true)" style="padding:5px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:10px">+ 필드 추가</button>';
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function _collectAttachmentConfig() {
+  var wrap = document.getElementById('rv-attach-config');
+  var toggle = document.getElementById('rv-attach-toggle');
+  if (!wrap || !toggle || !toggle.checked) return [];
+  return (wrap._fields || []).filter(function(f) { return f.label; });
 }
 
 function renderTextCompare() {
@@ -1867,6 +1998,17 @@ async function doConfirmSave() {
 
     var testBasis = (document.getElementById('inp-test-basis') || {}).value || '';
     var sampleType = (document.getElementById('inp-sample-type') || {}).value || '';
+
+    // 검토 패널에서 수정한 검사방법 반영 (HTML 편집기)
+    var tmEdEl = document.getElementById('rv-test-method-editor');
+    if (tmEdEl) {
+      var tmHtml = tmEdEl.innerHTML.trim();
+      _lastAnalyzed.testMethod = (tmHtml && tmHtml !== '<p style="color:#94a3b8">내용을 입력하거나 수정하세요</p>') ? tmHtml : null;
+    }
+
+    // 첨부파일 설정 반영
+    var attachFields = _collectAttachmentConfig();
+    _lastAnalyzed.attachmentFields = attachFields.length ? attachFields : [];
 
     var row = {
       docId: docId,
@@ -2165,17 +2307,20 @@ async function callClaudeRefine(memo) {
     prompt += '\n\n## 참고: PDF 텍스트 추출 비교\n' + textContext;
   }
 
+  var refineImages = await getVarImageBase64s();
+  var refineContentArr = [
+    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Blank } },
+    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Filled } }
+  ];
+  refineImages.forEach(function(img) {
+    refineContentArr.push({ type: 'image', source: { type: 'base64', media_type: img.type, data: img.b64 } });
+  });
+  refineContentArr.push({ type: 'text', text: prompt });
+
   var body = {
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4000,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Blank } },
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Filled } },
-        { type: 'text', text: prompt }
-      ]
-    }]
+    messages: [{ role: 'user', content: refineContentArr }]
   };
 
   var resp = await fetch(PROXY_URL, {
@@ -2271,8 +2416,9 @@ async function callClaude(textContext) {
     + '   - 측정값: 시료 측정농도, Blank 측정농도, 최종볼륨(mL), 희석배수, 검체 채취량(g) 등\n'
     + '   - 시험시작일, 시험번호(변경)일\n'
     + '   - 계산식 (수식 전체)\n'
-    + '   - 판정 테이블: 분석항목, 기준규격(mg/kg), 결과(mg/kg), 판정\n'
-    + '   - 장비/시약 정보 (있는 경우)\n\n'
+    + '   - 판정 테이블: 분析항목, 기준규격(mg/kg), 결과(mg/kg), 판정\n'
+    + '   - 장비/시약 정보 (있는 경우)\n'
+    + '   - **검사방법(시험절차)**: "검사방법", "시험방법", "시험절차", "분석방법" 등의 제목 하에 기술된 절차 텍스트 전문. 번호 목록·단계·조건 등 원문 그대로 추출\n\n'
     + '5. 테이블 형태의 데이터(표준용액농도, 판정 테이블 등)도 개별 셀 단위로 각각 필드를 만드세요.\n'
     + '6. 빈 양식에 있는 필드인데 작성 완료본에 값이 없으면 exampleValue를 빈 문자열("")로 두되, 필드 자체는 반드시 포함하세요.\n\n'
     + '## 응답 형식\n'
@@ -2317,8 +2463,31 @@ async function callClaude(textContext) {
     + '    "unit": "mg/kg"\n'
     + '  },\n'
     + '  "equipment": ["장비목록"],\n'
-    + '  "reagents": ["시약목록"]\n'
+    + '  "reagents": ["시약목록"],\n'
+    + '  "testMethod": "검사방법/시험절차를 HTML 형식으로 반환 (없으면 null). 아래 testMethod 작성 규칙 참고",\n'
+    + '  "attachmentFields": [\n'
+    + '    { "id": "photo1", "label": "사진 또는 첨부파일 라벨 (PDF 원문)", "accept": "image/*또는*", "showPreview": true }\n'
+    + '  ]\n'
     + '}\n\n'
+    + '## attachmentFields 작성 규칙\n'
+    + '- PDF 양식에 사진 첨부, 이미지 첨부, 사진 파일, 스캔본 첨부 등 파일 첨부가 필요한 칸이 있으면 추출하세요.\n'
+    + '- accept: 사진/이미지인 경우 "image/*", 모든 파일이면 "*"\n'
+    + '- showPreview: 이미지인 경우 true, 일반 문서인 경우 false\n'
+    + '- 해당 필드가 없으면 빈 배열 []로 설정하세요.\n\n'
+    + '## testMethod 작성 규칙\n'
+    + '- PDF에 "검사방법", "시험방법", "시험절차", "분析방법", "2. 검사방법" 등의 섹션이 있으면 해당 내용을 **HTML 형식**으로 반환하세요.\n'
+    + '- 반드시 아래 HTML 규칙을 따르세요:\n'
+    + '  1. **일반 텍스트/단계**: `<p>내용</p>` 으로 감싸세요.\n'
+    + '  2. **번호 목록 (1. 2. 3. ...)**: 각 항목을 `<p>1. 내용</p>` 형태로 유지하세요.\n'
+    + '  3. **제목/소제목**: `<h3>제목</h3>` 으로 감싸세요.\n'
+    + '  4. **표(테이블) 형태의 데이터** (예: 분석조건, 기기조건, 시약 농도 등):\n'
+    + '     `<table><thead><tr><th contenteditable="true">헤더1</th><th contenteditable="true">헤더2</th></tr></thead>`\n'
+    + '     `<tbody><tr><td contenteditable="true">값1</td><td contenteditable="true">값2</td></tr></tbody></table>` 형태로 반환하세요.\n'
+    + '  5. **구분선**: `<hr>` 사용\n'
+    + '  6. **굵게 강조**: `<strong>텍스트</strong>` 사용\n'
+    + '- JSON 문자열에 포함되므로 큰따옴표(")는 \\" 로 이스케이프하세요.\n'
+    + '- 줄바꿈은 \\n 없이 HTML 태그로만 처리하세요.\n'
+    + '- 해당 섹션이 없으면 null로 설정하세요.\n\n'
     + '## 최종 검증\n'
     + '응답 전에 빈 양식 PDF를 다시 한번 페이지별로 확인하고, 누락된 필드가 없는지 스스로 검증하세요.';
 
@@ -2337,17 +2506,32 @@ async function callClaude(textContext) {
   prompt += ''
     + (textContext ? '\n\n## 참고: PDF 텍스트 추출 비교 데이터\n아래는 PDF.js로 추출한 텍스트 좌표 비교입니다. 빈 양식에 없고 작성본에만 있는 텍스트가 입력값입니다. 이 데이터와 PDF 이미지를 교차 확인하여 누락 없이 추출하세요.\n\n' + textContext : '');
 
+  // 변수 예외 케이스 & 이미지 반영
+  var varException = (document.getElementById('inp-var-exception') || {}).value || '';
+  if (varException.trim()) {
+    prompt += '\n\n## 변수 예외 케이스 (반드시 계산식에 반영)\n'
+      + varException.trim()
+      + '\n위 예외 조건들을 calculations 의 formula / formulaText 에 반드시 반영하세요.';
+  }
+  var varImages = await getVarImageBase64s();
+  if (varImages.length) {
+    prompt += '\n\n## 참고 이미지 (' + varImages.length + '개 첨부)\n'
+      + '첨부된 이미지는 식품공전 표 또는 참고 자료입니다. 이미지 내용을 읽어 계산식·판정기준·변수값 도출에 활용하세요.';
+  }
+
+  var contentArr = [
+    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Blank } },
+    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Filled } }
+  ];
+  varImages.forEach(function(img) {
+    contentArr.push({ type: 'image', source: { type: 'base64', media_type: img.type, data: img.b64 } });
+  });
+  contentArr.push({ type: 'text', text: prompt });
+
   var body = {
     model: 'claude-sonnet-4-20250514',
     max_tokens: 16384,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Blank } },
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64Filled } },
-        { type: 'text', text: prompt }
-      ]
-    }]
+    messages: [{ role: 'user', content: contentArr }]
   };
 
   var resp = await fetch(PROXY_URL, {
@@ -2371,6 +2555,45 @@ async function callClaude(textContext) {
 
   var jsonStr = raw.text.replace(/```json|```/g, '').trim();
   return safeJsonParse(jsonStr);
+}
+
+function previewVarImages(input) {
+  var preview = document.getElementById('var-image-preview');
+  preview.innerHTML = '';
+  Array.from(input.files).forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var wrap = document.createElement('div');
+      wrap.style = 'position:relative;display:inline-block';
+      var img = document.createElement('img');
+      img.src = e.target.result;
+      img.style = 'max-height:130px;max-width:220px;border:1px solid #c7d7f9;border-radius:6px;object-fit:contain;background:#f0f5ff;display:block';
+      img.title = file.name;
+      var lbl = document.createElement('div');
+      lbl.textContent = file.name;
+      lbl.style = 'font-size:9px;color:#64748b;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px';
+      wrap.appendChild(img);
+      wrap.appendChild(lbl);
+      preview.appendChild(wrap);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function getVarImageBase64s() {
+  var input = document.getElementById('inp-var-images');
+  if (!input || !input.files || !input.files.length) return [];
+  var results = [];
+  for (var i = 0; i < input.files.length; i++) {
+    var file = input.files[i];
+    var b64 = await new Promise(function(resolve) {
+      var reader = new FileReader();
+      reader.onload = function(e) { resolve(e.target.result.split(',')[1]); };
+      reader.readAsDataURL(file);
+    });
+    results.push({ b64: b64, type: file.type || 'image/jpeg', name: file.name });
+  }
+  return results;
 }
 
 function safeJsonParse(text) {
@@ -3052,6 +3275,12 @@ function doReset() {
   document.getElementById('ui-filled').textContent='✅';
   document.getElementById('uf-blank').textContent='';
   document.getElementById('uf-filled').textContent='';
+  var varImgInp = document.getElementById('inp-var-images');
+  if (varImgInp) varImgInp.value = '';
+  var varExcInp = document.getElementById('inp-var-exception');
+  if (varExcInp) varExcInp.value = '';
+  var varPreview = document.getElementById('var-image-preview');
+  if (varPreview) varPreview.innerHTML = '';
   ['inp-person','inp-sop','inp-memo','inp-test-basis','inp-sample-type'].forEach(function(id){
     document.getElementById(id).value='';
   });

@@ -105,7 +105,8 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .txn-tbl{width:100%;border-collapse:collapse;font-size:11px}
 .txn-tbl thead{background:#f8f9fb;position:sticky;top:0}
 .txn-tbl th{padding:7px 8px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap;font-size:10px}
-.txn-tbl td{padding:6px 8px;border-bottom:1px solid #f0f2f5;color:#1a2332;font-size:11px}
+.txn-tbl td{padding:6px 8px;border-bottom:1px solid #f0f2f5;color:#1a2332;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.txn-tbl td.td-summary{white-space:normal;overflow:visible}
 .txn-tbl .text-right{text-align:right}
 .txn-tbl .row-payment{background:#eff6ff}
 .txn-tbl .row-total{background:#f8f9fb;font-weight:700}
@@ -129,8 +130,9 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .ledger-info-col:last-child{border-right:none}
 .ledger-tbl{font-size:11px}
 .ledger-tbl th,.ledger-tbl td{padding:5px 8px;border:1px solid #ccc}
-.txn-tbl{font-size:10px}
-.txn-tbl th,.txn-tbl td{padding:4px 6px;border:1px solid #ccc}
+.txn-tbl{font-size:9px;table-layout:fixed;width:100%}
+.txn-tbl th{padding:4px 5px;border:1px solid #ccc;white-space:nowrap;font-size:9px;overflow:hidden}
+.txn-tbl td{padding:4px 5px;border:1px solid #ccc;word-break:break-all}
 .txn-kpi-bar{display:none!important}
 .tbl-wrap{border:none}
 .sub-panel{display:block!important}
@@ -565,6 +567,7 @@ async function loadLedger() {
                 if (pDate < fromDate || pDate > toDate) return;
                 rows.push({
                     date: pDate, type: '입금', payMethod: p.method || '',
+                    cardCompany: p.cardCompany || '',
                     receiptNo: d.receiptNo || '', productName: '',
                     desc: p.memo || '', sales: 0, payment: Number(p.amount) || 0, sortOrder: 1
                 });
@@ -628,7 +631,11 @@ async function loadLedger() {
                 summary = parts.join(' ');
             } else {
                 var parts2 = [];
-                if (row.payMethod) parts2.push(row.payMethod);
+                if (row.payMethod) {
+                    var methodStr = row.payMethod;
+                    if (row.cardCompany) methodStr += '(' + row.cardCompany + ')';
+                    parts2.push(methodStr);
+                }
                 if (row.desc) parts2.push(row.desc);
                 if (row.receiptNo) parts2.push('<span class="receipt-no">' + row.receiptNo + '</span>');
                 summary = parts2.join(' · ');
@@ -697,57 +704,59 @@ async function loadTxnStatement() {
         // 업체정보 헤더 로드
         await _loadTxnCompanyInfo(company, allSnap);
 
-        var rows = [];
-
+        // 접수건별로 그룹핑
+        var receiptMap = {};
         allSnap.forEach(function(doc) {
             var d = doc.data();
             var rDate = d.receiptDate || '';
             var fee = _getFee(d);
+            var receiptNo = d.receiptNo || doc.id;
 
-            // 매출 행
-            if (rDate >= fromDate && rDate <= toDate) {
-                rows.push({
-                    date: rDate, type: '매출', receiptNo: d.receiptNo || '',
-                    companyName: company, productName: _getProductName(d),
-                    testItems: _getTestItems(d), testField: d.testField || d.sampleType || '',
-                    testPurpose: d.testPurpose || d.purpose || d.inspectionPurpose || '',
-                    salesRep: d.salesRep || '', payMethod: '',
-                    sales: fee, payment: 0, memo: '', sortKey: rDate + '0'
-                });
-            }
-
-            // 입금 행
-            (d.payments || []).forEach(function(p) {
-                var pDate = p.date || '';
-                if (pDate >= fromDate && pDate <= toDate) {
-                    rows.push({
-                        date: pDate, type: '입금', receiptNo: d.receiptNo || '',
-                        companyName: company, productName: '',
-                        testItems: '', testField: '', testPurpose: '',
-                        salesRep: '', payMethod: p.method || '',
-                        sales: 0, payment: Number(p.amount) || 0,
-                        memo: p.memo || '', sortKey: pDate + '1'
-                    });
-                }
+            // 기간 내 매출 또는 기간 내 입금이 있는 건만 포함
+            var salesInRange = rDate >= fromDate && rDate <= toDate;
+            var paymentsInRange = (d.payments || []).filter(function(p) {
+                return (p.date || '') >= fromDate && (p.date || '') <= toDate;
             });
+
+            if (!salesInRange && paymentsInRange.length === 0) return;
+
+            if (!receiptMap[receiptNo]) {
+                receiptMap[receiptNo] = {
+                    receiptDate: rDate,
+                    receiptNo: receiptNo,
+                    productName: _getProductName(d),
+                    testItems: _getTestItems(d),
+                    testField: d.testField || d.sampleType || '',
+                    testPurpose: d.testPurpose || d.purpose || d.inspectionPurpose || '',
+                    sales: salesInRange ? fee : 0,
+                    salesInRange: salesInRange,
+                    payments: paymentsInRange,
+                    memo: ''
+                };
+            }
         });
 
-        // 타입 필터
-        if (typeFilter === 'sales') rows = rows.filter(function(r) { return r.type === '매출'; });
-        else if (typeFilter === 'payment') rows = rows.filter(function(r) { return r.type === '입금'; });
+        var rows = Object.values(receiptMap);
 
-        // 정렬: 거래일 내림차순
+        // 타입 필터
+        if (typeFilter === 'sales') rows = rows.filter(function(r) { return r.salesInRange; });
+        else if (typeFilter === 'payment') rows = rows.filter(function(r) { return r.payments.length > 0; });
+
+        // 정렬: 접수일 내림차순
         rows.sort(function(a, b) {
-            if (a.date > b.date) return -1;
-            if (a.date < b.date) return 1;
-            return a.sortKey > b.sortKey ? -1 : 1;
+            if (a.receiptDate > b.receiptDate) return -1;
+            if (a.receiptDate < b.receiptDate) return 1;
+            return 0;
         });
 
         _txnRows = rows;
 
         // KPI 계산
         var totalSales = 0, totalPayment = 0;
-        rows.forEach(function(r) { totalSales += r.sales; totalPayment += r.payment; });
+        rows.forEach(function(r) {
+            totalSales += r.sales;
+            r.payments.forEach(function(p) { totalPayment += Number(p.amount) || 0; });
+        });
         var balance = totalSales - totalPayment;
 
         document.getElementById('txn-kpi-count').textContent = rows.length.toLocaleString('ko-KR');
@@ -763,40 +772,73 @@ async function loadTxnStatement() {
             return;
         }
 
-        // 테이블 렌더링
-        var html = '<div class="tbl-wrap"><table class="txn-tbl"><thead><tr>';
-        html += '<th style="width:30px">No</th>';
-        html += '<th style="width:82px">거래일</th>';
-        html += '<th style="width:45px">구분</th>';
+        // 테이블 렌더링 — 접수건 1건 = 1행
+        var html = '<div class="tbl-wrap"><table class="txn-tbl" style="table-layout:fixed;width:100%"><thead><tr>';
+        html += '<th style="width:28px">No</th>';
+        html += '<th style="width:80px">거래일</th>';
+        html += '<th style="width:40px">구분</th>';
         html += '<th>적 요</th>';
-        html += '<th style="width:60px">입금수단</th>';
-        html += '<th class="text-right" style="width:85px">매출</th>';
-        html += '<th class="text-right" style="width:85px">입금</th>';
-        html += '<th>비고</th>';
+        html += '<th class="text-right" style="width:75px">금액</th>';
+        html += '<th style="width:80px">결제일</th>';
+        html += '<th style="width:56px">구분</th>';
+        html += '<th style="width:46px">입금수단</th>';
+        html += '<th class="text-right" style="width:75px">입금액</th>';
+        html += '<th style="width:70px">비고</th>';
         html += '</tr></thead><tbody>';
 
-        var runBalance = 0;
         rows.forEach(function(row, idx) {
-            runBalance += row.sales - row.payment;
-            var cls = row.type === '입금' ? ' class="row-payment"' : '';
-            var summary = _buildTxnSummary(row);
-            html += '<tr' + cls + '>';
+            var totalPay = row.payments.reduce(function(s,p){ return s+(Number(p.amount)||0); }, 0);
+            var payDates = [...new Set(row.payments.map(function(p){ return p.date||''; }).filter(Boolean))].join(', ');
+            var methods = [...new Set(row.payments.map(function(p){ return p.method||''; }).filter(Boolean))];
+            var cardCos = [...new Set(row.payments.map(function(p){ return p.cardCompany||''; }).filter(Boolean))];
+            var methodStr = methods.join('/');
+            if (cardCos.length) methodStr += '(' + cardCos.join('/') + ')';
+            var memos = row.payments.map(function(p){ return p.memo||''; }).filter(Boolean).join(', ');
+
+            var isPaid = totalPay >= row.sales && row.sales > 0;
+            var isPartial = totalPay > 0 && totalPay < row.sales;
+            var payTypeStr, payTypeCls;
+            if (!row.salesInRange) {
+                payTypeStr = '입금'; payTypeCls = 'color:#2563eb;font-weight:600';
+            } else if (isPaid) {
+                payTypeStr = '입금완료'; payTypeCls = 'color:#16a34a;font-weight:600';
+            } else if (isPartial) {
+                payTypeStr = '부분입금'; payTypeCls = 'color:#d97706;font-weight:600';
+            } else {
+                payTypeStr = '미입금'; payTypeCls = 'color:#dc2626;font-weight:600';
+            }
+
+            // 적요
+            var parts = [];
+            if (row.receiptNo) parts.push('[' + row.receiptNo + ']');
+            if (row.productName) parts.push(row.productName);
+            var sub = [row.testField, row.testPurpose].filter(Boolean).join('/');
+            if (sub) parts.push('<span style="color:#6b7280;font-size:11px">' + sub + '</span>');
+            if (row.testItems && Array.isArray(row.testItems) && row.testItems.length) {
+                parts.push('<span style="color:#9ca3af;font-size:10px">' + row.testItems.slice(0,3).join(', ') + (row.testItems.length>3?'…':'') + '</span>');
+            }
+            var summary = parts.join(' ');
+
+            html += '<tr>';
             html += '<td>' + (idx + 1) + '</td>';
-            html += '<td>' + row.date + '</td>';
-            html += '<td>' + row.type + '</td>';
-            html += '<td>' + summary + '</td>';
-            html += '<td>' + _methodTag(row.payMethod) + '</td>';
-            html += '<td class="text-right">' + _ledgerFmt(row.sales) + '</td>';
-            html += '<td class="text-right">' + _ledgerFmt(row.payment) + '</td>';
-            html += '<td>' + row.memo + '</td>';
+            html += '<td>' + row.receiptDate + '</td>';
+            html += '<td><span style="color:#374151;font-weight:600">매출</span></td>';
+            html += '<td class="td-summary">' + summary + '</td>';
+            html += '<td class="text-right">' + (row.sales ? _ledgerFmt(row.sales) : '') + '</td>';
+            html += '<td style="color:#6b7280;font-size:11px">' + payDates + '</td>';
+            html += '<td><span style="' + payTypeCls + ';font-size:11px">' + payTypeStr + '</span></td>';
+            html += '<td>' + (methodStr ? _methodTag(methods[0]) : '') + '</td>';
+            html += '<td class="text-right" style="color:#2563eb">' + (totalPay ? _ledgerFmt(totalPay) : '') + '</td>';
+            html += '<td style="font-size:11px;color:#6b7280">' + memos + '</td>';
             html += '</tr>';
         });
 
         // 합계행
         html += '<tr class="row-total">';
-        html += '<td colspan="5" class="text-right">합 계</td>';
+        html += '<td colspan="4" class="text-right">합 계</td>';
         html += '<td class="text-right">' + _ledgerFmt(totalSales) + '</td>';
-        html += '<td class="text-right">' + _ledgerFmt(totalPayment) + '</td>';
+        html += '<td colspan="3"></td>';
+        html += '<td class="text-right" style="color:#2563eb">' + _ledgerFmt(totalPayment) + '</td>';
         html += '<td></td>';
         html += '</tr>';
 
@@ -889,7 +931,11 @@ function _getTestItems(d) {
 function _buildTxnSummary(row) {
     if (row.type === '입금') {
         var parts = [];
-        if (row.payMethod) parts.push(row.payMethod);
+        if (row.payMethod) {
+            var mStr = row.payMethod;
+            if (row.cardCompany) mStr += '(' + row.cardCompany + ')';
+            parts.push(mStr);
+        }
         if (row.memo) parts.push(row.memo);
         if (row.receiptNo) parts.push('<span class="receipt-no">' + row.receiptNo + '</span>');
         return parts.join(' · ');
@@ -962,6 +1008,19 @@ function _methodTag(method) {
 
 function _getFee(d) {
     if (d.discountFinalPrice != null && Number(d.discountFinalPrice) > 0) return Number(d.discountFinalPrice);
+    // testItems 레벨 fee 합산 (시료 × 시험항목 수수료 전체 합계)
+    if (d.samples && d.samples.length > 0) {
+        var itemSum = 0, hasItemFees = false;
+        d.samples.forEach(function(s) {
+            var items = s.testItems || s.refTestItems || [];
+            if (Array.isArray(items)) {
+                items.forEach(function(t) {
+                    if (t && Number(t.fee)) { itemSum += Number(t.fee); hasItemFees = true; }
+                });
+            }
+        });
+        if (hasItemFees && itemSum > 0) return itemSum;
+    }
     if (d.feeTotal != null && Number(d.feeTotal) > 0) return Number(d.feeTotal);
     if (d.feeOriginal != null && Number(d.feeOriginal) > 0) return Number(d.feeOriginal);
     if (d.totalFee != null && Number(d.totalFee) > 0) return Number(d.totalFee);
@@ -1007,21 +1066,52 @@ async function _loadCompanyInfo(companyName, receiptsSnap) {
 
     try {
         var compSnap = await db.collection('companies')
-            .where('name', '==', companyName).limit(1).get();
+            .where('company', '==', companyName).limit(1).get();
         if (compSnap.empty) {
             compSnap = await db.collection('companies')
-                .where('company', '==', companyName).limit(1).get();
+                .where('companyName', '==', companyName).limit(1).get();
+        }
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('name', '==', companyName).limit(1).get();
+        }
+        // 4단계: "(지점)" 등 지점명 제거 후 모회사명으로 재조회
+        if (compSnap.empty) {
+            var parentName = companyName.replace(/[\s]*\(지점\)[\s]*$/, '').trim();
+            if (parentName && parentName !== companyName) {
+                compSnap = await db.collection('companies')
+                    .where('company', '==', parentName).limit(1).get();
+            }
+        }
+
+        // 접수 데이터에서 fallback 정보 및 접수된 인허가 정보 추출 (가장 최근 접수 기준)
+        var fallbackBizNo = '', fallbackCeo = '', fallbackPhone = '', fallbackAddr = '';
+        var recLicName = '', recLicNo = '', recLicForm = '', recLicRep = '', recLicAddr = '';
+        if (receiptsSnap && receiptsSnap.docs && receiptsSnap.docs.length > 0) {
+            var sortedForFb = receiptsSnap.docs.slice().sort(function(a, b) {
+                return (b.data().receiptDate || '').localeCompare(a.data().receiptDate || '');
+            });
+            var rd = sortedForFb[0].data();
+            fallbackBizNo = rd.bizNo || rd.businessNo || '';
+            fallbackCeo = rd.ceo || rd.repName || '';
+            fallbackPhone = rd.companyPhone || rd.contactPhone || rd.phone || '';
+            fallbackAddr = rd.companyAddress || rd.address || '';
+            recLicName = rd.licBizName || '';
+            recLicNo = rd.licNo || '';
+            recLicForm = rd.licBizForm || '';
+            recLicRep = rd.licRepName || '';
+            recLicAddr = ((rd.licAddr || '') + ' ' + (rd.licAddr2 || '')).trim();
         }
 
         if (!compSnap.empty) {
             var c = compSnap.docs[0].data();
-            var bizNo = c.businessNo || c.bizNo || '';
+            var bizNo = c.bizNo || c.businessNo || fallbackBizNo;
             if (bizNo) document.getElementById('li-bizno').textContent = bizNo;
-            var ceo = c.ceo || c.repName || '';
+            var ceo = c.repName || c.ceo || fallbackCeo;
             if (ceo) document.getElementById('li-ceo').textContent = ceo;
-            var phone = c.phone || c.contactPhone || c.tel || '';
+            var phone = c.contactPhone || c.phone || c.tel || fallbackPhone;
             if (phone) document.getElementById('li-phone').textContent = phone;
-            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
+            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim() || fallbackAddr;
             if (addr) document.getElementById('li-addr').textContent = addr;
 
             var contactName = '', contactPhone = '', contactEmail = '';
@@ -1039,15 +1129,36 @@ async function _loadCompanyInfo(companyName, receiptsSnap) {
             if (contactPhone) document.getElementById('li-contact-phone').textContent = contactPhone;
             if (contactEmail) document.getElementById('li-contact-email').textContent = contactEmail;
 
-            if (c.licenses && c.licenses.length > 0) {
-                var lic = c.licenses[0];
-                if (lic.licBizName) document.getElementById('li-lic-name').textContent = lic.licBizName;
-                if (lic.licNo) document.getElementById('li-lic-no').textContent = lic.licNo;
-                if (lic.licBizForm) document.getElementById('li-lic-form').textContent = lic.licBizForm;
-                if (lic.licRepName) document.getElementById('li-lic-rep').textContent = lic.licRepName;
-                var licAddr = ((lic.licAddr || '') + ' ' + (lic.licAddr2 || '')).trim();
-                if (licAddr) document.getElementById('li-lic-addr').textContent = licAddr;
+            // 인허가 정보: 접수 데이터 우선, 없으면 company.licenses에서 영업소명칭 매칭
+            var licName = recLicName, licNo = recLicNo, licForm = recLicForm, licRep = recLicRep, licAddrVal = recLicAddr;
+            if (!licName && c.licenses && c.licenses.length > 0) {
+                var matchedLic = null;
+                for (var li2 = 0; li2 < c.licenses.length; li2++) {
+                    if ((c.licenses[li2].licBizName || '') === companyName) { matchedLic = c.licenses[li2]; break; }
+                }
+                if (!matchedLic) matchedLic = c.licenses[0];
+                licName = matchedLic.licBizName || '';
+                licNo = matchedLic.licNo || '';
+                licForm = matchedLic.licBizForm || '';
+                licRep = matchedLic.licRepName || '';
+                licAddrVal = ((matchedLic.licAddr || '') + ' ' + (matchedLic.licAddr2 || '')).trim();
             }
+            if (licName) document.getElementById('li-lic-name').textContent = licName;
+            if (licNo) document.getElementById('li-lic-no').textContent = licNo;
+            if (licForm) document.getElementById('li-lic-form').textContent = licForm;
+            if (licRep) document.getElementById('li-lic-rep').textContent = licRep;
+            if (licAddrVal) document.getElementById('li-lic-addr').textContent = licAddrVal;
+        } else {
+            // 업체 미등록 → 접수 데이터 fallback
+            if (fallbackBizNo) document.getElementById('li-bizno').textContent = fallbackBizNo;
+            if (fallbackCeo) document.getElementById('li-ceo').textContent = fallbackCeo;
+            if (fallbackPhone) document.getElementById('li-phone').textContent = fallbackPhone;
+            if (fallbackAddr) document.getElementById('li-addr').textContent = fallbackAddr;
+            if (recLicName) document.getElementById('li-lic-name').textContent = recLicName;
+            if (recLicNo) document.getElementById('li-lic-no').textContent = recLicNo;
+            if (recLicForm) document.getElementById('li-lic-form').textContent = recLicForm;
+            if (recLicRep) document.getElementById('li-lic-rep').textContent = recLicRep;
+            if (recLicAddr) document.getElementById('li-lic-addr').textContent = recLicAddr;
         }
 
         var salesRep = '';
@@ -1074,21 +1185,22 @@ function exportTxnExcel() {
     var from = document.getElementById('txn-from').value;
     var to = document.getElementById('txn-to').value;
 
-    var data = [['No', '거래일', '구분', '적요', '입금수단', '매출', '입금', '비고']];
+    var data = [['No', '거래일', '구분', '적요', '금액', '결제일', '구분(입금)', '입금수단', '입금액', '비고']];
     _txnRows.forEach(function(r, i) {
-        var summary = '';
-        if (r.type === '입금') {
-            summary = [r.payMethod, r.memo, r.receiptNo].filter(Boolean).join(' · ');
-        } else {
-            var parts = [];
-            if (r.receiptNo) parts.push('[' + r.receiptNo + ']');
-            if (r.productName) parts.push(r.productName);
-            var sub = [r.testField, r.testPurpose].filter(Boolean).join('/');
-            if (sub) parts.push(sub);
-            if (r.testItems) parts.push(r.testItems);
-            summary = parts.join(' ');
-        }
-        data.push([i+1, r.date, r.type, summary, r.payMethod, r.sales || '', r.payment || '', r.memo]);
+        var parts = [];
+        if (r.receiptNo) parts.push('[' + r.receiptNo + ']');
+        if (r.productName) parts.push(r.productName);
+        var sub = [r.testField, r.testPurpose].filter(Boolean).join('/');
+        if (sub) parts.push(sub);
+        var summary = parts.join(' ');
+        var totalPay = r.payments ? r.payments.reduce(function(s,p){ return s+(Number(p.amount)||0); }, 0) : 0;
+        var payDates = r.payments ? [...new Set(r.payments.map(function(p){ return p.date||''; }).filter(Boolean))].join(', ') : '';
+        var methods = r.payments ? [...new Set(r.payments.map(function(p){ return p.method||''; }).filter(Boolean))].join('/') : '';
+        var isPaid = totalPay >= r.sales && r.sales > 0;
+        var isPartial = totalPay > 0 && totalPay < r.sales;
+        var payType = isPaid ? '입금완료' : isPartial ? '부분입금' : totalPay > 0 ? '입금' : '미입금';
+        var memos = r.payments ? r.payments.map(function(p){ return p.memo||''; }).filter(Boolean).join(', ') : '';
+        data.push([i+1, r.receiptDate||'', '매출', summary, r.sales||'', payDates, payType, methods, totalPay||'', memos]);
     });
 
     var ws = XLSX.utils.aoa_to_sheet(data);
@@ -1107,17 +1219,52 @@ async function _loadTxnCompanyInfo(companyName, receiptsSnap) {
 
     try {
         var compSnap = await db.collection('companies')
-            .where('name', '==', companyName).limit(1).get();
+            .where('company', '==', companyName).limit(1).get();
         if (compSnap.empty) {
             compSnap = await db.collection('companies')
-                .where('company', '==', companyName).limit(1).get();
+                .where('companyName', '==', companyName).limit(1).get();
         }
+        if (compSnap.empty) {
+            compSnap = await db.collection('companies')
+                .where('name', '==', companyName).limit(1).get();
+        }
+        // 4단계: "(지점)" 등 지점명 제거 후 모회사명으로 재조회
+        if (compSnap.empty) {
+            var parentName = companyName.replace(/[\s]*\(지점\)[\s]*$/, '').trim();
+            if (parentName && parentName !== companyName) {
+                compSnap = await db.collection('companies')
+                    .where('company', '==', parentName).limit(1).get();
+            }
+        }
+
+        // 접수 데이터에서 fallback 정보 및 접수된 인허가 정보 추출 (가장 최근 접수 기준)
+        var fallbackBizNo = '', fallbackCeo = '', fallbackPhone = '', fallbackAddr = '';
+        var recLicName = '', recLicNo = '', recLicForm = '', recLicRep = '', recLicAddr = '';
+        if (receiptsSnap && receiptsSnap.docs && receiptsSnap.docs.length > 0) {
+            var sortedForFb = receiptsSnap.docs.slice().sort(function(a, b) {
+                return (b.data().receiptDate || '').localeCompare(a.data().receiptDate || '');
+            });
+            var rd = sortedForFb[0].data();
+            fallbackBizNo = rd.bizNo || rd.businessNo || '';
+            fallbackCeo = rd.ceo || rd.repName || '';
+            fallbackPhone = rd.companyPhone || rd.contactPhone || rd.phone || '';
+            fallbackAddr = rd.companyAddress || rd.address || '';
+            recLicName = rd.licBizName || '';
+            recLicNo = rd.licNo || '';
+            recLicForm = rd.licBizForm || '';
+            recLicRep = rd.licRepName || '';
+            recLicAddr = ((rd.licAddr || '') + ' ' + (rd.licAddr2 || '')).trim();
+        }
+
         if (!compSnap.empty) {
             var c = compSnap.docs[0].data();
-            if (c.businessNo || c.bizNo) document.getElementById('ti-bizno').textContent = c.businessNo || c.bizNo;
-            if (c.ceo || c.repName) document.getElementById('ti-ceo').textContent = c.ceo || c.repName;
-            if (c.phone || c.contactPhone || c.tel) document.getElementById('ti-phone').textContent = c.phone || c.contactPhone || c.tel;
-            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim();
+            var bizNo = c.bizNo || c.businessNo || fallbackBizNo;
+            if (bizNo) document.getElementById('ti-bizno').textContent = bizNo;
+            var ceo = c.repName || c.ceo || fallbackCeo;
+            if (ceo) document.getElementById('ti-ceo').textContent = ceo;
+            var phone = c.contactPhone || c.phone || c.tel || fallbackPhone;
+            if (phone) document.getElementById('ti-phone').textContent = phone;
+            var addr = ((c.addr1 || '') + ' ' + (c.addr2 || '')).trim() || fallbackAddr;
             if (addr) document.getElementById('ti-addr').textContent = addr;
 
             if (c.contacts && c.contacts.length > 0) {
@@ -1131,15 +1278,36 @@ async function _loadTxnCompanyInfo(companyName, receiptsSnap) {
                 if (c.contactEmail) document.getElementById('ti-contact-email').textContent = c.contactEmail;
             }
 
-            if (c.licenses && c.licenses.length > 0) {
-                var lic = c.licenses[0];
-                if (lic.licBizName) document.getElementById('ti-lic-name').textContent = lic.licBizName;
-                if (lic.licNo) document.getElementById('ti-lic-no').textContent = lic.licNo;
-                if (lic.licBizForm) document.getElementById('ti-lic-form').textContent = lic.licBizForm;
-                if (lic.licRepName) document.getElementById('ti-lic-rep').textContent = lic.licRepName;
-                var licAddr = ((lic.licAddr || '') + ' ' + (lic.licAddr2 || '')).trim();
-                if (licAddr) document.getElementById('ti-lic-addr').textContent = licAddr;
+            // 인허가 정보: 접수 데이터 우선, 없으면 company.licenses에서 영업소명칭 매칭
+            var licName = recLicName, licNo = recLicNo, licForm = recLicForm, licRep = recLicRep, licAddrVal = recLicAddr;
+            if (!licName && c.licenses && c.licenses.length > 0) {
+                var matchedLic = null;
+                for (var li2 = 0; li2 < c.licenses.length; li2++) {
+                    if ((c.licenses[li2].licBizName || '') === companyName) { matchedLic = c.licenses[li2]; break; }
+                }
+                if (!matchedLic) matchedLic = c.licenses[0];
+                licName = matchedLic.licBizName || '';
+                licNo = matchedLic.licNo || '';
+                licForm = matchedLic.licBizForm || '';
+                licRep = matchedLic.licRepName || '';
+                licAddrVal = ((matchedLic.licAddr || '') + ' ' + (matchedLic.licAddr2 || '')).trim();
             }
+            if (licName) document.getElementById('ti-lic-name').textContent = licName;
+            if (licNo) document.getElementById('ti-lic-no').textContent = licNo;
+            if (licForm) document.getElementById('ti-lic-form').textContent = licForm;
+            if (licRep) document.getElementById('ti-lic-rep').textContent = licRep;
+            if (licAddrVal) document.getElementById('ti-lic-addr').textContent = licAddrVal;
+        } else {
+            // 업체 미등록 → 접수 데이터 fallback
+            if (fallbackBizNo) document.getElementById('ti-bizno').textContent = fallbackBizNo;
+            if (fallbackCeo) document.getElementById('ti-ceo').textContent = fallbackCeo;
+            if (fallbackPhone) document.getElementById('ti-phone').textContent = fallbackPhone;
+            if (fallbackAddr) document.getElementById('ti-addr').textContent = fallbackAddr;
+            if (recLicName) document.getElementById('ti-lic-name').textContent = recLicName;
+            if (recLicNo) document.getElementById('ti-lic-no').textContent = recLicNo;
+            if (recLicForm) document.getElementById('ti-lic-form').textContent = recLicForm;
+            if (recLicRep) document.getElementById('ti-lic-rep').textContent = recLicRep;
+            if (recLicAddr) document.getElementById('ti-lic-addr').textContent = recLicAddr;
         }
 
         var salesRep = '';
@@ -1166,10 +1334,68 @@ async function _loadTxnCompanyInfo(companyName, receiptsSnap) {
 function printLedger() {
     var company = document.getElementById('ledger-company').value.trim();
     if (!company) { showToast('먼저 업체를 조회하세요'); return; }
-    document.getElementById('panel-ledger').classList.add('print-target');
-    document.getElementById('panel-txn').classList.remove('print-target');
-    window.print();
-    document.getElementById('panel-ledger').classList.remove('print-target');
+
+    var infoHtml = document.getElementById('ledger-info').innerHTML;
+    var tableHtml = document.getElementById('ledger-result').innerHTML;
+    var title = document.getElementById('ledger-info-title').textContent;
+
+    var w = window.open('', '_blank', 'width=900,height=700,scrollbars=yes');
+    w.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">');
+    w.document.write('<title>' + title + '</title>');
+    w.document.write('<style>');
+    w.document.write('*{margin:0;padding:0;box-sizing:border-box}');
+    w.document.write('body{font-family:"Pretendard",-apple-system,sans-serif;font-size:12px;background:#fff;padding:20px}');
+    w.document.write('.print-btn{display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end}');
+    w.document.write('.print-btn button{padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none}');
+    w.document.write('.btn-print{background:#1a73e8;color:#fff}');
+    w.document.write('.btn-close{background:#f1f3f4;color:#374151}');
+    w.document.write('.ledger-info{background:#f8fafc;border:1px solid #e2e6ed;border-radius:8px;padding:14px 18px;margin-bottom:14px}');
+    w.document.write('.ledger-info-top{display:flex;align-items:center;gap:16px;margin-bottom:10px}');
+    w.document.write('.ledger-info-top .title{font-size:16px;font-weight:800;color:#1a2332}');
+    w.document.write('.ledger-info-top .period{font-size:11px;color:#8892a4}');
+    w.document.write('.vat-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:#e8f5e9;color:#2e7d32}');
+    w.document.write('.bfl-logo{margin-left:auto;font-size:11px;color:#9ca3af}');
+    w.document.write('.ledger-info-body{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}');
+    w.document.write('.col-title{font-size:10px;font-weight:700;color:#8892a4;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}');
+    w.document.write('.ledger-info-row{display:flex;gap:6px;font-size:11px;margin-bottom:3px}');
+    w.document.write('.ledger-info-row .lbl{color:#8892a4;min-width:60px}');
+    w.document.write('.ledger-info-row .val{color:#1a2332;font-weight:500}');
+    w.document.write('table{width:100%;border-collapse:collapse;font-size:12px}');
+    w.document.write('thead{background:#f8f9fb}');
+    w.document.write('th{padding:8px 10px;text-align:left;font-weight:600;color:#5f6b7a;border-bottom:2px solid #e2e6ed;white-space:nowrap}');
+    w.document.write('td{padding:7px 10px;border-bottom:1px solid #f0f2f5;color:#1a2332}');
+    w.document.write('.text-right{text-align:right}');
+    w.document.write('.row-payment td{color:#2563eb}');
+    w.document.write('.row-carry td{background:#fffbeb;font-size:11px}');
+    w.document.write('.row-total td{background:#f8f9fb;font-weight:700;border-top:2px solid #e2e6ed}');
+    w.document.write('.bal-pos{color:#ef4444;font-weight:700}');
+    w.document.write('.bal-neg{color:#2563eb;font-weight:700}');
+    w.document.write('.bal-zero{color:#9ca3af}');
+    w.document.write('.receipt-no{font-size:10px;color:#8892a4;background:#f3f4f6;padding:1px 5px;border-radius:3px}');
+    w.document.write('.tbl-wrap{border:1px solid #e2e6ed;border-radius:8px;overflow:hidden}');
+    w.document.write('.acct-section{margin-top:16px;padding:10px 14px;border:1px solid #e2e6ed;border-radius:8px;background:#f8fafc}');
+    w.document.write('.acct-title{font-size:10px;font-weight:700;color:#8892a4;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}');
+    w.document.write('.acct-list{display:flex;gap:24px;flex-wrap:wrap}');
+    w.document.write('.acct-row{display:flex;gap:8px;font-size:12px;align-items:center}');
+    w.document.write('.acct-bank{font-weight:700;color:#1a2332}');
+    w.document.write('.acct-no{color:#1a2332;font-weight:500;letter-spacing:.5px}');
+    w.document.write('@media print{.print-btn{display:none!important}}');
+    w.document.write('</style></head><body>');
+    w.document.write('<div class="print-btn">');
+    w.document.write('<button class="btn-close" onclick="window.close()">닫기</button>');
+    w.document.write('<button class="btn-print" onclick="window.print()">🖨️ 인쇄</button>');
+    w.document.write('</div>');
+    w.document.write('<div class="ledger-info">' + infoHtml + '</div>');
+    w.document.write(tableHtml);
+    w.document.write('<div class="acct-section">');
+    w.document.write('<div class="acct-title">입금 계좌</div>');
+    w.document.write('<div class="acct-list">');
+    w.document.write('<div class="acct-row"><span class="acct-bank">기업은행</span><span class="acct-no">024-0880-2101017</span></div>');
+    w.document.write('<div class="acct-row"><span class="acct-bank">우리은행</span><span class="acct-no">1005-702-799176</span></div>');
+    w.document.write('<div class="acct-row"><span class="acct-bank">농협은행</span><span class="acct-no">301-0178-172211</span></div>');
+    w.document.write('</div></div>');
+    w.document.write('</body></html>');
+    w.document.close();
 }
 
 function printTxn() {

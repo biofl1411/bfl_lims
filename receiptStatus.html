@@ -91,7 +91,12 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 #table-zone{flex:1;overflow-y:auto;padding:16px 20px 0 20px}
 
 /* 상세 패널 */
-#detail-panel{width:360px;flex-shrink:0;border-left:1px solid #e2e6ed;background:#fff;overflow-y:auto;display:flex;flex-direction:column}
+#detail-panel{width:360px;flex-shrink:0;border-left:1px solid #e2e6ed;background:#fff;display:flex;flex-direction:row;transition:width .2s ease;position:relative;overflow:visible}
+#detail-panel.collapsed{width:28px}
+#detail-panel.collapsed #detail-panel-inner{opacity:0;pointer-events:none;overflow:hidden}
+#dp-toggle-btn{flex-shrink:0;width:16px;background:#f0f4ff;border:none;border-right:1px solid #e2e6ed;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#1a73e8;padding:0;transition:background .15s}
+#dp-toggle-btn:hover{background:#dce8ff}
+#detail-panel-inner{flex:1;overflow-y:auto;display:flex;flex-direction:column;min-width:0}
 #detail-panel-empty{padding:40px 20px;text-align:center;color:#999;font-size:13px}
 #detail-panel-content{display:none;flex:1;flex-direction:column}
 .dp-header{padding:16px;border-bottom:1px solid #eef0f4;position:relative}
@@ -108,7 +113,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 .dp-grid .dp-val{color:#1a2332;font-size:13px;font-weight:500;padding:4px 0}
 .dp-section-title{font-size:12px;font-weight:700;color:#1a2332;margin:12px 0 8px;padding-top:8px;border-top:1px solid #eef0f4}
 .dp-sample-card{border:1px solid #e2e6ed;border-radius:8px;padding:10px;margin-bottom:8px}
-.dp-memo-area{width:100%;min-height:60px;border:1px solid #e2e6ed;border-radius:6px;padding:8px;font-size:12px;resize:vertical;background:#f8f9fb;font-family:inherit}
+.dp-memo-area{width:100%;min-height:60px;border:1px solid #e2e6ed;border-radius:6px;padding:8px;font-size:12px;resize:vertical;background:#f8f9fb;font-family:inherit;transition:border-color .15s,background .15s}
+.dp-memo-area[readonly]{color:#6b7a8d;cursor:default}
+.dp-memo-area:not([readonly]){background:#fff;border-color:#cbd5e1}
+.dp-memo-area:not([readonly]):focus{border-color:#1a73e8;outline:none;background:#fff;box-shadow:0 0 0 2px rgba(26,115,232,.1)}
+.dp-memo-save-btn{padding:4px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:#1a73e8;color:#fff;font-family:inherit;margin-top:4px}
+.dp-memo-save-btn:hover{background:#1557b0}
+.dp-memo-author{margin-top:3px;font-size:11px;color:#94a3b8}
 
 /* 인라인 편집 */
 .dp-edit-input{width:100%;padding:4px 6px;border:1px solid #d0d5dd;border-radius:4px;font-size:12px;font-family:inherit;background:#fff;color:#1a2332}
@@ -190,6 +201,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             <select id="filter-rep" onchange="applyFilter()">
                 <option value="">전체 담당자</option>
             </select>
+            <select id="filter-pay" onchange="applyFilter()">
+                <option value="">전체 결제</option>
+                <option value="완납">완납</option>
+                <option value="부분입금">부분입금</option>
+                <option value="미입금">미입금</option>
+                <option value="미결제">미결제(부분+미입금)</option>
+            </select>
             <button class="btn btn-secondary btn-sm" onclick="resetFilters()">초기화</button>
             <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
                 <div style="position:relative;display:flex;align-items:center">
@@ -236,25 +254,28 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
             </div>
         </div>
         <div id="detail-panel">
-            <div id="detail-panel-empty">행을 클릭하면 상세 정보가 표시됩니다</div>
-            <div id="detail-panel-content">
-                <div class="dp-header">
-                    <div class="dp-receipt-no" id="dp-receipt-no"></div>
-                    <div class="dp-status-row" id="dp-status-row"></div>
-                    <button class="dp-close" onclick="closeDetailPanel()">✕</button>
+            <button id="dp-toggle-btn" onclick="toggleDetailPanel()" title="패널 접기/펼치기">◀</button>
+            <div id="detail-panel-inner">
+                <div id="detail-panel-empty">행을 클릭하면 상세 정보가 표시됩니다</div>
+                <div id="detail-panel-content">
+                    <div class="dp-header">
+                        <div class="dp-receipt-no" id="dp-receipt-no"></div>
+                        <div class="dp-status-row" id="dp-status-row"></div>
+                        <button class="dp-close" onclick="closeDetailPanel()">✕</button>
+                    </div>
+                    <div class="dp-tabs">
+                        <button class="dp-tab-btn active" data-tab="basic" onclick="switchDpTab('basic')">기본정보</button>
+                        <button class="dp-tab-btn" data-tab="sample" onclick="switchDpTab('sample')">시료정보</button>
+                        <button class="dp-tab-btn" data-tab="fee" onclick="switchDpTab('fee')">수수료/결제</button>
+                        <button class="dp-tab-btn" data-tab="memo" onclick="switchDpTab('memo')">메모</button>
+                        <button class="dp-tab-btn" data-tab="editlog" onclick="switchDpTab('editlog')">수정이력</button>
+                    </div>
+                    <div class="dp-tab-pane active" id="dp-tab-basic"></div>
+                    <div class="dp-tab-pane" id="dp-tab-sample"></div>
+                    <div class="dp-tab-pane" id="dp-tab-fee"></div>
+                    <div class="dp-tab-pane" id="dp-tab-memo"></div>
+                    <div class="dp-tab-pane" id="dp-tab-editlog"></div>
                 </div>
-                <div class="dp-tabs">
-                    <button class="dp-tab-btn active" data-tab="basic" onclick="switchDpTab('basic')">기본정보</button>
-                    <button class="dp-tab-btn" data-tab="sample" onclick="switchDpTab('sample')">시료정보</button>
-                    <button class="dp-tab-btn" data-tab="fee" onclick="switchDpTab('fee')">수수료/결제</button>
-                    <button class="dp-tab-btn" data-tab="memo" onclick="switchDpTab('memo')">메모</button>
-                    <button class="dp-tab-btn" data-tab="editlog" onclick="switchDpTab('editlog')">수정이력</button>
-                </div>
-                <div class="dp-tab-pane active" id="dp-tab-basic"></div>
-                <div class="dp-tab-pane" id="dp-tab-sample"></div>
-                <div class="dp-tab-pane" id="dp-tab-fee"></div>
-                <div class="dp-tab-pane" id="dp-tab-memo"></div>
-                <div class="dp-tab-pane" id="dp-tab-editlog"></div>
             </div>
         </div>
     </div>
@@ -584,6 +605,23 @@ var ALL_COLUMNS = [
     { key: 'payStatus',    label: '결제',       visible: true,  width: '70px' }
 ];
 
+function getTotalFee(d) {
+    if (d.discountFinalPrice) return Number(d.discountFinalPrice);
+    if (d.samples && d.samples.length > 0) {
+        var itemSum = 0, hasItemFees = false;
+        d.samples.forEach(function(s) {
+            var items = s.testItems || s.refTestItems || [];
+            if (Array.isArray(items)) {
+                items.forEach(function(t) {
+                    if (t && Number(t.fee)) { itemSum += Number(t.fee); hasItemFees = true; }
+                });
+            }
+        });
+        if (hasItemFees && itemSum > 0) return itemSum;
+    }
+    return Number(d.feeTotal || d.feeOriginal || d.totalFee || d.totalAmount || 0);
+}
+
 var _allReceipts = [];
 var _filteredReceipts = [];
 var _sortKey = 'receiptDate';
@@ -596,6 +634,52 @@ var _currentDetailId = null; // 현재 상세 패널 접수 doc ID
 var _currentDetailSampleIdx = 0; // 현재 상세 패널 시료 인덱스
 var _currentDetailRecord = null; // 현재 상세 패널 레코드
 var _lastSelectedIdx = -1; // Shift+클릭 범위 선택용
+
+// 메모 사용자 목록
+var _memoUsers = [];         // [{ id, name, department }, ...]
+var _memoCurrentUser = null; // 현재 선택된 사용자 { id, name, department }
+
+// 메모 팀 매핑 (메모키 → 사용 허용 팀명)
+var MEMO_TEAM_MAP = {
+    'receipt':   '고객지원팀',
+    'team_품질팀':  '품질보증팀',
+    'team_마케팅팀': '마케팅팀',
+    'team_재무팀':  '재무팀'
+};
+
+// 사용자 목록 로드 (최초 1회)
+async function loadMemoUsers() {
+    if (_memoUsers.length > 0) return;
+    try {
+        var snap = await db.collection('users').orderBy('name').get();
+        _memoUsers = [];
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            _memoUsers.push({ id: doc.id, name: d.name || doc.id, department: d.department || '' });
+        });
+    } catch(e) { console.warn('[메모 사용자 로드]', e.message); }
+}
+
+// 메모 사용자 선택 변경
+function onMemoUserSelect(selectEl) {
+    var uid = selectEl.value;
+    _memoCurrentUser = _memoUsers.find(function(u) { return u.id === uid; }) || null;
+    localStorage.setItem('bfl_memo_user_id', uid);
+    _refreshMemoSaveBtns();
+}
+
+// 팀에 따라 저장 버튼 활성/비활성 갱신
+function _refreshMemoSaveBtns() {
+    var dept = _memoCurrentUser ? _memoCurrentUser.department : '';
+    Object.keys(MEMO_TEAM_MAP).forEach(function(key) {
+        var btn = document.getElementById('memo-save-btn-' + key);
+        if (!btn) return;
+        var allowed = (MEMO_TEAM_MAP[key] === dept);
+        btn.style.display = allowed ? '' : 'none';
+        var ta = document.getElementById('memo-area-' + key);
+        if (ta) ta.readOnly = !allowed;
+    });
+}
 
 // ============================================================================
 // ═══ 소분류 수수료 규칙 — 공통 모듈(js/sub-chip-fee.js) 사용 ═══
@@ -625,17 +709,19 @@ async function loadReceipts() {
 
         var rawReceipts = await fsGetReceipts({ limit: 500 });
 
-        // ── 1단계: 거래처별 미수금 집계 (수수료>0 & 결제일 없음 = 미수금) ──
+        // ── 1단계: 거래처별 미수금 집계 (실제 미입금액 기준) ──
         _companyReceivables = {};
         rawReceipts.forEach(function(r) {
             var cust = findCompanyForReceipt(r);
             if (!cust) return;
             var key = cust.id || (cust.company || '').trim();
             if (!_companyReceivables[key]) _companyReceivables[key] = { oldestDate: null, totalAmount: 0 };
-            var fee = r.feeTotal || 0;
-            var hasPaid = !!(r.payDate); // 결제일이 있으면 결제 완료
-            if (fee > 0 && !hasPaid) {
-                _companyReceivables[key].totalAmount += fee;
+            var fee = getTotalFee(r);
+            var paidAmt = (r.payments || []).reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+            if (!paidAmt && r.payDate) paidAmt = fee; // 방안A 호환
+            var unpaid = Math.max(0, fee - paidAmt);
+            if (unpaid > 0) {
+                _companyReceivables[key].totalAmount += unpaid;
                 var rd = r.receiptDate || '';
                 if (rd && (!_companyReceivables[key].oldestDate || rd < _companyReceivables[key].oldestDate)) {
                     _companyReceivables[key].oldestDate = rd;
@@ -669,9 +755,14 @@ async function loadReceipts() {
             // 등급: Firestore 저장 값 사용 (companyMgmt에서 계산/저장)
             var grade = cust ? (cust.grade || 'F') : '';
             // 수수료 계산 (공급가액/세액/총계)
-            var ft = r.feeTotal || 0;
+            var ft = getTotalFee(r);
             var feeSupply = ft ? Math.round(ft / 1.1) : 0;
             var feeVat = ft ? ft - feeSupply : 0;
+            // 입금 상태 계산
+            var _paidAmt = (r.payments || []).reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+            if (!_paidAmt && r.payDate) _paidAmt = ft; // 방안A 호환
+            var _payKey = ft > 0 ? (_paidAmt >= ft ? '완납' : _paidAmt > 0 ? '부분입금' : '미입금') : '없음';
+            var _unpaid = Math.max(0, ft - _paidAmt);
 
             var samples = r.samples && r.samples.length > 0 ? r.samples : [{}];
             var totalCount = r.sampleTotalCount || samples.length || 1;
@@ -698,6 +789,10 @@ async function loadReceipts() {
                 row.feeSupply = feeSupply;
                 row.feeVat = feeVat;
                 row.feeTotal = ft;
+                // 입금 상태
+                row._paidAmount = _paidAmt;
+                row._unpaidAmount = _unpaid;
+                row._payStatusKey = _payKey;
                 // 시료별 긴급여부 (시료에 개별 설정이 있으면 우선)
                 var sampleUrgent = s['urgent-value'] || s.urgentValue || '';
                 if (sampleUrgent) row.urgent = sampleUrgent;
@@ -762,6 +857,7 @@ var _searchTags = [];
 
 // 줄임 단어 → 전체 단어 매핑
 var SEARCH_ALIASES = {
+  // 검사목적
   '자가': '자가품질위탁검사용',
   '자가품질': '자가품질위탁검사용',
   '위탁': '위탁검사',
@@ -772,8 +868,24 @@ var SEARCH_ALIASES = {
   '미생물': '미생물검사',
   '중금속': '중금속검사',
   '농약': '농약잔류물',
+  '잔농': '잔류농약',
   '식품첨가물': '식품첨가물검사',
-  '방사능': '방사능검사'
+  '방사능': '방사능검사',
+  '항생': '항생물질',
+  '알티': 'allergen(rt-pcr)',
+  '엘라': 'allergen(elisa)',
+  // 업종
+  '제조': '식품제조가공업',
+  '즉판': '즉석판매제조가공업',
+  '축물': '축산물가공업',
+  '유통': '유통판매원',
+  // 긴급
+  '시간': '시간긴급',
+  // 신호등 (hay에 한글 라벨 포함)
+  '신빨': '빨강',
+  '신주': '주황',
+  '신노': '노랑',
+  '신초': '초록'
 };
 
 function expandAlias(val) {
@@ -826,10 +938,11 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// 부분 매칭: 검색어를 2글자 단위 n-gram으로 쪼개 하나라도 포함되면 true
+// 부분 매칭: 5글자 미만은 2-gram 퍼지, 5글자 이상은 정확 포함만
 function fuzzyMatch(term, hay) {
   term = term.toLowerCase(); hay = hay.toLowerCase();
-  if (hay.indexOf(term) >= 0) return true; // 완전 포함 우선
+  if (hay.indexOf(term) >= 0) return true; // 정확 포함 우선
+  if (term.length >= 3) return false;      // 3글자 이상은 퍼지 안 함 (이크·케이크 등 오매칭 방지)
   if (term.length < 2) return false;
   for (var i = 0; i < term.length - 1; i++) {
     if (hay.indexOf(term.slice(i, i + 2)) >= 0) return true;
@@ -849,10 +962,15 @@ function applyFilter() {
     var urgentFilter = document.getElementById('filter-urgent').value;
     var trafficFilter = document.getElementById('filter-traffic').value;
     var repFilter = document.getElementById('filter-rep').value;
+    var payFilter = document.getElementById('filter-pay').value;
 
     _filteredReceipts = _allReceipts.filter(function(r) {
         if (status && r.status !== status) return false;
         if (field && r.testField !== field) return false;
+        if (payFilter) {
+            if (payFilter === '미결제') { if (r._payStatusKey !== '부분입금' && r._payStatusKey !== '미입금') return false; }
+            else if (r._payStatusKey !== payFilter) return false;
+        }
         if (from && r.receiptDate < from) return false;
         if (to && r.receiptDate > to) return false;
         if (urgentFilter) {
@@ -863,13 +981,23 @@ function applyFilter() {
         if (trafficFilter && r.trafficLight !== trafficFilter) return false;
         if (repFilter && r.salesRep !== repFilter) return false;
         // 검색 — 태그(Enter 확정) + 입력 중인 텍스트 모두 적용
+        var _tlLabel = {red:'빨강', orange:'주황', yellow:'노랑', green:'초록'}[r.trafficLight] || '';
+        // 해당 시료의 검사항목명 추출
+        var _sampleObj = r.samples && r.samples[r._sampleIdx];
+        var _itemNames = _sampleObj ? ((_sampleObj.testItems || _sampleObj.refTestItems || [])
+            .map(function(t){ return (t.itemName||t.name||'').replace(/\|+/g,'').trim(); }).join(' ')) : '';
+        // 금액 (합계·공급가액·세액, 숫자+콤마 형식 둘 다)
+        var _feeStr = [r.feeTotal, r.feeSupply, r.feeVat].filter(Boolean).map(function(n){
+            return n.toString() + ' ' + n.toLocaleString();
+        }).join(' ');
         var hay = [
             r.receiptNo, r._baseReceiptNo, r.companyName, r.productName,
             r.foodType, r.testPurpose, r.billCompany, r.salesRep,
             r.bizNo, r.companyAddress, r.ceo, r.companyMobile,
             r.billName, r.billPhone, r.billEmail, r.documentNo,
             r.reportNo, r.lotNo, r.relatedLaw, r.testField,
-            r.sampleType, r.receiptFormType
+            r.sampleType, r.receiptFormType, r.urgent, _tlLabel,
+            r.licBizForm, _itemNames, _feeStr
         ].map(function(v){ return (v||'').toLowerCase(); }).join(' ');
 
         // 태그 검색 (AND): 모든 태그가 hay에 매칭
@@ -878,8 +1006,11 @@ function applyFilter() {
             var matched = terms.some(function(term) { return fuzzyMatch(term, hay); });
             if (!matched) return false;
         }
-        // 입력 중 실시간 검색
-        if (typingSearch && !fuzzyMatch(typingSearch, hay)) return false;
+        // 입력 중 실시간 검색 (줄임말 확장 적용)
+        if (typingSearch) {
+            var typingTerms = expandAlias(typingSearch);
+            if (!typingTerms.some(function(term) { return fuzzyMatch(term, hay); })) return false;
+        }
         return true;
     });
 
@@ -1221,8 +1352,12 @@ function renderTable() {
             } else if (col.key === 'billCompany') {
                 val = resolveBillCompanyName(r);
             } else if (col.key === 'payStatus') {
-                if (r.payDate) val = '✅완료';
-                else if (r.feeTotal > 0) val = '<span style="color:#e53935;font-weight:700">미수금</span>';
+                if (r._payStatusKey === '완납') val = '✅완납';
+                else if (r._payStatusKey === '부분입금') {
+                    var pct = r.feeTotal > 0 ? Math.round(r._paidAmount / r.feeTotal * 100) : 0;
+                    val = '<span style="color:#d97706;font-weight:700">부분(' + pct + '%)</span>';
+                }
+                else if (r._payStatusKey === '미입금') val = '<span style="color:#e53935;font-weight:700">미수금</span>';
                 else val = '-';
             }
             bhtml += '<td>' + val + '</td>';
@@ -1317,9 +1452,9 @@ function updateSummaryBar() {
     _filteredReceipts.forEach(function(r) {
         var rk = r.id + '_' + r._sampleIdx;
         if (_selectedRows.has(rk)) {
-            sumSupply += (r.feeSupply || 0);
-            sumVat += (r.feeVat || 0);
-            sumTotal += (r.feeTotal || 0);
+            sumSupply += (r._sampleIdx === 0 ? (r.feeSupply || 0) : 0);
+            sumVat    += (r._sampleIdx === 0 ? (r.feeVat    || 0) : 0);
+            sumTotal  += (r._sampleIdx === 0 ? (r.feeTotal  || 0) : 0);
         }
     });
     document.getElementById('summary-count').textContent = count + '건 선택';
@@ -1531,7 +1666,28 @@ function openDetailPanel(id, sampleIdx) {
         dpRow('세액', r.feeVat ? Number(r.feeVat).toLocaleString() + '원' : '-') +
         '<div class="dp-lbl">총계</div><div class="dp-val" style="font-size:18px;font-weight:700;color:#1a73e8">' + (r.feeTotal ? Number(r.feeTotal).toLocaleString() + '원' : '-') + '</div>' +
         dpRow('결제방법', r.payMethod) +
-        dpRow('결제일', r.payDate || '<span style="color:#e53935">미수금</span>') +
+        (function(){
+            if (r._payStatusKey === '완납') return dpRow('결제', '✅완납' + (r.payDate ? ' (' + r.payDate + ')' : ''));
+            if (r._payStatusKey === '부분입금') {
+                var pct = r.feeTotal > 0 ? Math.round(r._paidAmount / r.feeTotal * 100) : 0;
+                return dpRow('결제', '<span style="color:#d97706;font-weight:700">부분입금 ' + pct + '% (' + Number(r._paidAmount).toLocaleString() + '원 / 미수 ' + Number(r._unpaidAmount).toLocaleString() + '원)</span>');
+            }
+            return dpRow('결제', '<span style="color:#e53935">미수금 ' + (r.feeTotal ? Number(r.feeTotal).toLocaleString() + '원' : '') + '</span>');
+        })() +
+        (function(){
+            var pmts = r.payments || [];
+            if (!pmts.length) return '';
+            var rows = pmts.map(function(p, i) {
+                return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:12px">' +
+                    '<span style="color:#6b7280">' + (i+1) + '차  ' + (p.date || '-') + '</span>' +
+                    '<span style="font-weight:600">' + Number(p.amount||0).toLocaleString() + '원</span>' +
+                    '<span style="color:#4b5563;background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:11px">' + (p.method||'-') + '</span>' +
+                    (p.memo ? '<span style="color:#9ca3af;font-size:11px">' + p.memo + '</span>' : '') +
+                    '</div>';
+            }).join('');
+            return '<div class="dp-lbl" style="grid-column:1/-1;margin-top:6px;font-weight:600;color:#374151">입금 이력</div>' +
+                '<div style="grid-column:1/-1;background:#f8fafc;border-radius:6px;padding:6px 10px">' + rows + '</div>';
+        })() +
         '</div>' +
         '<div class="dp-section-title">계산서 정보</div>' +
         '<div class="dp-grid">' +
@@ -1553,14 +1709,107 @@ function openDetailPanel(id, sampleIdx) {
     document.getElementById('dp-tab-fee').innerHTML = feeHtml;
 
     // 탭4 메모
-    var memoHtml = '<div style="margin-bottom:12px"><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">접수메모</label>' +
-        '<textarea class="dp-memo-area" readonly>' + (r.receiptMemo || r.memo || '') + '</textarea></div>';
+    var _receiptMemoText = s.sampleMemo || r.noticeMemo || r.receiptMemo || r.memo || '';
+    var _memoBy = s.sampleMemoBy || r.noticeMemoBy || '';
+    var _memoAt = s.sampleMemoAt || r.noticeMemoAt || '';
     var teamMemo = r.teamMemo || {};
-    ['고객팀','품질팀','재무팀','마케팅팀'].forEach(function(team) {
-        memoHtml += '<div style="margin-bottom:12px"><label style="font-size:11px;color:#5f6b7a;display:block;margin-bottom:4px">' + team + ' 메모</label>' +
-            '<textarea class="dp-memo-area" readonly>' + (teamMemo[team] || '') + '</textarea></div>';
+    var teamMemoLog = r.teamMemoLog || {};
+
+    // 메모 표시 형식: 각 줄마다 "(성명)"이 없으면 fallbackBy 추가
+    function _annotateLines(text, fallbackBy) {
+        if (!text) return '';
+        return text.split('\n').map(function(line) {
+            line = line.trim();
+            if (!line) return line;
+            return /\([^)]+\)$/.test(line) ? line : (line + (fallbackBy ? '(' + fallbackBy + ')' : ''));
+        }).join('\n');
+    }
+
+    // 팀별 사용자 선택 셀렉트 빌드 (users 로드 후 채워짐)
+    function _buildUserSelect(key, dept) {
+        var savedKey = 'bfl_memo_user_' + key;
+        var savedName = localStorage.getItem(savedKey) || '';
+        var users = _memoUsers.filter(function(u) { return u.department === dept; });
+        var opts = '<option value="">담당자 선택</option>';
+        users.forEach(function(u) {
+            opts += '<option value="' + u.name + '"' + (u.name === savedName ? ' selected' : '') + '>' + u.name + '</option>';
+        });
+        return '<select id="memo-user-' + key + '" ' +
+            'style="padding:2px 6px;border:1px solid #cdd5df;border-radius:4px;font-size:11px;font-family:inherit;color:#374151;background:#fff;margin-left:6px;cursor:pointer" ' +
+            'onchange="localStorage.setItem(\'bfl_memo_user_' + key + '\',this.value)">' +
+            opts + '</select>';
+    }
+
+    // 메모 섹션 빌더: 기존 메모(읽기전용) + 새 메모 입력란(저장 버튼 내장)
+    function _buildMemoSection(key, labelHtml, existText, existAt) {
+        var dispText = existText
+            ? '<div id="memo-display-' + key + '" style="' +
+              'padding:7px 9px;background:#f8f9fb;border:1px solid #e2e6ed;border-radius:6px;' +
+              'font-size:12px;color:#374151;line-height:1.6;white-space:pre-wrap;margin-bottom:6px">' +
+              existText.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>'
+            : '<div id="memo-display-' + key + '" style="display:none"></div>';
+        return '<div style="margin-bottom:16px">' +
+            '<div style="display:flex;align-items:center;margin-bottom:4px">' +
+            '<label style="font-size:11px;color:#5f6b7a">' + labelHtml + '</label>' +
+            _buildUserSelect(key, MEMO_TEAM_MAP[key]) + '</div>' +
+            dispText +
+            '<div style="border:1px solid #e2e6ed;border-radius:6px;background:#fff;overflow:hidden">' +
+            '<textarea class="dp-memo-area" id="memo-area-' + key + '" ' +
+            'placeholder="새 메모 입력..." ' +
+            'style="border:none;border-radius:0;background:transparent;min-height:48px;resize:none"></textarea>' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;' +
+            'padding:4px 8px;background:#f8f9fb;border-top:1px solid #e2e6ed">' +
+            (existAt ? '<div class="dp-memo-author" style="margin:0">' + existAt + '</div>' : '<div></div>') +
+            '<button class="dp-memo-save-btn" style="margin:0" onclick="saveMemoField(\'' + key + '\')">저장</button>' +
+            '</div></div></div>';
+    }
+
+    var memoHtml = '';
+
+    // 접수메모
+    var _recDisplayText = _annotateLines(_receiptMemoText, _memoBy);
+    memoHtml += _buildMemoSection('receipt',
+        '접수메모 <span style="color:#94a3b8;font-weight:400">(고객지원팀)</span>',
+        _recDisplayText, _memoAt);
+
+    // 팀 메모
+    var _teamDefs = [
+        { key: 'team_품질팀',   label: '품질팀 메모',   team: '품질팀',   dept: '품질보증팀' },
+        { key: 'team_마케팅팀', label: '마케팅팀 메모', team: '마케팅팀', dept: '마케팅팀' },
+        { key: 'team_재무팀',   label: '재무팀 메모',   team: '재무팀',   dept: '재무팀' }
+    ];
+    _teamDefs.forEach(function(def) {
+        var tLog = teamMemoLog[def.team] || {};
+        var tText = teamMemo[def.team] || '';
+        var tDisplayText = _annotateLines(tText, tLog.by || '');
+        memoHtml += _buildMemoSection(def.key,
+            def.label + ' <span style="color:#94a3b8;font-weight:400">(' + def.dept + ')</span>',
+            tDisplayText, tLog.at || '');
     });
+
     document.getElementById('dp-tab-memo').innerHTML = memoHtml;
+
+    // 사용자 목록 로드 후 셀렉트 채우기
+    loadMemoUsers().then(function() {
+        // 접수메모 셀렉트 (고객지원팀)
+        var allDefs = [
+            { key: 'receipt',      dept: '고객지원팀' },
+            { key: 'team_품질팀',   dept: '품질보증팀' },
+            { key: 'team_마케팅팀', dept: '마케팅팀' },
+            { key: 'team_재무팀',   dept: '재무팀' }
+        ];
+        allDefs.forEach(function(d) {
+            var sel = document.getElementById('memo-user-' + d.key);
+            if (!sel) return;
+            var savedName = localStorage.getItem('bfl_memo_user_' + d.key) || '';
+            var users = _memoUsers.filter(function(u) { return u.department === d.dept; });
+            var opts = '<option value="">담당자 선택</option>';
+            users.forEach(function(u) {
+                opts += '<option value="' + u.name + '"' + (u.name === savedName ? ' selected' : '') + '>' + u.name + '</option>';
+            });
+            sel.innerHTML = opts;
+        });
+    });
 
     // 수정이력 탭
     var editLog = r.editLog || [];
@@ -1727,6 +1976,22 @@ function dismissSampleWarning(el, warnKey) {
             summaryEl.innerHTML = '🧑‍🔧 이전 접수와 <b>' + remaining + '개</b> 항목이 다릅니다';
         }
     }
+}
+
+function toggleDetailPanel() {
+    var panel = document.getElementById('detail-panel');
+    var btn = document.getElementById('dp-toggle-btn');
+    if (panel.classList.contains('collapsed')) {
+        panel.classList.remove('collapsed');
+        btn.textContent = '◀';
+        btn.title = '패널 접기';
+    } else {
+        panel.classList.add('collapsed');
+        btn.textContent = '▶';
+        btn.title = '패널 펼치기';
+    }
+    // 테이블 컬럼 너비 재조정
+    if (typeof renderTable === 'function') { try { renderTable(); } catch(e) {} }
 }
 
 function closeDetailPanel() {
@@ -1931,6 +2196,78 @@ function goToReceiptEdit() {
     window.open('sampleReceiptV2.html?edit=' + encodeURIComponent(docId), '_blank');
 }
 
+// 메모 저장 (접수현황 메모 탭에서 직접 저장)
+function saveMemoField(key) {
+    var r = _currentDetailRecord;
+    if (!r) return;
+    var docId = r._origId || r.id;
+    var textEl = document.getElementById('memo-area-' + key);
+    if (!textEl) return;
+
+    // 섹션별 담당자 선택 값 읽기
+    var userSel = document.getElementById('memo-user-' + key);
+    var by = userSel ? userSel.value.trim() : '';
+    if (!by) { showToast('담당자를 먼저 선택하세요', 'error'); return; }
+
+    // 새로 입력한 텍스트
+    var newText = textEl.value.trim();
+    if (!newText) { showToast('메모 내용을 입력하세요', 'error'); return; }
+
+    var at = new Date().toISOString().slice(0,16).replace('T',' ');
+    var newEntry = newText + '(' + by + ')';  // "내용(성명)" 형식
+
+    // 기존 메모에 append (줄바꿈 구분)
+    var prevText = '';
+    if (key === 'receipt') {
+        prevText = r.noticeMemo || '';
+    } else {
+        var _tm = key.replace('team_', '');
+        prevText = (r.teamMemo && r.teamMemo[_tm]) ? r.teamMemo[_tm] : '';
+    }
+    // 기존 내용 뒤에 새 항목 추가 (기존 없으면 그냥 새 항목)
+    var mergedText = prevText ? (prevText + '\n' + newEntry) : newEntry;
+
+    var updateObj = {};
+    if (key === 'receipt') {
+        updateObj.noticeMemo = mergedText;
+        updateObj.noticeMemoBy = by;
+        updateObj.noticeMemoAt = at;
+    } else if (key.indexOf('team_') === 0) {
+        var team = key.replace('team_', '');
+        updateObj['teamMemo.' + team] = mergedText;
+        updateObj['teamMemoLog.' + team] = { by: by, at: at };
+    } else {
+        return;
+    }
+
+    db.collection('receipts').doc(docId).update(updateObj)
+    .then(function() {
+        // 로컬 캐시 업데이트
+        if (key === 'receipt') {
+            r.noticeMemo = mergedText; r.noticeMemoBy = by; r.noticeMemoAt = at;
+        } else {
+            var team = key.replace('team_', '');
+            if (!r.teamMemo) r.teamMemo = {};
+            if (!r.teamMemoLog) r.teamMemoLog = {};
+            r.teamMemo[team] = mergedText;
+            r.teamMemoLog[team] = { by: by, at: at };
+        }
+        // 기존 메모 표시 영역 갱신 (저장된 전체 텍스트, 이미 (성명) 포함)
+        var dispEl = document.getElementById('memo-display-' + key);
+        if (dispEl) {
+            dispEl.style.display = '';
+            dispEl.textContent = mergedText; // newEntry에 이미 (by) 붙어 있음
+        }
+        // 입력란 초기화
+        textEl.value = '';
+        // 시각 갱신
+        var atDiv = textEl.closest('div[style]').querySelector('.dp-memo-author');
+        if (atDiv) atDiv.innerHTML = at;
+        showToast('메모가 저장됐습니다', 'success');
+    })
+    .catch(function(e) { showToast('저장 실패: ' + e.message, 'error'); });
+}
+
 // ============================================================================
 // 상세 모달 (레거시 호환 — 패널로 전환)
 // ============================================================================
@@ -1945,7 +2282,7 @@ function closeDetailModal() {
 // 엑셀 다운로드
 // ============================================================================
 function downloadExcel() {
-    var header = ['접수번호','접수일자','상태','거래처','제품명','시험분야','검사목적','시료수','공급가액','세액','총계','결제일','담당자','처리기한','긴급'];
+    var header = ['접수번호','접수일자','상태','거래처','제품명','시험분야','검사목적','시료수','공급가액','세액','총계','결제상태','입금이력','담당자','처리기한','긴급'];
     var data = [header];
     _filteredReceipts.forEach(function(r) {
         data.push([
@@ -1957,10 +2294,15 @@ function downloadExcel() {
             r.testField || '',
             r.testPurpose || '',
             r.sampleTotalCount || 1,
-            r.feeSupply || 0,
-            r.feeVat || 0,
-            r.feeTotal || 0,
-            r.payDate || '미수금',
+            r._sampleIdx === 0 ? (r.feeSupply || 0) : '',
+            r._sampleIdx === 0 ? (r.feeVat    || 0) : '',
+            r._sampleIdx === 0 ? (r.feeTotal  || 0) : '',
+            r._sampleIdx === 0 ? (r._payStatusKey === '완납' ? '완납' : r._payStatusKey === '부분입금' ? '부분입금(' + Math.round(r._paidAmount/r.feeTotal*100) + '%)' : '미수금') : '',
+            r._sampleIdx === 0 ? (function(){
+                var pmts = r.payments || [];
+                if (!pmts.length) return r.payDate ? r.payDate + ' 완납' : '';
+                return pmts.map(function(p){ return (p.date||'-') + ' ' + Number(p.amount||0).toLocaleString() + '원(' + (p.method||'-') + ')'; }).join(' / ');
+            })() : '',
             r.salesRep || '',
             r.processingDeadline || '',
             (r.urgent === '긴급' || r.urgent === 'Y') ? '긴급' : '일반'

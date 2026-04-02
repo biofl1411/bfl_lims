@@ -246,6 +246,7 @@ input[type="date"]{padding:7px 10px;border:1px solid var(--gray-300);border-radi
             시험일지 양식
             <div style="display:flex;gap:4px">
               <button class="btn btn-sm btn-outline" onclick="loadDiaryDetail()" title="식약처 일지 조회">조회</button>
+              <button class="btn btn-sm btn-outline" onclick="printDiaryTemplate()" title="시험일지 인쇄" style="background:#f0f9ff;color:#0369a1;border-color:#7dd3fc">🖨️ 인쇄</button>
               <button class="btn btn-sm btn-primary" onclick="saveDiaryTemplate()" title="양식 저장">저장</button>
             </div>
           </div>
@@ -755,6 +756,23 @@ function renderFormTemplateDetail(ft) {
   html += '<div class="form-row"><div class="form-group"><label>SOP</label><input type="text" value="' + escA(a.sop) + '" readonly></div>';
   html += '<div class="form-group"><label>장비</label><input type="text" value="' + escA((a.equipment || []).join(', ')) + '" readonly></div></div>';
 
+  // 검사방법 (시험절차) — 없어도 편집 버튼 노출
+  html += '<details' + (a.testMethod ? ' open' : '') + ' style="border:1px solid #bfdbfe;border-radius:8px;overflow:hidden;margin-bottom:14px">';
+  html += '<summary style="padding:8px 13px;background:#1e40af;color:#fff;font-size:12px;font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center">';
+  html += '<span>📋 검사방법 (시험절차)' + (a.testMethod ? '' : ' <span style="font-size:10px;font-weight:400;opacity:.8">미설정</span>') + '</span>';
+  html += '<button onclick="event.preventDefault();event.stopPropagation();openTestMethodModal()" style="font-size:10px;padding:2px 9px;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:5px;cursor:pointer;margin-right:4px">✏️ 편집</button>';
+  html += '</summary>';
+  if (a.testMethod) {
+    // HTML 형식으로 저장된 경우 innerHTML 렌더링, plain text 감지 시 pre-wrap
+    var tmIsHtml = /<[a-z][\s\S]*>/i.test(a.testMethod);
+    html += '<div class="tm-view-content" style="padding:10px 14px;font-size:12px;line-height:1.8;color:#1e293b;background:#f0f9ff' + (tmIsHtml ? '' : ';white-space:pre-wrap') + '">';
+    html += tmIsHtml ? a.testMethod : escH(a.testMethod);
+    html += '</div>';
+  } else {
+    html += '<div style="padding:10px 14px;font-size:12px;color:#94a3b8;background:#f0f9ff">검사방법이 입력되지 않았습니다. ✏️ 편집 버튼을 눌러 추가하세요.</div>';
+  }
+  html += '</details>';
+
   // 표준물질정보 (수정 가능)
   var stdSection = getSectionByTitle(a, '표준물질정보');
   if (stdSection && stdSection.fields && stdSection.fields.length) {
@@ -820,8 +838,8 @@ function renderFormTemplateDetail(ft) {
     html += '</div>';
   }
 
-  // 계산식
-  if (a.calculations && a.calculations.length) {
+  // 계산식 (정성 미생물 항목은 표시 안 함)
+  if (a.calculations && a.calculations.length && !(_isMicroBiology(ft.testBasis) && !_isQuantitativeMicro(a))) {
     html += '<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px;margin-bottom:14px">';
     html += '<label style="font-size:12px;font-weight:700;color:#6b21a8;margin-bottom:8px;display:block">fx 계산식</label>';
     a.calculations.forEach(function(calc) {
@@ -838,21 +856,45 @@ function renderFormTemplateDetail(ft) {
     html += '</div>';
   }
 
+  // 첨부파일/사진 필드
+  var attachFields = a.attachmentFields || [];
+  if (attachFields.length) {
+    html += '<div style="border:1.5px solid #d1fae5;border-radius:8px;overflow:hidden;margin-bottom:14px">';
+    html += '<div style="background:#059669;color:#fff;font-size:12px;font-weight:700;padding:7px 13px">📎 첨부파일 / 사진</div>';
+    html += '<div style="padding:10px 14px;display:flex;flex-direction:column;gap:12px">';
+    attachFields.forEach(function(af) {
+      var fid = 'attach-' + escA(af.id);
+      html += '<div style="border:1px solid #a7f3d0;border-radius:7px;padding:10px 12px;background:#f0fdf4">';
+      html += '<label style="font-size:11px;font-weight:700;color:#065f46;display:block;margin-bottom:6px">' + escH(af.label || af.id) + '</label>';
+      html += '<input type="file" id="' + fid + '" accept="' + escA(af.accept || 'image/*') + '" onchange="onAttachChange(this,\'' + escA(af.id) + '\',' + (af.showPreview ? 'true' : 'false') + ')" style="font-size:12px">';
+      if (af.showPreview) {
+        html += '<div id="' + fid + '-preview" style="margin-top:8px;display:none">';
+        html += '<img id="' + fid + '-img" src="" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #a7f3d0;object-fit:contain">';
+        html += '</div>';
+      } else {
+        html += '<div id="' + fid + '-preview" style="margin-top:6px;font-size:12px;color:#065f46;display:none"></div>';
+      }
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
   // 저장 버튼
   html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
   html += '<button class="btn btn-primary" onclick="saveFormTemplateOverrides()" style="flex:1">💾 값 저장</button>';
+  html += '<button class="btn btn-outline btn-sm" onclick="openAttachConfigModal()" style="font-size:11px">📎 첨부파일 설정</button>';
   html += '</div>';
 
   // ── 모의 계산기 (해당 항목 전용) ──
-  if (a.isMicroForm || _isMicroBiology(ft.testBasis)) {
+  if ((a.isMicroForm || _isMicroBiology(ft.testBasis)) && _isQuantitativeMicro(a)) {
     // 미생물 표준평판법 전용 집락수 입력 폼
     html += '<details open style="border:1px solid #93c5fd;border-radius:10px;overflow:hidden;margin-bottom:14px">';
     html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#eff6ff,#dbeafe);cursor:pointer;font-size:13px;font-weight:600;color:#1d4ed8;display:flex;align-items:center;gap:8px;list-style:none">';
     html += '<span>🦠 미생물 집락수 입력 (모의 계산기)</span>';
     html += '<span style="margin-left:auto;font-size:10px;color:#60a5fa">▼</span></summary>';
     html += '<div style="padding:14px">' + _buildMicroForm(a) + '</div></details>';
-  } else if (a.calculations && a.calculations.length) {
-    // 이화학 등 일반 계산기
+  } else if (a.calculations && a.calculations.length && !(_isMicroBiology(ft.testBasis) && !_isQuantitativeMicro(a))) {
+    // 이화학 등 일반 계산기 (정성 미생물 항목은 제외)
     var _fm = {};
     (a.sections || []).forEach(function(sec) {
       (sec.fields || []).forEach(function(f) {
@@ -975,6 +1017,592 @@ function removeRoundingRule(idx) {
 }
 
 /* formTemplates 오버라이드 값 저장 */
+/* ── 검사방법 편집 모달 ── */
+function openTestMethodModal() {
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var current = (ft.analyzed && ft.analyzed.testMethod) || '';
+  var ed = document.getElementById('tm-editor');
+  if (ed) {
+    // plain text (줄바꿈만 있는 구형 데이터) 감지 → HTML 변환
+    if (current && !/<[a-z][\s\S]*>/i.test(current)) {
+      ed.innerHTML = current.split('\n').map(function(l){ return l ? '<p>' + escH(l) + '</p>' : '<p><br></p>'; }).join('');
+    } else {
+      ed.innerHTML = current;
+    }
+    // 저장된 표의 모든 셀에 contenteditable 보장
+    ed.querySelectorAll('td,th').forEach(function(c){ c.contentEditable = 'true'; });
+    // ★ 셀 범위 선택: 클릭 = 시작점, Shift+클릭 = 끝점 → 직사각형 하이라이트
+    window._tmSelStart = null; window._tmSelEnd = null;
+    ed.removeEventListener('mousedown', ed._tmCellTracker);
+    ed._tmCellTracker = function(e) {
+      var cell = e.target.closest('td,th');
+      if (!cell) return;
+      if (e.shiftKey && window._tmSelStart && window._tmSelStart.closest('table') === cell.closest('table')) {
+        // Shift 클릭 → 끝점 설정
+        window._tmSelEnd = cell;
+      } else {
+        // 일반 클릭 → 시작점 초기화
+        window._tmSelStart = cell;
+        window._tmSelEnd = null;
+        window._tmMergeTargetCell = cell; // 단일 셀 합치기 호환
+      }
+      _tmHighlightSelection();
+    };
+    ed.addEventListener('mousedown', ed._tmCellTracker);
+    // 열 너비 드래그 핸들 초기화
+    setTimeout(tmInitAllTablesResize, 80);
+  }
+  var modal = document.getElementById('test-method-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+async function saveTestMethod() {
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var ed = document.getElementById('tm-editor');
+  var val = ed ? ed.innerHTML.trim() : '';
+  // 완전히 빈 경우 null 처리
+  if (val === '' || val === '<br>' || val === '<p><br></p>') val = null;
+  if (!ft.analyzed) ft.analyzed = {};
+  ft.analyzed.testMethod = val || null;
+  try {
+    await db.collection('formTemplates').doc(ft._id).update({ 'analyzed.testMethod': val || null });
+    showToast('검사방법 저장됨', 'success');
+    document.getElementById('test-method-modal').style.display = 'none';
+    renderFormTemplateDetail(ft);
+  } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+}
+
+/* ── 검사방법 편집기 툴바 함수들 ── */
+function tmInsertTable(btn) {
+  // 기존 패널 제거 (토글)
+  var oldP = document.getElementById('tm-insert-table-panel');
+  if (oldP) { oldP.parentNode.removeChild(oldP); return; }
+
+  var btnRect = (btn || document.querySelector('[title="표 삽입"]')).getBoundingClientRect();
+  var panel = document.createElement('div');
+  panel.id = 'tm-insert-table-panel';
+  panel.style.cssText = 'position:fixed;top:' + (btnRect.bottom+4) + 'px;left:' + Math.max(4,btnRect.left) + 'px;background:#fff;border:1.5px solid #1e40af;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:999999;padding:12px 16px;min-width:200px;font-size:12px;color:#1e293b';
+  panel.innerHTML =
+    '<div style="font-weight:700;margin-bottom:10px;color:#1e40af">⊞ 표 삽입</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">'
+    + '<label style="width:24px">행</label><input id="tm-tbl-rows" type="number" value="3" min="1" max="20" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px">'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">'
+    + '<label style="width:24px">열</label><input id="tm-tbl-cols" type="number" value="3" min="1" max="10" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px">'
+    + '</div>'
+    + '<div style="display:flex;gap:6px;justify-content:flex-end">'
+    + '<button id="tm-tbl-cancel" style="padding:4px 12px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">취소</button>'
+    + '<button id="tm-tbl-ok" style="padding:4px 12px;border:none;border-radius:5px;background:#1e40af;color:#fff;cursor:pointer;font-size:12px;font-weight:600">삽입</button>'
+    + '</div>';
+  panel.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+  document.body.appendChild(panel);
+
+  document.getElementById('tm-tbl-cancel').addEventListener('click', function(){
+    var p=document.getElementById('tm-insert-table-panel'); if(p) p.parentNode.removeChild(p);
+  });
+  document.getElementById('tm-tbl-ok').addEventListener('click', function(){
+    var rows = parseInt(document.getElementById('tm-tbl-rows').value||'3');
+    var cols = parseInt(document.getElementById('tm-tbl-cols').value||'3');
+    var p=document.getElementById('tm-insert-table-panel'); if(p) p.parentNode.removeChild(p);
+    if(isNaN(rows)||rows<1) rows=3; if(isNaN(cols)||cols<1) cols=3;
+    var colW = Math.floor(100/cols)+'%';
+    var html='<table><thead><tr>';
+    for(var c=0;c<cols;c++) html+='<th contenteditable="true" style="width:'+colW+'">항목'+(c+1)+'</th>';
+    html+='</tr></thead><tbody>';
+    for(var r=0;r<rows;r++){html+='<tr>';for(var c2=0;c2<cols;c2++) html+='<td contenteditable="true">&nbsp;</td>';html+='</tr>';}
+    html+='</tbody></table><p><br></p>';
+    document.getElementById('tm-editor').focus();
+    document.execCommand('insertHTML',false,html);
+    setTimeout(tmInitAllTablesResize, 80);
+  });
+  setTimeout(function(){
+    document.addEventListener('mousedown',function _c(e){
+      var p=document.getElementById('tm-insert-table-panel');
+      if(!p){document.removeEventListener('mousedown',_c);return;}
+      if(!p.contains(e.target)){p.parentNode.removeChild(p);document.removeEventListener('mousedown',_c);}
+    });
+  },50);
+  return; // 아래 구버전 코드 실행 안 함
+  document.execCommand('insertHTML', false, html);
+}
+
+/* ── 표 열 너비 드래그 조정 (경계 감지 방식 — DOM 변경 없음) ── */
+function tmInitTableResize(tbl) {
+  // 중복 초기화 방지
+  if (tbl._tmResizeInited) return;
+  tbl._tmResizeInited = true;
+  var headerRow = tbl.querySelector('thead tr') || tbl.rows[0];
+  if (!headerRow) return;
+  // 헤더 셀 픽셀 너비 고정
+  Array.from(headerRow.cells).forEach(function(th) {
+    var curW = th.getBoundingClientRect().width;
+    if (curW > 0) th.style.width = curW + 'px';
+  });
+  var THRESHOLD = 6; // 경계에서 6px 이내 → 리사이즈 모드
+  var resizing = false;
+  tbl.addEventListener('mousemove', function(e) {
+    if (resizing) return;
+    var cell = e.target.closest('td,th');
+    if (!cell || !tbl.contains(cell)) { tbl.style.cursor = ''; return; }
+    var rect = cell.getBoundingClientRect();
+    tbl.style.cursor = (rect.right - e.clientX <= THRESHOLD) ? 'col-resize' : '';
+  });
+  tbl.addEventListener('mouseleave', function() { if (!resizing) tbl.style.cursor = ''; });
+  tbl.addEventListener('mousedown', function(e) {
+    var cell = e.target.closest('td,th');
+    if (!cell || !tbl.contains(cell)) return;
+    var rect = cell.getBoundingClientRect();
+    if (rect.right - e.clientX > THRESHOLD) return;
+    // 헤더에서 같은 열 th 찾기
+    var colIdx = cell.cellIndex;
+    var refTh = headerRow.cells[colIdx];
+    if (!refTh) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizing = true;
+    tbl.style.cursor = 'col-resize';
+    var startX = e.clientX;
+    var startW = refTh.getBoundingClientRect().width;
+    function onMove(ev) {
+      refTh.style.width = Math.max(30, startW + (ev.clientX - startX)) + 'px';
+    }
+    function onUp() {
+      resizing = false;
+      tbl.style.cursor = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+function tmInitAllTablesResize() {
+  var ed = document.getElementById('tm-editor');
+  if (!ed) return;
+  ed.querySelectorAll('table').forEach(function(tbl) { tmInitTableResize(tbl); });
+}
+
+function _tmGetActiveTable() {
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  var node = sel.getRangeAt(0).startContainer;
+  while (node && node !== document.getElementById('tm-editor')) {
+    if (node.nodeName === 'TABLE') return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+
+function _tmGetActiveCell() {
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  var node = sel.getRangeAt(0).startContainer;
+  while (node && node !== document.getElementById('tm-editor')) {
+    if (node.nodeName === 'TD' || node.nodeName === 'TH') return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+
+function tmTableAddRow() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  var tbody = tbl.querySelector('tbody') || tbl;
+  var rows = tbody.rows;
+  var refRow = null;
+  if (cell) {
+    var tr = cell.parentElement;
+    // tbody에 있는 행이면 그 아래에 삽입
+    if (tr && tr.parentElement === tbody) refRow = tr;
+  }
+  var cols = tbl.rows[0] ? tbl.rows[0].cells.length : 1;
+  var newRow = tbody.insertRow(refRow ? Array.from(tbody.rows).indexOf(refRow) + 1 : rows.length);
+  for (var i = 0; i < cols; i++) {
+    var td = newRow.insertCell(i);
+    td.innerHTML = '&nbsp;';
+    td.contentEditable = 'true';
+  }
+}
+
+function tmTableAddCol() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  var colIdx = cell ? cell.cellIndex + 1 : (tbl.rows[0] ? tbl.rows[0].cells.length : 0);
+  Array.from(tbl.rows).forEach(function(row, ri) {
+    var isHead = row.parentElement && row.parentElement.tagName === 'THEAD';
+    if (isHead && row.querySelector('th')) {
+      var th = document.createElement('th');
+      th.innerHTML = '항목';
+      th.contentEditable = 'true';
+      var ref = row.cells[colIdx] || null;
+      row.insertBefore(th, ref);
+    } else {
+      var newCell = row.insertCell(colIdx);
+      newCell.innerHTML = '&nbsp;';
+      newCell.contentEditable = 'true';
+    }
+  });
+  // 리사이즈 재초기화
+  var hr3 = tbl.querySelector('thead tr') || tbl.rows[0];
+  if (hr3) Array.from(hr3.cells).forEach(function(th) {
+    var curW = th.getBoundingClientRect().width;
+    if (curW > 0) th.style.width = curW + 'px';
+  });
+}
+
+function tmTableDelRow() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('삭제할 행의 셀을 클릭하세요', 'warning'); return; }
+  var tr = cell.parentElement;
+  var tbody = tbl.querySelector('tbody') || tbl;
+  if (tbody.rows.length <= 1) { showToast('행이 1개뿐이라 삭제할 수 없습니다', 'warning'); return; }
+  tr.parentElement.removeChild(tr);
+}
+
+function tmTableDelCol() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('삭제할 열의 셀을 클릭하세요', 'warning'); return; }
+  var colIdx = cell.cellIndex;
+  if (tbl.rows[0] && tbl.rows[0].cells.length <= 1) { showToast('열이 1개뿐이라 삭제할 수 없습니다', 'warning'); return; }
+  Array.from(tbl.rows).forEach(function(row) {
+    if (row.cells[colIdx]) row.deleteCell(colIdx);
+  });
+  // 리사이즈 재초기화 (열 변경 후 헤더 너비 픽셀 재고정)
+  var hr2 = tbl.querySelector('thead tr') || tbl.rows[0];
+  if (hr2) Array.from(hr2.cells).forEach(function(th) {
+    var curW = th.getBoundingClientRect().width;
+    if (curW > 0) th.style.width = curW + 'px';
+  });
+}
+
+function tmEqualCols() {
+  var tbl = _tmGetActiveTable();
+  if (!tbl) { showToast('표 안에 커서를 놓으세요', 'warning'); return; }
+  var headerRow = tbl.querySelector('thead tr') || tbl.rows[0];
+  if (!headerRow) return;
+  var colCount = headerRow.cells.length;
+  if (colCount < 1) return;
+  var pct = Math.floor(100 / colCount);
+  var remain = 100 - pct * colCount;
+  Array.from(headerRow.cells).forEach(function(th, i) {
+    th.style.width = (pct + (i === 0 ? remain : 0)) + '%';
+  });
+  showToast('열 너비 균등 배분 완료', 'success');
+}
+
+function tmSetFontSize(size) {
+  if (!size) return;
+  document.getElementById('tm-editor').focus();
+  document.execCommand('fontSize', false, size);
+}
+
+/* ── 셀 위치 계산 헬퍼 (colspan/rowspan 고려) ── */
+function _tmGetCellColIndex(cell) {
+  var row = cell.parentElement;
+  var idx = 0;
+  for (var i = 0; i < row.cells.length; i++) {
+    if (row.cells[i] === cell) return idx;
+    idx += parseInt(row.cells[i].colSpan || 1);
+  }
+  return idx;
+}
+function _tmGetCellAtCol(row, colIndex) {
+  var idx = 0;
+  for (var i = 0; i < row.cells.length; i++) {
+    if (idx === colIndex) return row.cells[i];
+    idx += parseInt(row.cells[i].colSpan || 1);
+    if (idx > colIndex) return null; // colIndex가 병합셀 내부
+  }
+  return null;
+}
+
+/* ── 셀 범위 하이라이트 ── */
+function _tmHighlightSelection() {
+  var ed = document.getElementById('tm-editor');
+  ed.querySelectorAll('td.tm-selected,th.tm-selected,td.tm-sel-range,th.tm-sel-range').forEach(function(c){
+    c.classList.remove('tm-selected','tm-sel-range');
+  });
+  var s = window._tmSelStart, e2 = window._tmSelEnd;
+  if (!s) return;
+  if (!e2 || e2 === s) { s.classList.add('tm-selected'); return; }
+  var tbl = s.closest('table');
+  if (!tbl) return;
+  var allRows = Array.from(tbl.rows);
+  var r1 = allRows.indexOf(s.parentElement), r2 = allRows.indexOf(e2.parentElement);
+  var c1 = _tmGetCellColIndex(s), c2 = _tmGetCellColIndex(e2);
+  var minR=Math.min(r1,r2), maxR=Math.max(r1,r2), minC=Math.min(c1,c2), maxC=Math.max(c1,c2);
+  for (var r=minR; r<=maxR; r++) {
+    for (var c=minC; c<=maxC; c++) {
+      var cell = _tmGetCellAtCol(allRows[r], c);
+      if (cell) cell.classList.add('tm-sel-range');
+    }
+  }
+}
+
+/* ── 셀 합치기 (범위 선택 방식) ── */
+function tmMergeSelection(btn) {
+  var s = window._tmSelStart, e2 = window._tmSelEnd;
+  if (!s) { showToast('합칠 셀을 클릭(또는 Shift+클릭으로 범위)하세요', 'warning'); return; }
+
+  // 범위가 선택된 경우 → 바로 합치기
+  if (e2 && e2 !== s) {
+    var tbl = s.closest('table');
+    if (!tbl) return;
+    var allRows = Array.from(tbl.rows);
+    var r1=allRows.indexOf(s.parentElement), r2=allRows.indexOf(e2.parentElement);
+    var c1=_tmGetCellColIndex(s), c2=_tmGetCellColIndex(e2);
+    var minR=Math.min(r1,r2), maxR=Math.max(r1,r2), minC=Math.min(c1,c2), maxC=Math.max(c1,c2);
+    var keepCell = _tmGetCellAtCol(allRows[minR], minC);
+    if (!keepCell) return;
+    // ★ 먼저 제거할 셀 전부 수집 후 한꺼번에 제거 (중간 제거 시 인덱스 밀림 방지)
+    var toRemove = [];
+    for (var r=minR; r<=maxR; r++) {
+      for (var c=minC; c<=maxC; c++) {
+        if (r===minR && c===minC) continue;
+        var cell = _tmGetCellAtCol(allRows[r], c);
+        if (cell) toRemove.push(cell);
+      }
+    }
+    toRemove.forEach(function(c){ if (c.parentElement) c.parentElement.removeChild(c); });
+    keepCell.rowSpan = maxR-minR+1;
+    keepCell.colSpan = maxC-minC+1;
+    keepCell.contentEditable = 'true';
+    keepCell.classList.remove('tm-sel-range','tm-selected');
+    window._tmSelStart = null; window._tmSelEnd = null;
+    window._tmMergeTargetCell = null;
+    showToast('셀 합치기 완료', 'success');
+    return;
+  }
+
+  // 단일 셀 선택 → 방향/칸수 패널 표시
+  window._tmMergeTargetCell = s;
+  tmShowMergePanel(btn);
+}
+
+/* ── 셀 합치기 패널 ── */
+function tmShowMergePanel(btn) {
+  // 기존 패널 제거 (토글)
+  var old = document.getElementById('tm-merge-panel');
+  if (old) { old.parentNode.removeChild(old); return; }
+
+  // ★ 클릭 추적으로 저장된 셀 우선, 없으면 현재 selection에서 탐색
+  if (!window._tmMergeTargetCell) window._tmMergeTargetCell = _tmGetActiveCell();
+
+  // 버튼 위치 기준 fixed 좌표 계산 (모달 overflow:hidden 우회)
+  var btnRect = btn.getBoundingClientRect();
+  var topPos = btnRect.bottom + 4;
+  var leftPos = Math.max(4, Math.min(btnRect.left, window.innerWidth - 240));
+
+  // 선택된 셀 안내 텍스트
+  var cellInfo = window._tmMergeTargetCell
+    ? '<span style="color:#0369a1;font-weight:600">"' + (window._tmMergeTargetCell.textContent.trim().substring(0, 12) || '빈 셀') + '"</span> 기준'
+    : '<span style="color:#dc2626">선택된 셀 없음 — 표 셀을 먼저 클릭하세요</span>';
+
+  var panel = document.createElement('div');
+  panel.id = 'tm-merge-panel';
+  panel.style.cssText = 'position:fixed;top:' + topPos + 'px;left:' + leftPos + 'px;background:#fff;border:1.5px solid #0369a1;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:999999;padding:12px 16px;min-width:220px;font-size:12px;color:#1e293b';
+  panel.innerHTML =
+    '<div style="font-weight:700;margin-bottom:8px;color:#0369a1">⊡ 셀 합치기</div>'
+    + '<div style="margin-bottom:10px;font-size:11px;background:#f0f9ff;border-radius:5px;padding:5px 8px">' + cellInfo + '</div>'
+    + '<div style="margin-bottom:10px">'
+    + '<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:5px;cursor:pointer;margin-bottom:4px;font-size:12px"><input type="radio" name="tm-merge-dir-r" value="r" checked id="tm-merge-dir-r" style="cursor:pointer"> → 오른쪽 (가로 합치기)</label>'
+    + '<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:5px;cursor:pointer;font-size:12px"><input type="radio" name="tm-merge-dir-r" value="d" id="tm-merge-dir-d" style="cursor:pointer"> ↓ 아래 (세로 합치기)</label>'
+    + '</div>'
+    + '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+    + '<label style="width:36px;flex-shrink:0">칸 수</label>'
+    + '<input id="tm-merge-n" type="number" value="2" min="2" max="20" style="flex:1;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px">'
+    + '<span style="font-size:11px;color:#94a3b8">(현재 포함)</span>'
+    + '</div>'
+    + '<div style="display:flex;gap:6px;justify-content:flex-end">'
+    + '<button id="tm-merge-cancel" style="padding:4px 14px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">취소</button>'
+    + '<button id="tm-merge-ok" style="padding:4px 14px;border:none;border-radius:5px;background:#0369a1;color:#fff;cursor:pointer;font-size:12px;font-weight:600">합치기</button>'
+    + '</div>';
+
+  panel.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+  document.body.appendChild(panel);  // body에 붙여 모달 overflow:hidden 우회
+
+  document.getElementById('tm-merge-cancel').addEventListener('click', function() {
+    var p = document.getElementById('tm-merge-panel');
+    if (p) p.parentNode.removeChild(p);
+  });
+  document.getElementById('tm-merge-ok').addEventListener('click', function() { tmDoMerge(); });
+
+  setTimeout(function(){
+    document.addEventListener('mousedown', function _close(e){
+      var p = document.getElementById('tm-merge-panel');
+      if (!p) { document.removeEventListener('mousedown', _close); return; }
+      if (!p.contains(e.target) && !btn.contains(e.target)) {
+        p.parentNode.removeChild(p);
+        document.removeEventListener('mousedown', _close);
+      }
+    });
+  }, 50);
+}
+
+function tmDoMerge() {
+  var dirEl = document.querySelector('input[name="tm-merge-dir-r"]:checked');
+  var dir = dirEl ? dirEl.value : 'r';
+  var n = parseInt((document.getElementById('tm-merge-n') || {}).value || '2');
+  var panel = document.getElementById('tm-merge-panel');
+  if (panel) panel.parentNode.removeChild(panel);
+  if (isNaN(n) || n < 2) return;
+
+  // 패널 열 때 저장된 셀 우선 사용
+  var cell = window._tmMergeTargetCell || _tmGetActiveCell();
+  if (!cell || !cell.parentElement) { showToast('합칠 셀을 먼저 클릭한 뒤 셀 합치기를 누르세요', 'warning'); return; }
+
+  if (dir === 'r') {
+    /* 가로 합치기 (colspan) */
+    var row = cell.parentElement;
+    var arrIdx = Array.from(row.cells).indexOf(cell);
+    var toRemove = [];
+    for (var i = 1; i < n; i++) {
+      if (row.cells[arrIdx + i]) toRemove.push(row.cells[arrIdx + i]);
+    }
+    if (toRemove.length < n - 1) { showToast('오른쪽에 셀이 부족합니다', 'warning'); return; }
+    toRemove.forEach(function(c) { row.removeChild(c); });
+    cell.colSpan = (parseInt(cell.colSpan || 1)) + toRemove.length;
+    cell.contentEditable = 'true';
+
+  } else {
+    /* 세로 합치기 (rowspan) */
+    var tbl = _tmGetActiveTable();
+    if (!tbl) return;
+    var allRows = Array.from(tbl.rows);
+    var rowIdx = allRows.indexOf(cell.parentElement);
+    var colIdx = _tmGetCellColIndex(cell);
+    var toRemove2 = [];
+    for (var r = 1; r < n; r++) {
+      var tRow = allRows[rowIdx + r];
+      if (!tRow) break;
+      var tCell = _tmGetCellAtCol(tRow, colIdx);
+      if (tCell) toRemove2.push(tCell);
+    }
+    if (toRemove2.length < n - 1) { showToast('아래에 셀이 부족합니다', 'warning'); return; }
+    toRemove2.forEach(function(c) { c.parentElement.removeChild(c); });
+    cell.rowSpan = (parseInt(cell.rowSpan || 1)) + toRemove2.length;
+    cell.contentEditable = 'true';
+  }
+  showToast('셀 합치기 완료', 'success');
+}
+
+function tmSplitCell() {
+  var cell = _tmGetActiveCell();
+  if (!cell) { showToast('나눌 셀을 클릭하세요', 'warning'); return; }
+  var colspan = parseInt(cell.colSpan || 1);
+  var rowspan = parseInt(cell.rowSpan || 1);
+  if (colspan <= 1 && rowspan <= 1) { showToast('이미 단일 셀입니다', 'warning'); return; }
+
+  var row = cell.parentElement;
+  var isHdr = cell.tagName === 'TH';
+  var arrIdx = Array.from(row.cells).indexOf(cell);
+  var colIdx = _tmGetCellColIndex(cell);
+
+  /* colspan 분리 */
+  if (colspan > 1) {
+    cell.colSpan = 1;
+    for (var i = 1; i < colspan; i++) {
+      var nc = document.createElement(isHdr ? 'th' : 'td');
+      nc.innerHTML = '&nbsp;';
+      nc.contentEditable = 'true';
+      var refEl = row.cells[arrIdx + i] || null;
+      row.insertBefore(nc, refEl);
+    }
+  }
+
+  /* rowspan 분리 */
+  if (rowspan > 1) {
+    var tbl2 = _tmGetActiveTable();
+    if (!tbl2) return;
+    var allRows2 = Array.from(tbl2.rows);
+    var rowIdx2 = allRows2.indexOf(row);
+    cell.rowSpan = 1;
+    for (var r2 = 1; r2 < rowspan; r2++) {
+      var tRow2 = allRows2[rowIdx2 + r2];
+      if (!tRow2) continue;
+      var nc2 = document.createElement(isHdr ? 'th' : 'td');
+      nc2.innerHTML = '&nbsp;';
+      nc2.contentEditable = 'true';
+      var refCell2 = _tmGetCellAtCol(tRow2, colIdx);
+      tRow2.insertBefore(nc2, refCell2 || null);
+    }
+  }
+  showToast('셀 나누기 완료', 'success');
+}
+
+function tmInsertBlock(tag) {
+  document.getElementById('tm-editor').focus();
+  document.execCommand('formatBlock', false, tag);
+}
+
+function tmInsertHr() {
+  document.getElementById('tm-editor').focus();
+  document.execCommand('insertHTML', false, '<hr><p><br></p>');
+}
+
+/* ── 첨부파일 설정 모달 (기존 기록서 직접 편집) ── */
+function openAttachConfigModal() {
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var a = ft.analyzed || {};
+  var fields = (a.attachmentFields || []).map(function(f) { return Object.assign({}, f); });
+
+  var modal = document.getElementById('attach-config-modal');
+  if (!modal) return;
+
+  window._attachModalFields = fields;
+
+  function buildRows() {
+    var html = '';
+    fields.forEach(function(f, i) {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:7px">';
+      html += '<span style="font-size:11px;font-weight:700;color:#065f46;min-width:20px">#'+(i+1)+'</span>';
+      html += '<input type="text" value="'+(f.label||'').replace(/"/g,'&quot;')+'" placeholder="필드 라벨" oninput="window._attachModalFields['+ i+'].label=this.value" style="flex:1;padding:5px 8px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">';
+      html += '<select onchange="window._attachModalFields['+ i+'].accept=this.value" style="padding:5px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">'
+        +'<option value="image/*"'+(f.accept==='image/*'?' selected':'')+'>이미지</option>'
+        +'<option value="*"'+(f.accept==='*'?' selected':'')+'>모든 파일</option>'
+        +'</select>';
+      html += '<select onchange="window._attachModalFields['+ i+'].showPreview=(this.value===\'true\')" style="padding:5px;border:1px solid #d1fae5;border-radius:5px;font-size:12px">'
+        +'<option value="true"'+(f.showPreview?' selected':'')+'>이미지 미리보기</option>'
+        +'<option value="false"'+(!f.showPreview?' selected':'')+'>파일명만</option>'
+        +'</select>';
+      html += '<button onclick="window._attachModalFields.splice('+i+',1);document.getElementById(\'acm-rows\').innerHTML=buildAttachRows()" style="padding:3px 8px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:11px;cursor:pointer">✕</button>';
+      html += '</div>';
+    });
+    return html;
+  }
+  window.buildAttachRows = buildRows;
+
+  var modalBody = document.getElementById('acm-rows');
+  if (modalBody) modalBody.innerHTML = buildRows();
+  modal.style.display = 'flex';
+}
+
+async function saveAttachConfig() {
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (!ft || !ft._isFormTemplate) return;
+  var fields = (window._attachModalFields || []).map(function(f, i) {
+    return { id: f.id || ('attach_'+(i+1)), label: f.label || ('첨부 '+(i+1)), accept: f.accept || 'image/*', showPreview: !!f.showPreview };
+  }).filter(function(f) { return f.label; });
+
+  if (!ft.analyzed) ft.analyzed = {};
+  ft.analyzed.attachmentFields = fields;
+  try {
+    await db.collection('formTemplates').doc(ft._id).update({ 'analyzed.attachmentFields': fields });
+    showToast('첨부파일 설정 저장됨', 'success');
+    document.getElementById('attach-config-modal').style.display = 'none';
+    renderFormTemplateDetail(ft);
+  } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+}
+
 async function saveFormTemplateOverrides() {
   var ft = _filteredDiaryTemplates[_selectedDiaryTmplIdx];
   if (!ft || !ft._isFormTemplate) { showToast('기록서를 선택하세요', 'error'); return; }
@@ -2373,6 +3001,33 @@ async function copyDiary() {
 
 
 /* ============================================================
+   첨부파일 / 사진 업로드 미리보기
+   ============================================================ */
+function onAttachChange(input, fieldId, showPreview) {
+  var fid = 'attach-' + fieldId;
+  var previewEl = document.getElementById(fid + '-preview');
+  if (!previewEl) return;
+  var file = input.files && input.files[0];
+  if (!file) { previewEl.style.display = 'none'; return; }
+
+  if (showPreview && file.type.startsWith('image/')) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = document.getElementById(fid + '-img');
+      if (img) { img.src = e.target.result; previewEl.style.display = ''; }
+    };
+    reader.readAsDataURL(file);
+  } else {
+    // 파일명만 표시
+    previewEl.style.display = '';
+    previewEl.innerHTML = '📄 <strong>' + escH(file.name) + '</strong>'
+      + ' <span style="color:#9ca3af;font-size:11px">(' + (file.size > 1024*1024
+        ? (file.size/1024/1024).toFixed(1)+'MB'
+        : Math.round(file.size/1024)+'KB') + ')</span>';
+  }
+}
+
+/* ============================================================
    시험기록서 — 유형 탭 전환
    ============================================================ */
 function switchRecType(type, el) {
@@ -2782,13 +3437,30 @@ function simCalc(ci) {
    미생물 표준평판법 전용 입력폼 + 모의 계산기
    (formCollector.html에서 이식)
    ══════════════════════════════════════ */
-var _MICRO_DILUTIONS = [10, 100, 1000, 10000, 100000];
+var _MICRO_DILUTIONS = [1, 10, 100, 1000, 10000, 100000]; // 0번=원액(1배)
 
 function _isMicroBiology(testBasis) {
   if (!testBasis) return false;
   var b = testBasis.trim();
+  // '제8.'은 식품공전 제8장 전체(중금속·농약 등 포함)에 해당해 너무 광범위하므로 제외
   return b.indexOf('미생물시험법') >= 0 || b.indexOf('일반시험법 4.') >= 0
-    || b.indexOf('제8.') >= 0 || b.indexOf('미생물') >= 0;
+    || b.indexOf('미생물') >= 0;
+}
+
+/* 정량 미생물(세균수·대장균군 등 CFU 계수) 여부 판별
+   살모넬라·리스테리아 등 정성(검출/불검출) 항목은 false */
+function _isQuantitativeMicro(analyzed) {
+  var rule = (analyzed || {}).judgmentRule || {};
+  var stdText = (rule.standardText || '').toLowerCase();
+  var unit = (rule.unit || '').toUpperCase();
+  // 1순위: 판정기준 텍스트에 /25g 포함 → 정성시험 (살모넬라, 리스테리아 등)
+  if (stdText.indexOf('/25g') >= 0) return false;
+  // 2순위: 단위에 CFU 포함 → 정량
+  if (unit.indexOf('CFU') >= 0) return true;
+  // 3순위: 단위에 / 포함하되 CFU 없음 (/25g, /g 등) → 정성
+  if (unit.indexOf('/') >= 0) return false;
+  // 이외: isMicroForm 플래그 명시적으로 설정된 경우만 집락수 폼 표시
+  return !!(analyzed && analyzed.isMicroForm);
 }
 
 function _getMicroNCount(analyzed) {
@@ -2817,35 +3489,52 @@ function _buildMicroForm(analyzed) {
     + '<span style="font-size:10px;background:#f0fdf4;border:0.5px solid #86efac;padding:1px 6px;border-radius:3px;color:#15803d">■ 유효(15~300)</span>'
     + '<span style="font-size:10px;background:#fffbeb;border:0.5px solid #fcd34d;padding:1px 6px;border-radius:3px;color:#92400e">■ 15미만</span>'
     + '<span style="font-size:10px;background:#fff7ed;border:0.5px solid #fb923c;padding:1px 6px;border-radius:3px;color:#c2410c">■ 300초과</span>'
-    + '<span style="font-size:10px;background:#f3f4f6;border:0.5px solid #d1d5db;padding:1px 6px;border-radius:3px;color:#6b7280">■ ND</span>'
+    + '<span style="font-size:10px;background:#f9fafb;border:0.5px solid #e5e7eb;padding:1px 6px;border-radius:3px;color:#9ca3af">■ ND(기본값, 클릭 시 입력)</span>'
+    + '<span style="font-size:10px;background:#fff7ed;border:0.5px solid #fb923c;padding:1px 6px;border-radius:3px;color:#c2410c">더블클릭 → TNTC</span>'
     + '</div></div>';
-  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 130) + 'px">';
+  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:' + (80 + nCount * 88) + 'px">';
   h += '<thead><tr><th rowspan="2" style="background:#1e3a8a;color:#fff;padding:6px 8px;border:0.5px solid #1e40af;width:72px;text-align:center">희석배수</th>';
-  for (var n = 1; n <= nCount; n++) h += '<th colspan="3" style="background:#1e3a8a;color:#fff;padding:5px;border:0.5px solid #1e40af;text-align:center">n' + n + '</th>';
+  for (var n = 1; n <= nCount; n++) h += '<th colspan="2" style="background:#1e3a8a;color:#fff;padding:5px;border:0.5px solid #1e40af;text-align:center">n' + n + '</th>';
   h += '</tr><tr>';
   for (var n = 1; n <= nCount; n++) {
     h += '<th style="background:#374151;color:#fff;padding:4px;border:0.5px solid #4b5563;font-size:10px">평판1</th>';
     h += '<th style="background:#374151;color:#fff;padding:4px;border:0.5px solid #4b5563;font-size:10px">평판2</th>';
-    h += '<th style="background:#1e40af;color:#bfdbfe;padding:4px;border:0.5px solid #1e40af;font-size:10px">ND</th>';
   }
   h += '</tr></thead><tbody>';
   // rule 객체를 전역 변수에 저장 (HTML 속성에 JSON 직접 넣으면 큰따옴표 깨짐)
   window._mcRule = rule;
   window._mcNCount = nCount;
   _MICRO_DILUTIONS.forEach(function(dil, di) {
-    h += '<tr><td style="background:#f9fafb;padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">1:' + dil.toLocaleString() + '</td>';
+    var dilLabel = dil === 1 ? '<span style="color:#7c3aed;font-weight:700">원액</span>' : '1:' + dil.toLocaleString();
+    var rowBg = dil === 1 ? 'background:#faf5ff;' : 'background:#f9fafb;';
+    h += '<tr id="mc-row-' + di + '" style="opacity:0.4">';
+    h += '<td style="' + rowBg + 'padding:4px 6px;border:0.5px solid #e5e7eb;font-weight:500;text-align:center;white-space:nowrap">'
+       + '<label style="display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer">'
+       + '<input type="checkbox" id="mc-row-en-' + di + '" onchange="_mcToggleRow(' + di + ')" style="width:14px;height:14px;cursor:pointer;accent-color:#1d4ed8">'
+       + dilLabel + '</label></td>';
     for (var n = 1; n <= nCount; n++) {
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-0" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" min="0" id="mc-' + n + '-' + di + '-1" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" style="width:52px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
-      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="checkbox" id="mc-nd-' + n + '-' + di + '" onchange="_mcToggleND(' + n + ',' + di + ',window._mcNCount,window._mcRule)" style="width:13px;height:13px"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-0" value="ND" disabled onfocus="_mcFocus(this)" onblur="_mcBlur(this,' + n + ',' + di + ')" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" ondblclick="_mcClickTNTC(this,' + n + ',' + di + ')" title="더블클릭 → TNTC" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px;color:#9ca3af;background:#f3f4f6"></td>';
+      h += '<td style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-' + n + '-' + di + '-1" value="ND" disabled onfocus="_mcFocus(this)" onblur="_mcBlur(this,' + n + ',' + di + ')" oninput="_mcUpdateRange(' + n + ',' + di + ');_mcCalcAll(window._mcNCount,window._mcRule)" ondblclick="_mcClickTNTC(this,' + n + ',' + di + ')" title="더블클릭 → TNTC" style="width:58px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px;color:#9ca3af;background:#f3f4f6"></td>';
     }
     h += '</tr>';
   });
   h += '<tr style="background:#f0fdf4"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#6b7280;text-align:center">채취량(g)</td>';
-  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="mc-w-' + n + '" placeholder="g" style="width:80px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:3px;border:0.5px solid #e5e7eb;text-align:center"><input type="number" step="0.1" id="mc-w-' + n + '" placeholder="g" style="width:80px;height:22px;text-align:center;border:0.5px solid #e5e7eb;border-radius:4px;font-size:11px"></td>';
   h += '</tr>';
-  h += '<tr style="background:#eff6ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:500;font-size:10px;color:#1d4ed8;text-align:center">결과</td>';
-  for (var n = 1; n <= nCount; n++) h += '<td colspan="3" style="padding:5px;border:0.5px solid #e5e7eb;text-align:center;font-weight:500;font-size:13px" id="mc-result-' + n + '">-</td>';
+  h += '<tr style="background:#fff7ed"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#c2410c;text-align:center;line-height:1.4">밀집평판<br><span style="font-size:9px">(1cm²)</span></td>';
+  for (var n = 1; n <= nCount; n++) {
+    h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-dense-' + n + '-0" placeholder="평판1" oninput="_mcCalcAll(window._mcNCount,window._mcRule)" title="평판1: 1cm² 집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #fb923c;border-radius:4px;font-size:11px;background:#fff7ed"></td>';
+    h += '<td style="padding:2px;border:0.5px solid #e5e7eb;text-align:center"><input type="text" id="mc-dense-' + n + '-1" placeholder="평판2" oninput="_mcCalcAll(window._mcNCount,window._mcRule)" title="평판2: 1cm² 집락수" style="width:52px;height:22px;text-align:center;border:0.5px solid #fb923c;border-radius:4px;font-size:11px;background:#fff7ed"></td>';
+  }
+  h += '</tr>';
+  h += '<tr style="background:#f0f9ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#0369a1;text-align:center">계산식</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:4px 6px;border:0.5px solid #e5e7eb;text-align:center;font-size:10px;color:#6b7280" id="mc-formula-' + n + '">-</td>';
+  h += '</tr>';
+  h += '<tr style="background:#fffbeb"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-size:10px;color:#92400e;text-align:center">시험결과</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:4px 6px;border:0.5px solid #e5e7eb;text-align:center;font-size:11px;color:#374151" id="mc-raw-' + n + '">-</td>';
+  h += '</tr>';
+  h += '<tr style="background:#eff6ff"><td style="padding:5px 6px;border:0.5px solid #e5e7eb;font-weight:700;font-size:10px;color:#1d4ed8;text-align:center">최종판정</td>';
+  for (var n = 1; n <= nCount; n++) h += '<td colspan="2" style="padding:5px;border:0.5px solid #e5e7eb;text-align:center;font-weight:700;font-size:13px" id="mc-result-' + n + '">-</td>';
   h += '</tr></tbody></table></div>';
   h += '<div id="mc-judge-box" style="margin-top:10px;padding:10px 14px;border-radius:8px;border:1.5px solid #86efac;background:#f0fdf4;display:flex;align-items:center;gap:10px">'
     + '<span id="mc-judge-icon" style="font-size:20px">—</span><div>'
@@ -2854,36 +3543,93 @@ function _buildMicroForm(analyzed) {
   return h;
 }
 
+function _mcSetND(inp) {
+  inp.value = 'ND';
+  inp.style.color = '#9ca3af';
+  inp.style.background = '#f9fafb';
+  inp.style.borderColor = '#e5e7eb';
+}
+function _mcClickTNTC(inp, n, di) {
+  if (inp.disabled) return;
+  if (inp.value.trim().toUpperCase() === 'TNTC') {
+    // TNTC 상태 → 더블클릭 시 해제하고 빈 칸으로
+    inp.value = '';
+    inp.style.background = ''; inp.style.borderColor = ''; inp.style.color = '';
+    inp.focus();
+  } else {
+    inp.value = 'TNTC';
+    inp.style.background = '#fff7ed'; inp.style.borderColor = '#fb923c'; inp.style.color = '#c2410c';
+  }
+  _mcUpdateRange(n, di);
+  _mcCalcAll(window._mcNCount, window._mcRule);
+}
+function _mcFocus(inp) {
+  if (inp.value.trim().toUpperCase() === 'ND') {
+    inp.value = '';
+    inp.style.color = '';
+    inp.style.background = '';
+    inp.style.borderColor = '';
+  }
+}
+function _mcBlur(inp, n, di) {
+  if (inp.value.trim() === '') {
+    _mcSetND(inp);
+    _mcCalcAll(window._mcNCount, window._mcRule);
+  }
+}
+function _mcToggleRow(di) {
+  var chk = document.getElementById('mc-row-en-' + di);
+  var enabled = chk && chk.checked;
+  var row = document.getElementById('mc-row-' + di);
+  if (row) row.style.opacity = enabled ? '1' : '0.4';
+  var nCount = window._mcNCount || 1;
+  for (var n = 1; n <= nCount; n++) {
+    [0,1].forEach(function(p) {
+      var inp = document.getElementById('mc-' + n + '-' + di + '-' + p);
+      if (!inp) return;
+      inp.disabled = !enabled;
+      inp.style.background = enabled ? '#f9fafb' : '#f3f4f6';
+      if (!enabled) { inp.value = 'ND'; inp.style.color = '#9ca3af'; inp.style.borderColor = '#e5e7eb'; }
+    });
+  }
+  _mcCalcAll(window._mcNCount, window._mcRule);
+}
+
 function _mcUpdateRange(n, di) {
-  var nd = (document.getElementById('mc-nd-'+n+'-'+di)||{}).checked;
   [0,1].forEach(function(p) {
     var inp = document.getElementById('mc-'+n+'-'+di+'-'+p);
-    if (!inp || nd) return;
-    var v = inp.value;
-    if (v === '') { inp.style.background=''; inp.style.borderColor=''; return; }
+    if (!inp) return;
+    var v = inp.value.trim();
+    if (v === '' || v.toUpperCase() === 'ND') { inp.style.background='#f9fafb'; inp.style.borderColor='#e5e7eb'; inp.style.color='#9ca3af'; return; }
+    var vUp = v.toUpperCase();
+    if (vUp === 'TNTC') {
+      inp.style.background='#fff7ed'; inp.style.borderColor='#fb923c'; inp.style.color='#c2410c';
+      inp.value = 'TNTC'; return;
+    }
     var num = Number(v);
+    if (isNaN(num)) { inp.style.background='#fef2f2'; inp.style.borderColor='#fca5a5'; inp.style.color='#dc2626'; return; }
+    inp.style.color = '';
     if (num >= 15 && num <= 300) { inp.style.background='#f0fdf4'; inp.style.borderColor='#86efac'; }
     else if (num < 15) { inp.style.background='#fffbeb'; inp.style.borderColor='#fcd34d'; }
     else { inp.style.background='#fff7ed'; inp.style.borderColor='#fb923c'; }
   });
 }
 
-function _mcToggleND(n, di, nCount, rule) {
-  var chk = document.getElementById('mc-nd-' + n + '-' + di);
-  var inp0 = document.getElementById('mc-' + n + '-' + di + '-0');
-  var inp1 = document.getElementById('mc-' + n + '-' + di + '-1');
-  if (!inp0 || !inp1) return;
-  if (chk && chk.checked) {
-    inp0.value = ''; inp0.disabled = true; inp0.style.background = '#f3f4f6';
-    inp1.value = ''; inp1.disabled = true; inp1.style.background = '#f3f4f6';
-  } else {
-    inp0.disabled = false; inp0.style.background = '';
-    inp1.disabled = false; inp1.style.background = '';
-  }
-  _mcCalcAll(nCount, rule);
+// 입력값 → 숫자 변환 (TNTC→9999, ND→null, 숫자→숫자, 나머지→null)
+function _mcGetVal(v) {
+  if (v === '' || v === undefined || v === null) return null;
+  var s = String(v).trim().toUpperCase();
+  if (s === 'TNTC') return 9999;
+  if (s === 'ND') return null;
+  var n = Number(s);
+  return isNaN(n) ? null : n;
 }
 
-function _mcInRange(v) { var n = Number(v); return v !== '' && !isNaN(n) && n >= 15 && n <= 300; }
+
+function _mcInRange(v) {
+  var num = _mcGetVal(v);
+  return num !== null && num >= 15 && num <= 300;
+}
 function _mcRound2(n) {
   if (!n || n <= 0 || isNaN(n)) return 0;
   var mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
@@ -2894,103 +3640,178 @@ function _mcCalcOne(n) {
   var allOver300 = true, allUnder15 = true, hasAnyValue = false;
   var firstDi = -1;
   _MICRO_DILUTIONS.forEach(function(dil, di) {
-    var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-    if (nd) return;
+    var rowChk = document.getElementById('mc-row-en-' + di);
+    if (!rowChk || !rowChk.checked) return;
     [0,1].forEach(function(p) {
       var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
-      if (v === '') return;
-      var num = Number(v);
-      if (isNaN(num)) return;
+      var num = _mcGetVal(v);
+      if (num === null) return;
       hasAnyValue = true;
       if (num <= 300) allOver300 = false;
       if (num >= 15) allUnder15 = false;
     });
   });
   if (!hasAnyValue) return null;
+
+  function _makeResult(sigmaC, denom, dilution, warning) {
+    var isRaw = (dilution === 1); // 원액: 소수점 유지, 유효숫자 미적용
+    var rawVal = (sigmaC / denom) * dilution;
+    var denomStr = denom === 1 ? '1' : (Number.isInteger(denom) ? String(denom) : denom.toFixed(1));
+    var dilStr = dilution === 1 ? '×1(원액)' : '×' + dilution.toLocaleString();
+    var formulaStr = sigmaC + ' ÷ ' + denomStr + ' ' + dilStr + ' = ' + (isRaw ? rawVal.toFixed(2).replace(/\.?0+$/, '') : Math.round(rawVal).toLocaleString());
+    return {
+      sigmaC: sigmaC, denom: denom, dilution: dilution,
+      raw: isRaw ? rawVal : Math.round(rawVal),
+      final: isRaw ? rawVal : _mcRound2(rawVal),
+      isRaw: isRaw, formulaStr: formulaStr,
+      warning: warning || ''
+    };
+  }
+
   if (allOver300) {
     var closestVal = null, closestDi = -1;
     _MICRO_DILUTIONS.forEach(function(dil, di) {
-      var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-      if (nd) return;
+      var rowChk = document.getElementById('mc-row-en-' + di);
+      if (!rowChk || !rowChk.checked) return;
       [0,1].forEach(function(p) {
         var v = (document.getElementById('mc-' + n + '-' + di + '-' + p) || {}).value || '';
-        if (v === '') return;
-        var num = Number(v);
-        if (isNaN(num)) return;
+        var num = _mcGetVal(v);
+        if (num === null) return;
         if (closestVal === null || Math.abs(num - 300) < Math.abs(closestVal - 300)) {
           closestVal = num; closestDi = di;
         }
+        // 첫 번째 활성화된 행 fallback (closestDi 미설정 시)
+        if (closestDi < 0) closestDi = di;
       });
     });
-    if (closestDi < 0) return null;
-    var raw = closestVal * _MICRO_DILUTIONS[closestDi];
-    return { sigmaC: closestVal, denom: 1, raw: Math.round(raw), final: _mcRound2(raw), warning: 'over300' };
+    // 밀집평판 1cm² 입력값 확인 — (평판1 + 평판2) ÷ 2 × 희석배수
+    var denseV0 = _mcGetVal((document.getElementById('mc-dense-' + n + '-0') || {}).value);
+    var denseV1 = _mcGetVal((document.getElementById('mc-dense-' + n + '-1') || {}).value);
+    var denseCount = (denseV0 !== null ? 1 : 0) + (denseV1 !== null ? 1 : 0);
+    if (denseCount > 0) {
+      var denseAvg = ((denseV0 || 0) + (denseV1 || 0)) / denseCount;
+      if (denseAvg > 0) {
+        if (closestDi < 0) {
+          for (var d3 = 0; d3 < _MICRO_DILUTIONS.length; d3++) {
+            var chk3 = document.getElementById('mc-row-en-' + d3);
+            if (chk3 && chk3.checked) { closestDi = d3; break; }
+          }
+        }
+        if (closestDi < 0) return null;
+        var dil = _MICRO_DILUTIONS[closestDi];
+        var dilStr2 = dil === 1 ? '×1(원액)' : '×' + dil.toLocaleString();
+        var rawVal2 = denseAvg * dil;
+        var avgStr = denseCount === 2
+          ? '(' + denseV0 + '+' + denseV1 + ')÷2'
+          : String(denseAvg);
+        var formulaDense = avgStr + ' ' + dilStr2 + ' = ' + Math.round(rawVal2).toLocaleString();
+        return { sigmaC: denseAvg, denom: 1, dilution: dil, raw: Math.round(rawVal2), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
+      }
+    }
+    // 1cm² 미입력 → allOver300 상태 표시만
+    return { warning: 'need_dense', formulaStr: '⚠️ 밀집평판 1cm² 집락수 입력 필요' };
   }
+
   _MICRO_DILUTIONS.forEach(function(dil, di) {
     if (firstDi >= 0) return;
-    var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-    if (nd) return;
+    var rowChk = document.getElementById('mc-row-en-' + di);
+    if (!rowChk || !rowChk.checked) return;
     var v0 = (document.getElementById('mc-' + n + '-' + di + '-0') || {}).value || '';
     var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
     if (_mcInRange(v0) || _mcInRange(v1)) firstDi = di;
   });
+
   if (firstDi === -1) {
-    for (var di = 0; di < _MICRO_DILUTIONS.length; di++) {
-      var nd = (document.getElementById('mc-nd-' + n + '-' + di) || {}).checked;
-      if (nd) continue;
-      var v0 = (document.getElementById('mc-' + n + '-' + di + '-0') || {}).value || '';
-      var v1 = (document.getElementById('mc-' + n + '-' + di + '-1') || {}).value || '';
-      if (v0 !== '' || v1 !== '') { firstDi = di; break; }
+    for (var di2 = 0; di2 < _MICRO_DILUTIONS.length; di2++) {
+      var rowChk2 = document.getElementById('mc-row-en-' + di2);
+      if (!rowChk2 || !rowChk2.checked) continue;
+      var v0b = (document.getElementById('mc-' + n + '-' + di2 + '-0') || {}).value || '';
+      var v1b = (document.getElementById('mc-' + n + '-' + di2 + '-1') || {}).value || '';
+      if (v0b !== '' || v1b !== '') { firstDi = di2; break; }
     }
     if (firstDi === -1) return null;
-    var n1 = 0, sigC = 0;
+    var cnt = 0, sigC2 = 0;
     [0,1].forEach(function(p) {
       var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
-      if (v !== '' && !isNaN(Number(v))) { n1++; sigC += Number(v); }
+      var s2 = String(v).trim().toUpperCase();
+      var num = _mcGetVal(v);
+      // TNTC 평판은 fallback 집계에서도 제외
+      if (num !== null && s2 !== 'TNTC') { cnt++; sigC2 += num; }
     });
-    if (n1 === 0) return null;
-    var raw = (sigC / n1) * _MICRO_DILUTIONS[firstDi];
-    return { sigmaC: sigC, raw: Math.round(raw), final: _mcRound2(raw), warning: allUnder15 ? 'under15' : '' };
+    if (cnt === 0) return null;
+    return _makeResult(sigC2, cnt, _MICRO_DILUTIONS[firstDi], allUnder15 ? 'under15' : '');
   }
+
   var sigmaC = 0, n1p = 0, n2p = 0;
   [0,1].forEach(function(p) {
-    var nd = (document.getElementById('mc-nd-'+n+'-'+firstDi)||{}).checked;
     var v = (document.getElementById('mc-'+n+'-'+firstDi+'-'+p)||{}).value||'';
-    if (!nd && v !== '' && !isNaN(Number(v))) { n1p++; sigmaC += Number(v); }
+    var s = String(v).trim().toUpperCase();
+    var num = _mcGetVal(v);
+    // 15~300 범위 내 평판만 집계 (TNTC·범위 외 제외)
+    if (num !== null && s !== 'TNTC' && _mcInRange(v)) { n1p++; sigmaC += num; }
   });
   var secDi = firstDi + 1;
   if (secDi < _MICRO_DILUTIONS.length) {
-    [0,1].forEach(function(p) {
-      var nd = (document.getElementById('mc-nd-'+n+'-'+secDi)||{}).checked;
-      var v = (document.getElementById('mc-'+n+'-'+secDi+'-'+p)||{}).value||'';
-      if (!nd && v !== '' && !isNaN(Number(v)) && _mcInRange(v)) { n2p++; sigmaC += Number(v); }
-    });
+    var secChk = document.getElementById('mc-row-en-' + secDi);
+    if (secChk && secChk.checked) {
+      [0,1].forEach(function(p) {
+        var v = (document.getElementById('mc-'+n+'-'+secDi+'-'+p)||{}).value||'';
+        var num = _mcGetVal(v);
+        if (num !== null && _mcInRange(v)) { n2p++; sigmaC += num; }
+      });
+    }
   }
   if (n1p === 0) return null;
   var denom = (1 * n1p) + (0.1 * n2p);
-  var raw = (sigmaC / denom) * _MICRO_DILUTIONS[firstDi];
-  return { sigmaC: sigmaC, denom: denom, raw: Math.round(raw), final: _mcRound2(raw) };
+  return _makeResult(sigmaC, denom, _MICRO_DILUTIONS[firstDi], '');
 }
 
 function _mcCalcAll(nCount, rule) {
   var m = rule.m || 10000, M = rule.M || 50000, c = rule.c !== undefined ? rule.c : 2;
-  var results = [], over300Count = 0, warnCount = 0, failCount = 0;
+  var results = [], calcResults = [], over300Count = 0, warnCount = 0, failCount = 0;
   for (var n = 1; n <= nCount; n++) {
     var calc = _mcCalcOne(n);
+    var elFormula = document.getElementById('mc-formula-' + n);
+    var elRaw = document.getElementById('mc-raw-' + n);
     var el = document.getElementById('mc-result-' + n);
-    if (el) {
-      if (!calc) {
-        el.textContent = '-'; el.style.color = '#9ca3af';
-      } else if (calc.warning === 'over300') {
-        el.innerHTML = calc.final.toLocaleString() + ' <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px">300초과</span>';
-        el.style.color = '#c2410c'; over300Count++;
-      } else {
-        el.textContent = calc.final.toLocaleString() + ' CFU/g';
-        el.style.color = calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+
+    if (!calc) {
+      if (elFormula) { elFormula.textContent = '-'; elFormula.style.color = '#9ca3af'; }
+      if (elRaw) { elRaw.textContent = '-'; elRaw.style.color = '#9ca3af'; }
+      if (el) { el.textContent = '-'; el.style.color = '#9ca3af'; }
+    } else if (calc.warning === 'need_dense') {
+      if (elFormula) { elFormula.textContent = calc.formulaStr; elFormula.style.color = '#c2410c'; }
+      if (elRaw) { elRaw.textContent = '-'; elRaw.style.color = '#9ca3af'; }
+      if (el) { el.textContent = '-'; el.style.color = '#9ca3af'; }
+    } else {
+      // 계산식 행
+      if (elFormula) { elFormula.textContent = calc.formulaStr; elFormula.style.color = '#6b7280'; }
+
+      // 시험결과 행 (원액: 소수점 표시, 그 외: Math.round 값)
+      if (elRaw) {
+        var rawStr = calc.isRaw
+          ? (Number.isInteger(calc.raw) ? calc.raw.toString() : parseFloat(calc.raw.toFixed(2)).toString()) + ' CFU/g'
+          : Math.round(calc.raw).toLocaleString() + ' CFU/g';
+        elRaw.textContent = rawStr;
+        elRaw.style.color = '#374151';
+      }
+
+      // 최종판정 행
+      if (el) {
+        if (calc.warning === 'over300') {
+          el.innerHTML = (calc.isRaw ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString()) : calc.final.toLocaleString()) + ' CFU/g <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px">300초과</span>';
+          el.style.color = '#c2410c'; over300Count++;
+        } else {
+          var finalStr = calc.isRaw
+            ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString()) + ' CFU/g'
+            : calc.final.toLocaleString() + ' CFU/g';
+          el.textContent = finalStr;
+          el.style.color = calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
+        }
       }
     }
-    if (calc) { results.push(calc.final); if (calc.final > M) failCount++; else if (calc.final > m) warnCount++; }
-    else results.push(null);
+    if (calc) { results.push(calc.final); calcResults.push(calc); if (calc.final > M) failCount++; else if (calc.final > m) warnCount++; }
+    else { results.push(null); calcResults.push(null); }
   }
   var box = document.getElementById('mc-judge-box');
   var icon = document.getElementById('mc-judge-icon');
@@ -3004,13 +3825,412 @@ function _mcCalcAll(nCount, rule) {
   box.style.background = pass ? '#f0fdf4' : '#fef2f2';
   icon.textContent = pass ? '✓' : '✗'; icon.style.color = pass ? '#15803d' : '#dc2626';
   text.textContent = pass ? '적합' : '부적합'; text.style.color = pass ? '#15803d' : '#dc2626';
-  var resStr = results.map(function(r,i){ return r !== null ? 'n'+(i+1)+'='+r.toLocaleString() : null; }).filter(Boolean).join(', ');
+  var resStr = calcResults.map(function(calc,i){
+    if (calc === null) return null;
+    var valStr = calc.isRaw
+      ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString())
+      : calc.final.toLocaleString();
+    return 'n'+(i+1)+'='+valStr;
+  }).filter(Boolean).join(', ');
   sub.textContent = resStr
     + (over300Count > 0 ? ' | 300초과(밀집평판법) '+over300Count+'건' : '')
     + (failCount > 0 ? ' | M초과 '+failCount+'건' : '')
     + (warnCount > c ? ' | m초과 '+warnCount+'건>c('+c+')' : '');
 }
 
+/* ══════════════════════════════════════
+   시험일지 인쇄
+   ══════════════════════════════════════ */
+function _buildPrintHtml(contentHtml, title, landscape) {
+  var pageSize = landscape ? 'A4 landscape' : 'A4 portrait';
+  return '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>' + title + '</title><style>'
+    + '@page{margin:12mm 18mm;size:' + pageSize + '}'
+    + '*{box-sizing:border-box}'
+    + 'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;color:#1a2332;margin:0;padding:10px}'
+    + '.print-hd{text-align:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1e3a5f}'
+    + '.print-hd h1{font-size:16px;margin:0 0 3px;color:#1e3a5f}'
+    + '.print-hd p{font-size:10px;color:#888;margin:0}'
+    + 'input[type=text],input[type=number],input[type=date],textarea{'
+    +   'border:none!important;background:transparent!important;padding:0!important;'
+    +   'outline:none;font-size:inherit;font-family:inherit;color:inherit;width:100%;resize:none}'
+    + 'select{border:none;background:transparent;font-size:inherit;font-family:inherit;color:inherit}'
+    + 'button,.btn{display:none!important}'
+    + 'details:not([open]){display:none}'
+    + 'details{border:1px solid #e2e6ed;border-radius:6px;overflow:hidden;margin-bottom:8px}'
+    + 'summary{padding:7px 12px;font-weight:600;font-size:13px;list-style:none;cursor:default}'
+    + 'summary::-webkit-details-marker{display:none}'
+    + 'table{border-collapse:collapse;width:100%;font-size:11px;margin-top:4px}'
+    + 'td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:middle}'
+    + 'th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}'
+    + '.empty-state{display:none}'
+    + 'label{font-size:10px;color:#666;display:block;margin-bottom:2px}'
+    + '.overall-badge{padding:3px 10px;border-radius:6px;font-weight:700}'
+    + '.overall-badge.pass{background:#dcfce7;color:#166534}'
+    + '.overall-badge.fail{background:#fee2e2;color:#991b1b}'
+    + '</style></head><body>'
+    + '<div class="print-hd"><h1>' + title + '</h1>'
+    + '<p>출력일시: ' + new Date().toLocaleString('ko-KR') + '</p></div>'
+    + contentHtml + '</body></html>';
+}
+
+function _printViaIframe(htmlContent) {
+  var iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none';
+  document.body.appendChild(iframe);
+  var doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open(); doc.write(htmlContent); doc.close();
+  iframe.onload = function() {
+    try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e) {}
+    setTimeout(function() { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
+  };
+}
+
+/* ── 인쇄 미리보기 팝업 ── */
+function _showPrintPreview(htmlContent, title) {
+  var modal = document.getElementById('print-preview-modal');
+  if (!modal) return;
+  // iframe에 미리보기 내용 삽입
+  var pif = document.getElementById('print-preview-iframe');
+  pif.srcdoc = htmlContent;
+  // 제목 표시
+  document.getElementById('print-preview-title').textContent = title || '인쇄 미리보기';
+  // 인쇄 버튼 클릭 시 실제 인쇄
+  document.getElementById('print-preview-do-btn').onclick = function() {
+    try { pif.contentWindow.focus(); pif.contentWindow.print(); } catch(e) {}
+  };
+  modal.style.display = 'flex';
+}
+function _closePrintPreview() {
+  var modal = document.getElementById('print-preview-modal');
+  if (modal) modal.style.display = 'none';
+  var pif = document.getElementById('print-preview-iframe');
+  if (pif) pif.srcdoc = '';
+}
+
+function printDiaryTemplate() {
+  var panel = document.getElementById('diary-panel');
+  if (!panel || panel.querySelector('.empty-state')) {
+    alert('선택된 시험일지가 없습니다.'); return;
+  }
+  // 기록서 양식 수집 템플릿인 경우 → 전용 시험과정 양식으로 인쇄
+  var ft = _filteredDiaryTemplates && _filteredDiaryTemplates[_selectedDiaryTmplIdx];
+  if (ft && ft._isFormTemplate) {
+    // DOM에서 업로드된 첨부 이미지 수집
+    var attachImgs = {};
+    ((ft.analyzed || {}).attachmentFields || []).forEach(function(af) {
+      var imgEl = document.getElementById('attach-' + af.id + '-img');
+      if (imgEl && imgEl.src && imgEl.src.startsWith('data:')) {
+        attachImgs[af.id] = imgEl.src;
+      }
+    });
+    _printFormTemplateDiary(ft, attachImgs);
+    return;
+  }
+  // 일반 시험일지 (기존 방식)
+  var clone = panel.cloneNode(true);
+  panel.querySelectorAll('input, textarea, select').forEach(function(el, i) {
+    var c = clone.querySelectorAll('input, textarea, select')[i];
+    if (!c) return;
+    if (el.type === 'checkbox') c.checked = el.checked;
+    else c.value = el.value;
+  });
+  panel.querySelectorAll('details').forEach(function(d, i) {
+    var cd = clone.querySelectorAll('details')[i];
+    if (cd) cd.open = d.open;
+  });
+  clone.querySelectorAll('button, .btn').forEach(function(b) { b.remove(); });
+  var html = _buildPrintHtml(clone.innerHTML, '🧪 시험일지', false);
+  _showPrintPreview(html, '시험일지 인쇄 미리보기');
+}
+
+/* ─────────────────────────────────────────────
+   기록서 양식 수집 템플릿 전용 인쇄 레이아웃
+   결과 입력 폼(testResultInput) 필드 제외,
+   시험 과정 관련 내용(섹션·표준물질·계산식 등) 포함
+   ───────────────────────────────────────────── */
+function _printFormTemplateDiary(ft, attachImgs) {
+  var a = ft.analyzed || {};
+  var overrides = ft._overrides || {};
+  attachImgs = attachImgs || {};
+
+  // 계산식 변수로 사용되는 field ID = 결과 입력 측정 필드 → 시험일지에서 제외
+  var resultFieldIds = [];
+  (a.calculations || []).forEach(function(calc) {
+    (calc.formula || '').replace(/[a-zA-Z_][a-zA-Z0-9_]*/g, function(v) {
+      if (resultFieldIds.indexOf(v) < 0) resultFieldIds.push(v);
+    });
+  });
+
+  // 결과 입력에만 사용되는 섹션명 패턴 (해당 섹션 전체 제외)
+  var resultSectionKeywords = ['측정값', '검체측정', '시료측정'];
+  function isResultSection(title) {
+    return resultSectionKeywords.some(function(k) { return (title || '').indexOf(k) >= 0; });
+  }
+
+  var h = '';
+
+  /* ── 헤더 테이블 ── */
+  h += '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">';
+  h += '<tr><td colspan="4" style="background:#1e3a5f;color:#fff;font-size:15px;font-weight:700;padding:9px 14px;text-align:center;letter-spacing:1px">시험검사기록서</td></tr>';
+  var rows = [
+    ['검사항목', escH(ft.representativeItem || ''), '항목코드', escH(ft.representativeItemCode || '')],
+    ['시험법근거', escH(ft.testBasis || ''), '시험유형', escH(a.testType || '')],
+    ['SOP', escH(a.sop || ''), '장비', escH((a.equipment || []).join(', '))]
+  ];
+  if (a.judgmentRule && a.judgmentRule.standardText) {
+    rows.push(['판정기준',
+      '<span style="color:#dc2626;font-weight:700">' + escH(a.judgmentRule.standardText) + (a.judgmentRule.unit ? ' ' + escH(a.judgmentRule.unit) : '') + '</span>',
+      '식품유형', escH(getFoodTypeFromForm(ft))]);
+  }
+  rows.forEach(function(r) {
+    h += '<tr>';
+    h += '<td style="width:13%;background:#f0f4ff;border:1px solid #cbd5e1;padding:5px 9px;font-size:10px;color:#475569;font-weight:600">' + r[0] + '</td>';
+    h += '<td style="border:1px solid #cbd5e1;padding:5px 9px;font-size:12px">' + r[1] + '</td>';
+    h += '<td style="width:13%;background:#f0f4ff;border:1px solid #cbd5e1;padding:5px 9px;font-size:10px;color:#475569;font-weight:600">' + r[2] + '</td>';
+    h += '<td style="border:1px solid #cbd5e1;padding:5px 9px;font-size:12px">' + r[3] + '</td>';
+    h += '</tr>';
+  });
+  h += '</table>';
+
+  /* ── 검사방법 (시험절차) ── */
+  if (a.testMethod) {
+    h += '<div style="margin-bottom:14px;border:1.5px solid #bfdbfe;border-radius:7px;overflow:hidden">';
+    h += '<div style="background:#1e40af;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📋 검사방법 (시험절차)</div>';
+    var tmIsHtmlPrint = /<[a-z][\s\S]*>/i.test(a.testMethod);
+    h += '<div style="padding:10px 14px;font-size:11px;line-height:1.8;color:#1e293b' + (tmIsHtmlPrint ? '' : ';white-space:pre-wrap') + '">';
+    h += tmIsHtmlPrint ? a.testMethod : escH(a.testMethod);
+    h += '</div>';
+    h += '</div>';
+  }
+
+  /* ── 섹션별 필드 출력 ── */
+  (a.sections || []).forEach(function(sec) {
+    if (isResultSection(sec.title)) return; // 결과 입력 섹션 제외
+
+    // 결과 측정 변수에 해당하는 필드를 제외한 나머지 필드
+    var fields = (sec.fields || []).filter(function(f) {
+      return resultFieldIds.indexOf(f.id) < 0;
+    });
+    if (!fields.length) return;
+
+    h += '<div style="margin-bottom:14px">';
+    if (sec.title) {
+      h += '<div style="background:#334155;color:#fff;font-size:11px;font-weight:700;padding:5px 11px;border-radius:4px 4px 0 0">' + escH(sec.title) + '</div>';
+    }
+    h += '<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1">';
+
+    var perRow = 3; // 한 행에 최대 3개 필드
+    for (var fi = 0; fi < fields.length; fi += perRow) {
+      h += '<tr>';
+      for (var ci = 0; ci < perRow; ci++) {
+        var f = fields[fi + ci];
+        if (!f) {
+          // 빈 칸으로 채우기
+          h += '<td style="border:1px solid #e2e8f0;padding:6px 8px" colspan="' + (2 * (perRow - ci)) + '"></td>';
+          break;
+        }
+        var lbl = escH(f.label || '') + (f.unit ? ' <span style="color:#9ca3af;font-size:9px">(' + escH(f.unit) + ')</span>' : '');
+        // 오버라이드 값 우선, 없으면 exampleValue
+        var ovVal = '';
+        if (sec.title === '표준물질정보' && overrides.stdInfo) ovVal = overrides.stdInfo[f.id] || '';
+        if (sec.title === '표준용액농도' && overrides.stdConc) ovVal = overrides.stdConc[f.id] || '';
+        var val = ovVal || f.exampleValue || '';
+        var isFixed = (f.type === 'readonly' || !!ovVal);
+
+        h += '<td style="background:#f8fafc;border:1px solid #e2e8f0;padding:4px 8px;font-size:10px;color:#64748b;width:12%">' + lbl + '</td>';
+        if (isFixed) {
+          h += '<td style="border:1px solid #e2e8f0;padding:6px 8px;font-size:12px;font-weight:600;color:#065f46;background:#f0fdf4">' + escH(val) + '</td>';
+        } else {
+          // 수기 입력용 빈 칸 (exampleValue는 연한 색으로)
+          var display = val ? '<span style="color:#c0c0c0;font-size:11px">' + escH(val) + '</span>' : '&nbsp;';
+          h += '<td style="border:1px solid #e2e8f0;padding:6px 8px;font-size:12px;min-height:24px">' + display + '</td>';
+        }
+      }
+      h += '</tr>';
+    }
+    h += '</table></div>';
+  });
+
+  /* ── 계산식 ── */
+  if (a.calculations && a.calculations.length) {
+    h += '<div style="margin-bottom:14px;padding:10px 14px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px">';
+    h += '<div style="font-size:11px;font-weight:700;color:#6b21a8;margin-bottom:6px">계산식 (결과 산출)</div>';
+    a.calculations.forEach(function(calc) {
+      h += '<div style="font-size:11px;margin-bottom:4px">';
+      h += '<span style="color:#7c3aed;font-weight:600">' + escH(calc.label || '') + '</span>';
+      if (calc.unit) h += ' (' + escH(calc.unit) + ')';
+      h += ' = <code style="font-size:11px;background:#f5f3ff;padding:2px 5px;border-radius:3px">' + escH(calc.formulaText || calc.formula || '') + '</code>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  /* ── 첨부파일 / 사진 ── */
+  if (a.attachmentFields && a.attachmentFields.length) {
+    h += '<div style="margin-bottom:14px;border:1.5px solid #d1fae5;border-radius:7px;overflow:hidden">';
+    h += '<div style="background:#059669;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📎 첨부파일 / 사진</div>';
+    h += '<div style="padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px">';
+    a.attachmentFields.forEach(function(af) {
+      h += '<div style="flex:1;min-width:160px;border:1px solid #a7f3d0;border-radius:6px;padding:8px;background:#f0fdf4">';
+      h += '<div style="font-size:10px;font-weight:700;color:#065f46;margin-bottom:6px">' + escH(af.label || af.id) + '</div>';
+      if (attachImgs[af.id]) {
+        h += '<img src="' + attachImgs[af.id] + '" style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;display:block">';
+      } else {
+        h += '<div style="height:120px;border:2px dashed #6ee7b7;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px">사진 없음</div>';
+      }
+      h += '</div>';
+    });
+    h += '</div></div>';
+  }
+
+  /* ── 결과 기록란 ── */
+  h += '<table style="width:100%;border-collapse:collapse;border:2px solid #1e3a5f;margin-top:4px">';
+  h += '<tr style="background:#1e3a5f;color:#fff">';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">분석항목</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">기준규격</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">결과(측정값)</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">판정</th>';
+  h += '<th style="padding:6px 10px;font-size:11px;text-align:center">검사자</th>';
+  h += '</tr>';
+  var jr = a.judgmentRule || {};
+  h += '<tr>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;font-weight:600">' + escH(ft.representativeItem || '') + '</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;text-align:center">' + escH((jr.standardText || '') + (jr.unit ? ' ' + jr.unit : '')) + '</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:50px;text-align:center">&nbsp;</td>';
+  h += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+  h += '</tr>';
+  h += '</table>';
+
+  var title = '시험검사기록서 — ' + escH(ft.representativeItem || '');
+  _showPrintPreview(_buildPrintHtml(h, '🧪 ' + title, false), title + ' 인쇄 미리보기');
+}
+
 </script>
+
+<!-- 검사방법 편집 모달 -->
+<div id="test-method-modal" style="display:none;position:fixed;inset:0;z-index:9991;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);width:800px;max-width:97vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+    <!-- 헤더 -->
+    <div style="padding:12px 18px;background:#1e40af;color:#fff;font-size:14px;font-weight:700;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
+      📋 검사방법 (시험절차) 편집
+      <button onclick="document.getElementById('test-method-modal').style.display='none'" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <!-- 서식 툴바 -->
+    <div id="tm-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;padding:7px 12px;background:#f8faff;border-bottom:1px solid #dbeafe;align-items:center">
+      <!-- 텍스트 서식 -->
+      <button onmousedown="event.preventDefault();document.execCommand('bold')" title="굵게" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;font-weight:700;cursor:pointer;font-size:13px">B</button>
+      <button onmousedown="event.preventDefault();document.execCommand('italic')" title="기울임" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;font-style:italic;cursor:pointer;font-size:13px">I</button>
+      <button onmousedown="event.preventDefault();document.execCommand('underline')" title="밑줄" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;text-decoration:underline;cursor:pointer;font-size:13px">U</button>
+      <button onmousedown="event.preventDefault();document.execCommand('strikeThrough')" title="취소선" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;text-decoration:line-through;cursor:pointer;font-size:13px">S</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 글씨 크기 -->
+      <select onmousedown="event.stopPropagation()" onchange="event.preventDefault();tmSetFontSize(this.value);this.value=''" title="글씨 크기" style="padding:3px 5px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;height:26px">
+        <option value="">크기</option>
+        <option value="1">8pt</option>
+        <option value="2">10pt</option>
+        <option value="3">12pt</option>
+        <option value="4">14pt</option>
+        <option value="5">18pt</option>
+        <option value="6">24pt</option>
+        <option value="7">32pt</option>
+      </select>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 글자색 -->
+      <label title="글자색" style="display:flex;align-items:center;gap:3px;padding:2px 7px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:11px;height:26px">
+        A <input type="color" value="#000000" onchange="document.getElementById('tm-editor').focus();document.execCommand('foreColor',false,this.value)" style="width:18px;height:16px;border:none;padding:0;cursor:pointer;background:none">
+      </label>
+      <!-- 바탕색 -->
+      <label title="바탕색(형광펜)" style="display:flex;align-items:center;gap:3px;padding:2px 7px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:11px;height:26px">
+        🖊 <input type="color" value="#ffff00" onchange="document.getElementById('tm-editor').focus();document.execCommand('hiliteColor',false,this.value)" style="width:18px;height:16px;border:none;padding:0;cursor:pointer;background:none">
+      </label>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 정렬 -->
+      <button onmousedown="event.preventDefault();document.execCommand('justifyLeft')" title="왼쪽 정렬" style="padding:3px 8px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:13px">≡</button>
+      <button onmousedown="event.preventDefault();document.execCommand('justifyCenter')" title="가운데 정렬" style="padding:3px 8px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:13px">☰</button>
+      <button onmousedown="event.preventDefault();document.execCommand('justifyRight')" title="오른쪽 정렬" style="padding:3px 8px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;direction:rtl">≡</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 제목/단락 -->
+      <button onmousedown="event.preventDefault();tmInsertBlock('h3')" title="소제목" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">제목</button>
+      <button onmousedown="event.preventDefault();tmInsertBlock('p')" title="본문" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">본문</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 표 관련 -->
+      <button onmousedown="event.preventDefault();tmInsertTable(this)" title="표 삽입" style="padding:3px 9px;border:1px solid #1e40af;border-radius:5px;background:#eff6ff;color:#1e40af;cursor:pointer;font-size:12px;font-weight:600">⊞ 표 삽입</button>
+      <button onmousedown="event.preventDefault();tmTableAddRow()" title="행 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 행</button>
+      <button onmousedown="event.preventDefault();tmTableAddCol()" title="열 추가" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">+ 열</button>
+      <button onmousedown="event.preventDefault();tmTableDelRow()" title="행 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 행</button>
+      <button onmousedown="event.preventDefault();tmTableDelCol()" title="열 삭제" style="padding:3px 9px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;font-size:12px">- 열</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <!-- 셀 합치기/나누기 -->
+      <button onmousedown="event.preventDefault();tmMergeSelection(this)" title="셀 합치기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600;position:relative">⊡ 셀 합치기</button>
+      <button onmousedown="event.preventDefault();tmSplitCell()" title="셀 나누기" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600">⊟ 셀 나누기</button>
+      <button onmousedown="event.preventDefault();tmEqualCols()" title="열 너비 균등 배분" style="padding:3px 9px;border:1px solid #0369a1;border-radius:5px;background:#e0f2fe;color:#0369a1;cursor:pointer;font-size:12px;font-weight:600">⇔ 균등</button>
+      <span style="width:1px;height:22px;background:#cbd5e1;margin:0 3px"></span>
+      <button onmousedown="event.preventDefault();tmInsertHr()" title="구분선" style="padding:3px 9px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;font-size:12px">— 구분선</button>
+    </div>
+    <!-- 편집 영역 -->
+    <div style="flex:1;overflow-y:auto;padding:14px 18px">
+      <div id="tm-editor" contenteditable="true" style="min-height:340px;padding:10px 14px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:12px;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;line-height:1.8;color:#1e293b;outline:none;background:#fff"></div>
+      <style>
+        #tm-editor table,.tm-view-content table{border-collapse:collapse;width:100%;margin:8px 0;table-layout:fixed}
+        #tm-editor td,#tm-editor th,.tm-view-content td,.tm-view-content th{border:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap}
+        #tm-editor th,.tm-view-content th{background:#1e3a5f;color:#fff;font-weight:600;text-align:center}
+        #tm-editor td:focus,#tm-editor th:focus{outline:2px solid #3b82f6;outline-offset:-2px}
+        #tm-editor td.tm-selected,#tm-editor th.tm-selected{outline:2px solid #f59e0b;outline-offset:-2px;background:rgba(245,158,11,.12)}
+        #tm-editor td.tm-sel-range,#tm-editor th.tm-sel-range{outline:2px solid #3b82f6;outline-offset:-2px;background:rgba(59,130,246,.12)}
+        #tm-editor h3,.tm-view-content h3{font-size:13px;font-weight:700;color:#1e40af;margin:10px 0 4px;border-bottom:1px solid #bfdbfe;padding-bottom:3px}
+        #tm-editor p,.tm-view-content p{margin:4px 0}
+        #tm-editor hr,.tm-view-content hr{border:none;border-top:1px solid #cbd5e1;margin:8px 0}
+      </style>
+    </div>
+    <!-- 푸터 -->
+    <div style="padding:10px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;align-items:center">
+      <span style="font-size:11px;color:#94a3b8;margin-right:auto">셀 클릭 → 셀 합치기/나누기 | 셀 클릭 후 행/열 추가·삭제</span>
+      <button onclick="document.getElementById('test-method-modal').style.display='none'" style="padding:6px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:13px;cursor:pointer">취소</button>
+      <button onclick="saveTestMethod()" style="padding:6px 18px;background:#1e40af;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 첨부파일 설정 모달 -->
+<div id="attach-config-modal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);width:560px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 18px;background:#059669;color:#fff;font-size:14px;font-weight:700;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
+      📎 첨부파일 / 사진 필드 설정
+      <button onclick="document.getElementById('attach-config-modal').style.display='none'" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px">
+      <div id="acm-rows"></div>
+      <button onclick="window._attachModalFields.push({id:'attach_'+(window._attachModalFields.length+1),label:'',accept:'image/*',showPreview:true});document.getElementById('acm-rows').innerHTML=buildAttachRows()" style="padding:6px 16px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer">+ 필드 추가</button>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="document.getElementById('attach-config-modal').style.display='none'" style="padding:7px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:13px;cursor:pointer">취소</button>
+      <button onclick="saveAttachConfig()" style="padding:7px 18px;background:#059669;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     인쇄 미리보기 팝업
+     ═══════════════════════════════════════ -->
+<div id="print-preview-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.35);width:860px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+    <!-- 헤더 툴바 -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#1e3a5f;border-radius:12px 12px 0 0">
+      <span id="print-preview-title" style="color:#fff;font-size:14px;font-weight:700">인쇄 미리보기</span>
+      <div style="display:flex;gap:8px">
+        <button id="print-preview-do-btn" style="padding:6px 18px;background:#3b82f6;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 인쇄</button>
+        <button onclick="_closePrintPreview()" style="padding:6px 14px;background:#475569;color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer">✕ 닫기</button>
+      </div>
+    </div>
+    <!-- 미리보기 iframe -->
+    <div style="flex:1;overflow:auto;background:#e5e7eb;padding:16px">
+      <div style="background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15);min-height:1000px;border-radius:4px">
+        <iframe id="print-preview-iframe" style="width:100%;min-height:1000px;border:none;border-radius:4px" sandbox="allow-same-origin allow-modals"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
