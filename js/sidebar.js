@@ -242,7 +242,7 @@ const SIDEBAR_MENU = [
     icon: '📄',
     label: '성적 관리',
     sub: [
-      { label: '검토 및 발송',         href: 'reportDispatch.html',  page: 'results-dispatch' },
+      { label: '접수 현황',            href: 'reportDispatch.html',  page: 'results-dispatch' },
       { label: '성적서 발급',          disabled: true },
       { label: '설정',                 disabled: true }
     ]
