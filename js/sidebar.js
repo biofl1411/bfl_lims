@@ -193,6 +193,7 @@ const SIDEBAR_MENU = [
       { label: '업무일지',          href: 'salesMgmt.html#daily',        page: 'daily',        internalPage: 'daily' },
       { label: '업체조회',          href: 'salesMgmt.html#bizSearch',    page: 'bizSearch',    internalPage: 'bizSearch' },
       { label: '긴급 협조',         href: 'salesMgmt.html#urgent',       page: 'urgent',       internalPage: 'urgent' },
+      { label: '접수 현황',         href: 'receiptStatus.html',          page: 'sales-status' },
       { label: '영업통계',          disabled: true },
       { label: '영업 설정',         disabled: true }
     ]
