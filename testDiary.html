@@ -893,6 +893,13 @@ function renderFormTemplateDetail(ft) {
     html += '<span>🦠 미생물 집락수 입력 (모의 계산기)</span>';
     html += '<span style="margin-left:auto;font-size:10px;color:#60a5fa">▼</span></summary>';
     html += '<div style="padding:14px">' + _buildMicroForm(a) + '</div></details>';
+  } else if (_isMicroBiology(ft.testBasis) && !_isQuantitativeMicro(a)) {
+    // 정성 미생물 (살모넬라·리스테리아 등) 검출/불검출 판정 폼
+    html += '<details open style="border:1px solid #86efac;border-radius:10px;overflow:hidden;margin-bottom:14px">';
+    html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);cursor:pointer;font-size:13px;font-weight:600;color:#15803d;display:flex;align-items:center;gap:8px;list-style:none">';
+    html += '<span>🦠 검출/불검출 판정 (모의 계산기)</span>';
+    html += '<span style="margin-left:auto;font-size:10px;color:#4ade80">▼</span></summary>';
+    html += '<div style="padding:14px">' + _buildQualitativeMicroForm(a) + '</div></details>';
   } else if (a.calculations && a.calculations.length && !(_isMicroBiology(ft.testBasis) && !_isQuantitativeMicro(a))) {
     // 이화학 등 일반 계산기 (정성 미생물 항목은 제외)
     var _fm = {};
@@ -3438,6 +3445,75 @@ function simCalc(ci) {
    (formCollector.html에서 이식)
    ══════════════════════════════════════ */
 var _MICRO_DILUTIONS = [1, 10, 100, 1000, 10000, 100000]; // 0번=원액(1배)
+
+/* 정성 미생물 검출/불검출 판정 폼 (살모넬라·리스테리아 등) */
+function _buildQualitativeMicroForm(analyzed) {
+  var rule = (analyzed || {}).judgmentRule || {};
+  var nCount = parseInt(rule.n || rule.nCount || 5);
+  var c = parseInt(rule.c !== undefined ? rule.c : 0);
+  var stdText = rule.standardText || '';
+  var unit = rule.unit || '/25g';
+  var h = '';
+  h += '<div style="background:#f0fdf4;border:0.5px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">'
+    + '<strong style="color:#15803d">🦠 정성시험 (검출/불검출)</strong>'
+    + ' &nbsp;n=' + nCount + ', c=' + c + ' ' + unit
+    + (stdText ? '<div style="margin-top:4px;font-size:10px;color:#6b7280">' + stdText + '</div>' : '')
+    + '</div>';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px" id="qmc-samples">';
+  for (var i = 1; i <= nCount; i++) {
+    h += '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;background:#f9fafb;min-width:70px" id="qmc-card-' + i + '">'
+       + '<span style="font-size:11px;font-weight:700;color:#374151">n' + i + '</span>'
+       + '<button type="button" id="qmc-btn-' + i + '" onclick="_qmcToggle(' + i + ',' + nCount + ',' + c + ')" '
+       + 'style="padding:4px 10px;border-radius:6px;border:1.5px solid #d1d5db;background:#fff;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer;min-width:60px">불검출</button>'
+       + '</div>';
+  }
+  h += '</div>';
+  h += '<div id="qmc-result-box" style="padding:10px 14px;border-radius:8px;border:1.5px solid #d1d5db;background:#f9fafb;display:flex;align-items:center;gap:10px">'
+     + '<span id="qmc-icon" style="font-size:20px">—</span>'
+     + '<div><div style="font-size:13px;font-weight:600" id="qmc-text">시료 판정 후 자동 계산</div>'
+     + '<div style="font-size:11px;color:#6b7280;margin-top:2px" id="qmc-sub"></div></div>'
+     + '</div>';
+  return h;
+}
+
+function _qmcToggle(idx, nCount, c) {
+  var btn = document.getElementById('qmc-btn-' + idx);
+  var card = document.getElementById('qmc-card-' + idx);
+  if (!btn) return;
+  var isDetected = btn.getAttribute('data-detected') === '1';
+  if (isDetected) {
+    btn.setAttribute('data-detected', '0');
+    btn.textContent = '불검출';
+    btn.style.background = '#fff'; btn.style.color = '#6b7280'; btn.style.borderColor = '#d1d5db';
+    card.style.borderColor = '#e5e7eb'; card.style.background = '#f9fafb';
+  } else {
+    btn.setAttribute('data-detected', '1');
+    btn.textContent = '검출';
+    btn.style.background = '#fef2f2'; btn.style.color = '#dc2626'; btn.style.borderColor = '#fca5a5';
+    card.style.borderColor = '#fca5a5'; card.style.background = '#fef2f2';
+  }
+  // 판정
+  var detectedCount = 0;
+  for (var i = 1; i <= nCount; i++) {
+    var b = document.getElementById('qmc-btn-' + i);
+    if (b && b.getAttribute('data-detected') === '1') detectedCount++;
+  }
+  var icon = document.getElementById('qmc-icon');
+  var text = document.getElementById('qmc-text');
+  var sub  = document.getElementById('qmc-sub');
+  var box  = document.getElementById('qmc-result-box');
+  if (detectedCount > c) {
+    if (icon) icon.textContent = '❌';
+    if (text) { text.textContent = '부적합'; text.style.color = '#dc2626'; }
+    if (sub)  sub.textContent = '검출 ' + detectedCount + '건 (허용기준 c=' + c + ' 초과)';
+    if (box)  { box.style.borderColor = '#fca5a5'; box.style.background = '#fef2f2'; }
+  } else {
+    if (icon) icon.textContent = '✅';
+    if (text) { text.textContent = '적합'; text.style.color = '#15803d'; }
+    if (sub)  sub.textContent = '검출 ' + detectedCount + '건 (허용기준 c=' + c + ' 이하)';
+    if (box)  { box.style.borderColor = '#86efac'; box.style.background = '#f0fdf4'; }
+  }
+}
 
 function _isMicroBiology(testBasis) {
   if (!testBasis) return false;
