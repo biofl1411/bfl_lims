@@ -2359,7 +2359,8 @@ window.addEventListener('firebase-ready', async function() {
     // 라벨 드롭다운 로드
     loadLabelOptions();
 
-    // 휴일 목록 로드 (처리기한 워킹데이 계산용)
+    // 처리기한 워킹데이 수 + 휴일 목록 로드
+    await loadDeadlineWorkingDays();
     await loadHolidaysFromFirestore();
 
     // 수수료 Firestore 맵 로드 (자가품질위탁검사용)
@@ -3084,6 +3085,14 @@ function setTodayDate() {
 // 처리기한 계산 (워킹데이 12일 기준)
 // ============================================================================
 var _holidayDatesCache = null;
+var _deadlineWorkingDays = 12; // 기본값, Firestore에서 로드 후 덮어씀
+
+async function loadDeadlineWorkingDays() {
+    try {
+        var data = await fsGetSettings('deadlineRule');
+        if (data && data.workingDays) _deadlineWorkingDays = parseInt(data.workingDays) || 12;
+    } catch(e) { /* 기본값 유지 */ }
+}
 
 async function loadHolidaysFromFirestore() {
     try {
@@ -3131,7 +3140,7 @@ function addWorkingDays(startDate, workDays) {
 function calculateProcessingDeadline() {
     const receiptDate = document.getElementById('receipt-date').value;
     if (!receiptDate) return;
-    const deadline = addWorkingDays(new Date(receiptDate), 12);
+    const deadline = addWorkingDays(new Date(receiptDate), _deadlineWorkingDays);
     document.getElementById('processing-deadline').value = deadline.toISOString().split('T')[0];
 }
 
