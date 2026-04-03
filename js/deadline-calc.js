@@ -64,7 +64,7 @@ var DeadlineCalc = (function() {
         return y + '-' + m + '-' + d;
     }
 
-    /** 오늘부터 처리기한까지 남은 워킹데이 수 (음수면 초과) */
+    /** 오늘 포함, 처리기한까지 남은 워킹데이 수 (음수면 초과) */
     function remainingWorkingDays(deadlineStr) {
         if (!deadlineStr) return null;
         var today = new Date();
@@ -72,23 +72,24 @@ var DeadlineCalc = (function() {
         var deadline = new Date(deadlineStr);
         deadline.setHours(0, 0, 0, 0);
 
-        if (today.getTime() === deadline.getTime()) return 0;
+        if (today.getTime() === deadline.getTime()) return 1; // 당일 = 1일 남음
 
         var count = 0;
         if (today < deadline) {
-            // 남은 워킹데이 (양수)
+            // 오늘 포함하여 처리기한까지 워킹데이 카운트
             var d = new Date(today);
-            while (d < deadline) {
-                d.setDate(d.getDate() + 1);
+            while (d <= deadline) {
                 if (isWorkingDay(d)) count++;
+                d.setDate(d.getDate() + 1);
             }
             return count;
         } else {
-            // 초과 워킹데이 (음수)
+            // 초과: 처리기한 다음날부터 오늘까지 워킹데이
             var d = new Date(deadline);
-            while (d < today) {
-                d.setDate(d.getDate() + 1);
+            d.setDate(d.getDate() + 1);
+            while (d <= today) {
                 if (isWorkingDay(d)) count++;
+                d.setDate(d.getDate() + 1);
             }
             return -count;
         }
