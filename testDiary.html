@@ -4354,6 +4354,284 @@ function _printFormTemplateDiary(ft, attachImgs) {
   _showPrintPreview(_buildPrintHtml(h, '🧪 ' + title, false), title + ' 인쇄 미리보기');
 }
 
+/* ═══════════════════════════════════════════════
+   인쇄 폼 설정 — 동적 섹션 추출 + 표시/숨김/순서
+   ═══════════════════════════════════════════════ */
+var _printSections = [];       // 현재 항목의 섹션 목록 [{key, label, visible}]
+var _printCurrentFt = null;    // 현재 인쇄 중인 formTemplate
+var _printCurrentAttach = {};  // 현재 첨부 이미지
+
+function _extractPrintSections(ft) {
+  var a = ft.analyzed || {};
+  var secs = [];
+  secs.push({ key: '_header', label: '헤더 (검사항목·시험법·SOP·장비·판정기준)', visible: true });
+  if (a.testMethod) secs.push({ key: '_testMethod', label: '검사방법 (시험절차)', visible: true });
+  (a.sections || []).forEach(function(sec, i) {
+    secs.push({ key: '_sec_' + i, label: sec.title || '섹션 ' + (i + 1), visible: true, secIdx: i });
+  });
+  if (a.calculations && a.calculations.length) secs.push({ key: '_calc', label: '계산식 (결과 산출)', visible: true });
+  if (a.attachmentFields && a.attachmentFields.length) secs.push({ key: '_attach', label: '첨부파일 / 사진', visible: true });
+  secs.push({ key: '_result', label: '결과 기록란', visible: true });
+  return secs;
+}
+
+async function _loadPrintConfig(itemCode) {
+  if (!itemCode) return null;
+  try {
+    var doc = await db.collection('settings').doc('printFormConfig').get();
+    if (doc.exists && doc.data()[itemCode]) return doc.data()[itemCode];
+  } catch(e) {}
+  return null;
+}
+
+async function _savePrintConfig() {
+  if (!_printCurrentFt) return;
+  var itemCode = _printCurrentFt.representativeItemCode || '';
+  if (!itemCode) { alert('항목코드가 없어 저장할 수 없습니다.'); return; }
+  var config = _printSections.map(function(s) { return { key: s.key, visible: s.visible }; });
+  var update = {};
+  update[itemCode] = config;
+  try {
+    await db.collection('settings').doc('printFormConfig').set(update, { merge: true });
+    alert('인쇄 폼 설정 저장 완료 (' + itemCode + ')');
+  } catch(e) { alert('저장 실패: ' + e.message); }
+}
+
+function _applyPrintConfig(saved) {
+  if (!saved || !saved.length) return;
+  var map = {};
+  saved.forEach(function(s, i) { map[s.key] = { visible: s.visible, order: i }; });
+  _printSections.forEach(function(s) {
+    if (map[s.key] !== undefined) s.visible = map[s.key].visible;
+  });
+  _printSections.sort(function(a, b) {
+    var oa = map[a.key] !== undefined ? map[a.key].order : 999;
+    var ob = map[b.key] !== undefined ? map[b.key].order : 999;
+    return oa - ob;
+  });
+}
+
+function _renderPrintSettingsList() {
+  var el = document.getElementById('print-settings-list');
+  if (!el) return;
+  el.innerHTML = _printSections.map(function(s, i) {
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#fff;border:1px solid #e9d5ff;border-radius:6px;margin-bottom:4px" data-idx="' + i + '">'
+      + '<input type="checkbox" ' + (s.visible ? 'checked' : '') + ' onchange="_psCfgToggle(' + i + ')" style="accent-color:#7c3aed;cursor:pointer">'
+      + '<span style="flex:1;font-size:12px;color:#1e293b">' + s.label + '</span>'
+      + '<button onclick="_psCfgMove(' + i + ',-1)" style="background:none;border:1px solid #ddd6fe;border-radius:4px;cursor:pointer;font-size:11px;padding:1px 6px;color:#6b21a8" ' + (i === 0 ? 'disabled' : '') + '>↑</button>'
+      + '<button onclick="_psCfgMove(' + i + ',1)" style="background:none;border:1px solid #ddd6fe;border-radius:4px;cursor:pointer;font-size:11px;padding:1px 6px;color:#6b21a8" ' + (i === _printSections.length - 1 ? 'disabled' : '') + '>↓</button>'
+      + '</div>';
+  }).join('');
+}
+
+function _psCfgToggle(idx) {
+  _printSections[idx].visible = !_printSections[idx].visible;
+  _refreshPrintPreview();
+}
+
+function _psCfgMove(idx, dir) {
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= _printSections.length) return;
+  var tmp = _printSections[idx];
+  _printSections[idx] = _printSections[newIdx];
+  _printSections[newIdx] = tmp;
+  _renderPrintSettingsList();
+  _refreshPrintPreview();
+}
+
+function _resetPrintConfig() {
+  _printSections = _extractPrintSections(_printCurrentFt);
+  _renderPrintSettingsList();
+  _refreshPrintPreview();
+}
+
+function _togglePrintSettings() {
+  var panel = document.getElementById('print-settings-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function _refreshPrintPreview() {
+  if (!_printCurrentFt) return;
+  var h = _buildPrintFromSections(_printCurrentFt, _printCurrentAttach);
+  var title = '시험검사기록서 — ' + escH(_printCurrentFt.representativeItem || '');
+  var pif = document.getElementById('print-preview-iframe');
+  if (pif) pif.srcdoc = _buildPrintHtml(h, '🧪 ' + title, false);
+}
+
+function _buildPrintFromSections(ft, attachImgs) {
+  var a = ft.analyzed || {};
+  var overrides = ft._overrides || {};
+  attachImgs = attachImgs || {};
+
+  var resultFieldIds = [];
+  (a.calculations || []).forEach(function(calc) {
+    (calc.formula || '').replace(/[a-zA-Z_][a-zA-Z0-9_]*/g, function(v) {
+      if (resultFieldIds.indexOf(v) < 0) resultFieldIds.push(v);
+    });
+  });
+  var resultSectionKeywords = ['측정값', '검체측정', '시료측정'];
+  function isResultSection(title) {
+    return resultSectionKeywords.some(function(k) { return (title || '').indexOf(k) >= 0; });
+  }
+
+  var builders = {};
+
+  builders['_header'] = function() {
+    var hh = '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">';
+    hh += '<tr><td colspan="4" style="background:#1e3a5f;color:#fff;font-size:15px;font-weight:700;padding:9px 14px;text-align:center;letter-spacing:1px">시험검사기록서</td></tr>';
+    var rows = [
+      ['검사항목', escH(ft.representativeItem || ''), '항목코드', escH(ft.representativeItemCode || '')],
+      ['시험법근거', escH(ft.testBasis || ''), '시험유형', escH(a.testType || '')],
+      ['SOP', escH(a.sop || ''), '장비', escH((a.equipment || []).join(', '))]
+    ];
+    if (a.judgmentRule && a.judgmentRule.standardText) {
+      rows.push(['판정기준',
+        '<span style="color:#dc2626;font-weight:700">' + escH(a.judgmentRule.standardText) + (a.judgmentRule.unit ? ' ' + escH(a.judgmentRule.unit) : '') + '</span>',
+        '식품유형', escH(getFoodTypeFromForm(ft))]);
+    }
+    rows.forEach(function(r) {
+      hh += '<tr>';
+      hh += '<td style="width:13%;background:#f0f4ff;border:1px solid #cbd5e1;padding:5px 9px;font-size:10px;color:#475569;font-weight:600">' + r[0] + '</td>';
+      hh += '<td style="border:1px solid #cbd5e1;padding:5px 9px;font-size:12px">' + r[1] + '</td>';
+      hh += '<td style="width:13%;background:#f0f4ff;border:1px solid #cbd5e1;padding:5px 9px;font-size:10px;color:#475569;font-weight:600">' + r[2] + '</td>';
+      hh += '<td style="border:1px solid #cbd5e1;padding:5px 9px;font-size:12px">' + r[3] + '</td>';
+      hh += '</tr>';
+    });
+    hh += '</table>';
+    return hh;
+  };
+
+  builders['_testMethod'] = function() {
+    if (!a.testMethod) return '';
+    var hh = '<div style="margin-bottom:14px;border:1.5px solid #bfdbfe;border-radius:7px;overflow:hidden">';
+    hh += '<div style="background:#1e40af;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📋 검사방법 (시험절차)</div>';
+    var isHtml = /<[a-z][\s\S]*>/i.test(a.testMethod);
+    hh += '<div style="padding:10px 14px;font-size:11px;line-height:1.8;color:#1e293b' + (isHtml ? '' : ';white-space:pre-wrap') + '">';
+    hh += isHtml ? a.testMethod : escH(a.testMethod);
+    hh += '</div></div>';
+    return hh;
+  };
+
+  (a.sections || []).forEach(function(sec, i) {
+    builders['_sec_' + i] = function() {
+      if (isResultSection(sec.title)) return '';
+      var fields = (sec.fields || []).filter(function(f) { return resultFieldIds.indexOf(f.id) < 0; });
+      if (!fields.length) return '';
+      var hh = '<div style="margin-bottom:14px">';
+      if (sec.title) hh += '<div style="background:#334155;color:#fff;font-size:11px;font-weight:700;padding:5px 11px;border-radius:4px 4px 0 0">' + escH(sec.title) + '</div>';
+      hh += '<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1">';
+      var perRow = 3;
+      for (var fi = 0; fi < fields.length; fi += perRow) {
+        hh += '<tr>';
+        for (var ci = 0; ci < perRow; ci++) {
+          var f = fields[fi + ci];
+          if (!f) { hh += '<td style="border:1px solid #e2e8f0;padding:6px 8px" colspan="' + (2 * (perRow - ci)) + '"></td>'; break; }
+          var lbl = escH(f.label || '') + (f.unit ? ' <span style="color:#9ca3af;font-size:9px">(' + escH(f.unit) + ')</span>' : '');
+          var ovVal = '';
+          if (sec.title === '표준물질정보' && overrides.stdInfo) ovVal = overrides.stdInfo[f.id] || '';
+          if (sec.title === '표준용액농도' && overrides.stdConc) ovVal = overrides.stdConc[f.id] || '';
+          var val = ovVal || f.exampleValue || '';
+          var isFixed = (f.type === 'readonly' || !!ovVal);
+          hh += '<td style="background:#f8fafc;border:1px solid #e2e8f0;padding:4px 8px;font-size:10px;color:#64748b;width:12%">' + lbl + '</td>';
+          if (isFixed) {
+            hh += '<td style="border:1px solid #e2e8f0;padding:6px 8px;font-size:12px;font-weight:600;color:#065f46;background:#f0fdf4">' + escH(val) + '</td>';
+          } else {
+            var display = val ? '<span style="color:#c0c0c0;font-size:11px">' + escH(val) + '</span>' : '&nbsp;';
+            hh += '<td style="border:1px solid #e2e8f0;padding:6px 8px;font-size:12px;min-height:24px">' + display + '</td>';
+          }
+        }
+        hh += '</tr>';
+      }
+      hh += '</table></div>';
+      return hh;
+    };
+  });
+
+  builders['_calc'] = function() {
+    if (!a.calculations || !a.calculations.length) return '';
+    var hh = '<div style="margin-bottom:14px;padding:10px 14px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px">';
+    hh += '<div style="font-size:11px;font-weight:700;color:#6b21a8;margin-bottom:6px">계산식 (결과 산출)</div>';
+    a.calculations.forEach(function(calc) {
+      hh += '<div style="font-size:11px;margin-bottom:4px">';
+      hh += '<span style="color:#7c3aed;font-weight:600">' + escH(calc.label || '') + '</span>';
+      if (calc.unit) hh += ' (' + escH(calc.unit) + ')';
+      hh += ' = <code style="font-size:11px;background:#f5f3ff;padding:2px 5px;border-radius:3px">' + escH(calc.formulaText || calc.formula || '') + '</code>';
+      hh += '</div>';
+    });
+    hh += '</div>';
+    return hh;
+  };
+
+  builders['_attach'] = function() {
+    if (!a.attachmentFields || !a.attachmentFields.length) return '';
+    var hh = '<div style="margin-bottom:14px;border:1.5px solid #d1fae5;border-radius:7px;overflow:hidden">';
+    hh += '<div style="background:#059669;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📎 첨부파일 / 사진</div>';
+    hh += '<div style="padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px">';
+    a.attachmentFields.forEach(function(af) {
+      hh += '<div style="flex:1;min-width:160px;border:1px solid #a7f3d0;border-radius:6px;padding:8px;background:#f0fdf4">';
+      hh += '<div style="font-size:10px;font-weight:700;color:#065f46;margin-bottom:6px">' + escH(af.label || af.id) + '</div>';
+      if (attachImgs[af.id]) {
+        hh += '<img src="' + attachImgs[af.id] + '" style="max-width:100%;max-height:180px;border-radius:4px;object-fit:contain;display:block">';
+      } else {
+        hh += '<div style="height:120px;border:2px dashed #6ee7b7;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px">사진 없음</div>';
+      }
+      hh += '</div>';
+    });
+    hh += '</div></div>';
+    return hh;
+  };
+
+  builders['_result'] = function() {
+    var hh = '<table style="width:100%;border-collapse:collapse;border:2px solid #1e3a5f;margin-top:4px">';
+    hh += '<tr style="background:#1e3a5f;color:#fff">';
+    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">분석항목</th>';
+    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">기준규격</th>';
+    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">결과(측정값)</th>';
+    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">판정</th>';
+    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">검사자</th>';
+    hh += '</tr>';
+    var jr = a.judgmentRule || {};
+    hh += '<tr>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;font-weight:600">' + escH(ft.representativeItem || '') + '</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;text-align:center">' + escH((jr.standardText || '') + (jr.unit ? ' ' + jr.unit : '')) + '</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:50px;text-align:center">&nbsp;</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+    hh += '</tr>';
+    hh += '</table>';
+    return hh;
+  };
+
+  var out = '';
+  _printSections.forEach(function(s) {
+    if (!s.visible) return;
+    var fn = builders[s.key];
+    if (fn) out += fn();
+  });
+  return out;
+}
+
+// _printFormTemplateDiary를 래핑하여 설정 로드 후 렌더링
+var _origPrintFormTemplateDiary = _printFormTemplateDiary;
+_printFormTemplateDiary = async function(ft, attachImgs) {
+  _printCurrentFt = ft;
+  _printCurrentAttach = attachImgs || {};
+  _printSections = _extractPrintSections(ft);
+
+  var saved = await _loadPrintConfig(ft.representativeItemCode || '');
+  if (saved) _applyPrintConfig(saved);
+
+  _renderPrintSettingsList();
+  var settingsBtn = document.getElementById('print-preview-settings-btn');
+  if (settingsBtn) settingsBtn.style.display = '';
+  document.getElementById('print-settings-panel').style.display = 'none';
+
+  var h = _buildPrintFromSections(ft, attachImgs);
+  var title = '시험검사기록서 — ' + escH(ft.representativeItem || '');
+  _showPrintPreview(_buildPrintHtml(h, '🧪 ' + title, false), title + ' 인쇄 미리보기');
+};
+
 </script>
 
 <!-- 검사방법 편집 모달 -->
@@ -4467,9 +4745,21 @@ function _printFormTemplateDiary(ft, attachImgs) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#1e3a5f;border-radius:12px 12px 0 0">
       <span id="print-preview-title" style="color:#fff;font-size:14px;font-weight:700">인쇄 미리보기</span>
       <div style="display:flex;gap:8px">
+        <button id="print-preview-settings-btn" onclick="_togglePrintSettings()" style="padding:6px 14px;background:#7c3aed;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;display:none">⚙ 인쇄 폼 설정</button>
         <button id="print-preview-do-btn" style="padding:6px 18px;background:#3b82f6;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">🖨️ 인쇄</button>
         <button onclick="_closePrintPreview()" style="padding:6px 14px;background:#475569;color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer">✕ 닫기</button>
       </div>
+    </div>
+    <!-- 인쇄 폼 설정 패널 (토글) -->
+    <div id="print-settings-panel" style="display:none;background:#f5f3ff;border-bottom:1px solid #ddd6fe;padding:12px 18px;max-height:240px;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700;color:#6b21a8">인쇄 섹션 편집 — 체크 해제로 숨기기, ↑↓로 순서 변경</span>
+        <div style="display:flex;gap:6px">
+          <button onclick="_resetPrintConfig()" style="padding:3px 10px;background:#fff;border:1px solid #ddd6fe;border-radius:5px;font-size:11px;cursor:pointer;color:#6b21a8">기본값 복원</button>
+          <button onclick="_savePrintConfig()" style="padding:3px 10px;background:#7c3aed;border:none;border-radius:5px;font-size:11px;cursor:pointer;color:#fff;font-weight:600">저장</button>
+        </div>
+      </div>
+      <div id="print-settings-list"></div>
     </div>
     <!-- 미리보기 iframe -->
     <div style="flex:1;overflow:auto;background:#e5e7eb;padding:16px">
