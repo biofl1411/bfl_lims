@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BFL 접수 현황 (모바일)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:#f0f2f5;color:#1a2332;font-size:14px;-webkit-tap-highlight-color:transparent}
+.header{position:sticky;top:0;z-index:100;background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.header h1{font-size:16px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.header h1 span{font-size:20px}
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap}
+.filter-bar select,.filter-bar input{padding:6px 10px;border:none;border-radius:6px;font-size:12px;background:rgba(255,255,255,.15);color:#fff;flex:1;min-width:0}
+.filter-bar select option{color:#1a2332;background:#fff}
+.filter-bar input::placeholder{color:rgba(255,255,255,.6)}
+.period-btns{display:flex;gap:4px;margin-top:6px}
+.period-btn{padding:4px 10px;border:1px solid rgba(255,255,255,.3);border-radius:12px;background:none;color:rgba(255,255,255,.8);font-size:11px;cursor:pointer}
+.period-btn.active{background:rgba(255,255,255,.25);color:#fff;font-weight:600;border-color:rgba(255,255,255,.6)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 16px}
+.summary-card{background:#fff;border-radius:10px;padding:10px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.summary-card .val{font-size:18px;font-weight:800;color:#1e3a5f}
+.summary-card .lbl{font-size:10px;color:#6b7280;margin-top:2px}
+.card-list{padding:8px 12px;display:flex;flex-direction:column;gap:8px;padding-bottom:80px}
+.card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 1px 6px rgba(0,0,0,.06);border-left:4px solid #2563eb}
+.card.urgent{border-left-color:#dc2626;background:#fff5f5}
+.card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.card-no{font-size:13px;font-weight:700;color:#1e3a5f;font-family:monospace}
+.card-status{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+.card-status.접수완료{background:#dcfce7;color:#166534}
+.card-status.시험중{background:#dbeafe;color:#1e40af}
+.card-status.완료{background:#f3e8ff;color:#6b21a8}
+.card-body{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:12px}
+.card-body .k{color:#6b7280;font-weight:500}
+.card-body .v{color:#1a2332;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-deadline{margin-top:8px;display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid #f0f0f0}
+.card-deadline .dl{font-size:12px;font-weight:700}
+.card-deadline .fee{font-size:13px;font-weight:700;color:#0369a1}
+.badge-urgent{display:inline-block;background:#dc2626;color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:600;margin-left:6px}
+.badge-tl{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.tl-green{background:#22c55e}.tl-yellow{background:#eab308}.tl-orange{background:#f97316}.tl-red{background:#ef4444}
+.loading{text-align:center;padding:40px;color:#6b7280;font-size:13px}
+.empty{text-align:center;padding:60px 20px;color:#9ca3af}
+.empty .icon{font-size:48px;margin-bottom:12px}
+.count-bar{padding:8px 16px;font-size:11px;color:#6b7280;display:flex;justify-content:space-between;align-items:center}
+.refresh-btn{position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;font-size:20px;box-shadow:0 4px 12px rgba(37,99,235,.4);cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="js/firebase-init.js"></script>
+<script src="js/deadline-calc.js"></script>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>📋</span>접수 현황 <span style="font-size:11px;font-weight:400;opacity:.7">영업관리 모바일</span></h1>
+  <div class="filter-bar">
+    <select id="f-status"><option value="">전체 상태</option><option value="접수완료">접수완료</option><option value="시험중">시험중</option><option value="완료">완료</option></select>
+    <select id="f-field"><option value="">전체 분야</option><option value="식품">식품</option><option value="축산">축산</option></select>
+    <input type="search" id="f-search" placeholder="거래처·접수번호 검색">
+  </div>
+  <div class="period-btns">
+    <button class="period-btn active" data-days="30">1개월</button>
+    <button class="period-btn" data-days="90">3개월</button>
+    <button class="period-btn" data-days="180">6개월</button>
+    <button class="period-btn" data-days="365">1년</button>
+  </div>
+</div>
+
+<div class="summary" id="summary">
+  <div class="summary-card"><div class="val" id="s-total">-</div><div class="lbl">전체 접수</div></div>
+  <div class="summary-card"><div class="val" id="s-fee">-</div><div class="lbl">매출 합계</div></div>
+  <div class="summary-card"><div class="val" id="s-deadline">-</div><div class="lbl">기한 임박</div></div>
+</div>
+
+<div class="count-bar"><span id="count-text">로딩중...</span><span id="sort-label">최신순</span></div>
+
+<div class="card-list" id="card-list">
+  <div class="loading">📡 데이터를 불러오는 중...</div>
+</div>
+
+<button class="refresh-btn" onclick="loadData()">🔄</button>
+
+<script>
+var _allData = [];
+var _filtered = [];
+var _periodDays = 30;
+
+// 기간 버튼
+document.querySelectorAll('.period-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    _periodDays = parseInt(btn.dataset.days);
+    applyFilter();
+  });
+});
+
+// 필터 이벤트
+document.getElementById('f-status').addEventListener('change', applyFilter);
+document.getElementById('f-field').addEventListener('change', applyFilter);
+var _searchTimer;
+document.getElementById('f-search').addEventListener('input', function() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(applyFilter, 300);
+});
+
+function getTotalFee(r) {
+  if (r.totalFee) return Number(r.totalFee);
+  if (r.testItems && r.testItems.length) {
+    return r.testItems.reduce(function(s, t) { return s + (Number(t.fee) || 0); }, 0);
+  }
+  return Number(r.fee) || 0;
+}
+
+async function loadData() {
+  try {
+    await DeadlineCalc.load();
+
+    var snap = await db.collection('receipts').orderBy('receiptDate', 'desc').limit(1000).get();
+    _allData = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      d.id = doc.id;
+      _allData.push(d);
+    });
+    applyFilter();
+  } catch(e) {
+    document.getElementById('card-list').innerHTML = '<div class="empty"><div class="icon">⚠️</div>데이터 로드 실패<br><span style="font-size:12px;color:#9ca3af">' + e.message + '</span></div>';
+  }
+}
+
+function applyFilter() {
+  var status = document.getElementById('f-status').value;
+  var field = document.getElementById('f-field').value;
+  var search = (document.getElementById('f-search').value || '').trim().toLowerCase();
+
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - _periodDays);
+  var cutoffStr = cutoff.toISOString().split('T')[0];
+
+  _filtered = _allData.filter(function(r) {
+    if (r.receiptDate && r.receiptDate < cutoffStr) return false;
+    if (status && (r.status || '') !== status) return false;
+    if (field && (r.testField || '') !== field) return false;
+    if (search) {
+      var hay = ((r.receiptNo || '') + ' ' + (r.companyName || '') + ' ' + (r.productName || '')).toLowerCase();
+      if (hay.indexOf(search) < 0) return false;
+    }
+    return true;
+  });
+
+  renderSummary();
+  renderCards();
+}
+
+function renderSummary() {
+  document.getElementById('s-total').textContent = _filtered.length + '건';
+  var totalFee = _filtered.reduce(function(s, r) { return s + getTotalFee(r); }, 0);
+  document.getElementById('s-fee').textContent = totalFee ? Math.round(totalFee / 1000).toLocaleString() + '천원' : '-';
+
+  var urgentCount = 0;
+  _filtered.forEach(function(r) {
+    if (r.processingDeadline) {
+      var rem = DeadlineCalc.remainingWorkingDays(r.processingDeadline);
+      if (rem !== null && rem <= 3) urgentCount++;
+    }
+  });
+  document.getElementById('s-deadline').textContent = urgentCount + '건';
+  document.getElementById('count-text').textContent = '검색결과 ' + _filtered.length + '건';
+}
+
+function renderCards() {
+  var el = document.getElementById('card-list');
+  if (!_filtered.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">📭</div>조건에 맞는 접수건이 없습니다</div>';
+    return;
+  }
+
+  el.innerHTML = _filtered.map(function(r) {
+    var isUrgent = (r.urgent === '긴급' || r.urgent === 'Y');
+    var fee = getTotalFee(r);
+    var feeStr = fee ? Math.round(fee / 1.1).toLocaleString() + '원' : '-';
+
+    // D-day
+    var ddayHtml = '-';
+    if (r.processingDeadline) {
+      var rem = DeadlineCalc.remainingWorkingDays(r.processingDeadline);
+      if (rem !== null) {
+        var color = rem <= 0 ? '#dc2626' : rem <= 2 ? '#f97316' : rem <= 5 ? '#eab308' : '#6b7280';
+        var label = rem <= 0 ? 'D+' + Math.abs(rem) : 'D-' + rem;
+        ddayHtml = '<span style="color:' + color + ';font-weight:700">' + label + '</span>';
+      }
+    }
+
+    // 신호등
+    var tlClass = r.trafficLight ? 'tl-' + r.trafficLight : '';
+    var tlHtml = tlClass ? '<span class="badge-tl ' + tlClass + '"></span>' : '';
+
+    // 상태
+    var statusCls = (r.status || '').replace(/\s/g, '');
+
+    // 시료명
+    var product = r.productName || '';
+    if (!product && r.samples && r.samples[0]) product = r.samples[0].productName || r.samples[0].sampleName || '';
+
+    return '<div class="card' + (isUrgent ? ' urgent' : '') + '" onclick="toggleDetail(this)">'
+      + '<div class="card-top">'
+      + '<div>' + tlHtml + '<span class="card-no">' + esc(r.receiptNo || '-') + '</span>' + (isUrgent ? '<span class="badge-urgent">긴급</span>' : '') + '</div>'
+      + '<span class="card-status ' + statusCls + '">' + esc(r.status || '-') + '</span>'
+      + '</div>'
+      + '<div class="card-body">'
+      + '<span class="k">거래처</span><span class="v">' + esc(r.companyName || '-') + '</span>'
+      + '<span class="k">검사목적</span><span class="v">' + esc(r.testPurpose || '-') + '</span>'
+      + '<span class="k">제품/시료</span><span class="v">' + esc(product) + '</span>'
+      + '<span class="k">접수일</span><span class="v">' + esc(r.receiptDate || '-') + '</span>'
+      + '</div>'
+      + '<div class="card-deadline">'
+      + '<div>처리기한 ' + ddayHtml + ' <span style="font-size:10px;color:#9ca3af">' + esc(r.processingDeadline || '') + '</span></div>'
+      + '<div class="fee">' + feeStr + '</div>'
+      + '</div>'
+      + '<div class="card-detail" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;font-size:11px;color:#6b7280">'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px">'
+      + '<span>분야: ' + esc(r.testField || '-') + '</span>'
+      + '<span>등급: ' + esc(r.grade || '-') + '</span>'
+      + '<span>식품유형: ' + esc(r.foodTypeName || '-') + '</span>'
+      + '<span>업종: ' + esc(r.industryType || '-') + '</span>'
+      + '</div></div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleDetail(card) {
+  var detail = card.querySelector('.card-detail');
+  if (detail) detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+}
+
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Firebase 준비 시 로드
+window.addEventListener('firebase-ready', loadData);
+if (typeof db !== 'undefined' && db) loadData();
+</script>
+</body>
+</html>
