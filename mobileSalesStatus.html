@@ -117,15 +117,33 @@ function getTotalFee(r) {
   return Number(r.fee) || 0;
 }
 
+var _companyMap = {}; // bizNo/company → 거래처 데이터
+
 async function loadData() {
   try {
     await DeadlineCalc.load();
+
+    // 거래처 데이터 로드
+    var compSnap = await db.collection('companies').get();
+    _companyMap = {};
+    compSnap.forEach(function(doc) {
+      var c = doc.data();
+      if (c.bizNo) _companyMap[c.bizNo.trim()] = c;
+      if (c.company) _companyMap[c.company.trim()] = c;
+    });
 
     var snap = await db.collection('receipts').orderBy('receiptDate', 'desc').limit(1000).get();
     _allData = [];
     snap.forEach(function(doc) {
       var d = doc.data();
       d.id = doc.id;
+      // 거래처 담당자 정보 매핑
+      var comp = _companyMap[d.bizNo] || _companyMap[d.companyName] || {};
+      d._contactName = comp.contactName || '';
+      d._contactPhone = comp.contactPhone || '';
+      d._contactMobile = comp.contactMobile || '';
+      d._contactEmail = comp.contactEmail || '';
+      d._contactFax = comp.contactFax || '';
       _allData.push(d);
     });
     applyFilter();
@@ -273,11 +291,13 @@ function renderCards() {
       + '<div style="font-weight:600;color:#1e3a5f;margin-bottom:3px;font-size:11px">👤 거래처 연락처</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:11px">'
       + '<span>대표자: <b>' + esc(r.ceo || '-') + '</b></span>'
+      + '<span>담당자: <b>' + esc(r._contactName || '-') + '</b></span>'
+      + '<span>담당자 전화: <b>' + (r._contactPhone ? '<a href="tel:' + esc(r._contactPhone) + '" style="color:#2563eb">' + esc(r._contactPhone) + '</a>' : '-') + '</b></span>'
+      + '<span>담당자 휴대폰: <b>' + (r._contactMobile ? '<a href="tel:' + esc(r._contactMobile) + '" style="color:#2563eb">' + esc(r._contactMobile) + '</a>' : '-') + '</b></span>'
+      + '<span>담당자 이메일: <b>' + (r._contactEmail ? '<a href="mailto:' + esc(r._contactEmail) + '" style="color:#2563eb">' + esc(r._contactEmail) + '</a>' : '-') + '</b></span>'
+      + '<span>팩스: <b>' + esc(r._contactFax || r.companyFax || '-') + '</b></span>'
       + '<span>영업담당: <b>' + esc(r.salesRep || '-') + '</b></span>'
-      + '<span>전화: <b>' + (r.companyPhone ? '<a href="tel:' + esc(r.companyPhone) + '" style="color:#2563eb">' + esc(r.companyPhone) + '</a>' : '-') + '</b></span>'
-      + '<span>휴대폰: <b>' + (r.companyMobile ? '<a href="tel:' + esc(r.companyMobile) + '" style="color:#2563eb">' + esc(r.companyMobile) + '</a>' : '-') + '</b></span>'
-      + '<span>이메일: <b>' + (r.reportEmail ? '<a href="mailto:' + esc(r.reportEmail) + '" style="color:#2563eb">' + esc(r.reportEmail) + '</a>' : '-') + '</b></span>'
-      + '<span>팩스: <b>' + esc(r.companyFax || '-') + '</b></span>'
+      + '<span>회사 전화: <b>' + (r.companyPhone ? '<a href="tel:' + esc(r.companyPhone) + '" style="color:#2563eb">' + esc(r.companyPhone) + '</a>' : '-') + '</b></span>'
       + '</div></div>'
       + '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb">'
       + '<div style="font-weight:600;color:#6b21a8;margin-bottom:3px;font-size:11px">🧾 계산서 담당자</div>'
