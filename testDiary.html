@@ -928,22 +928,33 @@ function renderFormTemplateDetail(ft) {
     html += '<span style="font-size:11px;font-weight:400;color:#b45309">드래그로 섹션·필드 재배치</span>';
     html += '<span style="margin-left:auto;font-size:10px;color:#f59e0b">▼</span></summary>';
     html += '<div style="padding:14px" id="sort-panel-body">';
-    html += '<div id="sort-sections-list" style="display:flex;flex-direction:column;gap:8px">';
+    html += '<div id="sort-sections-list" style="display:flex;flex-direction:column;gap:12px">';
     editSections.forEach(function(sec, si) {
-      html += '<div class="sort-sec-card" data-sec-idx="' + si + '" data-orig-idx="' + si + '" draggable="true" style="border:1.5px solid #fbbf24;border-radius:8px;background:#fffbeb;overflow:hidden;cursor:grab">';
-      html += '<div class="sort-sec-header" style="background:#fef3c7;padding:7px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #fde68a">';
-      html += '<span style="color:#b45309;font-size:15px;line-height:1">⠿</span>';
-      html += '<span style="font-size:12px;font-weight:700;color:#92400e;flex:1">' + escH(sec.title || '(섹션' + (si+1) + ')') + '</span>';
+      html += '<div class="sort-sec-card" data-sec-idx="' + si + '" data-orig-idx="' + si + '" style="border:1.5px solid #fbbf24;border-radius:8px;background:#fffbeb;overflow:hidden">';
+      html += '<div class="sort-sec-header" draggable="true" style="background:#334155;color:#fff;padding:7px 12px;display:flex;align-items:center;gap:8px;cursor:grab">';
+      html += '<span style="font-size:14px;line-height:1;opacity:.7">⠿</span>';
+      html += '<span style="font-size:12px;font-weight:700;flex:1">' + escH(sec.title || '(섹션' + (si+1) + ')') + '</span>';
       html += '</div>';
       if (sec.fields && sec.fields.length) {
-        html += '<div class="sort-fields-list" data-sec-idx="' + si + '" style="padding:6px 10px;display:flex;flex-direction:column;gap:4px">';
-        sec.fields.forEach(function(f, fi) {
-          html += '<div class="sort-field-item" data-sec-idx="' + si + '" data-field-idx="' + fi + '" data-orig-field-idx="' + fi + '" draggable="true" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:white;border:1px solid #fde68a;border-radius:5px;cursor:grab;font-size:11px;color:#78350f">';
-          html += '<span style="color:#f59e0b;font-size:12px">⠿</span>';
-          html += escH(f.label || f.id || '');
-          if (f.unit) html += ' <span style="color:#b45309;font-size:10px">(' + escH(f.unit) + ')</span>';
-          html += '</div>';
-        });
+        html += '<div class="sort-fields-list" data-sec-idx="' + si + '" style="padding:6px">';
+        html += '<table style="width:100%;border-collapse:collapse;table-layout:fixed">';
+        var perRow = 3;
+        for (var fi = 0; fi < sec.fields.length; fi += perRow) {
+          html += '<tr>';
+          for (var ci = 0; ci < perRow; ci++) {
+            var f = sec.fields[fi + ci];
+            if (!f) {
+              html += '<td style="border:1px solid #e2e8f0;padding:4px" colspan="' + (2 * (perRow - ci)) + '"></td>';
+              break;
+            }
+            var lbl = escH(f.label || f.id || '');
+            if (f.unit) lbl += ' <span style="color:#9ca3af;font-size:9px">(' + escH(f.unit) + ')</span>';
+            html += '<td class="sort-field-item" data-sec-idx="' + si + '" data-field-idx="' + (fi + ci) + '" data-orig-field-idx="' + (fi + ci) + '" draggable="true" style="background:#f0f4ff;border:1px solid #cbd5e1;padding:4px 8px;font-size:10px;color:#475569;font-weight:600;width:13%;cursor:grab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="드래그로 이동">' + lbl + '</td>';
+            html += '<td style="border:1px solid #e2e8f0;padding:4px 8px;font-size:11px;color:#94a3b8;min-height:20px">&nbsp;</td>';
+          }
+          html += '</tr>';
+        }
+        html += '</table>';
         html += '</div>';
       }
       html += '</div>';
@@ -1723,23 +1734,27 @@ async function saveFormTemplateOverrides() {
   }
 }
 
-/* ── 섹션·필드 드래그 재배치 ── */
+/* ── 섹션·필드 드래그 재배치 (테이블 셀 swap 방식) ── */
 (function() {
-  // 드래그 상태
-  var _dragSec = null;     // {el, idx}
-  var _dragField = null;   // {el, secIdx, fieldIdx}
+  var _dragSec = null;
+  var _dragField = null;
 
   document.addEventListener('dragstart', function(e) {
     var el = e.target;
-    if (el.classList.contains('sort-sec-card')) {
-      _dragSec = { el: el, idx: parseInt(el.dataset.secIdx) };
-      _dragField = null;
-      el.style.opacity = '0.5';
-      e.dataTransfer.effectAllowed = 'move';
+    // 섹션 헤더 드래그 → 섹션 카드 전체 이동
+    if (el.classList.contains('sort-sec-header')) {
+      var card = el.closest('.sort-sec-card');
+      if (card) {
+        _dragSec = { el: card, idx: parseInt(card.dataset.secIdx) };
+        _dragField = null;
+        card.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+      }
     } else if (el.classList.contains('sort-field-item')) {
       _dragField = { el: el, secIdx: parseInt(el.dataset.secIdx), fieldIdx: parseInt(el.dataset.fieldIdx) };
       _dragSec = null;
       el.style.opacity = '0.5';
+      el.style.background = '#fef3c7';
       e.dataTransfer.effectAllowed = 'move';
     }
   });
@@ -1747,6 +1762,8 @@ async function saveFormTemplateOverrides() {
   document.addEventListener('dragend', function(e) {
     var el = e.target;
     el.style.opacity = '';
+    if (el.classList.contains('sort-field-item')) el.style.background = '#f0f4ff';
+    if (_dragSec) _dragSec.el.style.opacity = '';
     _dragSec = null;
     _dragField = null;
   });
@@ -1758,13 +1775,13 @@ async function saveFormTemplateOverrides() {
     if (_dragSec) {
       var over = target.closest('.sort-sec-card');
       if (over && over !== _dragSec.el) {
-        var list = over.parentNode;
+        var list = document.getElementById('sort-sections-list');
+        if (!list) return;
         var cards = Array.from(list.querySelectorAll(':scope > .sort-sec-card'));
         var overIdx = cards.indexOf(over);
         var dragIdx = cards.indexOf(_dragSec.el);
         if (dragIdx < overIdx) list.insertBefore(_dragSec.el, over.nextSibling);
         else list.insertBefore(_dragSec.el, over);
-        // data-sec-idx 재부여
         Array.from(list.querySelectorAll(':scope > .sort-sec-card')).forEach(function(c, i) {
           c.dataset.secIdx = i;
           c.querySelectorAll('.sort-field-item').forEach(function(f) { f.dataset.secIdx = i; });
@@ -1775,16 +1792,20 @@ async function saveFormTemplateOverrides() {
     } else if (_dragField) {
       var overField = target.closest('.sort-field-item');
       if (overField && overField !== _dragField.el && overField.dataset.secIdx === String(_dragField.secIdx)) {
-        var fl2 = overField.parentNode;
-        var items = Array.from(fl2.querySelectorAll(':scope > .sort-field-item'));
-        var oi = items.indexOf(overField);
-        var di = items.indexOf(_dragField.el);
-        if (di < oi) fl2.insertBefore(_dragField.el, overField.nextSibling);
-        else fl2.insertBefore(_dragField.el, overField);
-        // data-field-idx 재부여
-        Array.from(fl2.querySelectorAll(':scope > .sort-field-item')).forEach(function(f, i) {
-          f.dataset.fieldIdx = i;
-        });
+        // td swap: 두 셀의 내용과 data 속성을 교환
+        var dragEl = _dragField.el;
+        var dHtml = dragEl.innerHTML, dOrig = dragEl.dataset.origFieldIdx, dTitle = dragEl.title;
+        dragEl.innerHTML = overField.innerHTML;
+        dragEl.dataset.origFieldIdx = overField.dataset.origFieldIdx;
+        overField.innerHTML = dHtml;
+        overField.dataset.origFieldIdx = dOrig;
+        // fieldIdx 재부여
+        var container = dragEl.closest('.sort-fields-list');
+        if (container) {
+          Array.from(container.querySelectorAll('.sort-field-item')).forEach(function(f, i) { f.dataset.fieldIdx = i; });
+        }
+        _dragField.el = overField;
+        _dragField.fieldIdx = parseInt(overField.dataset.fieldIdx);
       }
     }
   });
