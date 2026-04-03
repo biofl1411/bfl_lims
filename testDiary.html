@@ -4535,6 +4535,8 @@ function _extractPrintSections(ft) {
   if (a.calculations && a.calculations.length) secs.push({ key: '_calc', label: '계산식 (결과 산출)', visible: true });
   if (a.attachmentFields && a.attachmentFields.length) secs.push({ key: '_attach', label: '첨부파일 / 사진', visible: true });
   secs.push({ key: '_result', label: '결과 기록란', visible: true });
+  secs.push({ key: '_simCalc', label: '계산기 — 모의 계산 결과', visible: true });
+  secs.push({ key: '_microCalc', label: '미생물 집락수 — 모의 계산 결과', visible: true });
   return secs;
 }
 
@@ -4655,8 +4657,6 @@ function _printCalcChoice(ft, attachImgs, mcData, simData) {
 function _refreshPrintPreview() {
   if (!_printCurrentFt) return;
   var h = _buildPrintFromSections(_printCurrentFt, _printCurrentAttach);
-  if (_printCurrentSimData) h += _buildSimCalcPrintHtml(_printCurrentSimData);
-  if (_printCurrentMcData) h += _buildMicroCalcPrintHtml(_printCurrentMcData);
   var title = '시험검사기록서 — ' + escH(_printCurrentFt.representativeItem || '');
   var pif = document.getElementById('print-preview-iframe');
   if (pif) pif.srcdoc = _buildPrintHtml(h, '🧪 ' + title, false);
@@ -4793,7 +4793,7 @@ function _buildPrintFromSections(ft, attachImgs) {
     hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">기준규격</th>';
     hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">결과(측정값)</th>';
     hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">판정</th>';
-    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">검사자</th>';
+    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">비고</th>';
     hh += '</tr>';
     var jr = a.judgmentRule || {};
     hh += '<tr>';
@@ -4804,6 +4804,20 @@ function _buildPrintFromSections(ft, attachImgs) {
     hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
     hh += '</tr>';
     hh += '</table>';
+    return hh;
+  };
+
+  builders['_simCalc'] = function(customLabel) {
+    if (!_printCurrentSimData) return '';
+    var hh = _buildSimCalcPrintHtml(_printCurrentSimData);
+    if (customLabel) hh = hh.replace(/>🧮 계산기 — 모의 계산 결과</, '>' + escH(customLabel) + '<');
+    return hh;
+  };
+
+  builders['_microCalc'] = function(customLabel) {
+    if (!_printCurrentMcData) return '';
+    var hh = _buildMicroCalcPrintHtml(_printCurrentMcData);
+    if (customLabel) hh = hh.replace(/>🦠 미생물 집락수 — 모의 계산 결과</, '>' + escH(customLabel) + '<');
     return hh;
   };
 
@@ -4832,8 +4846,6 @@ _printFormTemplateDiary = async function(ft, attachImgs) {
   document.getElementById('print-settings-panel').style.display = 'none';
 
   var h = _buildPrintFromSections(ft, attachImgs);
-  if (_printCurrentSimData) h += _buildSimCalcPrintHtml(_printCurrentSimData);
-  if (_printCurrentMcData) h += _buildMicroCalcPrintHtml(_printCurrentMcData);
   var title = '시험검사기록서 — ' + escH(ft.representativeItem || '');
   _showPrintPreview(_buildPrintHtml(h, '🧪 ' + title, false), title + ' 인쇄 미리보기');
 };
