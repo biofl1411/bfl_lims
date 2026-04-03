@@ -937,7 +937,7 @@ function renderFormTemplateDetail(ft) {
       html += '</div>';
       if (sec.fields && sec.fields.length) {
         html += '<div class="sort-fields-list" data-sec-idx="' + si + '" style="padding:6px">';
-        html += '<table style="width:100%;border-collapse:collapse;table-layout:fixed">';
+        html += '<table id="sort-table-' + si + '" style="width:100%;border-collapse:collapse;table-layout:fixed">';
         var perRow = 3;
         for (var fi = 0; fi < sec.fields.length; fi += perRow) {
           html += '<tr>';
@@ -949,7 +949,7 @@ function renderFormTemplateDetail(ft) {
             }
             var lbl = escH(f.label || f.id || '');
             if (f.unit) lbl += ' <span style="color:#9ca3af;font-size:9px">(' + escH(f.unit) + ')</span>';
-            html += '<td class="sort-field-item" data-sec-idx="' + si + '" data-field-idx="' + (fi + ci) + '" data-orig-field-idx="' + (fi + ci) + '" draggable="true" style="background:#f0f4ff;border:1px solid #cbd5e1;padding:4px 8px;font-size:10px;color:#475569;font-weight:600;width:13%;cursor:grab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="드래그로 이동">' + lbl + '</td>';
+            html += '<td class="sort-field-item" data-sec-idx="' + si + '" data-field-idx="' + (fi + ci) + '" data-orig-field-idx="' + (fi + ci) + '" onclick="_sortFieldClick(this,' + si + ',' + (fi+ci) + ')" style="background:#f0f4ff;border:1px solid #cbd5e1;padding:4px 8px;font-size:10px;color:#475569;font-weight:600;width:13%;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="클릭하여 선택 → 다른 셀 클릭으로 위치 교환">' + lbl + '</td>';
             html += '<td style="border:1px solid #e2e8f0;padding:4px 8px;font-size:11px;color:#94a3b8;min-height:20px">&nbsp;</td>';
           }
           html += '</tr>';
@@ -1731,6 +1731,49 @@ async function saveFormTemplateOverrides() {
     renderFormTemplateDetail(ft);
   } catch(e) {
     showToast('저장 실패: ' + e.message, 'error');
+  }
+}
+
+/* ── 필드 클릭 교환 방식 ── */
+var _sortSelectedField = null; // 선택된 셀
+function _sortFieldClick(td, secIdx, fieldIdx) {
+  if (!_sortSelectedField) {
+    // 첫 번째 클릭: 선택
+    _sortSelectedField = td;
+    td.style.background = '#fbbf24';
+    td.style.color = '#fff';
+    td.style.fontWeight = '700';
+  } else if (_sortSelectedField === td) {
+    // 같은 셀 다시 클릭: 선택 해제
+    td.style.background = '#f0f4ff';
+    td.style.color = '#475569';
+    td.style.fontWeight = '600';
+    _sortSelectedField = null;
+  } else if (_sortSelectedField.dataset.secIdx === td.dataset.secIdx) {
+    // 같은 섹션 내 다른 셀 클릭: 교환
+    var aHtml = _sortSelectedField.innerHTML;
+    var aOrig = _sortSelectedField.dataset.origFieldIdx;
+    _sortSelectedField.innerHTML = td.innerHTML;
+    _sortSelectedField.dataset.origFieldIdx = td.dataset.origFieldIdx;
+    td.innerHTML = aHtml;
+    td.dataset.origFieldIdx = aOrig;
+    // 스타일 복원
+    _sortSelectedField.style.background = '#f0f4ff';
+    _sortSelectedField.style.color = '#475569';
+    _sortSelectedField.style.fontWeight = '600';
+    td.style.background = '#dcfce7';
+    td.style.color = '#166534';
+    setTimeout(function() { td.style.background = '#f0f4ff'; td.style.color = '#475569'; td.style.fontWeight = '600'; }, 600);
+    _sortSelectedField = null;
+  } else {
+    // 다른 섹션: 선택 해제 후 새로 선택
+    _sortSelectedField.style.background = '#f0f4ff';
+    _sortSelectedField.style.color = '#475569';
+    _sortSelectedField.style.fontWeight = '600';
+    _sortSelectedField = td;
+    td.style.background = '#fbbf24';
+    td.style.color = '#fff';
+    td.style.fontWeight = '700';
   }
 }
 
