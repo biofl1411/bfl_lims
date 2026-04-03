@@ -4662,6 +4662,25 @@ function _refreshPrintPreview() {
   if (pif) pif.srcdoc = _buildPrintHtml(h, '🧪 ' + title, false);
 }
 
+function _judgeResult(numVal, jr) {
+  if (!jr || !jr.standardText) return '';
+  var st = jr.standardText || '';
+  // "X 이하", "X 미만", "X 이상", "불검출", "음성" 등 패턴 파싱
+  var m;
+  if (st === '불검출' || st === '음성') {
+    return numVal === 0 ? '적합' : '부적합';
+  }
+  m = st.match(/([\d,.]+)\s*이하/);
+  if (m) return numVal <= parseFloat(m[1].replace(/,/g, '')) ? '적합' : '부적합';
+  m = st.match(/([\d,.]+)\s*미만/);
+  if (m) return numVal < parseFloat(m[1].replace(/,/g, '')) ? '적합' : '부적합';
+  m = st.match(/([\d,.]+)\s*이상/);
+  if (m) return numVal >= parseFloat(m[1].replace(/,/g, '')) ? '적합' : '부적합';
+  m = st.match(/([\d,.]+)\s*초과/);
+  if (m) return numVal > parseFloat(m[1].replace(/,/g, '')) ? '부적합' : '적합';
+  return '';
+}
+
 function _buildPrintFromSections(ft, attachImgs) {
   var a = ft.analyzed || {};
   var overrides = ft._overrides || {};
@@ -4796,11 +4815,29 @@ function _buildPrintFromSections(ft, attachImgs) {
     hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">비고</th>';
     hh += '</tr>';
     var jr = a.judgmentRule || {};
+    // 모의 계산 결과가 있으면 결과값·판정 자동 채움
+    var resultVal = '', judgmentVal = '';
+    if (_printCurrentSimData && _printCurrentSimData.calcs && _printCurrentSimData.calcs.length) {
+      var lastCalc = _printCurrentSimData.calcs[_printCurrentSimData.calcs.length - 1];
+      resultVal = lastCalc.ruleStr + (lastCalc.unit ? ' ' + lastCalc.unit : '');
+      var numVal = parseFloat(lastCalc.ruleStr);
+      if (!isNaN(numVal) && jr.standardText) judgmentVal = _judgeResult(numVal, jr);
+    }
+    if (_printCurrentMcData && _printCurrentMcData.rows && _printCurrentMcData.rows.length) {
+      var mcResults = _printCurrentMcData.rows.map(function(r) { return r.result; });
+      resultVal = mcResults.join(', ');
+      if (_printCurrentMcData.judge && _printCurrentMcData.judge.text) {
+        judgmentVal = _printCurrentMcData.judge.text;
+      }
+    }
+    var resultStyle = resultVal ? 'font-weight:700;color:#0369a1' : '';
+    var judgeColor = judgmentVal.indexOf('적합') >= 0 && judgmentVal.indexOf('부적합') < 0 ? '#059669' : (judgmentVal.indexOf('부적합') >= 0 ? '#dc2626' : '');
+    var judgeStyle = judgmentVal ? 'font-weight:700;color:' + (judgeColor || '#374151') : '';
     hh += '<tr>';
     hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;font-weight:600">' + escH(ft.representativeItem || '') + '</td>';
     hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;text-align:center">' + escH((jr.standardText || '') + (jr.unit ? ' ' + jr.unit : '')) + '</td>';
-    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
-    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:50px;text-align:center">&nbsp;</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px;text-align:center;' + resultStyle + '">' + (resultVal || '&nbsp;') + '</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:50px;text-align:center;' + judgeStyle + '">' + (judgmentVal || '&nbsp;') + '</td>';
     hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
     hh += '</tr>';
     hh += '</table>';
