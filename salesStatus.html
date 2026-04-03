@@ -141,6 +141,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;height
 <script src="js/mfds-codes.js"></script>
 <script src="js/sub-chip-fee.js"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="js/deadline-calc.js"></script>
 <script src="js/grade-calculator.js"></script>
 <script src="js/toast.js"></script>
 <script src="js/sidebar.js"></script>
@@ -691,6 +692,8 @@ async function loadReceipts() {
     document.getElementById('loading').style.display = '';
     document.getElementById('receipt-tbody').innerHTML = '';
     try {
+        // 처리기한 워킹데이 설정 로드
+        await DeadlineCalc.load();
         // 소분류 수수료 규칙 로드
         await SUB_CHIP_FEE.load();
         // 거래처 데이터 로드 → 복합 매칭 맵 구축 (인허가 기준)
@@ -1290,8 +1293,7 @@ function renderTable() {
         if (r.urgent === '긴급' || r.urgent === 'Y') {
             rowStyle = 'background-color:#fff5f5;';
         } else if (r.processingDeadline) {
-            var dlDays = Math.ceil((new Date(r.processingDeadline) - new Date()) / 86400000);
-            if (dlDays <= 2) rowStyle = 'background-color:#fff8f0;';
+            rowStyle = DeadlineCalc.getRowBgByDeadline(r.processingDeadline);
         } else if (r.trafficLight === 'red' || r.trafficLight === 'orange') {
             rowStyle = 'background-color:#fffde7;';
         }
@@ -1338,13 +1340,7 @@ function renderTable() {
             } else if (col.key === 'sampleTotalCount') {
                 val = val || 1;
             } else if (col.key === 'processingDeadline') {
-                if (val) {
-                    var days = Math.ceil((new Date(val) - new Date()) / 86400000);
-                    if (days <= 0) val = '<span style="color:#e53935;font-weight:700">D+' + Math.abs(days) + '</span>';
-                    else if (days <= 2) val = '<span style="color:#ff9800;font-weight:700">D-' + days + '</span>';
-                    else if (days <= 7) val = '<span style="color:#f9a825;font-weight:600">D-' + days + '</span>';
-                    else val = '<span style="color:#999">D-' + days + '</span>';
-                } else { val = '-'; }
+                val = DeadlineCalc.renderDeadlineCell(val);
             } else if (col.key === 'testField') {
                 var tfColors = { '축산': 'background:#fce8d5;color:#bf5700', '식품': 'background:#e0f2f1;color:#00695c', '기타': 'background:#fce4ec;color:#ad1457' };
                 var tfStyle = tfColors[val] || '';
@@ -1586,13 +1582,7 @@ function openDetailPanel(id, sampleIdx) {
     _currentDetailId = id;
     _currentDetailSampleIdx = sampleIdx;
     _currentDetailRecord = r;
-    var deadlineDisplay = r.processingDeadline || '-';
-    if (r.processingDeadline) {
-        var dlDays = Math.ceil((new Date(r.processingDeadline) - new Date()) / 86400000);
-        if (dlDays <= 0) deadlineDisplay = '<span style="color:#e53935;font-weight:700">' + r.processingDeadline + ' (D+' + Math.abs(dlDays) + ')</span>';
-        else if (dlDays <= 2) deadlineDisplay = '<span style="color:#ff9800;font-weight:700">' + r.processingDeadline + ' (D-' + dlDays + ')</span>';
-        else deadlineDisplay = r.processingDeadline + ' (D-' + dlDays + ')';
-    }
+    var deadlineDisplay = DeadlineCalc.renderDday(r.processingDeadline, true);
     var tlDisplay = r.trafficLight ? '<span class="tl tl-' + r.trafficLight + '"></span> ' + (tlLabels[r.trafficLight]||'') : '-';
     document.getElementById('dp-tab-basic').innerHTML =
         '<div style="position:relative;padding-right:24px">' +

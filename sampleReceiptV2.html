@@ -320,6 +320,7 @@ body.sidebar-collapsed .main-container{margin-left:64px}
 <script src="js/mfds-fee-mapping.js"></script>
 <script src="js/mfds_templates.js?v=20260227"></script>
 <script src="js/firestore-helpers.js"></script>
+<script src="js/deadline-calc.js"></script>
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
@@ -2360,8 +2361,7 @@ window.addEventListener('firebase-ready', async function() {
     loadLabelOptions();
 
     // 처리기한 워킹데이 수 + 휴일 목록 로드
-    await loadDeadlineWorkingDays();
-    await loadHolidaysFromFirestore();
+    await DeadlineCalc.load();
 
     // 수수료 Firestore 맵 로드 (자가품질위탁검사용)
     await loadFirestoreFeeMap();
@@ -3082,66 +3082,12 @@ function setTodayDate() {
 }
 
 // ============================================================================
-// 처리기한 계산 (워킹데이 12일 기준)
+// 처리기한 계산 — DeadlineCalc 공통 모듈 사용
 // ============================================================================
-var _holidayDatesCache = null;
-var _deadlineWorkingDays = 12; // 기본값, Firestore에서 로드 후 덮어씀
-
-async function loadDeadlineWorkingDays() {
-    try {
-        var data = await fsGetSettings('deadlineRule');
-        if (data && data.workingDays) _deadlineWorkingDays = parseInt(data.workingDays) || 12;
-    } catch(e) { /* 기본값 유지 */ }
-}
-
-async function loadHolidaysFromFirestore() {
-    try {
-        var fsData = await fsGetSettings('holidays');
-        if (fsData && Array.isArray(fsData.dates)) {
-            _holidayDatesCache = fsData.dates;
-        } else if (fsData && Array.isArray(fsData.list)) {
-            _holidayDatesCache = fsData.list.map(function(h){ return h.date; });
-        } else {
-            _holidayDatesCache = [];
-        }
-    } catch(e) {
-        _holidayDatesCache = [];
-    }
-}
-
-function getHolidays() {
-    if (_holidayDatesCache !== null) return _holidayDatesCache;
-    // Firestore 로드 전 fallback: localStorage
-    try {
-        const stored = localStorage.getItem('bfl_holidays');
-        return stored ? JSON.parse(stored) : [];
-    } catch(e) { return []; }
-}
-
-function isWorkingDay(date) {
-    const day = date.getDay();
-    if (day === 0 || day === 6) return false; // 주말
-    const dateStr = date.toISOString().split('T')[0];
-    const holidays = getHolidays();
-    return !holidays.includes(dateStr);
-}
-
-function addWorkingDays(startDate, workDays) {
-    const date = new Date(startDate);
-    // 접수일 포함: 접수일이 워킹데이면 1일로 카운트
-    let added = isWorkingDay(date) ? 1 : 0;
-    while (added < workDays) {
-        date.setDate(date.getDate() + 1);
-        if (isWorkingDay(date)) added++;
-    }
-    return date;
-}
-
 function calculateProcessingDeadline() {
-    const receiptDate = document.getElementById('receipt-date').value;
+    var receiptDate = document.getElementById('receipt-date').value;
     if (!receiptDate) return;
-    const deadline = addWorkingDays(new Date(receiptDate), _deadlineWorkingDays);
-    document.getElementById('processing-deadline').value = deadline.toISOString().split('T')[0];
+    document.getElementById('processing-deadline').value = DeadlineCalc.calcDeadline(receiptDate);
 }
 
 // ============================================================================
