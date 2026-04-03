@@ -3862,9 +3862,8 @@ function _mcInRange(v) {
   return num !== null && num >= 15 && num <= 300;
 }
 function _mcFormatRaw(n) {
-  // 소수점 한 자리까지 표시 (정수면 소수점 없이)
-  var fixed1 = parseFloat(n.toFixed(1));
-  return fixed1 % 1 === 0 ? fixed1.toLocaleString() : fixed1.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1});
+  // 소수점 버림, 정수로 표시
+  return Math.floor(n).toLocaleString();
 }
 function _mcGetSigDigits() {
   var sel = document.getElementById('mc-sig-digits');
@@ -3900,11 +3899,11 @@ function _mcCalcOne(n) {
     var rawVal = (sigmaC / denom) * dilution;
     var denomStr = denom === 1 ? '1' : (Number.isInteger(denom) ? String(denom) : denom.toFixed(1));
     var dilStr = dilution === 1 ? '×1(원액)' : '×' + dilution.toLocaleString();
-    var rawDisplay = isRaw ? rawVal.toFixed(2).replace(/\.?0+$/, '') : _mcFormatRaw(rawVal);
+    var rawDisplay = isRaw ? rawVal.toFixed(1) : _mcFormatRaw(rawVal);
     var formulaStr = sigmaC + ' ÷ ' + denomStr + ' ' + dilStr + ' = ' + rawDisplay;
     return {
       sigmaC: sigmaC, denom: denom, dilution: dilution,
-      raw: isRaw ? rawVal : parseFloat(rawVal.toFixed(1)),
+      raw: isRaw ? rawVal : Math.floor(rawVal),
       final: isRaw ? rawVal : _mcRound2(rawVal),
       isRaw: isRaw, formulaStr: formulaStr,
       warning: warning || ''
@@ -3947,7 +3946,7 @@ function _mcCalcOne(n) {
       ? '(' + denseV0 + '+' + denseV1 + ')÷2'
       : String(denseAvg);
     var formulaDense = avgStr + ' ' + dilStr2 + ' = ' + _mcFormatRaw(rawVal2);
-    return { sigmaC: denseAvg, denom: 1, dilution: dil, raw: parseFloat(rawVal2.toFixed(1)), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
+    return { sigmaC: denseAvg, denom: 1, dilution: dil, raw: Math.floor(rawVal2), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
   }
 
   _MICRO_DILUTIONS.forEach(function(dil, di) {
@@ -4024,11 +4023,11 @@ function _mcCalcAll(nCount, rule) {
       // 계산식 행
       if (elFormula) { elFormula.textContent = calc.formulaStr; elFormula.style.color = '#6b7280'; }
 
-      // 시험결과 행 (원액: 소수점2자리, 그 외: 소수점1자리)
+      // 시험결과 행 (원액: 소수점1자리, 그 외: 정수)
       if (elRaw) {
         var rawStr = calc.isRaw
-          ? (Number.isInteger(calc.raw) ? calc.raw.toString() : parseFloat(calc.raw.toFixed(2)).toString()) + ' CFU/g'
-          : _mcFormatRaw(calc.raw) + ' CFU/g';
+          ? parseFloat(calc.raw.toFixed(1)) + ' CFU/g'
+          : calc.raw.toLocaleString() + ' CFU/g';
         elRaw.textContent = rawStr;
         elRaw.style.color = '#374151';
       }
@@ -4037,9 +4036,7 @@ function _mcCalcAll(nCount, rule) {
       if (elSig) {
         var sigDigits = _mcGetSigDigits();
         var sigVal = calc.isRaw ? calc.raw : _mcRoundSig(calc.raw, sigDigits);
-        var sigStr = calc.isRaw
-          ? (Number.isInteger(sigVal) ? sigVal.toString() : parseFloat(sigVal.toFixed(2)).toString())
-          : sigVal.toLocaleString();
+        var sigStr = calc.isRaw ? parseFloat(sigVal.toFixed(1)).toString() : sigVal.toLocaleString();
         elSig.textContent = sigStr + ' CFU/g (' + sigDigits + '자리)';
         elSig.style.color = '#6b21a8';
       }
@@ -4047,12 +4044,10 @@ function _mcCalcAll(nCount, rule) {
       // 최종판정 행
       if (el) {
         if (calc.warning === 'over300') {
-          el.innerHTML = (calc.isRaw ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString()) : calc.final.toLocaleString()) + ' CFU/g <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px">300초과</span>';
+          el.innerHTML = (calc.isRaw ? parseFloat(calc.final.toFixed(1)) : calc.final.toLocaleString()) + ' CFU/g <span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 4px;border-radius:3px">300초과</span>';
           el.style.color = '#c2410c'; over300Count++;
         } else {
-          var finalStr = calc.isRaw
-            ? (Number.isInteger(calc.final) ? calc.final.toString() : parseFloat(calc.final.toFixed(2)).toString()) + ' CFU/g'
-            : calc.final.toLocaleString() + ' CFU/g';
+          var finalStr = (calc.isRaw ? parseFloat(calc.final.toFixed(1)) : calc.final.toLocaleString()) + ' CFU/g';
           el.textContent = finalStr;
           el.style.color = calc.final > M ? '#dc2626' : calc.final > m ? '#d97706' : '#15803d';
         }
