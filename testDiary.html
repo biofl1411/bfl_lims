@@ -4528,10 +4528,10 @@ function _extractPrintSections(ft) {
     secs.push({ key: '_sec_' + i, label: sec.title || '섹션 ' + (i + 1), visible: true, secIdx: i });
   });
   if (a.calculations && a.calculations.length) secs.push({ key: '_calc', label: '계산식 (결과 산출)', visible: true });
-  if (a.attachmentFields && a.attachmentFields.length) secs.push({ key: '_attach', label: '첨부파일 / 사진', visible: true });
-  secs.push({ key: '_result', label: '결과 기록란', visible: true });
   secs.push({ key: '_simCalc', label: '계산기 — 모의 계산 결과', visible: true });
   secs.push({ key: '_microCalc', label: '모의 계산 결과', visible: true });
+  if (a.attachmentFields && a.attachmentFields.length) secs.push({ key: '_attach', label: '첨부파일 / 사진', visible: true });
+  secs.push({ key: '_result', label: '결과 기록란', visible: true, fixed: 'bottom' });
   return secs;
 }
 
@@ -4801,16 +4801,14 @@ function _buildPrintFromSections(ft, attachImgs) {
   };
 
   builders['_result'] = function() {
-    var hh = '<table style="width:100%;border-collapse:collapse;border:2px solid #1e3a5f;margin-top:4px">';
+    var hh = '<table style="width:100%;border-collapse:collapse;border:2px solid #1e3a5f;margin-top:4px;table-layout:fixed">';
     hh += '<tr style="background:#1e3a5f;color:#fff">';
-    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">분석항목</th>';
-    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">기준규격</th>';
-    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">결과(측정값)</th>';
-    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">판정</th>';
-    hh += '<th style="padding:6px 10px;font-size:11px;text-align:center">비고</th>';
+    hh += '<th style="width:25%;padding:6px 10px;font-size:11px;text-align:center">분석항목</th>';
+    hh += '<th style="width:25%;padding:6px 10px;font-size:11px;text-align:center">기준규격</th>';
+    hh += '<th style="width:25%;padding:6px 10px;font-size:11px;text-align:center">결과(측정값)</th>';
+    hh += '<th style="width:25%;padding:6px 10px;font-size:11px;text-align:center">판정</th>';
     hh += '</tr>';
     var jr = a.judgmentRule || {};
-    // 모의 계산 결과가 있으면 결과값·판정 자동 채움
     var resultVal = '', judgmentVal = '';
     if (_printCurrentSimData && _printCurrentSimData.calcs && _printCurrentSimData.calcs.length) {
       var lastCalc = _printCurrentSimData.calcs[_printCurrentSimData.calcs.length - 1];
@@ -4829,11 +4827,10 @@ function _buildPrintFromSections(ft, attachImgs) {
     var judgeColor = judgmentVal.indexOf('적합') >= 0 && judgmentVal.indexOf('부적합') < 0 ? '#059669' : (judgmentVal.indexOf('부적합') >= 0 ? '#dc2626' : '');
     var judgeStyle = judgmentVal ? 'font-weight:700;color:' + (judgeColor || '#374151') : '';
     hh += '<tr>';
-    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;font-weight:600">' + escH(ft.representativeItem || '') + '</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;font-weight:600;text-align:center">' + escH(ft.representativeItem || '') + '</td>';
     hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;text-align:center">' + escH((jr.standardText || '') + (jr.unit ? ' ' + jr.unit : '')) + '</td>';
-    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px;text-align:center;' + resultStyle + '">' + (resultVal || '&nbsp;') + '</td>';
-    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:50px;text-align:center;' + judgeStyle + '">' + (judgmentVal || '&nbsp;') + '</td>';
-    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;min-width:80px">&nbsp;</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;' + resultStyle + '">' + (resultVal || '&nbsp;') + '</td>';
+    hh += '<td style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;' + judgeStyle + '">' + (judgmentVal || '&nbsp;') + '</td>';
     hh += '</tr>';
     hh += '</table>';
     return hh;
@@ -4853,13 +4850,15 @@ function _buildPrintFromSections(ft, attachImgs) {
     return hh;
   };
 
-  var out = '';
+  var out = '', bottomOut = '';
   _printSections.forEach(function(s) {
     if (!s.visible) return;
     var fn = builders[s.key];
-    if (fn) out += fn(s.customLabel);
+    if (!fn) return;
+    if (s.fixed === 'bottom') { bottomOut += fn(s.customLabel); }
+    else { out += fn(s.customLabel); }
   });
-  return out;
+  return out + bottomOut;
 }
 
 // _printFormTemplateDiary를 래핑하여 설정 로드 후 렌더링
