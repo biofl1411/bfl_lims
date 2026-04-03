@@ -3849,6 +3849,11 @@ function _mcInRange(v) {
   var num = _mcGetVal(v);
   return num !== null && num >= 15 && num <= 300;
 }
+function _mcFormatRaw(n) {
+  // 소수점 한 자리까지 표시 (정수면 소수점 없이)
+  var fixed1 = parseFloat(n.toFixed(1));
+  return fixed1 % 1 === 0 ? fixed1.toLocaleString() : fixed1.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1});
+}
 function _mcRound2(n) {
   if (!n || n <= 0 || isNaN(n)) return 0;
   var mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
@@ -3877,10 +3882,11 @@ function _mcCalcOne(n) {
     var rawVal = (sigmaC / denom) * dilution;
     var denomStr = denom === 1 ? '1' : (Number.isInteger(denom) ? String(denom) : denom.toFixed(1));
     var dilStr = dilution === 1 ? '×1(원액)' : '×' + dilution.toLocaleString();
-    var formulaStr = sigmaC + ' ÷ ' + denomStr + ' ' + dilStr + ' = ' + (isRaw ? rawVal.toFixed(2).replace(/\.?0+$/, '') : Math.round(rawVal).toLocaleString());
+    var rawDisplay = isRaw ? rawVal.toFixed(2).replace(/\.?0+$/, '') : _mcFormatRaw(rawVal);
+    var formulaStr = sigmaC + ' ÷ ' + denomStr + ' ' + dilStr + ' = ' + rawDisplay;
     return {
       sigmaC: sigmaC, denom: denom, dilution: dilution,
-      raw: isRaw ? rawVal : Math.round(rawVal),
+      raw: isRaw ? rawVal : parseFloat(rawVal.toFixed(1)),
       final: isRaw ? rawVal : _mcRound2(rawVal),
       isRaw: isRaw, formulaStr: formulaStr,
       warning: warning || ''
@@ -3922,8 +3928,8 @@ function _mcCalcOne(n) {
     var avgStr = denseCount === 2
       ? '(' + denseV0 + '+' + denseV1 + ')÷2'
       : String(denseAvg);
-    var formulaDense = avgStr + ' ' + dilStr2 + ' = ' + Math.round(rawVal2).toLocaleString();
-    return { sigmaC: denseAvg, denom: 1, dilution: dil, raw: Math.round(rawVal2), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
+    var formulaDense = avgStr + ' ' + dilStr2 + ' = ' + _mcFormatRaw(rawVal2);
+    return { sigmaC: denseAvg, denom: 1, dilution: dil, raw: parseFloat(rawVal2.toFixed(1)), final: _mcRound2(rawVal2), isRaw: false, formulaStr: formulaDense, warning: 'dense' };
   }
 
   _MICRO_DILUTIONS.forEach(function(dil, di) {
@@ -3997,11 +4003,11 @@ function _mcCalcAll(nCount, rule) {
       // 계산식 행
       if (elFormula) { elFormula.textContent = calc.formulaStr; elFormula.style.color = '#6b7280'; }
 
-      // 시험결과 행 (원액: 소수점 표시, 그 외: Math.round 값)
+      // 시험결과 행 (원액: 소수점2자리, 그 외: 소수점1자리)
       if (elRaw) {
         var rawStr = calc.isRaw
           ? (Number.isInteger(calc.raw) ? calc.raw.toString() : parseFloat(calc.raw.toFixed(2)).toString()) + ' CFU/g'
-          : Math.round(calc.raw).toLocaleString() + ' CFU/g';
+          : _mcFormatRaw(calc.raw) + ' CFU/g';
         elRaw.textContent = rawStr;
         elRaw.style.color = '#374151';
       }
