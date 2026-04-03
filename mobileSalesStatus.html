@@ -58,7 +58,10 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
   <div class="filter-bar">
     <select id="f-status"><option value="">전체 상태</option><option value="접수완료">접수완료</option><option value="시험중">시험중</option><option value="완료">완료</option></select>
     <select id="f-field"><option value="">전체 분야</option><option value="식품">식품</option><option value="축산">축산</option></select>
-    <input type="search" id="f-search" placeholder="거래처·접수번호 검색">
+    <div style="flex:2;display:flex;gap:4px;min-width:0">
+      <input type="search" id="f-search" placeholder="거래처·접수번호·제품명·식품유형" style="flex:1;min-width:0">
+      <button id="voice-btn" onclick="startVoice()" style="padding:6px 10px;border:none;border-radius:6px;background:rgba(255,255,255,.2);color:#fff;font-size:14px;cursor:pointer;flex-shrink:0" title="음성 검색">🎙️</button>
+    </div>
   </div>
   <div class="period-btns">
     <button class="period-btn active" data-days="30">1개월</button>
@@ -145,7 +148,9 @@ function applyFilter() {
     if (status && (r.status || '') !== status) return false;
     if (field && (r.testField || '') !== field) return false;
     if (search) {
-      var hay = ((r.receiptNo || '') + ' ' + (r.companyName || '') + ' ' + (r.productName || '')).toLowerCase();
+      var sampleNames = (r.samples || []).map(function(s) { return s.productName || s.sampleName || ''; }).join(' ');
+      var hay = [r.receiptNo, r.companyName, r.productName, r.testPurpose, r.foodTypeName,
+        r.testField, r.bizNo, r.licNo, r.salesRep, sampleNames].join(' ').toLowerCase();
       if (hay.indexOf(search) < 0) return false;
     }
     return true;
@@ -266,6 +271,42 @@ function toggleDetail(card) {
 }
 
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// 음성인식 (Web Speech API)
+var _recognition = null;
+function startVoice() {
+  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { alert('이 브라우저에서 음성인식을 지원하지 않습니다.'); return; }
+  if (_recognition) { _recognition.stop(); _recognition = null; return; }
+  _recognition = new SpeechRecognition();
+  _recognition.lang = 'ko-KR';
+  _recognition.continuous = false;
+  _recognition.interimResults = true;
+  var btn = document.getElementById('voice-btn');
+  btn.style.background = '#dc2626';
+  btn.textContent = '⏹';
+  _recognition.onresult = function(e) {
+    var transcript = '';
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      transcript += e.results[i][0].transcript;
+    }
+    document.getElementById('f-search').value = transcript;
+    if (e.results[e.results.length - 1].isFinal) applyFilter();
+  };
+  _recognition.onend = function() {
+    btn.style.background = 'rgba(255,255,255,.2)';
+    btn.textContent = '🎙️';
+    _recognition = null;
+    applyFilter();
+  };
+  _recognition.onerror = function(e) {
+    btn.style.background = 'rgba(255,255,255,.2)';
+    btn.textContent = '🎙️';
+    _recognition = null;
+    if (e.error !== 'no-speech') alert('음성인식 오류: ' + e.error);
+  };
+  _recognition.start();
+}
 
 // Firebase 준비 시 로드
 window.addEventListener('firebase-ready', loadData);
