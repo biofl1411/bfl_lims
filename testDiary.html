@@ -4551,7 +4551,7 @@ async function _savePrintConfig() {
   if (!_printCurrentFt) return;
   var itemCode = _printCurrentFt.representativeItemCode || '';
   if (!itemCode) { alert('항목코드가 없어 저장할 수 없습니다.'); return; }
-  var config = _printSections.map(function(s) { return { key: s.key, visible: s.visible }; });
+  var config = _printSections.map(function(s) { var o = { key: s.key, visible: s.visible }; if (s.customLabel) o.customLabel = s.customLabel; return o; });
   var update = {};
   update[itemCode] = config;
   try {
@@ -4563,9 +4563,12 @@ async function _savePrintConfig() {
 function _applyPrintConfig(saved) {
   if (!saved || !saved.length) return;
   var map = {};
-  saved.forEach(function(s, i) { map[s.key] = { visible: s.visible, order: i }; });
+  saved.forEach(function(s, i) { map[s.key] = { visible: s.visible, order: i, customLabel: s.customLabel || '' }; });
   _printSections.forEach(function(s) {
-    if (map[s.key] !== undefined) s.visible = map[s.key].visible;
+    if (map[s.key] !== undefined) {
+      s.visible = map[s.key].visible;
+      if (map[s.key].customLabel) s.customLabel = map[s.key].customLabel;
+    }
   });
   _printSections.sort(function(a, b) {
     var oa = map[a.key] !== undefined ? map[a.key].order : 999;
@@ -4578,9 +4581,12 @@ function _renderPrintSettingsList() {
   var el = document.getElementById('print-settings-list');
   if (!el) return;
   el.innerHTML = _printSections.map(function(s, i) {
+    var displayLabel = s.customLabel || s.label;
+    var hasCustom = s.customLabel ? ' style="color:#7c3aed;font-weight:600"' : '';
     return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#fff;border:1px solid #e9d5ff;border-radius:6px;margin-bottom:4px" data-idx="' + i + '">'
       + '<input type="checkbox" ' + (s.visible ? 'checked' : '') + ' onchange="_psCfgToggle(' + i + ')" style="accent-color:#7c3aed;cursor:pointer">'
-      + '<span style="flex:1;font-size:12px;color:#1e293b">' + s.label + '</span>'
+      + '<span' + hasCustom + ' style="flex:1;font-size:12px;color:#1e293b">' + displayLabel + (s.customLabel ? ' <span style="font-size:9px;color:#a78bfa">(원본: ' + s.label + ')</span>' : '') + '</span>'
+      + '<button onclick="_psCfgRename(' + i + ')" style="background:none;border:1px solid #c4b5fd;border-radius:4px;cursor:pointer;font-size:10px;padding:1px 6px;color:#7c3aed" title="제목 변경">✏️</button>'
       + '<button onclick="_psCfgMove(' + i + ',-1)" style="background:none;border:1px solid #ddd6fe;border-radius:4px;cursor:pointer;font-size:11px;padding:1px 6px;color:#6b21a8" ' + (i === 0 ? 'disabled' : '') + '>↑</button>'
       + '<button onclick="_psCfgMove(' + i + ',1)" style="background:none;border:1px solid #ddd6fe;border-radius:4px;cursor:pointer;font-size:11px;padding:1px 6px;color:#6b21a8" ' + (i === _printSections.length - 1 ? 'disabled' : '') + '>↓</button>'
       + '</div>';
@@ -4589,6 +4595,21 @@ function _renderPrintSettingsList() {
 
 function _psCfgToggle(idx) {
   _printSections[idx].visible = !_printSections[idx].visible;
+  _refreshPrintPreview();
+}
+
+function _psCfgRename(idx) {
+  var s = _printSections[idx];
+  var current = s.customLabel || s.label;
+  var newName = prompt('인쇄 시 표시할 제목을 입력하세요:\n(빈칸 = 원래 이름으로 복원)', current);
+  if (newName === null) return;
+  newName = newName.trim();
+  if (!newName || newName === s.label) {
+    delete s.customLabel;
+  } else {
+    s.customLabel = newName;
+  }
+  _renderPrintSettingsList();
   _refreshPrintPreview();
 }
 
@@ -4659,9 +4680,9 @@ function _buildPrintFromSections(ft, attachImgs) {
 
   var builders = {};
 
-  builders['_header'] = function() {
+  builders['_header'] = function(customLabel) {
     var hh = '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">';
-    hh += '<tr><td colspan="4" style="background:#1e3a5f;color:#fff;font-size:15px;font-weight:700;padding:9px 14px;text-align:center;letter-spacing:1px">시험검사기록서</td></tr>';
+    hh += '<tr><td colspan="4" style="background:#1e3a5f;color:#fff;font-size:15px;font-weight:700;padding:9px 14px;text-align:center;letter-spacing:1px">' + escH(customLabel || '시험검사기록서') + '</td></tr>';
     var rows = [
       ['검사항목', escH(ft.representativeItem || ''), '항목코드', escH(ft.representativeItemCode || '')],
       ['시험법근거', escH(ft.testBasis || ''), '시험유형', escH(a.testType || '')],
@@ -4684,10 +4705,10 @@ function _buildPrintFromSections(ft, attachImgs) {
     return hh;
   };
 
-  builders['_testMethod'] = function() {
+  builders['_testMethod'] = function(customLabel) {
     if (!a.testMethod) return '';
     var hh = '<div style="margin-bottom:14px;border:1.5px solid #bfdbfe;border-radius:7px;overflow:hidden">';
-    hh += '<div style="background:#1e40af;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📋 검사방법 (시험절차)</div>';
+    hh += '<div style="background:#1e40af;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">' + escH(customLabel || '📋 검사방법 (시험절차)') + '</div>';
     var isHtml = /<[a-z][\s\S]*>/i.test(a.testMethod);
     hh += '<div style="padding:10px 14px;font-size:11px;line-height:1.8;color:#1e293b' + (isHtml ? '' : ';white-space:pre-wrap') + '">';
     hh += isHtml ? a.testMethod : escH(a.testMethod);
@@ -4696,12 +4717,13 @@ function _buildPrintFromSections(ft, attachImgs) {
   };
 
   (a.sections || []).forEach(function(sec, i) {
-    builders['_sec_' + i] = function() {
+    builders['_sec_' + i] = function(customLabel) {
       if (isResultSection(sec.title)) return '';
       var fields = (sec.fields || []).filter(function(f) { return resultFieldIds.indexOf(f.id) < 0; });
       if (!fields.length) return '';
       var hh = '<div style="margin-bottom:14px">';
-      if (sec.title) hh += '<div style="background:#334155;color:#fff;font-size:11px;font-weight:700;padding:5px 11px;border-radius:4px 4px 0 0">' + escH(sec.title) + '</div>';
+      var secTitle = customLabel || sec.title;
+      if (secTitle) hh += '<div style="background:#334155;color:#fff;font-size:11px;font-weight:700;padding:5px 11px;border-radius:4px 4px 0 0">' + escH(secTitle) + '</div>';
       hh += '<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1">';
       var perRow = 3;
       for (var fi = 0; fi < fields.length; fi += perRow) {
@@ -4730,10 +4752,10 @@ function _buildPrintFromSections(ft, attachImgs) {
     };
   });
 
-  builders['_calc'] = function() {
+  builders['_calc'] = function(customLabel) {
     if (!a.calculations || !a.calculations.length) return '';
     var hh = '<div style="margin-bottom:14px;padding:10px 14px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px">';
-    hh += '<div style="font-size:11px;font-weight:700;color:#6b21a8;margin-bottom:6px">계산식 (결과 산출)</div>';
+    hh += '<div style="font-size:11px;font-weight:700;color:#6b21a8;margin-bottom:6px">' + escH(customLabel || '계산식 (결과 산출)') + '</div>';
     a.calculations.forEach(function(calc) {
       hh += '<div style="font-size:11px;margin-bottom:4px">';
       hh += '<span style="color:#7c3aed;font-weight:600">' + escH(calc.label || '') + '</span>';
@@ -4745,10 +4767,10 @@ function _buildPrintFromSections(ft, attachImgs) {
     return hh;
   };
 
-  builders['_attach'] = function() {
+  builders['_attach'] = function(customLabel) {
     if (!a.attachmentFields || !a.attachmentFields.length) return '';
     var hh = '<div style="margin-bottom:14px;border:1.5px solid #d1fae5;border-radius:7px;overflow:hidden">';
-    hh += '<div style="background:#059669;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">📎 첨부파일 / 사진</div>';
+    hh += '<div style="background:#059669;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">' + escH(customLabel || '📎 첨부파일 / 사진') + '</div>';
     hh += '<div style="padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px">';
     a.attachmentFields.forEach(function(af) {
       hh += '<div style="flex:1;min-width:160px;border:1px solid #a7f3d0;border-radius:6px;padding:8px;background:#f0fdf4">';
@@ -4789,7 +4811,7 @@ function _buildPrintFromSections(ft, attachImgs) {
   _printSections.forEach(function(s) {
     if (!s.visible) return;
     var fn = builders[s.key];
-    if (fn) out += fn();
+    if (fn) out += fn(s.customLabel);
   });
   return out;
 }
