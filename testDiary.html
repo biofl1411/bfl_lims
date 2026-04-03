@@ -4155,6 +4155,162 @@ function _closePrintPreview() {
   if (pif) pif.srcdoc = '';
 }
 
+function _collectSimCalcData() {
+  // 일반 계산기(이화학 등)의 현재 DOM 값을 수집
+  var d = window._simCalcData;
+  var results = window._simCalcResults;
+  if (!d || !d.calcs || !d.calcs.length || !results) return null;
+  var data = { calcs: [] };
+  d.calcs.forEach(function(calc, ci) {
+    var r = results[ci];
+    if (!r) return;
+    var vars = _simParseVars(calc.formula || '');
+    var inputs = [];
+    vars.forEach(function(v) {
+      var el = document.getElementById('sim-' + ci + '-' + v);
+      var fi = d.fieldMap[v] || {};
+      inputs.push({ id: v, label: fi.label || v, unit: fi.unit || '', value: el ? el.value : '' });
+    });
+    // 대입 수식
+    var expr = calc.formula || '';
+    vars.forEach(function(v) {
+      var val = parseFloat((document.getElementById('sim-' + ci + '-' + v) || {}).value) || 0;
+      expr = expr.replace(new RegExp('\\b' + v + '\\b', 'g'), '(' + val + ')');
+    });
+    data.calcs.push({
+      label: calc.label || '',
+      unit: calc.unit || '',
+      formula: calc.formulaText || calc.formula || '',
+      inputs: inputs,
+      expr: expr,
+      raw: r.raw,
+      ruleStr: r.ruleStr,
+      ruleLabel: r.label
+    });
+  });
+  return data.calcs.length ? data : null;
+}
+
+function _buildSimCalcPrintHtml(simData) {
+  if (!simData || !simData.calcs.length) return '';
+  var h = '<div style="margin-bottom:14px;border:1.5px solid #d8b4fe;border-radius:7px;overflow:hidden">';
+  h += '<div style="background:#6b21a8;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">🧮 계산기 — 모의 계산 결과</div>';
+  simData.calcs.forEach(function(c, i) {
+    h += '<div style="padding:10px 14px;' + (i > 0 ? 'border-top:1px solid #e9d5ff;' : '') + '">';
+    h += '<div style="font-size:12px;font-weight:700;color:#6b21a8;margin-bottom:6px">' + c.label + (c.unit ? ' (' + c.unit + ')' : '') + '</div>';
+    // 입력값 표
+    h += '<table style="width:100%;border-collapse:collapse;margin-bottom:6px;font-size:11px">';
+    c.inputs.forEach(function(inp) {
+      if (!inp.value && inp.value !== '0') return;
+      h += '<tr>';
+      h += '<td style="padding:3px 8px;background:#f8fafc;border:1px solid #e2e8f0;width:35%;color:#64748b;font-weight:500">' + inp.label + (inp.unit ? ' (' + inp.unit + ')' : '') + '</td>';
+      h += '<td style="padding:3px 8px;border:1px solid #e2e8f0;font-weight:600">' + inp.value + '</td>';
+      h += '</tr>';
+    });
+    h += '</table>';
+    // 대입식
+    h += '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;padding:6px 10px;margin-bottom:6px">';
+    h += '<div style="font-size:9px;font-weight:600;color:#92400e;margin-bottom:2px">대입 결과</div>';
+    h += '<div style="font-family:monospace;font-size:10px;color:#78716c;word-break:break-all">' + c.expr + '</div>';
+    h += '</div>';
+    // 결과
+    h += '<div style="display:flex;gap:6px">';
+    h += '<div style="flex:1;background:#f0f9ff;border:1px solid #7dd3fc;border-radius:6px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center">';
+    h += '<span style="font-size:10px;font-weight:600;color:#0c4a6e">원시값:</span>';
+    h += '<span style="font-family:monospace;font-size:12px;font-weight:700;color:#0369a1">' + (typeof c.raw === 'number' ? c.raw.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') : c.raw) + '</span></div>';
+    h += '<div style="flex:1;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center">';
+    h += '<span style="font-size:10px;font-weight:600;color:#166534">규칙적용:</span>';
+    h += '<span style="font-family:monospace;font-size:14px;font-weight:800;color:#059669">' + c.ruleStr + '</span></div>';
+    h += '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function _collectMicroCalcData() {
+  // 미생물 모의 계산기의 현재 DOM 값을 수집
+  var microEl = document.querySelector('#diary-panel details[open] table');
+  if (!microEl) return null;
+  // mc-formula, mc-raw, mc-sig, mc-result, mc-judge 수집
+  var data = { rows: [], judge: {} };
+  var nCount = window._mcNCount || 0;
+  if (!nCount) return null;
+  for (var n = 1; n <= nCount; n++) {
+    var formula = (document.getElementById('mc-formula-' + n) || {}).textContent || '-';
+    var raw = (document.getElementById('mc-raw-' + n) || {}).textContent || '-';
+    var sig = (document.getElementById('mc-sig-' + n) || {}).textContent || '-';
+    var result = (document.getElementById('mc-result-' + n) || {}).textContent || '-';
+    if (formula === '-' && raw === '-') continue;
+    data.rows.push({ n: n, formula: formula, raw: raw, sig: sig, result: result });
+  }
+  data.judge.text = (document.getElementById('mc-judge-text') || {}).textContent || '';
+  data.judge.sub = (document.getElementById('mc-judge-sub') || {}).textContent || '';
+  // 희석배수별 입력값 수집
+  data.dilutions = [];
+  var _DILS = window._MICRO_DILUTIONS || [];
+  for (var di = 0; di < _DILS.length; di++) {
+    var chk = document.getElementById('mc-row-en-' + di);
+    if (!chk || !chk.checked) continue;
+    var dilRow = { dil: _DILS[di], plates: [] };
+    for (var nn = 1; nn <= nCount; nn++) {
+      var v0 = (document.getElementById('mc-' + nn + '-' + di + '-0') || {}).value || '';
+      var v1 = (document.getElementById('mc-' + nn + '-' + di + '-1') || {}).value || '';
+      dilRow.plates.push({ n: nn, p1: v0, p2: v1 });
+    }
+    data.dilutions.push(dilRow);
+  }
+  return data.rows.length ? data : null;
+}
+
+function _buildMicroCalcPrintHtml(mcData) {
+  if (!mcData || !mcData.rows.length) return '';
+  var nCount = mcData.rows.length;
+  var h = '<div style="margin-bottom:14px;border:1.5px solid #93c5fd;border-radius:7px;overflow:hidden">';
+  h += '<div style="background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;padding:6px 12px">🦠 미생물 집락수 — 모의 계산 결과</div>';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  // 희석배수 입력값
+  if (mcData.dilutions && mcData.dilutions.length) {
+    h += '<tr><th style="background:#1e3a8a;color:#fff;padding:5px 8px;border:1px solid #1e40af;width:80px">희석배수</th>';
+    for (var n = 0; n < nCount; n++) h += '<th colspan="2" style="background:#1e3a8a;color:#fff;padding:5px;border:1px solid #1e40af;text-align:center">n' + mcData.rows[n].n + '</th>';
+    h += '</tr>';
+    h += '<tr><th style="background:#374151;color:#fff;padding:3px;border:1px solid #4b5563;font-size:9px"></th>';
+    for (var n = 0; n < nCount; n++) {
+      h += '<th style="background:#374151;color:#fff;padding:3px;border:1px solid #4b5563;font-size:9px">평판1</th>';
+      h += '<th style="background:#374151;color:#fff;padding:3px;border:1px solid #4b5563;font-size:9px">평판2</th>';
+    }
+    h += '</tr>';
+    mcData.dilutions.forEach(function(dr) {
+      var dilLabel = dr.dil === 1 ? '원액' : '1:' + dr.dil.toLocaleString();
+      h += '<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;background:#f9fafb">' + dilLabel + '</td>';
+      dr.plates.forEach(function(p) {
+        h += '<td style="padding:3px 6px;border:1px solid #e5e7eb;text-align:center">' + (p.p1 || 'ND') + '</td>';
+        h += '<td style="padding:3px 6px;border:1px solid #e5e7eb;text-align:center">' + (p.p2 || 'ND') + '</td>';
+      });
+      h += '</tr>';
+    });
+  }
+  // 계산식 / 시험결과 / 유효자리 / 최종판정
+  ['formula', 'raw', 'sig', 'result'].forEach(function(key) {
+    var labels = { formula: '계산식', raw: '시험결과', sig: '유효자리', result: '최종판정' };
+    var bgs = { formula: '#f0f9ff', raw: '#fffbeb', sig: '#f5f3ff', result: '#eff6ff' };
+    var colors = { formula: '#0369a1', raw: '#92400e', sig: '#6b21a8', result: '#1d4ed8' };
+    h += '<tr style="background:' + bgs[key] + '"><td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:10px;color:' + colors[key] + ';text-align:center;font-weight:' + (key === 'result' ? '700' : '600') + '">' + labels[key] + '</td>';
+    mcData.rows.forEach(function(r) {
+      h += '<td colspan="2" style="padding:4px 8px;border:1px solid #e5e7eb;text-align:center;font-size:' + (key === 'result' ? '13px;font-weight:700' : '11px') + ';color:' + colors[key] + '">' + r[key] + '</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</table>';
+  // 판정
+  if (mcData.judge && mcData.judge.text) {
+    h += '<div style="padding:8px 12px;background:#f0fdf4;border-top:1px solid #86efac;font-size:12px"><strong>' + mcData.judge.text + '</strong>';
+    if (mcData.judge.sub) h += ' <span style="font-size:10px;color:#6b7280">' + mcData.judge.sub + '</span>';
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 function printDiaryTemplate() {
   var panel = document.getElementById('diary-panel');
   if (!panel || panel.querySelector('.empty-state')) {
@@ -4171,7 +4327,14 @@ function printDiaryTemplate() {
         attachImgs[af.id] = imgEl.src;
       }
     });
-    _printFormTemplateDiary(ft, attachImgs);
+    // 모의 계산 데이터가 있으면 선택지 제공
+    var mcData = _collectMicroCalcData();
+    var simData = _collectSimCalcData();
+    if (mcData || simData) {
+      _printCalcChoice(ft, attachImgs, mcData, simData);
+    } else {
+      _printFormTemplateDiary(ft, attachImgs);
+    }
     return;
   }
   // 일반 시험일지 (기존 방식)
@@ -4451,9 +4614,28 @@ function _togglePrintSettings() {
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
+var _printCurrentMcData = null;  // 미생물 모의 계산
+var _printCurrentSimData = null; // 일반 계산기 모의 계산
+
+function _printCalcChoice(ft, attachImgs, mcData, simData) {
+  var msg = '인쇄 방식을 선택하세요:\n\n'
+    + '[ 확인 ] → 모의 계산 값 포함 인쇄\n'
+    + '[ 취소 ] → 빈 양식 인쇄';
+  if (confirm(msg)) {
+    _printCurrentMcData = mcData;
+    _printCurrentSimData = simData;
+  } else {
+    _printCurrentMcData = null;
+    _printCurrentSimData = null;
+  }
+  _printFormTemplateDiary(ft, attachImgs);
+}
+
 function _refreshPrintPreview() {
   if (!_printCurrentFt) return;
   var h = _buildPrintFromSections(_printCurrentFt, _printCurrentAttach);
+  if (_printCurrentSimData) h += _buildSimCalcPrintHtml(_printCurrentSimData);
+  if (_printCurrentMcData) h += _buildMicroCalcPrintHtml(_printCurrentMcData);
   var title = '시험검사기록서 — ' + escH(_printCurrentFt.representativeItem || '');
   var pif = document.getElementById('print-preview-iframe');
   if (pif) pif.srcdoc = _buildPrintHtml(h, '🧪 ' + title, false);
@@ -4628,6 +4810,8 @@ _printFormTemplateDiary = async function(ft, attachImgs) {
   document.getElementById('print-settings-panel').style.display = 'none';
 
   var h = _buildPrintFromSections(ft, attachImgs);
+  if (_printCurrentSimData) h += _buildSimCalcPrintHtml(_printCurrentSimData);
+  if (_printCurrentMcData) h += _buildMicroCalcPrintHtml(_printCurrentMcData);
   var title = '시험검사기록서 — ' + escH(ft.representativeItem || '');
   _showPrintPreview(_buildPrintHtml(h, '🧪 ' + title, false), title + ' 인쇄 미리보기');
 };
