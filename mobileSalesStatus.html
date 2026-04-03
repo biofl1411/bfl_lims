@@ -201,17 +201,20 @@ function renderCards() {
     // 성적서 발급일
     var reportDate = r.reportIssueDate || r.reportDate || '-';
 
-    // 결과/판정 — samples[].testItems[]에서 수집
-    var resultItems = [];
+    // 결과/판정 — samples[]별 그룹핑
+    var sampleGroups = [];
     (r.samples || []).forEach(function(s, si) {
+      var sName = s.productName || s.sampleName || ('시료 ' + (si + 1));
+      var items = [];
       (s.testItems || []).forEach(function(t) {
         var name = (t.itemName || t.testItemName || t.testCode || '항목').replace(/\|\|/g, '').trim();
         var result = t.result || '미입력';
         var judgment = t.judgment || '-';
         var resColor = t.result ? '#1e3a5f' : '#dc2626';
         var judgeColor = judgment === '적합' ? '#059669' : judgment === '부적합' ? '#dc2626' : '#9ca3af';
-        resultItems.push({ name: name, result: result, judgment: judgment, resColor: resColor, judgeColor: judgeColor, fee: t.fee || 0 });
+        items.push({ name: name, result: result, judgment: judgment, resColor: resColor, judgeColor: judgeColor, fee: t.fee || 0 });
       });
+      sampleGroups.push({ sName: sName, items: items, urgent: s.urgent || '' });
     });
 
     // D-day
@@ -262,12 +265,22 @@ function renderCards() {
       + '<span>성적서 발급: <b>' + esc(reportDate) + '</b></span>'
       + '<span>결제방법: <b>' + esc(r.payMethod || '-') + '</b></span>'
       + '</div>'
-      + (resultItems.length ? '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb">'
-        + '<div style="font-weight:600;color:#1e3a5f;margin-bottom:4px;font-size:12px">📋 검사항목 (' + resultItems.length + '건)</div>'
-        + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
-        + '<tr style="background:#f0f4ff"><th style="padding:3px 6px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0">항목명</th><th style="padding:3px 6px;text-align:center;color:#475569;border-bottom:1px solid #e2e8f0">결과</th><th style="padding:3px 6px;text-align:center;color:#475569;border-bottom:1px solid #e2e8f0">판정</th><th style="padding:3px 6px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0">수수료</th></tr>'
-        + resultItems.map(function(ri) { return '<tr><td style="padding:3px 6px;border-bottom:1px solid #f0f0f0">' + esc(ri.name) + '</td><td style="padding:3px 6px;text-align:center;color:' + ri.resColor + ';font-weight:600;border-bottom:1px solid #f0f0f0">' + esc(ri.result) + '</td><td style="padding:3px 6px;text-align:center;color:' + ri.judgeColor + ';font-weight:600;border-bottom:1px solid #f0f0f0">' + esc(ri.judgment) + '</td><td style="padding:3px 6px;text-align:right;color:#6b7280;border-bottom:1px solid #f0f0f0">' + (ri.fee ? ri.fee.toLocaleString() : '-') + '</td></tr>'; }).join('')
-        + '</table></div>' : '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af">검사항목 정보 없음</div>')
+      + (sampleGroups.length ? '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb">'
+        + sampleGroups.map(function(sg, gi) {
+          var totalItems = sg.items.length;
+          var sgHtml = '<div style="' + (gi > 0 ? 'margin-top:8px;' : '') + '">';
+          sgHtml += '<div style="font-weight:600;color:#1e3a5f;font-size:12px;margin-bottom:4px;display:flex;align-items:center;gap:6px">'
+            + '🧪 ' + esc(sg.sName) + ' <span style="font-size:10px;color:#6b7280;font-weight:400">(' + totalItems + '건)</span></div>';
+          if (totalItems) {
+            sgHtml += '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+              + '<tr style="background:#f0f4ff"><th style="padding:3px 6px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0">항목명</th><th style="padding:3px 6px;text-align:center;color:#475569;border-bottom:1px solid #e2e8f0">결과</th><th style="padding:3px 6px;text-align:center;color:#475569;border-bottom:1px solid #e2e8f0">판정</th><th style="padding:3px 6px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0">수수료</th></tr>'
+              + sg.items.map(function(ri) { return '<tr><td style="padding:3px 6px;border-bottom:1px solid #f0f0f0">' + esc(ri.name) + '</td><td style="padding:3px 6px;text-align:center;color:' + ri.resColor + ';font-weight:600;border-bottom:1px solid #f0f0f0">' + esc(ri.result) + '</td><td style="padding:3px 6px;text-align:center;color:' + ri.judgeColor + ';font-weight:600;border-bottom:1px solid #f0f0f0">' + esc(ri.judgment) + '</td><td style="padding:3px 6px;text-align:right;color:#6b7280;border-bottom:1px solid #f0f0f0">' + (ri.fee ? ri.fee.toLocaleString() : '-') + '</td></tr>'; }).join('')
+              + '</table>';
+          } else { sgHtml += '<div style="font-size:11px;color:#9ca3af">검사항목 없음</div>'; }
+          sgHtml += '</div>';
+          return sgHtml;
+        }).join('')
+        + '</div>' : '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af">시료 정보 없음</div>')
       + '</div>'
       + '</div>';
   }).join('');
