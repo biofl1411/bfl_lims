@@ -181,7 +181,30 @@ function renderCards() {
   el.innerHTML = _filtered.map(function(r) {
     var isUrgent = (r.urgent === '긴급' || r.urgent === 'Y');
     var fee = getTotalFee(r);
-    var feeStr = fee ? Math.round(fee / 1.1).toLocaleString() + '원' : '-';
+    var feeStr = fee ? fee.toLocaleString() + '원' : '-';
+
+    // 입금 정보
+    var paidAmt = (r.payments || []).reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+    if (!paidAmt && r.payDate) paidAmt = fee;
+    var payStatus = fee > 0 ? (paidAmt >= fee ? '완납' : paidAmt > 0 ? '부분입금' : '미입금') : '-';
+    var payColor = payStatus === '완납' ? '#059669' : payStatus === '부분입금' ? '#d97706' : payStatus === '미입금' ? '#dc2626' : '#9ca3af';
+    var unpaid = Math.max(0, fee - paidAmt);
+
+    // 계산서 정보
+    var invoiceType = r.invoiceType || '-';
+    var invoiceIssued = r.taxInvoiceIssued ? '발행완료' : '미발행';
+    var invoiceColor = r.taxInvoiceIssued ? '#059669' : '#9ca3af';
+
+    // 성적서 발급일
+    var reportDate = r.reportIssueDate || r.reportDate || '-';
+
+    // 결과/판정
+    var resultItems = [];
+    (r.testItems || []).forEach(function(t) {
+      if (t.result || t.judgment) {
+        resultItems.push((t.itemName || t.testItemName || '') + ': ' + (t.result || '-') + ' (' + (t.judgment || '-') + ')');
+      }
+    });
 
     // D-day
     var ddayHtml = '-';
@@ -215,18 +238,24 @@ function renderCards() {
       + '<span class="k">검사목적</span><span class="v">' + esc(r.testPurpose || '-') + '</span>'
       + '<span class="k">제품/시료</span><span class="v">' + esc(product) + '</span>'
       + '<span class="k">접수일</span><span class="v">' + esc(r.receiptDate || '-') + '</span>'
+      + '<span class="k">입금</span><span class="v" style="color:' + payColor + '">' + payStatus + (unpaid > 0 ? ' (미수 ' + unpaid.toLocaleString() + ')' : '') + '</span>'
+      + '<span class="k">계산서</span><span class="v" style="color:' + invoiceColor + '">' + invoiceIssued + ' · ' + esc(invoiceType) + '</span>'
       + '</div>'
       + '<div class="card-deadline">'
       + '<div>처리기한 ' + ddayHtml + ' <span style="font-size:10px;color:#9ca3af">' + esc(r.processingDeadline || '') + '</span></div>'
       + '<div class="fee">' + feeStr + '</div>'
       + '</div>'
-      + '<div class="card-detail" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;font-size:11px;color:#6b7280">'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px">'
-      + '<span>분야: ' + esc(r.testField || '-') + '</span>'
-      + '<span>등급: ' + esc(r.grade || '-') + '</span>'
-      + '<span>식품유형: ' + esc(r.foodTypeName || '-') + '</span>'
-      + '<span>업종: ' + esc(r.industryType || '-') + '</span>'
-      + '</div></div>'
+      + '<div class="card-detail" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;font-size:11px;color:#475569">'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px">'
+      + '<span>분야: <b>' + esc(r.testField || '-') + '</b></span>'
+      + '<span>등급: <b>' + esc(r.grade || '-') + '</b></span>'
+      + '<span>식품유형: <b>' + esc(r.foodTypeName || '-') + '</b></span>'
+      + '<span>업종: <b>' + esc(r.industryType || '-') + '</b></span>'
+      + '<span>성적서 발급: <b>' + esc(reportDate) + '</b></span>'
+      + '<span>결제방법: <b>' + esc(r.payMethod || '-') + '</b></span>'
+      + '</div>'
+      + (resultItems.length ? '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb"><div style="font-weight:600;color:#1e3a5f;margin-bottom:3px">검사결과</div>' + resultItems.map(function(ri) { return '<div style="font-size:11px">' + esc(ri) + '</div>'; }).join('') + '</div>' : '')
+      + '</div>'
       + '</div>';
   }).join('');
 }
