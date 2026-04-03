@@ -554,6 +554,7 @@ function renderFormTemplateRow(ft, idx, cls, catColors) {
   html += '<span class="item-name" style="font-size:14px">' + escH(ft.representativeItem || '-') + '</span>';
   html += '<div style="display:flex;gap:4px;align-items:center">';
   html += '<span style="background:#8b5cf6;color:#fff;font-size:9px;padding:1px 6px;border-radius:3px">기록서</span>';
+  if (ft.diaryStatus === '완료') html += '<span style="background:#059669;color:#fff;font-size:9px;padding:1px 6px;border-radius:3px">완료🔒</span>';
   html += '<span style="background:' + catColor + ';color:#fff;font-size:10px;padding:1px 6px;border-radius:3px">' + escH(a.testType || '') + '</span>';
   html += '</div></div>';
 
@@ -729,6 +730,21 @@ function renderFormTemplateDetail(ft) {
   // 헤더: 기록서 뱃지
   html += '<h4><span class="icon">📄</span>시험검사기록서 — ' + escH(ft.representativeItem || '') + '</h4>';
 
+  // 시험일지 상태 (검토중 / 완료)
+  var _dsStatus = ft.diaryStatus || '검토중';
+  var _dsIsLocked = (_dsStatus === '완료');
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 14px;border-radius:8px;background:' + (_dsIsLocked ? '#f0fdf4;border:1.5px solid #86efac' : '#eff6ff;border:1.5px solid #93c5fd') + '">';
+  html += '<span style="font-size:16px">' + (_dsIsLocked ? '🔒' : '📝') + '</span>';
+  html += '<span style="font-size:13px;font-weight:700;color:' + (_dsIsLocked ? '#166534' : '#1d4ed8') + '">' + _dsStatus + '</span>';
+  if (_dsIsLocked) {
+    html += '<span style="font-size:11px;color:#6b7280;flex:1">편집이 잠겨있습니다. 수정하려면 검토중으로 변경하세요.</span>';
+    html += '<button onclick="_changeDiaryStatus(\'' + escA(ft._id) + '\',\'검토중\')" style="padding:5px 14px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">🔓 검토중으로 변경</button>';
+  } else {
+    html += '<span style="font-size:11px;color:#6b7280;flex:1">편집 가능 상태입니다.</span>';
+    html += '<button onclick="_changeDiaryStatus(\'' + escA(ft._id) + '\',\'완료\')" style="padding:5px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">✅ 완료로 변경</button>';
+  }
+  html += '</div>';
+
   // 기본 정보
   html += '<div class="form-row"><div class="form-group"><label>검사항목</label><input type="text" value="' + escA(ft.representativeItem) + '" readonly></div>';
   html += '<div class="form-group"><label>항목코드</label><input type="text" value="' + escA(ft.representativeItemCode) + '" readonly style="font-family:monospace"></div></div>';
@@ -879,11 +895,13 @@ function renderFormTemplateDetail(ft) {
     html += '</div></div>';
   }
 
-  // 저장 버튼
-  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
-  html += '<button class="btn btn-primary" onclick="saveFormTemplateOverrides()" style="flex:1">💾 값 저장</button>';
-  html += '<button class="btn btn-outline btn-sm" onclick="openAttachConfigModal()" style="font-size:11px">📎 첨부파일 설정</button>';
-  html += '</div>';
+  // 저장 버튼 (완료 상태면 숨김)
+  if (!_dsIsLocked) {
+    html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+    html += '<button class="btn btn-primary" onclick="saveFormTemplateOverrides()" style="flex:1">💾 값 저장</button>';
+    html += '<button class="btn btn-outline btn-sm" onclick="openAttachConfigModal()" style="font-size:11px">📎 첨부파일 설정</button>';
+    html += '</div>';
+  }
 
   // ── 모의 계산기 (해당 항목 전용) ──
   if ((a.isMicroForm || _isMicroBiology(ft.testBasis)) && _isQuantitativeMicro(a)) {
@@ -918,9 +936,9 @@ function renderFormTemplateDetail(ft) {
     html += '<div style="padding:14px" id="sim-body"></div></details>';
   }
 
-  // ── 섹션·필드 순서 편집 ──
+  // ── 섹션·필드 순서 편집 (완료 상태면 숨김) ──
   var editSections = a.sections || [];
-  if (editSections.length) {
+  if (editSections.length && !_dsIsLocked) {
     var ftIdForSort = ft._id || '';
     html += '<details id="sort-panel-details" style="border:1px solid #fbbf24;border-radius:10px;overflow:hidden;margin-bottom:14px">';
     html += '<summary style="padding:10px 14px;background:linear-gradient(135deg,#fffbeb,#fef3c7);cursor:pointer;font-size:13px;font-weight:600;color:#92400e;display:flex;align-items:center;gap:8px;list-style:none">';
@@ -1855,6 +1873,23 @@ function _sortFieldClick(td, secIdx, fieldIdx) {
 })();
 
 /* 섹션 순서 저장 */
+/* ── 시험일지 상태 변경 (검토중 ↔ 완료) ── */
+async function _changeDiaryStatus(ftId, newStatus) {
+  try {
+    await db.collection('formTemplates').doc(ftId).update({ diaryStatus: newStatus });
+    var ft = (_filteredDiaryTemplates || []).find(function(t) { return t._id === ftId; });
+    if (ft) {
+      ft.diaryStatus = newStatus;
+      renderFormTemplateDetail(ft);
+      // 목록 뱃지도 갱신
+    }
+    renderDiaryItemList();
+    showToast(newStatus === '완료' ? '🔒 완료 처리됨 — 편집 잠금' : '🔓 검토중 — 편집 가능', 'success');
+  } catch(e) {
+    showToast('상태 변경 실패: ' + e.message, 'error');
+  }
+}
+
 async function saveSectionOrder(ftId) {
   var ft = (_filteredDiaryTemplates || []).find(function(t) { return t._id === ftId; });
   if (!ft || !ft.analyzed) { showToast('양식을 찾을 수 없습니다', 'error'); return; }
